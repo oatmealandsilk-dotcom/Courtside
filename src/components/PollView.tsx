@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -64,7 +65,7 @@ export function PollView({ question, compact = false }: { question: Question; co
         const share = total ? Math.round((poll.counts[i] ?? 0) / total * 100) : 0;
         const mine = poll.myVote === i;
         return (
-          <Pressable
+          <SwipePressable
             key={i}
             accessibilityRole="button"
             accessibilityLabel={voted ? `${option}, ${share} percent${mine ? ', your vote' : ''}` : `Vote for ${option}`}
@@ -76,7 +77,7 @@ export function PollView({ question, compact = false }: { question: Question; co
             <Text style={[styles.label, mine && styles.labelMine]} numberOfLines={2}>{option}</Text>
             {mine ? <Tick pop={settled.current} /> : null}
             {results ? <Share share={voted ? share : 0} mine={mine} index={i} still={!settled.current} /> : null}
-          </Pressable>
+          </SwipePressable>
         );
       })}
       <Text style={styles.meta}>{total === 1 ? '1 vote' : `${total} votes`}{voted ? ' · tap another to change' : ''}</Text>

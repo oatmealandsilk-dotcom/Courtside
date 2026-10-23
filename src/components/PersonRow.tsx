@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 
 import { Highlighted } from '@/components/CourtSearch';
 import { FollowPill } from '@/components/FollowPill';
@@ -49,7 +50,7 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
   const bold = (parts: { s: string; on: boolean }[]) => parts.map((p, i) => (p.on ? <Text key={i} style={styles.handleMatch}>{p.s}</Text> : p.s));
   const label = `${user.name}${streakWords(streak)}, @${user.handle}, ${levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <SwipePressable accessibilityRole="link" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
       <View style={[styles.body, !first && styles.rule]}>
         <View style={styles.words}>
@@ -85,7 +86,7 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
           />
         ) : null}
       </View>
-    </Pressable>
+    </SwipePressable>
   );
 }
 

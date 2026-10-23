@@ -1,6 +1,7 @@
 import { PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HereTag } from '@/components/place/CourtLife';
@@ -65,7 +66,7 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
           const here = courtNow[c.courtId] ? courtNow[c.courtId].youHere : !!c.youHere;
           const quiet = !news.hit && !news.posts && !news.now;
           return (
-            <Pressable
+            <SwipePressable
               key={c.courtId}
               accessibilityRole="link"
               accessibilityLabel={[name, here ? 'you’re checked in here' : null, news.posts, news.hit ? `hit ${news.hit}` : null, news.now, quiet ? 'nothing new this week' : null].filter(Boolean).join(', ')}
@@ -86,7 +87,7 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
                 // Two lines: on a phone one cut off the new-posts count, the news the card is for.
                 return rest ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={2}>{rest}</Text> : null;
               })()}
-            </Pressable>
+            </SwipePressable>
           );
         })}
       </ScrollView>

@@ -1,7 +1,9 @@
 import { PRESS_SHRINK } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { type ReactNode } from 'react';
-import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+
+import { SwipePressable } from '@/components/SwipePressable';
 
 import { colors, radius, spacing } from '@/theme';
 
@@ -21,9 +23,10 @@ export function Card({ children, onPress, style, padded = true }: Props) {
   if (!onPress) return content;
 
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
+    // SwipePressable: on a page that swipes sideways, a finger that is swiping never shrinks the card.
+    <SwipePressable onPress={onPress} style={({ pressed }) => (pressed ? styles.pressed : undefined)}>
       {content}
-    </Pressable>
+    </SwipePressable>
   );
 }
 

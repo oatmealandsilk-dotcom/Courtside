@@ -5,6 +5,7 @@ import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming
 import { useResponsive } from '@/lib/useResponsive';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /**
  * Drag-to-swipe between pages on the phone.
@@ -230,7 +231,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   return (
     <GestureDetector gesture={pan}>
       <View onLayout={(event) => { width.value = event.nativeEvent.layout.width; }} style={{ flex: fill ? 1 : undefined, overflow: 'hidden' }}>
-        <Animated.View style={[{ flex: fill ? 1 : undefined }, pageStyle]}>{children}</Animated.View>
+        {/* A press on the page waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
+        <Animated.View style={[{ flex: fill ? 1 : undefined }, pageStyle]}><SwipeArea on={enabled}>{children}</SwipeArea></Animated.View>
         {preview ? (
           <Animated.View pointerEvents="none" accessibilityElementsHidden style={[{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: `${direction * 100}%`, marginLeft: direction * gap }, previewStyle]}>
             {preview}

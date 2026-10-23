@@ -4,7 +4,8 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
@@ -71,15 +72,15 @@ function Coaching() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           <NotificationButton size={25} />
           <InboxButton size={27} coaching />
-          <Pressable accessibilityRole="link" accessibilityLabel="Search coaches and players" onPress={() => router.push({ pathname: '/search', params: { scope: 'coaches' } })} hitSlop={8}>
+          <SwipePressable accessibilityRole="link" accessibilityLabel="Search coaches and players" onPress={() => router.push({ pathname: '/search', params: { scope: 'coaches' } })} hitSlop={8}>
             <Ionicons name="search" size={23} color={colors.text} />
-          </Pressable>
+          </SwipePressable>
         </View>
       }>
       {/* ------------------------------ Coach studio ---------------------------- */}
       {/* Coaches only: their studio comes first, not tucked under everything else. */}
       {myCoach && studio ? (
-        <Pressable
+        <SwipePressable
           accessibilityRole="link"
           accessibilityLabel={`Coach studio. ${studio.line}`}
           onPress={() => router.push('/coach-studio')}
@@ -97,7 +98,7 @@ function Coaching() {
           </View>
           {studio.waiting ? <View style={styles.studioCount}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.studioCountText}>{studio.waiting}</Text></View> : null}
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
+        </SwipePressable>
       ) : null}
       {/* ------------------------------ Ask a coach ----------------------------- */}
       <View style={[styles.section, myCoach ? null : styles.sectionFirst]}>
@@ -111,7 +112,7 @@ function Coaching() {
           public), and the box eases back up once it is closed. */}
       <AskTip eligible={askTipEligible} style={styles.askTip} />
       {/* Tapped, this box grows and lifts into the full question page (see ask-coach), where you type from the start. */}
-      <Pressable
+      <SwipePressable
         ref={askPill}
         accessibilityRole="button"
         accessibilityLabel="Ask a coach a question"
@@ -120,7 +121,7 @@ function Coaching() {
       >
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askPlaceholder}>Your question</Text>
         <View style={styles.askGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
-      </Pressable>
+      </SwipePressable>
       {/* No promise nobody can keep: until coaches are on, the note says what really happens.
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
@@ -129,14 +130,14 @@ function Coaching() {
       {isGuest && !shown.length ? <GuestJoinCard title="Ask real coaches" body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
-        <Pressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
+        <SwipePressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
           <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>AI coach</Text>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-        </Pressable>
+        </SwipePressable>
       ) : null}
       {/* ------------------------------ Coaches ---------------------------------- */}
       <View style={styles.section}>
@@ -168,7 +169,7 @@ function Coaching() {
             const user = users.find((u) => u.id === coach.userId);
             const price = coach.services.length ? Math.min(...coach.services.map((s) => s.priceCents)) : 0;
             return (
-              <Pressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
+              <SwipePressable key={coach.id} accessibilityRole="link" onPress={() => router.push(`/coach/${coach.id}`)} style={({ pressed }) => [styles.coachCard, pressed && styles.pressed]}>
                 {/* The coach's own picture colour, the same as on their page and in Messages (Oct 20 sweep: Tomás was beige here, blue everywhere else). */}
                 <Avatar name={user?.name ?? 'Coach'} seed={user?.avatarSeed ?? coach.id} uri={user?.avatarUrl} size={64} />
                 <View style={styles.coachWords}>
@@ -188,7 +189,7 @@ function Coaching() {
                   {/* Prices only where paid booking is open (admins, until it is released): no "Booking soon" placeholders. */}
                   {paidBooking && coach.payoutsReady !== false && price ? <View style={styles.priceTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.priceText}>from {money(price)}</Text></View> : null}
                 </View>
-              </Pressable>
+              </SwipePressable>
             );
           })}
         </ScrollView>
@@ -216,7 +217,7 @@ function Coaching() {
                   const author = users.find((u) => u.id === question.authorId);
                   const waiting = question.replyIds.length === 0;
                   return (
-                    <Pressable
+                    <SwipePressable
                       key={entry.key}
                       accessibilityRole="link"
                       onPress={() => router.push(`/coach-question/${question.id}`)}
@@ -232,7 +233,7 @@ function Coaching() {
                         </View>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-                    </Pressable>
+                    </SwipePressable>
                   );
                 }
                 const r = entry.request!;
@@ -241,7 +242,7 @@ function Coaching() {
                 const service = coach?.services.find((x) => x.id === r.serviceId);
                 const waiting = r.status === 'submitted' || r.status === 'in-review';
                 return (
-                  <Pressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
+                  <SwipePressable key={entry.key} accessibilityRole="link" onPress={() => router.push(`/coach-request/${r.id}`)} style={({ pressed }) => [styles.row, index > 0 && styles.rowLine, pressed && styles.pressed]}>
                     <View style={styles.rowWords}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
                       <View style={styles.metaRow}>
@@ -252,7 +253,7 @@ function Coaching() {
                       </View>
                     </View>
                     <Ionicons name="lock-closed-outline" size={14} color={colors.textFaint} />
-                  </Pressable>
+                  </SwipePressable>
                 );
               })}
           </View>
@@ -262,20 +263,20 @@ function Coaching() {
       {/* --------------------------- Coach on CourtSide -------------------------- */}
       {/* A coach with a studio has the card at the top (it counts the questions too). */}
       {myCoach ? null : currentUser?.isCoach ? (
-        <Pressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
+        <SwipePressable accessibilityRole="link" onPress={() => router.push('/coach-inbox')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>{unanswered} {unanswered === 1 ? 'question needs' : 'questions need'} an answer</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
-        </Pressable>
+        </SwipePressable>
       ) : shown.length === 0 ? null : (
-        <Pressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
+        <SwipePressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>Coach on CourtSide</Text>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>Apply to get listed.</Text>
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
-        </Pressable>
+        </SwipePressable>
       )}
     </Screen>
   );

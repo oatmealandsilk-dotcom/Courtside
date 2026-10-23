@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 
+import { useSwipePressLook } from '@/features/navigation/swipePress';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 
 interface Props {
@@ -77,18 +78,25 @@ export function Tappable({
     ).start();
   };
 
+  // On a page that swipes sideways the dip waits a beat, so a finger that is swiping never dips the
+  // control (swipePress). A like (immediate) is left to fire on touch-down, exactly as before.
+  const press = useSwipePressLook((on) => spring(on ? scaleTo : 1), { enabled: !immediate, delayLongPress });
+
   return (
     <Pressable
       onPress={disabled || immediate ? undefined : onPress}
       onLongPress={disabled ? undefined : onLongPress}
       delayLongPress={delayLongPress}
+      {...press.delay}
+      onTouchStart={press.touchStart}
+      onPressMove={press.pressMove}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ ...accessibilityState, disabled }}
-      onPressIn={() => { if (disabled) return; spring(scaleTo); if (immediate) onPress?.(); }}
-      onPressOut={() => !disabled && spring(1)}
+      onPressIn={() => { if (disabled) return; press.pressIn(); if (immediate) onPress?.(); }}
+      onPressOut={() => !disabled && press.pressOut()}
       // react-native-web maps these to mouse enter/leave; native ignores them.
       onHoverIn={() => Platform.OS === 'web' && !disabled && spring(hoverTo)}
       onHoverOut={() => Platform.OS === 'web' && !disabled && spring(1)}

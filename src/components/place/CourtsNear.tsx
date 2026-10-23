@@ -1,6 +1,7 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -152,7 +153,7 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
           const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
           const badge = badges.get(c.id);
           return (
-            <Pressable
+            <SwipePressable
               key={c.id}
               accessibilityRole="link"
               accessibilityLabel={[labelOf(c), meta, badge?.hit ? `hit ${badge.hit}` : null, badge?.posts].filter(Boolean).join(', ')}
@@ -174,13 +175,13 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
                 </View>
               </View>
-            </Pressable>
+            </SwipePressable>
           );
         })}
-        <Pressable accessibilityRole="link" accessibilityLabel="See all courts on the map" onPress={() => router.push('/map')} style={({ pressed }) => [styles.card, styles.allCard, pressed && styles.cardPressed]}>
+        <SwipePressable accessibilityRole="link" accessibilityLabel="See all courts on the map" onPress={() => router.push('/map')} style={({ pressed }) => [styles.card, styles.allCard, pressed && styles.cardPressed]}>
           <View style={styles.allDisc}><Ionicons name="map-outline" size={20} color={colors.brand} /></View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.allText}>See all on the map</Text>
-        </Pressable>
+        </SwipePressable>
       </ScrollView>
     </View>
   );
