@@ -10,6 +10,7 @@ import Home from '../../app/(tabs)/index';
 import Coaches from '../../app/(tabs)/coaches';
 import Profile from '../../app/(tabs)/profile';
 import { TabFocus } from '@/features/navigation/tabFocus';
+import { catchUpNow } from '@/theme/catchUp';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { setPendingTab } from '@/features/navigation/pendingTab';
 import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
@@ -157,6 +158,12 @@ export function TabsPager({ pathname }: { pathname: string }) {
   const startY = useSharedValue(0);
   const startPosition = useSharedValue(0);
   const lastHeading = useSharedValue(-1);
+  // A theme picked a moment ago: a finger on the row lets the tabs either side catch up at once
+  // (src/theme/catchUp.ts), so one slid in is never seen in the old court. Nothing when none is held.
+  const nearCaughtUp = useRef(() => {
+    const i = activeRef.current;
+    catchUpNow([TAB_PATHS[i], TAB_PATHS[i - 1], TAB_PATHS[i + 1]].filter((p): p is (typeof TAB_PATHS)[number] => !!p));
+  }).current;
   const pan = useMemo(() => {
     return Gesture.Pan()
       .manualActivation(true)
@@ -167,6 +174,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
         startX.value = t.x;
         armed.value = false;
         startY.value = t.y;
+        runOnJS(nearCaughtUp)();
       })
       .onTouchesMove((e, state) => {
         'worklet';

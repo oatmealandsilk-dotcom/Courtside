@@ -14,7 +14,8 @@ import { fadeEnded, fadeStarted, onEndFades } from './catchUp';
  * cards, the words) goes on top in the old court's colours, fully there, so
  * the first frame looks exactly as before. The copies then fade to nothing on
  * the animation thread and are taken away: the old look dissolves into the
- * new with no grey in between and nothing waited for (no photograph).
+ * new, the page's own two looks blended with no tinted veil laid over
+ * them, and nothing waited for (no photograph).
  *
  * Copies only ever move their own opacity, from 1 to 0, and are gone once
  * there: they never come to rest, so Reanimated can never leave one showing

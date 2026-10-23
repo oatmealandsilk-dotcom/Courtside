@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
-import { FadeCopy, FadeFill, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
+import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
@@ -651,13 +651,8 @@ const ScreenBody = React.memo(function ScreenBody({
       enabled={Platform.OS === 'ios' && !scroll && !scrollsInside}
       onLayout={(e) => { avoiderFrame.current = e.nativeEvent.layout; }}
     >
-      {themeFade ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <FadeFill key={layer.key} op={layer.op} color={themes[layer.theme].bg} testID="theme-fade-bg" />)} /> : null}
-      {wash ? (
-        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}>
-          <Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} />
-          {themeFade ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <WashCopy key={layer.key} op={layer.op} theme={layer.theme} />)} /> : null}
-        </Reanimated.View>
-      ) : null}
+      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} /></Reanimated.View> : null}
+      {themeFade ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <PageCopy key={layer.key} op={layer.op} theme={layer.theme} washStyle={wash ? washStyle : null} />)} /> : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <View
@@ -738,20 +733,23 @@ const ScreenBody = React.memo(function ScreenBody({
 });
 
 /**
- * The page's wash in the court being left, on its own ground so the new
- * court's glows never show through the old, and its foot meets the old
- * ground below with no seam (ThemeFade).
+ * The page itself in the court being left: its ground, with its wash where the
+ * live one is (moving with it as the page scrolls), as one layer over the live
+ * ground and wash, so the whole page blends straight from the old look to the
+ * new with no seam where the wash ends (ThemeFade).
  */
-const WashCopy = React.memo(function WashCopy({ op, theme }: { op: SharedValue<number>; theme: FadeLayer['theme'] }) {
+const PageCopy = React.memo(function PageCopy({ op, theme, washStyle }: { op: SharedValue<number>; theme: FadeLayer['theme']; washStyle: object | null }) {
+  const bg = themes[theme].bg;
   return (
-    <FadeCopy op={op} style={washCopyStyle} testID="theme-fade-wash">
-      <View style={{ height: PAGE_WASH.height, backgroundColor: themes[theme].bg }}>
-        <Wash theme={theme} fade={themes[theme].bg} height={PAGE_WASH.height} strength={PAGE_WASH.strength} />
-      </View>
+    <FadeCopy op={op} style={[StyleSheet.absoluteFill, { backgroundColor: bg }]} testID="theme-fade-bg">
+      {washStyle ? (
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}>
+          <Wash theme={theme} fade={bg} height={PAGE_WASH.height} strength={PAGE_WASH.strength} />
+        </Reanimated.View>
+      ) : null}
     </FadeCopy>
   );
 });
-const washCopyStyle = { position: 'absolute', top: 0, left: 0, right: 0 } as const;
 
 /** The back arrow in the court being left, over the live one (ThemeFade). */
 const ChevronCopy = React.memo(function ChevronCopy({ op, color }: { op: SharedValue<number>; color: string }) {
