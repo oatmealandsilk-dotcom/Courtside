@@ -52,15 +52,24 @@ const rgb = (g: Glow) => `rgb(${g[0]}, ${g[1]}, ${g[2]})`;
  * both feathered to nothing before the bottom edge. It sits behind a screen's
  * opening moment or inside a card. The colours are the court's own.
  */
-export const Wash = React.memo(function Wash({ height = 320, strength = 1, style, fade, theme: wanted }: Props) {
+export const Wash = React.memo(function Wash(props: Props) {
+  // A court and a colour to fade into both given (the theme list's swatches, a theme change's copies):
+  // nothing here follows the app's theme, so a theme change does not redraw it.
+  return props.theme && props.fade ? <WashDrawing {...props} theme={props.theme} fade={props.fade} /> : <LiveWash {...props} />;
+});
+
+/** The app's own court's wash, redrawn when the theme changes. */
+function LiveWash(props: Props) {
   const { theme: current } = useTheme();
-  const theme = wanted ?? current;
+  return <WashDrawing {...props} theme={props.theme ?? current} fade={props.fade ?? colors.bg} />;
+}
+
+function WashDrawing({ height = 320, strength = 1, style, fade: to, theme }: Props & { theme: ThemeName; fade: string }) {
   const [l, r] = WASHES[theme] ?? WASHES.default;
   // The court's name is part of every gradient's id: iOS keeps a gradient by
   // its id and would not repaint one whose colours changed under the same
   // name, which left the old court's glow on the new court's page.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
-  const to = fade ?? colors.bg;
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
@@ -84,7 +93,7 @@ export const Wash = React.memo(function Wash({ height = 320, strength = 1, style
       </Svg>
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
   wrap: { position: 'absolute', top: 0, left: 0, right: 0, overflow: 'hidden' },

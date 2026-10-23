@@ -1,5 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
+import { FadeCopy, FadeFill, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
@@ -72,6 +73,12 @@ interface Props {
    * not its own — without this, Coaching's position would be applied to Profile.
    */
   memoryKey?: string;
+  /**
+   * A theme change fading on this page (the Theme page's useThemeFade): the
+   * page's ground, wash, back arrow and title get a copy each in the court
+   * being left, fading off the new. Left out, the page is drawn as always.
+   */
+  themeFade?: FadeStore;
   /** Hands the caller the scroller, for jumping to a particular child. */
   scrollRef?: React.MutableRefObject<ScrollView | null>;
   /** Kept up to date with how far down the page is, for a caller that remembers a spot per section. */
@@ -169,6 +176,7 @@ const ScreenBody = React.memo(function ScreenBody({
   bleedTop = false,
   noteBelow = 0,
   unconstrained = false,
+  themeFade,
 }: Props & { routeKey: string }) {
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
@@ -538,6 +546,30 @@ const ScreenBody = React.memo(function ScreenBody({
   const constrain = (node: ReactNode, fill = false) =>
     isPhone ? node : <View style={[styles.constrain, fill && styles.flex, { maxWidth: containerWidth }]}>{node}</View>;
 
+  const titleProps: { numberOfLines?: number; maxFontSizeMultiplier?: number; adjustsFontSizeToFit?: boolean; minimumFontScale?: number } = titleLines
+    ? { numberOfLines: titleLines, maxFontSizeMultiplier: TextScale.TITLE }
+    : onBack ? { maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE);
+  const titleText = (
+    <Text
+      style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
+      // A tab's short fixed title (no way back): one line that shrinks a little rather than breaking a
+      // word ("Communit / y") at a large phone text size. A pushed page's title (a way back, often from
+      // data) wraps at word boundaries as before, capped; a page that asks for lines (titleLines) keeps them.
+      {...titleProps}
+      onLayout={titleLines ? (e) => {
+        const now = titleNow.current;
+        if (!now.title) return;
+        const w = Math.round(e.nativeEvent.layout.width);
+        // Stepped down: only a new width (a turned phone, a wider window) measures it again.
+        if (now.small) { if (now.fit && w !== now.fit.w) setTitleFit(null); return; }
+        const size = (compactTitle || !isPhone ? styles.titleCompact : styles.title).fontSize ?? 22;
+        const wraps = e.nativeEvent.layout.height > size * 1.8;
+        const t = now.title;
+        setTitleFit((prev) => (prev && prev.title === t && prev.w === w && prev.wraps === wraps ? prev : { title: t, w, wraps }));
+      } : undefined}
+    >{title}</Text>
+  );
+
   const header =
     title || onBack ? (
       constrain(
@@ -551,32 +583,38 @@ const ScreenBody = React.memo(function ScreenBody({
               accessibilityRole="button"
               accessibilityLabel="Go back"
             >
-              <Ionicons name="chevron-back" size={22} color={colors.text} />
+              {themeFade ? (
+                <View>
+                  <Ionicons name="chevron-back" size={22} color={colors.text} />
+                  <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <ChevronCopy key={layer.key} op={layer.op} color={themes[layer.theme].text} />)} />
+                </View>
+              ) : <Ionicons name="chevron-back" size={22} color={colors.text} />}
             </Pressable>
           ) : null}
           <View style={styles.headerText}>
             {/* Measured at the usual size: more than one line there, and it steps down, staying down for this
                 title at this width (stepped down, it is not measured again unless the width changes). */}
-            <Text
-              style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
-              // A tab's short fixed title (no way back): one line that shrinks a little rather than breaking a
-              // word ("Communit / y") at a large phone text size. A pushed page's title (a way back, often from
-              // data) wraps at word boundaries as before, capped; a page that asks for lines (titleLines) keeps them.
-              {...(titleLines
-                ? { numberOfLines: titleLines, maxFontSizeMultiplier: TextScale.TITLE }
-                : onBack ? { maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE))}
-              onLayout={titleLines ? (e) => {
-                const now = titleNow.current;
-                if (!now.title) return;
-                const w = Math.round(e.nativeEvent.layout.width);
-                // Stepped down: only a new width (a turned phone, a wider window) measures it again.
-                if (now.small) { if (now.fit && w !== now.fit.w) setTitleFit(null); return; }
-                const size = (compactTitle || !isPhone ? styles.titleCompact : styles.title).fontSize ?? 22;
-                const wraps = e.nativeEvent.layout.height > size * 1.8;
-                const t = now.title;
-                setTitleFit((prev) => (prev && prev.title === t && prev.w === w && prev.wraps === wraps ? prev : { title: t, w, wraps }));
-              } : undefined}
-            >{title}</Text>
+            {themeFade ? (
+              <View>
+                {titleText}
+                {title ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => {
+                  const sheet = remapFor(layer.theme, styleDefinitions);
+                  return (
+                    <FadeText
+                      key={layer.key}
+                      op={layer.op}
+                      testID="theme-fade-title"
+                      style={compactTitle || !isPhone ? sheet.titleCompact : sheet.title}
+                      extra={titleSmall ? sheet.titleCapped : undefined}
+                      text={title}
+                      numberOfLines={titleProps.numberOfLines}
+                      maxFontSizeMultiplier={titleProps.maxFontSizeMultiplier}
+                      fit={titleProps.adjustsFontSizeToFit}
+                    />
+                  );
+                })} /> : null}
+              </View>
+            ) : titleText}
             {subtitle ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.subtitle}>{subtitle}</Text> : null}
           </View>
           {right}
@@ -613,7 +651,13 @@ const ScreenBody = React.memo(function ScreenBody({
       enabled={Platform.OS === 'ios' && !scroll && !scrollsInside}
       onLayout={(e) => { avoiderFrame.current = e.nativeEvent.layout; }}
     >
-      {wash ? <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}><Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} /></Reanimated.View> : null}
+      {themeFade ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <FadeFill key={layer.key} op={layer.op} color={themes[layer.theme].bg} testID="theme-fade-bg" />)} /> : null}
+      {wash ? (
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, washStyle]}>
+          <Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} />
+          {themeFade ? <FadeSpot store={themeFade} render={(layers) => layers.map((layer) => <WashCopy key={layer.key} op={layer.op} theme={layer.theme} />)} /> : null}
+        </Reanimated.View>
+      ) : null}
       {headerWrapper ? headerWrapper(header) : header}
       {scroll ? (
         <View
@@ -690,6 +734,31 @@ const ScreenBody = React.memo(function ScreenBody({
     </KeyboardAvoidingView>
     </PageWashContext.Provider>
     </KeyboardScrollContext.Provider>
+  );
+});
+
+/**
+ * The page's wash in the court being left, on its own ground so the new
+ * court's glows never show through the old, and its foot meets the old
+ * ground below with no seam (ThemeFade).
+ */
+const WashCopy = React.memo(function WashCopy({ op, theme }: { op: SharedValue<number>; theme: FadeLayer['theme'] }) {
+  return (
+    <FadeCopy op={op} style={washCopyStyle} testID="theme-fade-wash">
+      <View style={{ height: PAGE_WASH.height, backgroundColor: themes[theme].bg }}>
+        <Wash theme={theme} fade={themes[theme].bg} height={PAGE_WASH.height} strength={PAGE_WASH.strength} />
+      </View>
+    </FadeCopy>
+  );
+});
+const washCopyStyle = { position: 'absolute', top: 0, left: 0, right: 0 } as const;
+
+/** The back arrow in the court being left, over the live one (ThemeFade). */
+const ChevronCopy = React.memo(function ChevronCopy({ op, color }: { op: SharedValue<number>; color: string }) {
+  return (
+    <FadeCopy op={op} style={StyleSheet.absoluteFill}>
+      <Ionicons name="chevron-back" size={22} color={color} />
+    </FadeCopy>
   );
 });
 

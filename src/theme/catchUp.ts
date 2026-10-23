@@ -24,13 +24,13 @@ import { FADE_MS } from './fadeTiming';
 
 /** One held-back tab, as its ThemeGate registers it. */
 export interface GateEntry {
-  /** The tab's address: '/discuss', '/', '/coaches' or '/profile'. */
+  /** The tab's address: '/discuss', '/', '/coaches' or '/profile'; '*' for a browser's frame round the tabs. */
   pane: string;
   /** The court it shows now (kept up to date as it lands). */
   look: ThemeName;
   set: (name: ThemeName) => void;
   /** On a phone, whether the tab row has this tab on screen; undefined where there is no row (a browser). */
-  active: boolean | undefined;
+  active: () => boolean | undefined;
 }
 
 /** Lets the change land before anything is let go. */
@@ -38,6 +38,8 @@ const SETTLE_MS = 40;
 /** Whatever happens, everything is let go this long after the last pick. */
 const SAFETY_MS = 2000;
 const RETRY_MS = 32;
+/** A page sliding in or out (Back, the bar): no tab is redrawn under the slide, which runs this long. */
+const NAV_QUIET_MS = 450;
 /** The strip, left to right, as TabsPager has it: a tab's neighbours come next after it. */
 const TAB_ORDER = ['/discuss', '/', '/coaches', '/profile'];
 
@@ -45,6 +47,7 @@ const gates = new Set<GateEntry>();
 let live: ThemeName = 'default';
 let fading = 0;
 let lastTap = -Infinity;
+let lastNav = -Infinity;
 /** The gate whose catch-up has been asked for and has not landed yet. */
 let inFlight: GateEntry | null = null;
 /** How many gates this round has let go (the first goes as an ordinary update). */
@@ -54,12 +57,16 @@ let safetyTimer: ReturnType<typeof setTimeout> | null = null;
 let unwatch: (() => void) | null = null;
 
 /** The navigation, handed in by goBack.ts (which owns it), so this file never imports the router. */
-interface Nav { currentTab: () => string | null; tabsOnShow: () => boolean; onPageChange: (cb: () => void) => () => void }
+interface Nav { currentTab: () => string | null; tabsOnShow: () => boolean; pageOnShow: (name: string) => boolean; onPageChange: (cb: () => void) => () => void }
 let nav: Nav | null = null;
 export function setCatchUpNav(next: Nav) { nav = next; }
 
 const now = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 const frame = (fn: () => void) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => fn()) : setTimeout(fn, 16));
+
+let ownBack = -Infinity;
+/** The app's own Back has let go of what it uncovers (goBack): the browser's Back event that follows need not. */
+export function noteOwnBack() { ownBack = now(); }
 
 /** The court the app starts on (ThemeProvider). */
 export function noteLive(name: ThemeName) { live = name; }
@@ -101,13 +108,18 @@ export function tapped(name: ThemeName) {
   // this one) is called off here, in this same go: an ordinary update back to
   // the court it shows wins over it, so a tab never lands on a court in
   // between and nothing of it lands during the change.
-  const was = inFlight;
-  inFlight = null;
-  if (was && was.look !== live) was.set(was.look);
+  callOff();
   schedule(FADE_MS + SETTLE_MS);
   if (safetyTimer) clearTimeout(safetyTimer);
   safetyTimer = setTimeout(() => { safetyTimer = null; catchUpNow('all'); }, SAFETY_MS);
   watch(true);
+}
+
+/** A tab's catch-up under way is called off (it is picked again later): see tapped. */
+function callOff() {
+  const was = inFlight;
+  inFlight = null;
+  if (was && was.look !== live) was.set(was.look);
 }
 
 function schedule(ms: number) {
@@ -120,8 +132,11 @@ function held(): boolean {
   return false;
 }
 
+/** The tab on show, or the tabs' own frame ('*': always let go with the tab on show). */
 function isActive(g: GateEntry, current: string | null): boolean {
-  return g.active !== undefined ? g.active : g.pane === current;
+  if (g.pane === '*') return true;
+  const active = g.active();
+  return active !== undefined ? active : g.pane === current;
 }
 
 /** The next tab to let go: the one on screen, then its neighbours, then the rest. */
@@ -135,7 +150,8 @@ function pick(): GateEntry | null {
     if (g.look === live) continue;
     const at = TAB_ORDER.indexOf(g.pane);
     let rank: number;
-    if (isActive(g, current)) rank = 0;
+    if (g.pane === '*') rank = 0.5; // the tabs' frame: small, straight after the tab on show
+    else if (isActive(g, current)) rank = 0;
     else if (at < 0) rank = 100; // a copy drawn for a swipe's preview
     else if (anchor < 0) rank = 10 + at;
     else rank = Math.abs(at - anchor);
@@ -147,7 +163,7 @@ function pick(): GateEntry | null {
 function step() {
   stepTimer = null;
   if (fading > 0) { schedule(RETRY_MS); return; }
-  const wait = lastTap + FADE_MS + SETTLE_MS - now();
+  const wait = Math.max(lastTap + FADE_MS + SETTLE_MS, lastNav + NAV_QUIET_MS) - now();
   if (wait > 0) { schedule(wait); return; }
   if (inFlight) return; // it moves on once that one lands
   const next = pick();
@@ -212,7 +228,16 @@ function watch(fresh = false) {
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { catchUpNow('active'); return false; });
     stops.push(() => sub.remove());
   }
-  if (nav) stops.push(nav.onPageChange(() => { if (nav?.tabsOnShow()) catchUpNow('all'); }));
+  // The tab on show is let go as the tabs come back; the others carry on catching up out of sight.
+  if (nav) {
+    stops.push(nav.onPageChange(() => {
+      lastNav = now();
+      // Nothing out of sight lands under the slide: a catch-up under way waits until it has run.
+      callOff();
+      if (nav?.tabsOnShow()) catchUpNow('active');
+      schedule(NAV_QUIET_MS);
+    }));
+  }
   unwatch = () => stops.forEach((s) => s());
 }
 
@@ -230,13 +255,18 @@ export function installCatchUp(): () => void {
   });
   stops.push(() => app.remove());
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    const back = () => catchUpNow('all');
+    // The browser's own Back, from Settings: the tab it uncovers. The app's Back (goBack) has let go of
+    // that already and goes through here too: skipped. (Settings under the Theme page changed with the tap.)
+    const back = () => {
+      if (now() - ownBack < 1000 || nav?.pageOnShow('theme')) return;
+      catchUpNow('active');
+    };
     window.addEventListener('popstate', back);
     stops.push(() => window.removeEventListener('popstate', back));
     // For the timing harness and the auto-tester: where the change has got to.
     (globalThis as { __courtsideTheme?: unknown }).__courtsideTheme = {
       live: () => live,
-      gates: () => [...gates].map((g) => ({ pane: g.pane, look: g.look, active: g.active })),
+      gates: () => [...gates].map((g) => ({ pane: g.pane, look: g.look, active: g.active() })),
       fading: () => fading,
       settled: catchUpSettled,
     };

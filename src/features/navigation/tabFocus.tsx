@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import { useIsFocused as useRouteFocused } from 'expo-router';
 import { AppStateLater } from '@/store/AppContext';
 import { TabOnShowContext, useIsFocused } from '@/lib/useIsFocused';
-import { ThemeContext, liveTheme, valueFor, type ThemeName } from '@/theme/ThemeProvider';
+import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
 
 /**
@@ -15,6 +15,8 @@ import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/ca
  * reads as "focused".
  */
 const TabFocusContext = createContext<boolean | undefined>(undefined);
+/** The same, as a box read on demand, for the theme's gate (reading the context would redraw it on every swipe). */
+const TabActiveBox = createContext<{ active: boolean } | undefined>(undefined);
 
 export function TabFocus({ active, children }: { active: boolean; children: React.ReactNode }) {
   // Whether this tab is on show (its slot on screen, and no page opened over the tabs), worked out
@@ -22,9 +24,13 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   // the tab on show, not all four, before it can slide in (Oct 10, owner: "the buttons like the
   // settings. msg notifications, etc respond too slow").
   const routeFocused = useRouteFocused();
+  const box = useRef({ active }).current;
+  useLayoutEffect(() => { box.active = active; }, [box, active]);
   return (
     <TabFocusContext.Provider value={active}>
-      <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+      <TabActiveBox.Provider value={box}>
+        <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+      </TabActiveBox.Provider>
     </TabFocusContext.Provider>
   );
 }
@@ -54,7 +60,7 @@ export function asTabRoute<P extends object>(Screen: React.ComponentType<P>, pan
     // Only props a caller passed (a preview, one person's feed) count.
     const own = Object.keys(props).filter((key) => key !== 'segment');
     if (Platform.OS !== 'web' && !inPager && own.length === 0) return null;
-    return <ThemeGate pane={pane}><OffScreenLater><Screen {...props} /></OffScreenLater></ThemeGate>;
+    return <ThemeGate pane={pane}>{() => <OffScreenLater><Screen {...props} /></OffScreenLater>}</ThemeGate>;
   }
   return React.memo(TabRoute);
 }
@@ -65,28 +71,39 @@ export function asTabRoute<P extends object>(Screen: React.ComponentType<P>, pan
  * screen at the tap, and each tab follows out of sight afterwards, one per
  * redraw. A new tab starts on the court picked.
  *
- * Its context value is the same object the root hands out for that court
- * (valueFor), so holding it is never a change to anything inside. Anything
- * above the tabs that passes theme-dependent props into a tab would bring the
- * whole cost back to the tap: keep theme reads inside the tabs (the timing
- * harness's tap-commit check guards it).
+ * The parts inside read their court from this gate's own source, so a pick
+ * reaches none of them until the gate moves it. Anything above the tabs that
+ * passes theme-dependent props into a tab would bring the whole cost back to
+ * the tap: keep theme reads inside the tabs (the timing harness's tap-commit
+ * check guards it).
  */
-function ThemeGate({ pane, children }: { pane: string; children: React.ReactNode }) {
+export function ThemeGate({ pane, children }: { pane: string; children: () => React.ReactNode }) {
   const [look, setLook] = useState<ThemeName>(liveTheme);
-  const active = useContext(TabFocusContext);
+  const [source] = useState(() => makeThemeSource(look));
+  const box = useContext(TabActiveBox);
   const entry = useRef<GateEntry | null>(null);
-  if (!entry.current) entry.current = { pane, look, set: setLook, active };
+  if (!entry.current) {
+    entry.current = {
+      pane,
+      look,
+      // The parts inside are told, and the screen is drawn again from the top, in the same go.
+      set: (name: ThemeName) => { source.set(name); setLook(name); },
+      active: () => box?.active,
+    };
+  }
   useLayoutEffect(() => {
     const gate = entry.current!;
     registerGate(gate);
     return () => unregisterGate(gate);
   }, []);
-  useLayoutEffect(() => { entry.current!.active = active; }, [active]);
   useLayoutEffect(() => {
     entry.current!.look = look;
     landed(entry.current!);
   }, [look]);
-  return <ThemeContext.Provider value={valueFor(look)}>{children}</ThemeContext.Provider>;
+  // Drawn afresh here (a render function, not ready-made children): when the gate lets go, the whole
+  // screen is redrawn from the top in the new court, as it was before the gates, so a part that reads
+  // the live colours without following the theme itself is never left in the old court.
+  return <ThemeSourceContext.Provider value={source}>{children()}</ThemeSourceContext.Provider>;
 }
 
 /**

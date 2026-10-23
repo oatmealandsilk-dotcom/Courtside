@@ -10,7 +10,7 @@ import { setPendingTab } from '@/features/navigation/pendingTab';
 import { TABS_SLIDE, listenForSlides, type PageSlide } from '@/features/navigation/pageSlide';
 import { askedSection, requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { TabFocus } from '@/features/navigation/tabFocus';
+import { TabFocus, ThemeGate } from '@/features/navigation/tabFocus';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -48,7 +48,16 @@ function networkQuiet(wanted: () => boolean, quietMs = 1000, maxMs = 6000): Prom
 /** The strip, left to right, the same as the phone's TabsPager: Community, Home, Coaching, Profile. */
 const TAB_PATHS = ['/discuss', '/', '/coaches', '/profile'];
 
+/**
+ * The tabs' frame in a browser follows a theme change with the tabs, out of
+ * sight (src/theme/catchUp.ts): its scene colour is the only theme it reads,
+ * and redrawing it on the tap redrew the navigator over all four tabs.
+ */
 export default function TabsLayout() {
+  return <ThemeGate pane="*">{() => <TabsLayoutBody />}</ThemeGate>;
+}
+
+function TabsLayoutBody() {
   useTheme();
   const pathname = usePathname();
   const params = useGlobalSearchParams<{ section?: string }>();

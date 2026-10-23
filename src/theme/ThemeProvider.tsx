@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
@@ -229,20 +229,58 @@ const DARK_THEMES: ReadonlySet<ThemeName> = new Set<ThemeName>(['night', 'us-ope
  * a phone, which the old grey veil was there to hide. Now a tap recolours only
  * what can be seen: the Theme page, Settings under it, the app's frame and the
  * status bar, in one small redraw. The four tabs sit behind a ThemeGate each
- * (catchUp.tsx) and catch up out of sight once the change has played, one tab
- * per redraw, as background work.
+ * (src/features/navigation/tabFocus.tsx) and catch up out of sight once the
+ * change has played, one tab per redraw, as background work (catchUp.ts).
  *
  * `live` is the court picked: what is saved and what the live `colors` object
- * holds. A gate holding a tab back keeps its old court in its own context
- * until it is let go.
+ * holds. A gate holding a tab back keeps its old court until it is let go.
+ *
+ * The court reaches each part through a source (the root's, a gate's, a
+ * ThemeScope's) that the part listens to, not through a changing context
+ * value: React hands a changed context to every part reading it below the
+ * change, a tab held behind its own gate included, and each of those was
+ * then drawn again at the tap (only to find its court unchanged), with the
+ * live colours already new and its court still old. A part that keeps what
+ * it read (the Feed's top row, the Follow pills) kept a mix of the two and
+ * was left in the old court. A source tells only the parts reading it.
  */
 let live: ThemeName = 'default';
-let rootSet: ((name: ThemeName) => void) | null = null;
 /** Set once someone has picked a court, so a late read of the saved one never overrides their pick. */
 let picked = false;
 
 /** The court picked, whatever any held-back tab is still showing. */
 export const liveTheme = (): ThemeName => live;
+
+/** Where a part reads its court from: the app's own, a held tab's, or a ThemeScope's. */
+export interface ThemeSource {
+  get: () => ThemeName;
+  subscribe: (listener: () => void) => () => void;
+  /** Inside a ThemeScope (see ThemeValue.scoped). */
+  scoped: boolean;
+}
+
+/** A source whose court is moved with `set`; the parts reading it are told. */
+export function makeThemeSource(initial: ThemeName, scoped = false): ThemeSource & { set: (name: ThemeName) => void } {
+  let current = initial;
+  const listeners = new Set<() => void>();
+  return {
+    get: () => current,
+    set: (name: ThemeName) => {
+      if (name === current) return;
+      current = name;
+      listeners.forEach((listener) => listener());
+    },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    scoped,
+  };
+}
+
+/** The app's own court: what everything outside a held tab reads. */
+const rootSource = makeThemeSource('default');
+export const ThemeSourceContext = createContext<ThemeSource>(rootSource);
 
 function saveTheme(name: ThemeName) {
   try {
@@ -262,7 +300,7 @@ function setTheme(name: ThemeName) {
   live = name;
   Object.assign(colors, themes[name]);
   tapped(name);
-  rootSet?.(name);
+  rootSource.set(name);
 }
 
 // Kept so existing callers of the old night-mode switch keep working.
@@ -273,47 +311,33 @@ function applyNow(name: ThemeName) {
   live = name;
   noteLive(name);
   Object.assign(colors, themes[name]);
-  rootSet?.(name);
+  rootSource.set(name);
   catchUpNow('all');
 }
 
 const values = new Map<ThemeName, ThemeValue>();
-/**
- * The one context value per court, made once: the root and every gate hand out
- * the same object for the same court, so a gate holding its court never looks
- * like a change to anything under it.
- */
-export function valueFor(name: ThemeName): ThemeValue {
-  let value = values.get(name);
+const scopedValues = new Map<ThemeName, ThemeValue>();
+/** The one value per court, made once, so a part handed the same court sees the same object. */
+export function valueFor(name: ThemeName, scoped = false): ThemeValue {
+  const cache = scoped ? scopedValues : values;
+  let value = cache.get(name);
   if (!value) {
-    value = Object.freeze({ theme: name, setTheme, night: name === 'night', dark: DARK_THEMES.has(name), setNight, scoped: false });
-    values.set(name, value);
+    value = Object.freeze({ theme: name, setTheme, night: name === 'night', dark: DARK_THEMES.has(name), setNight, scoped });
+    cache.set(name, value);
   }
   return value;
 }
 
-export const ThemeContext = createContext<ThemeValue>({
-  theme: 'default',
-  setTheme: (_name: ThemeName) => {},
-  night: false,
-  dark: false,
-  setNight: (_value: boolean) => {},
-  scoped: false,
-});
-
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // The live colours are set as the app first draws, not as this file loads: style sheets are
   // written in the default palette, and the colour-to-slot map (slotOf) is built from it.
-  const [theme, updateTheme] = useState<ThemeName>(() => {
+  useState(() => {
     live = readStored();
     noteLive(live);
     Object.assign(colors, themes[live]);
+    rootSource.set(live);
     return live;
   });
-  useLayoutEffect(() => {
-    rootSet = updateTheme;
-    return () => { if (rootSet === updateTheme) rootSet = null; };
-  }, []);
   useEffect(() => installCatchUp(), []);
 
   // A phone has no localStorage, and its own store can only be read back
@@ -340,17 +364,36 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <ThemeContext.Provider value={valueFor(theme)}>
+    <ThemeSourceContext.Provider value={rootSource}>
       <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
         {loaded ? children : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
       </View>
-    </ThemeContext.Provider>
+    </ThemeSourceContext.Provider>
   );
 }
 
-export const useTheme = () => useContext(ThemeContext);
+/**
+ * The court this part is drawn in, and the switches. It listens to its
+ * source (the nearest gate, ThemeScope or the app's own) and is drawn again
+ * when that source moves: in the same go as the move, so a move made as
+ * background work (a tab catching up) is background work here too.
+ */
+export function useTheme(): ThemeValue {
+  const source = useContext(ThemeSourceContext);
+  const [, redraw] = useReducer((n: number) => n + 1, 0);
+  const theme = source.get();
+  // What this part last showed, as committed (a draw React threw away never counts).
+  const shown = useRef(theme);
+  useLayoutEffect(() => { shown.current = theme; });
+  useLayoutEffect(() => {
+    const check = () => { if (source.get() !== shown.current) redraw(); };
+    check(); // moved between the draw and now
+    return source.subscribe(check);
+  }, [source]);
+  return valueFor(theme, source.scoped);
+}
 
 /**
  * Draws what is inside it in another court's colours, and only that: the
@@ -366,15 +409,14 @@ export const useTheme = () => useContext(ThemeContext);
  * it is in the app's colours as always.
  */
 export function ThemeScope({ theme, children }: { theme: ThemeName; children: React.ReactNode }) {
-  const outer = useContext(ThemeContext);
-  const value = useMemo(() => ({ ...outer, theme, night: theme === 'night', dark: DARK_THEMES.has(theme), scoped: true }), [outer, theme]);
-  // Always the same shape, the app's own court too, so a change of court never starts the inside over.
+  // A fixed source per court: a change of court is a new source, which the parts inside read at once.
+  const source = useMemo(() => makeThemeSource(theme, true), [theme]);
   // Put back to the court picked (live), never a court the screen around it may still be holding.
   useLayoutEffect(() => { Object.assign(colors, themes[live]); });
   Object.assign(colors, themes[theme]);
   return (
     <>
-      <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+      <ThemeSourceContext.Provider value={source}>{children}</ThemeSourceContext.Provider>
       <PutBack />
     </>
   );
