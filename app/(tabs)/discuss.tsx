@@ -615,7 +615,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Live while the tab is on show, beside Discussions too, so it is already drawn when it slides in.
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
-          ? <View style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
+          // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -1003,8 +1004,11 @@ const styleDefinitions = StyleSheet.create({
   searchCancel: { fontSize: 16, ...font('600'), color: colors.brand },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
   search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, minHeight: 46, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
-  // The map card while a search is up: kept, out of the layout.
-  mapHidden: { display: 'none' },
+  // The map card while a search is up: kept, out of the layout. In a browser `display: none` keeps it.
+  // On a phone it would not: the phone takes a view with display none off the screen entirely, its map's
+  // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
+  // place the page first opened on). There it stays put, laid over nothing, unseen and untouchable.
+  mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
   playersTitle: { ...typography.title, color: colors.text },

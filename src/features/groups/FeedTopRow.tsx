@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -34,6 +34,15 @@ import { TextScale } from '@/theme/textScale';
  * thing that only moves (a group's name arriving in front of the "+", the
  * font coming in) is never reported again, and the "+" stayed at the old end
  * of the row, on top of the first group's name (UI audit, Oct 11).
+ *
+ * That end is then handed to the "+" as its own place (`left`), drawn the
+ * ordinary way, and the animation thread adds only the row's slide and the
+ * stop at the edge, both read from shared values. On an iPhone the "+" used
+ * to get its whole position from the animation thread, recomputed from
+ * numbers baked into it at each draw; when your groups came in after the row
+ * was first laid out (they are read from the server a moment later), that
+ * new position never took, and the "+" stayed where the row used to end,
+ * on top of the first group's name ("+RRC", Oct 22, owner).
  */
 
 /** The "+": its box, and how far it keeps from the right edge once it stops there (over the sound disc's middle). */
@@ -48,8 +57,6 @@ const GAP = 9;
 const PLUS_GAP = 6;
 /** The widest a word gets; a longer name ends in "…". */
 const WORD_MAX = 150;
-/** Where a "+" that has not been placed yet waits: at its stop by the edge, where it can never cover a word. */
-const PLUS_UNPLACED = 100_000;
 
 interface Props {
   groups: { id: string; name: string }[];
@@ -161,15 +168,24 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) runOnJS(then)(); });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
-  // Where the "+" would sit at the row's end; it goes no further right than its stop at the edge.
-  // A word just added and not measured yet keeps the "+" at its stop for that moment.
-  const plusAt = layout ? layout.plusAt : PLUS_UNPLACED;
+  // The "+" sits at the row's end (its `left`, laid out like any view, so a group arriving moves it
+  // for certain), slides with the row, and goes no further right than its stop at the edge. Only the
+  // slide and the stop are worked out on the animation thread, from shared values, never from numbers
+  // baked into the worklet (on an iPhone a new set of those, after the groups came in, never took).
+  // A word just added and not measured yet hides the "+" for that moment (it keeps its old place).
+  const lastPlusAt = useRef(0);
+  if (layout) lastPlusAt.current = layout.plusAt;
+  const plusAt = lastPlusAt.current;
   const plusStop = viewW - PLUS_RIGHT - PLUS;
-  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value + plusAt, plusStop) }] }));
+  const plusAtNow = useSharedValue(0);
+  const plusStopNow = useSharedValue(0);
+  useLayoutEffect(() => { plusAtNow.value = plusAt; plusStopNow.value = plusStop; }, [plusAt, plusStop, plusAtNow, plusStopNow]);
+  const plusSlide = useAnimatedStyle(() => ({ transform: [{ translateX: Math.min(shift.value, plusStopNow.value - plusAtNow.value) }] }));
   // Shown once everything has been measured, and kept shown while a new group's name is measured.
   const shown = useRef(false);
   useEffect(() => { if (viewW && layout) shown.current = true; });
   const ready = viewW && (layout || shown.current) ? 1 : 0;
+  const plusReady = viewW && layout ? 1 : 0;
   // Away with the scroll: it rides up and fades with the finger, frame by frame, and settles in
   // or out when the feed comes to rest (features/feed/topRowScroll). With Reduce Motion it only
   // fades. VoiceOver keeps it in, as does one of its words holding the focus. Nothing in the row
@@ -237,7 +253,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
             })}
           </Animated.View>
         </View>
-        <Animated.View style={[styles.plusSpot, plusSlide, { opacity: ready }]}>
+        <Animated.View style={[styles.plusSpot, { left: plusAt, opacity: plusReady }, plusSlide]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Find or start a group${invites ? `, ${invites} ${invites === 1 ? 'invite' : 'invites'}` : ''}${waiting ? ', someone is asking to join yours' : ''}`} hitSlop={10} onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }} onBlur={() => setFocusIn(false)} onPress={onPlus} style={styles.plusHit}>
             <Ionicons name="add" size={22} color={ink} style={[{ opacity: 0.85 }, edge]} />
             {waiting || invites ? <View style={styles.waiting} /> : null}
