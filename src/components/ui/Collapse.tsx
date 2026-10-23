@@ -34,9 +34,12 @@ export function Collapse({ open, children, unclip = false }: {
   unclip?: boolean;
 }) {
   const room = unclip ? SHADOW_ROOM : 0;
+  // Always there, as the old fold was (shut, at no height), so a parent's gap round it is unchanged.
   return (
-    <Fold open={open} room={room} duration={260} style={room ? { marginHorizontal: -room } : undefined}>
-      {room ? <View style={{ padding: room }}>{children}</View> : children}
-    </Fold>
+    <View>
+      <Fold open={open} room={room} duration={260} style={room ? { marginHorizontal: -room } : undefined}>
+        {room ? <View style={{ padding: room }}>{children}</View> : children}
+      </Fold>
+    </View>
   );
 }
