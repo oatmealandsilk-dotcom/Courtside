@@ -1657,9 +1657,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // feed on show (a group tab behind For you never builds ahead). On a phone a clip is "in" when
   // its opening seconds are (the same point the clip on screen starts at), so the extra fetch
   // only ever uses a link the nearer clips are done with, and a slow link never sees it. In a
-  // browser, where only the next clip fetched before, the second page ahead fetches too, on the
-  // same terms (the clip on screen playing with three seconds in hand, the next with three in).
-  // A page that got its fetch keeps it while it stays in reach, so nothing is built twice.
+  // browser, where only the next clip fetched before, the second page ahead fetches too, and the
+  // third, each on the same terms (see lookaheadOk). A page that got its fetch keeps it while it
+  // stays in reach, so nothing is built twice.
   const lookaheadOk = (upTo: number) => {
     if (!playing || !warmed || !playable || warming || !connectionIsQuick()) return false;
     let clipOnScreen = false;
@@ -1671,8 +1671,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       if (!inNow(id)) return false;
       // In a browser "in" is only the first frame: there the clip on screen must also be playing
       // with three seconds in hand, as a phone's has when it starts (a link with nothing to spare
-      // never gets there), and while it needs the link the next one must have three seconds in too.
-      // With no clip on screen (a written post, a tip), the next one's first frame will do.
+      // never gets there), and while it needs the link the ones ahead must have three seconds in
+      // too. With no clip on screen (a written post, a tip), their first frames will do.
       const video = item?.type === 'hit' ? !!item.story.videoUrl : item?.type === 'post' && !!item.post.videoUrl;
       if (!video || Platform.OS !== 'web') continue;
       if (k === 0) { if (steadyId !== id) return false; clipOnScreen = true; }
@@ -1688,7 +1688,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     // to third ahead as it is (it has its seconds in) instead of freeing it.
     if (Platform.OS !== 'web') for (let k = -WINDOW; k <= AHEAD; k += 1) { const item = feed[active + k]; if (item) keep.add(keyOf(item)); }
     const third = feed[active + EXTRA];
-    if (Platform.OS !== 'web' && third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
+    if (third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
     const second = feed[active + 2];
     if (Platform.OS === 'web' && second && !keep.has(keyOf(second)) && lookaheadOk(1)) keep.add(keyOf(second));
     if (keep.size !== lookahead.current.size || [...keep].some((key) => !lookahead.current.has(key))) lookahead.current = keep;
@@ -1923,8 +1923,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               // buffers while the feed is still warming up instead of waiting for
               // it, the one you are most likely to land on starts instantly, and
               // scrolling stays smooth.
-              // On top of that, a page that got its lookahead (above) fetches too: on a phone the third
-              // page ahead, in a browser the second, each like the others.
+              // On top of that, a page that got its lookahead (above) fetches too, like the others: the
+              // third page ahead, and in a browser the second.
               const extra = ahead >= 2 && lookahead.current.has(keyOf(item));
               const near = Platform.OS === 'web' ? ((ahead === 0 || ahead === 1) && (!warming || ahead === 0)) || extra : distance <= 1 || (ahead > 0 && ahead <= AHEAD) || extra;
               const strip = index === suggestHost ? suggestStrip : null;
