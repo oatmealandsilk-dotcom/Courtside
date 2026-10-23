@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { MediaPicker, type PickedMedia } from '@/components/MediaPicker';
 import { GlideHeight, Screen } from '@/components/ui';
+import { useRestKey } from '@/components/ui/restMotion';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { clearUnsentCoachQuestion, peekUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import * as haptics from '@/lib/haptics';
@@ -188,7 +189,14 @@ export default function AskCoach() {
   const canSubmit = title.trim().length > 10 && body.trim().length > 25;
   // Post turns from grey to green (and back) over a moment, not in one frame (Oct 22 sweep).
   const ready = useSharedValue(canSubmit ? 1 : 0);
-  useEffect(() => { ready.value = withTiming(canSubmit ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }); }, [canSubmit, ready]);
+  // Built afresh each time it lands, on a phone, so an iPhone that drops a settled animation value can
+  // never show a ready Post as grey (or a grey one as ready) on a later re-render as you type.
+  const [postKey, postLanded] = useRestKey();
+  const readyFirst = useRef(true);
+  useEffect(() => {
+    if (readyFirst.current) { readyFirst.current = false; return; }
+    ready.value = withTiming(canSubmit ? 1 : 0, { duration: 200, easing: Easing.out(Easing.cubic) }, (done) => { 'worklet'; if (done) runOnJS(postLanded)(); });
+  }, [canSubmit, ready, postLanded]);
   const offFill = colors.surfaceAlt, onFill = colors.brand, offInk = colors.textFaint, onInk = colors.brandInk;
   const postFill = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(ready.value, [0, 1], [offFill, onFill]) }));
   const postInk = useAnimatedStyle(() => ({ color: interpolateColor(ready.value, [0, 1], [offInk, onInk]) }));
@@ -295,7 +303,7 @@ export default function AskCoach() {
         <View style={styles.foot}>
           <Text style={styles.footNote}>{canSubmit ? 'Coaches see your level with it.' : title.trim().length <= 10 ? 'A few more words on what is wrong.' : 'A little more detail, so the answer can be specific.'}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.postPress, pressed && canSubmit && { opacity: 0.85 }]}>
-            <Reanimated.View style={[styles.post, postFill]}>
+            <Reanimated.View key={postKey} style={[styles.post, postFill]}>
               <Reanimated.Text style={[styles.postText, postInk]}>Post</Reanimated.Text>
               <View style={styles.arrow}>
                 <Reanimated.View style={[StyleSheet.absoluteFill, arrowOff]}><Ionicons name="arrow-forward" size={16} color={colors.textFaint} /></Reanimated.View>

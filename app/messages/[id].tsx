@@ -35,6 +35,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
+import { useRestKey } from '@/components/ui/restMotion';
 import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn, sharesReceipts } from '@/features/messages/groups';
 import { HitGlyph } from '@/components/HitGlyph';
 import { joinedCount } from '@/features/hits/audience';
@@ -88,6 +89,9 @@ import { BlurView } from 'expo-blur';
 
 /** The held message's blur, its strength moved on the animation thread (see the hold menu). */
 const AnimatedBlurView = Reanimated.createAnimatedComponent(BlurView);
+/** The hold menu open and still: after its animated styles, so they win at rest on a phone. */
+const MENU_DIM_REST = { opacity: 1 } as const;
+const MENU_POP_REST = { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
@@ -2342,9 +2346,15 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const still = useReducedMotion();
   const p = useSharedValue(still ? 1 : 0);
   const lift = useSharedValue(1);
+  // Open and still (Oct 23): on a phone the dim, the reactions and the actions then rest in plain styles
+  // as well, and the blur is built afresh at its full strength, so an iPhone that drops a settled
+  // animation value can never leave the menu clear (its first frame) on a later re-render while it is up.
+  const [menuRest, setMenuRest] = useState(still);
+  const [blurKey, blurLanded] = useRestKey();
+  const landed = useCallback(() => { setMenuRest(true); blurLanded(); }, [blurLanded]);
   useEffect(() => {
     if (still) return;
-    p.value = withSpring(1, { damping: 22, stiffness: 340, mass: 0.7 });
+    p.value = withSpring(1, { damping: 22, stiffness: 340, mass: 0.7 }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
     lift.value = withSequence(withTiming(1.055, { duration: 120, easing: Easing.out(Easing.quad) }), withSpring(1.03, { damping: 13, stiffness: 280 }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2361,6 +2371,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const liftLook = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   const barLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.55 + 0.45 * p.value }] }));
   const cardLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * -8 }, { scale: 0.82 + 0.18 * p.value }] }));
+  // Kept through the close (its own values win over these as they run); the menu is gone once it has closed.
+  const menuAtRest = menuRest && Platform.OS !== 'web';
   const text = message.kind === 'text';
   // A photo's caption can be copied like any message's words.
   const caption = message.kind === 'photo' && !!message.body.trim();
@@ -2430,8 +2442,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
       <View style={StyleSheet.absoluteFill}>
         {/* The blur comes and goes by its own strength, never under a fade: blur under a fading parent
             can turn see-through on the iPhone (Oct 17; Oct 22 sweep, item 5). Only the dim fades. */}
-        {Platform.OS === 'ios' ? <AnimatedBlurView pointerEvents="none" animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} /> : null}
-        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook]}>
+        {Platform.OS === 'ios' ? <AnimatedBlurView key={blurKey} pointerEvents="none" animatedProps={blurProps} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook, menuAtRest && MENU_DIM_REST]}>
           <View style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
         </Reanimated.View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
@@ -2454,7 +2466,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
           </Reanimated.View>
         ) : null}
         {canReact ? (
-          <Reanimated.View style={[styles.menuReactions, { top: top - shift, height: BAR_H, transformOrigin: mine ? 'right bottom' : 'left bottom' }, side(BAR_W), barLook]}>
+          <Reanimated.View style={[styles.menuReactions, { top: top - shift, height: BAR_H, transformOrigin: mine ? 'right bottom' : 'left bottom' }, side(BAR_W), barLook, menuAtRest && MENU_POP_REST]}>
             {REACTIONS.map((emoji, i) => (
               <Reanimated.View key={emoji} entering={still ? undefined : ZoomIn.delay(40 + i * 28).springify().damping(13).stiffness(260)}>
               <Pressable
@@ -2483,7 +2495,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
             <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
           </Reanimated.View>
         ) : null}
-        <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook]}>
+        <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook, menuAtRest && MENU_POP_REST]}>
           {actionRows.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>

@@ -9,6 +9,8 @@ import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
 import { useStageMotion } from '@/features/feed/useStageMotion';
+import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
+import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
@@ -147,6 +149,13 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   useEffect(() => { pinch.value = withTiming(pinched ? 1 : 0, { duration: 180 }); }, [pinched, pinch]);
   // The comments opening and closing: the row fades with the clip's words, frame by frame with the sheet.
   const stageFade = useStageMotion('chrome');
+  // On a phone the whole row is built afresh each time it comes to rest in a new look (Oct 23): back from
+  // the comments or a pinch, onto a clip or a written post, a new feed picked. Its views then start from
+  // the look they rest in and carry no older synced value, so an iPhone that drops a settled animation
+  // value (Reanimated keeps the first frame's, or an older rest's) can never leave the row hidden, its
+  // words in the wrong ink, or the "+" without its white on a later re-render. Nothing it holds is lost:
+  // where it sits and what is measured live here, in FeedTopRow.
+  const [rowKey, bumpRow] = useRestKey();
   // Activities sits left of For you (Oct 4): sessions with stats, as Strava's feed.
   const words = [{ id: 'activities' as string | null, name: 'Activities' }, { id: null as string | null, name: 'For you' }, ...groups];
   // The camera's mode picker (Oct 4, owner): the word on show always sits in
@@ -183,8 +192,8 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     if (Math.abs(target.current - to) < 0.5) return;
     target.current = to;
     // One smooth glide, Apple's ease-out, no bounce: a spring re-aimed mid-flight read as a jolt.
-    shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) });
-  }, [homeMid, viewW, shift]);
+    shift.value = withTiming(to, { duration: 380, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { 'worklet'; if (done) runOnJS(bumpRow)(); });
+  }, [homeMid, viewW, shift]); // eslint-disable-line react-hooks/exhaustive-deps
   // The glide starts on the tap itself; the feed underneath switches a frame later,
   // so its heavy first draw never holds the row back.
   // The feed underneath is switched only once the glide has landed: building a
@@ -193,7 +202,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     const at = layout?.at.get(key);
     if (!at || !viewW) { then(); return; }
     target.current = viewW / 2 - (at.x + at.w / 2);
-    shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) runOnJS(then)(); });
+    shift.value = withTiming(target.current, { duration: 320, easing: Easing.bezier(0.22, 1, 0.36, 1) }, (done) => { if (done) { runOnJS(then)(); runOnJS(bumpRow)(); } });
   };
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: shift.value }] }));
   // The "+" sits at the row's end (its `left`, laid out like any view, so a group arriving moves it
@@ -232,6 +241,21 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   const [gone, setGone] = useState(false);
   useAnimatedReaction(() => away.value > 0.5, (now, before) => { if (now !== before) runOnJS(setGone)(now); }, [away]);
   const outOfWay = gone && !held;
+  // The row's resting look, worked out on the animation thread: '' while anything in it is moving
+  // (the scroll included, so it is never rebuilt under a finger mid-scroll).
+  const lastRest = useSharedValue('');
+  useAnimatedReaction(() => {
+    const at = (x: number) => (x <= 0.001 ? '0' : x >= 0.999 ? '1' : '');
+    const c = at(stageFrame(stageTop.value, stageGeo.value).chrome);
+    const i = at(pic.value);
+    const n = at(pinch.value);
+    const a = at(held ? 0 : away.value);
+    return c && i && n && a ? `${i}${n}${c}` : '';
+  }, (now, before) => {
+    if (!now) return;
+    if (before === null || !lastRest.value) { lastRest.value = now; return; }
+    if (now !== lastRest.value) { lastRest.value = now; runOnJS(bumpRow)(); }
+  }, [held, away]);
   const awayStyle = useAnimatedStyle(() => {
     const p = held ? 0 : away.value;
     return {
@@ -250,7 +274,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
         style={[styles.tapBand, { height: insets.top + TAP_BAND }]}
       />
     ) : null}
-    <Animated.View ref={stageFade.ref as never} pointerEvents="box-none" style={[styles.stageWrap, { height: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT }, stageFade.style]}>
+    <Animated.View key={rowKey} ref={stageFade.ref as never} pointerEvents="box-none" style={[styles.stageWrap, { height: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT }, stageFade.style]}>
     <Animated.View pointerEvents={hidden || outOfWay ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP }, awayStyle]}>
       <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
         {/* The words, cut off just short of the "+" at its stop. While the "+" rides at the row's end, no word reaches the cut. */}

@@ -4,6 +4,7 @@ import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Fold, FoldList, Pop } from '@/components/ui/Fold';
+import { useRestKey } from '@/components/ui/restMotion';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { PaneScroller } from '@/components/ui/PaneScroller';
@@ -1034,16 +1035,22 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
   const still = useReducedMotion();
   const progress = useSharedValue(shown ? 1 : 0);
   const width = useSharedValue(0);
+  // Built afresh each time it lands in or out, on a phone, so an iPhone that drops a settled animation
+  // value can never shrink Cancel away while the search is open (or bring it back once closed) on a
+  // later re-render. Its width is kept here (a shared value), so the new copy starts at the right size.
+  const [restKey, landed] = useRestKey();
+  const first = useRef(true);
   useEffect(() => {
-    progress.value = withTiming(shown ? 1 : 0, { duration: shown ? 240 : 200, easing: SETTLE });
-  }, [shown, progress]);
+    if (first.current) { first.current = false; return; }
+    progress.value = withTiming(shown ? 1 : 0, { duration: shown ? 240 : 200, easing: SETTLE }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
+  }, [shown, progress, landed]);
   const style = useAnimatedStyle(() => ({
     // With Reduce Motion on, the room changes at once and only the word fades.
     width: still ? (shown ? width.value : 0) : width.value * progress.value,
     opacity: progress.value,
   }));
   return (
-    <Reanimated.View style={[styles.cancelWrap, style]} pointerEvents={shown ? 'box-none' : 'none'} accessibilityElementsHidden={!shown} importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'} aria-hidden={!shown}>
+    <Reanimated.View key={restKey} style={[styles.cancelWrap, style]} pointerEvents={shown ? 'box-none' : 'none'} accessibilityElementsHidden={!shown} importantForAccessibility={shown ? 'auto' : 'no-hide-descendants'} aria-hidden={!shown}>
       <View style={styles.cancelInner} pointerEvents="box-none">
         <Pressable accessibilityRole="button" accessibilityLabel="Cancel search" hitSlop={8} onPress={onPress} focusable={shown} onLayout={(e) => { width.value = e.nativeEvent.layout.width; }} style={styles.cancelButton}>
           <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.searchCancel} numberOfLines={1}>Cancel</Text>

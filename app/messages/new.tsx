@@ -12,6 +12,7 @@ import { brandBoxShadow, brandShadow } from '@/theme/fillMode';
 import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroupChat, named, othersIn } from '@/features/messages/groups';
 import { LockBadge, LockNote } from '@/features/messages/LockNote';
 import { GrowRoom } from '@/features/messages/ChatBits';
+import { useRestKey } from '@/components/ui/restMotion';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { User } from '@/data/types';
@@ -56,13 +57,19 @@ const CHIP_GLIDE = LinearTransition.duration(200).easing(Easing.bezier(0.25, 0.8
 /** The round tick at the end of a row: its fill grows from the middle when ticked, and shrinks away when not. */
 function Tick({ on, styles }: { on: boolean; styles: { tick: object; tickFill: object } }) {
   const p = useSharedValue(on ? 1 : 0);
+  // Built afresh each time it lands, on a phone, so an iPhone that drops a settled animation value can
+  // never shrink a picked person's tick away (or bring an unpicked one back) on a later re-render.
+  const [fillKey, landed] = useRestKey();
+  const first = React.useRef(true);
   React.useEffect(() => {
-    p.value = on ? withSpring(1, { damping: 16, stiffness: 320, mass: 0.7 }) : withTiming(0, { duration: 140 });
-  }, [on, p]);
+    if (first.current) { first.current = false; return; }
+    const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(landed)(); };
+    p.value = on ? withSpring(1, { damping: 16, stiffness: 320, mass: 0.7 }, done) : withTiming(0, { duration: 140 }, done);
+  }, [on, p, landed]);
   const fill = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
   return (
     <View style={styles.tick}>
-      <Reanimated.View style={[styles.tickFill, fill]}>
+      <Reanimated.View key={fillKey} style={[styles.tickFill, fill]}>
         <Ionicons name="checkmark" size={15} color={colors.brandInk} />
       </Reanimated.View>
     </View>
@@ -248,17 +255,18 @@ export default function NewMessage() {
       footerY.value = withTiming(0, { duration: FOOTER_IN_MS, easing: Easing.out(Easing.cubic) }, up);
       return undefined;
     }
-    setFooterUp(false);
+    // Taken down once it has gone, and only then not up: the draw that starts the way out keeps the plain
+    // resting place (the way out's own values win over it as they run).
     if (footerStill) footerFade.value = withTiming(0, { duration: 160 });
     else footerY.value = withTiming(footerH.current + 4, { duration: FOOTER_OUT_MS, easing: Easing.in(Easing.quad) });
-    const t = setTimeout(() => setFooterDrawn(false), (footerStill ? 160 : FOOTER_OUT_MS) + 40);
+    const t = setTimeout(() => { setFooterDrawn(false); setFooterUp(false); }, (footerStill ? 160 : FOOTER_OUT_MS) + 40);
     return () => clearTimeout(t);
   }, [footerShown, footerStill, footerY, footerFade]);
   const footerSlide = useAnimatedStyle(() => ({ opacity: footerFade.value, transform: [{ translateY: footerY.value }] }));
   // Up and still, on a phone: the footer's place is said by a plain style as well, so a phone that drops the
   // settled animation values (Reanimated keeps the first frame's: below the edge, clear) can never take
   // Chat / Create group away on a later re-render.
-  const footerRest = Platform.OS !== 'web' && footerShown && footerUp ? FOOTER_REST : null;
+  const footerRest = Platform.OS !== 'web' && footerUp ? FOOTER_REST : null;
   const footer = (phone: boolean) => {
     if (!footerShown && !footerDrawn) return null;
     const f = footerShown ? { picked, notes, held, busy, sameGroup: !!sameGroup } : lastFooter.current;

@@ -29,11 +29,17 @@ const NO_LIMIT = 100000;
  * Never put it round anything glass: it fades its contents (Oct 17 rule).
  * With Reduce Motion on, a plain fade.
  */
-export function Fold({ open, children, appear = false, gap = 0, duration = 240, style, onClosed }: {
+export function Fold({ open, children, appear = false, gap = 0, room = 0, duration = 240, style, onClosed }: {
   open: boolean;
   children: React.ReactNode;
   appear?: boolean;
   gap?: number;
+  /**
+   * Room kept above and below the contents inside the fold (a card's soft shadow: Collapse's `unclip`),
+   * given back with negative margins in step with the fold, so a shut fold takes no space at all.
+   * The contents must bring the room themselves (padding).
+   */
+  room?: number;
   duration?: number;
   style?: StyleProp<ViewStyle>;
   /** Called once it has folded shut and taken its contents down. */
@@ -57,8 +63,12 @@ export function Fold({ open, children, appear = false, gap = 0, duration = 240, 
   const first = useRef(true);
   const closedRef = useRef(onClosed);
   closedRef.current = onClosed;
+  const openRef = useRef(open);
+  openRef.current = open;
 
   const settle = useCallback((opened: boolean) => {
+    // A close that landed just as it was opened again: the open now under way settles it instead.
+    if (!opened && openRef.current) return;
     setBusy(false);
     if (!opened) { setMounted(false); closedRef.current?.(); }
   }, []);
@@ -101,14 +111,16 @@ export function Fold({ open, children, appear = false, gap = 0, duration = 240, 
 
   const animated = useAnimatedStyle(() => {
     const p = opening ? 0 : progress.value;
-    return {
+    // Shutting, it takes its gap with it; empty (nothing to show), it takes none at all.
+    const top = (!gap ? 0 : height.value === 0 ? -gap : -gap * (1 - p)) - room * p;
+    const look = {
       opacity: p,
       // With Reduce Motion on, only the fade: the height changes at once.
       maxHeight: (opening || moving.value) && !still ? Math.max(0, height.value) * p : NO_LIMIT,
-      // Shutting, it takes its gap with it; empty (nothing to show), it takes none at all.
-      marginTop: !gap ? 0 : height.value === 0 ? -gap : -gap * (1 - p),
+      marginTop: top,
     };
-  }, [opening, still, gap]);
+    return room ? { ...look, marginBottom: -room * p } : look;
+  }, [opening, still, gap, room]);
 
   // What it showed while open, kept as it folds shut (the list that emptied, the box that was cancelled).
   const lastShown = useRef(children);
@@ -116,11 +128,13 @@ export function Fold({ open, children, appear = false, gap = 0, duration = 240, 
   if (!mounted && !open) return null;
   // Open and still, on a phone: its open look is said by a plain style as well, so a phone that drops
   // the settled animation values (Reanimated keeps the first frame's: shut and clear) can never fold
-  // an open box away on a later re-render.
-  const resting = Platform.OS !== 'web' && open && mounted && !busy && !opening;
+  // an open box away on a later re-render. Kept while it folds shut (the close's own values win over it
+  // as they run), so the draw that starts a close never shows the first frame's look for a moment.
+  const resting = Platform.OS !== 'web' && mounted && !opening && (open ? !busy : true);
+  const restTop = (gap && lastHeight.current === 0 ? -gap : 0) - room;
   return (
     <Animated.View
-      style={[(busy || opening) && { overflow: 'hidden' }, style, animated, resting && { opacity: 1, maxHeight: NO_LIMIT, marginTop: gap && lastHeight.current === 0 ? -gap : 0 }]}
+      style={[(busy || opening) && { overflow: 'hidden' }, style, animated, resting && (room ? { opacity: 1, maxHeight: NO_LIMIT, marginTop: restTop, marginBottom: -room } : { opacity: 1, maxHeight: NO_LIMIT, marginTop: restTop })]}
       pointerEvents={open ? 'box-none' : 'none'}
       accessibilityElementsHidden={!open}
       importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
@@ -202,13 +216,13 @@ export function Pop({ open, children, style, origin = 'top right' }: {
   const [rested, setRested] = useState(false);
   const lastShown = useRef(children);
   if (open) lastShown.current = children;
-  const gone = useCallback(() => setMounted(false), []);
+  // Taken down once shut, and only then not at rest: the draw that starts a close keeps the plain open look.
+  const gone = useCallback(() => { setMounted(false); setRested(false); }, []);
   useEffect(() => {
     if (open) {
       setMounted(true);
       progress.value = withTiming(1, { duration: 200, easing: CURVE }, (done) => { if (done) runOnJS(setRested)(true); });
     } else {
-      setRested(false);
       progress.value = withTiming(0, { duration: 140, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(gone)(); });
     }
   }, [open, progress, gone]);
@@ -219,7 +233,8 @@ export function Pop({ open, children, style, origin = 'top right' }: {
   if (!mounted && !open) return null;
   // Open and still, on a phone: its open look is said by a plain style as well (as Fold's), so a dropped
   // settled animation value can never leave an open menu invisible on a later re-render.
-  const resting = Platform.OS !== 'web' && open && rested;
+  // Kept through a close (the close's own values win over it as they run).
+  const resting = Platform.OS !== 'web' && rested;
   return (
     <Animated.View style={[style, { transformOrigin: origin } as ViewStyle, animated, resting && POP_REST]} pointerEvents={open ? 'auto' : 'none'}>
       {open ? children : lastShown.current}

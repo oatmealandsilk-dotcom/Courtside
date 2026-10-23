@@ -1,7 +1,8 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, withSpring, withTiming } from 'react-native-reanimated';
 
+import { useRestLength } from '@/components/ui/restMotion';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { SHEET_SPRING } from '@/theme/motion';
 
@@ -27,22 +28,20 @@ const SPRING = { ...SHEET_SPRING, overshootClamping: true } as const;
 
 export function useGlideHeight({ shrink = true, seed = 0, spring = false, pad = 0 }: { shrink?: boolean; seed?: number; spring?: boolean; pad?: number } = {}) {
   const reduce = useReducedMotion();
-  // -1: not measured yet, so the box takes its content's own height.
-  const h = useSharedValue(seed > 0 ? seed : -1);
-  const target = useRef(seed > 0 ? seed : 0);
-  const style = useAnimatedStyle(() => (h.value < 0 ? {} : { height: h.value }));
+  // Not measured yet (and no seed): no height of its own, so the box takes its content's.
+  // The resting height is a plain style held by React (useRestLength), so an iPhone that drops a
+  // settled animation value can never put the box back to an older height on a later re-render.
+  const box = useRestLength('height', seed > 0 ? seed : null);
   const onLayout = useCallback((e: LayoutChangeEvent) => {
     const inner = e.nativeEvent.layout.height;
     if (inner <= 0) return;
     const next = Math.round((inner + pad) * 2) / 2;
-    if (next === target.current) return;
-    const first = target.current === 0;
-    target.current = next;
-    if (first && h.value < 0) { h.value = next; return; }
-    if (reduce || (!shrink && next < h.value)) { cancelAnimation(h); h.value = next; return; }
-    h.value = spring ? withSpring(next, SPRING) : withTiming(next, EASE);
+    const now = box.target.current;
+    if (next === now) return;
+    if (now == null || reduce || (!shrink && next < now)) { box.jump(next); return; }
+    box.glide(next, (to, done) => (spring ? withSpring(to, SPRING, done) : withTiming(to, EASE, done)));
   }, [reduce, shrink, spring, pad]); // eslint-disable-line react-hooks/exhaustive-deps
-  return { style, onLayout, height: h };
+  return { style: box.style, onLayout };
 }
 
 /**

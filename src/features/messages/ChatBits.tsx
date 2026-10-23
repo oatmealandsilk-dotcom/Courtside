@@ -8,6 +8,7 @@ import Reanimated, { Easing, FadeIn, FadeOut, ZoomIn, ZoomOut, runOnJS, useAnima
 
 import { Avatar } from '@/components/ui';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
+import { useRestLength } from '@/components/ui/restMotion';
 import { RisingSheet } from '@/components/RisingSheet';
 import type { ID, Message, User } from '@/data/types';
 import { chatStamp } from '@/lib/format';
@@ -125,15 +126,18 @@ export function GrowRoom({ children, from = 'bottom', growIn = false }: { childr
   const styles = useThemedStyles(styleDefinitions);
   const still = useReducedMotion();
   // growIn: it opens from nothing on the fold's own clock (a receipt moving up as the message under it leaves).
-  const h = useSharedValue(growIn ? 0 : -1);
-  const look = useAnimatedStyle(() => ({ height: Math.max(0, h.value) }));
+  // Its resting height is a plain style held by React (useRestLength), so an iPhone that drops a settled
+  // animation value can never fold the room shut (a group name box while you type in it) on a later re-render.
+  const room = useRestLength('height', growIn ? 0 : null);
   return (
-    <Reanimated.View style={[styles.growRoom, look]}>
+    <Reanimated.View style={[styles.growRoom, room.style]}>
       <View
         style={[styles.growInner, from === 'top' ? styles.growTop : styles.growBottom]}
         onLayout={(e) => {
           const next = e.nativeEvent.layout.height;
-          h.value = h.value < 0 || still ? next : withTiming(next, growIn ? { duration: LEAVE_MS, easing: FOLD } : { duration: 240, easing: GLIDE });
+          if (room.target.current == null || still) { room.jump(next); return; }
+          if (next === room.target.current) return;
+          room.glide(next, (to, done) => withTiming(to, growIn ? { duration: LEAVE_MS, easing: FOLD } : { duration: 240, easing: GLIDE }, done));
         }}
       >
         {children}

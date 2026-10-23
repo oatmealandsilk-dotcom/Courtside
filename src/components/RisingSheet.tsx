@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, Modal, Platform, Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -44,6 +44,10 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
   // (AT_REST below), so an iPhone that drops the settled animation values (Reanimated keeps the
   // first frame's, off screen and clear) can never send an open sheet away on a later re-render.
   const [up, setUp] = useState(false);
+  const visibleRef = useRef(visible);
+  visibleRef.current = visible;
+  // (A close that landed just as it was opened again leaves it up.)
+  const gone = useCallback(() => { if (visibleRef.current) return; setMounted(false); setUp(false); }, []);
   const rise = useSharedValue(0);
   const dim = useSharedValue(0);
   const height = useSharedValue(Dimensions.get('window').height);
@@ -55,16 +59,18 @@ export function RisingSheet({ visible, onClose, onBackdropPress, closeLabel = 'C
       rise.value = reduce ? withTiming(1, { duration: SHEET_DIM_IN_MS }, done) : withSpring(1, SHEET_SPRING, done);
       return;
     }
-    setUp(false);
+    // Gone once it has left, and only then not at rest: the draw that starts a close keeps the plain
+    // resting look (the close's own values win over it as they run), so it never blinks to the first
+    // frame's look (off screen, clear) for a moment before dropping away.
     dim.value = withTiming(0, { duration: SHEET_DIM_OUT_MS });
     rise.value = withTiming(0, { duration: SHEET_CLOSE_MS, easing: CLOSE_EASE }, (finished) => {
-      if (finished) runOnJS(setMounted)(false);
+      if (finished) runOnJS(gone)();
     });
-  }, [visible, reduce, rise, dim]);
+  }, [visible, reduce, rise, dim, gone]);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   // Phones only: Reanimated's settled-value handling is native-only, and in a browser a resting style
   // dropped on close would be written for a frame before the close animation's first.
-  const atRest = up && visible && Platform.OS !== 'web';
+  const atRest = up && Platform.OS !== 'web';
   const sheetMotion = useAnimatedStyle(() => (reduce
     ? { opacity: rise.value }
     // Never above where it rests: the spring's faint settle would lift its bottom edge off the screen's.

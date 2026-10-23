@@ -1,10 +1,11 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, FadeIn, FadeInLeft, FadeInRight, FadeOut, LayoutAnimationConfig, ReduceMotion, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInLeft, FadeInRight, FadeOut, LayoutAnimationConfig, ReduceMotion, interpolateColor, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { BrandMark } from '@/components/BrandMark';
+import { useRestKey } from '@/components/ui/restMotion';
 import { Submit } from '@/components/sheet/SheetForm';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -71,16 +72,22 @@ function Dot({ on }: { on: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
   const p = useSharedValue(on ? 1 : 0);
+  // Built afresh each time it lands, on a phone, so an iPhone that drops a settled animation value can
+  // never show the wrong step's dot on a later re-render.
+  const [dotKey, landed] = useRestKey();
+  const first = useRef(true);
   useEffect(() => {
-    p.value = reduced ? (on ? 1 : 0) : withTiming(on ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) });
-  }, [on, reduced, p]);
+    if (first.current) { first.current = false; return; }
+    if (reduced) { p.value = on ? 1 : 0; landed(); return; }
+    p.value = withTiming(on ? 1 : 0, { duration: 260, easing: Easing.out(Easing.cubic) }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
+  }, [on, reduced, p, landed]);
   const quiet = withAlpha(colors.text, 0.18);
   const green = colors.brand;
   const look = useAnimatedStyle(() => ({
     width: 6 + 14 * p.value,
     backgroundColor: interpolateColor(p.value, [0, 1], [quiet, green]),
   }));
-  return <Animated.View style={[styles.dot, look]} />;
+  return <Animated.View key={dotKey} style={[styles.dot, look]} />;
 }
 
 /**

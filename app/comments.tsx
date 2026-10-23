@@ -513,14 +513,19 @@ function Collapse({ show, gap, pullTop = 0, style, children }: { show: boolean; 
   const height = useSharedValue(0);
   // Open and still: see `resting` below.
   const [rested, setRested] = useState(show);
+  const showRef = useRef(show);
+  showRef.current = show;
+  // Taken down once shut, and only then not at rest: the draw that starts a close keeps the plain open
+  // look (the close's own values win over it as they run). A close that landed just as it was shown
+  // again leaves it up.
+  const gone = useCallback(() => { if (showRef.current) return; setMounted(false); setRested(false); }, []);
   useEffect(() => {
     if (show) setMounted(true);
-    else setRested(false);
     open.value = withTiming(show ? 1 : 0, { duration: 180 }, (done) => {
-      if (done && !show) runOnJS(setMounted)(false);
+      if (done && !show) runOnJS(gone)();
       if (done && show) runOnJS(setRested)(true);
     });
-  }, [show, open]);
+  }, [show, open, gone]);
   const look = useAnimatedStyle(() => ({
     height: height.value * open.value,
     opacity: open.value,
@@ -531,7 +536,7 @@ function Collapse({ show, gap, pullTop = 0, style, children }: { show: boolean; 
   // Open and still, on a phone: its open look is said by a plain style as well, so a phone that drops the
   // settled animation values (Reanimated keeps the first frame's: no height, clear) can never fold an open
   // strip away on a later re-render.
-  const resting = Platform.OS !== 'web' && show && rested;
+  const resting = Platform.OS !== 'web' && rested;
   return (
     <Animated.View style={[{ overflow: 'hidden' }, style, look, resting && { height: 'auto', opacity: 1, marginTop: -pullTop, marginBottom: 0 }]} pointerEvents={show ? 'auto' : 'none'}>
       <View onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>{last.current}</View>

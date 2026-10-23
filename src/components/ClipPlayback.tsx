@@ -1,11 +1,12 @@
-import React, { useContext, useEffect, useRef, useState, memo } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState, memo } from 'react';
 import { useSoundMuted } from '@/features/feed/sound';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
+import { useRestKey } from '@/components/ui/restMotion';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { ClipVideo } from './ClipVideo';
@@ -34,18 +35,20 @@ function Pop({ on, children }: { on: boolean; children: React.ReactNode }) {
   const v = useSharedValue(on ? 1 : 0);
   const [drawn, setDrawn] = useState(on);
   const [still, setStill] = useState(on);
+  // Taken down once hidden, and only then not still: the draw that starts the way out keeps the plain
+  // shown look (the way out's own values win over it as they run).
+  const gone = useCallback(() => { setDrawn(false); setStill(false); }, []);
   useEffect(() => {
     if (on) {
       setDrawn(true);
       v.value = withTiming(1, { duration: 160, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(setStill)(true); });
       return;
     }
-    setStill(false);
-    v.value = withTiming(0, { duration: 120, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(setDrawn)(false); });
-  }, [on, v]);
+    v.value = withTiming(0, { duration: 120, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(gone)(); });
+  }, [on, v, gone]);
   const look = useAnimatedStyle(() => ({ opacity: v.value, transform: [{ scale: 0.8 + 0.2 * v.value }] }));
   if (!drawn && !on) return null;
-  return <Animated.View pointerEvents="none" style={[look, on && still && POP_SHOWN]}>{children}</Animated.View>;
+  return <Animated.View pointerEvents="none" style={[look, still && Platform.OS !== 'web' && POP_SHOWN]}>{children}</Animated.View>;
 }
 
 const POP_SHOWN = { opacity: 1, transform: [{ scale: 1 }] };
@@ -170,6 +173,16 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const glassDisc = !!discInk && liquidGlass;
   const growDisc = glassDisc && !reduceMotion;
   const discShown = useDerivedValue(() => disc.value * (pageChrome ? pageChrome.value : 1));
+  // A pinned disc rests shown, and hidden while its page is on the comments stage. On a phone it is
+  // built afresh each time it comes to rest in the other look (Oct 23), so an iPhone that drops a settled
+  // animation value can never leave it shrunk away (or shown over the stage) on a later re-render.
+  const [discKey, bumpDisc] = useRestKey();
+  const discRest = useSharedValue(-1);
+  useAnimatedReaction(() => (!discPinned ? -1 : discShown.value >= 0.999 ? 1 : discShown.value <= 0.001 ? 0 : -1), (now, before) => {
+    if (now < 0) return;
+    if (before === null || discRest.value < 0) { discRest.value = now; return; }
+    if (now !== discRest.value) { discRest.value = now; runOnJS(bumpDisc)(); }
+  }, [discPinned]);
   const discStyle = useAnimatedStyle(() => (growDisc
     ? { opacity: 1, transform: [{ scale: discShown.value }] }
     : { opacity: discShown.value, transform: [{ scale: 0.86 + 0.14 * disc.value }] }), [growDisc]);
@@ -239,7 +252,7 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
       </Pressable>
       {silent || bare ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={muted ? 'Unmute clip' : 'Mute clip'} hitSlop={12} onPress={() => { setMuted((v) => !v); if (!discPinned) showDisc(); }} style={[styles.soundHit, { top: insets.top + drop + (discInk ? 25 : 22) }]}>
-          <Animated.View style={[styles.sound, discInk ? styles.soundThemed : null, glassDisc ? styles.soundLiquid : null, discStyle]}>
+          <Animated.View key={discKey} style={[styles.sound, discInk ? styles.soundThemed : null, glassDisc ? styles.soundLiquid : null, discStyle]}>
             {glassDisc ? <GlassFill radius={18} tint={colors.brand} strength={0.22} present={growDisc ? discShown : undefined} fade={growDisc ? undefined : discShown} /> : null}
             <Ionicons name={muted ? 'volume-mute' : 'volume-high'} size={17} color="white" />
           </Animated.View>

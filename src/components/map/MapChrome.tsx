@@ -10,6 +10,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
+import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { FollowShrink } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
@@ -142,11 +143,12 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
   // One lit value for the button's green, its edge and its icon, so the icon never runs ahead of the fill (a spinner ending as Location comes on).
   const locLit = useLit(!!locationOn);
+  const locV = locLit.v;
   const edgeOff = `${colors.borderStrong}55`;
   const edgeOn = colors.brand;
-  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locLit.value, [0, 1], [edgeOff, edgeOn]) }));
+  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff, edgeOn]) }));
   const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : (
-    <TwoTone v={locLit} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
+    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
   );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
@@ -211,8 +213,8 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           <TipPulse where="map" size={44} />
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
             {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass radius={22} style={[styles.barRound, locEdge]}>
-              <GreenFill v={locLit} radius={22} />
+            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
+              <GreenFill v={locLit.v} radius={22} />
               {locationIcon}
             </MapGlass>
           </Pressable>
@@ -269,43 +271,45 @@ function SearchList({ up, children }: { up: boolean; children: React.ReactNode }
   // While it closes, what it last listed.
   const kept = useRef<React.ReactNode>(children);
   if (up) kept.current = children;
-  const h = useSharedValue(0);
   const open = useSharedValue(0);
   const natural = useRef(0);
+  // The glass's height: React holds it at rest (useRestLength), so an iPhone that drops a settled
+  // animation value can never put the list back to an older height on a later re-render.
+  const glass = useRestLength('height', 0);
+  const ease = useCallback((to: number, done: (finished?: boolean) => void) => withTiming(to, LIST_EASE, done), []);
   // Open and still: see `resting` below.
   const [opened, setOpened] = useState(false);
   useEffect(() => {
     if (up) {
       setShown(true);
       open.value = withTiming(1, { duration: LIST_IN_MS }, (done) => { if (done) runOnJS(setOpened)(true); });
-      if (natural.current) h.value = reduce ? natural.current : withTiming(natural.current, LIST_EASE);
+      if (natural.current) { if (reduce) glass.jump(natural.current); else glass.glide(natural.current, ease); }
       return;
     }
-    setOpened(false);
-    const gone = (done?: boolean) => { 'worklet'; if (done) runOnJS(setShown)(false); };
-    if (reduce) { open.value = withTiming(0, { duration: LIST_OUT_MS }, gone); return; }
+    // Taken down once shut, and only then not at rest: the draw that starts the close keeps the plain open look.
+    const gone = () => { setShown(false); setOpened(false); };
+    if (reduce) { open.value = withTiming(0, { duration: LIST_OUT_MS }, (done) => { 'worklet'; if (done) runOnJS(gone)(); }); return; }
     open.value = withTiming(0, { duration: LIST_OUT_MS });
-    h.value = withTiming(0, LIST_EASE, gone);
+    glass.glide(0, ease, gone);
   }, [up]); // eslint-disable-line react-hooks/exhaustive-deps
   // Unmounted, it starts from nothing the next time.
-  useEffect(() => { if (!shown) { natural.current = 0; h.value = 0; } }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (!shown) { natural.current = 0; glass.jump(0); } }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
   const wrap = useAnimatedStyle(() => ({ opacity: open.value, marginTop: spacing.sm * open.value }));
-  const glass = useAnimatedStyle(() => ({ height: h.value }));
   if (!shown) return null;
-  // Open and still, on a phone: the list's open look is said by plain styles as well, so a phone that drops
-  // the settled animation values (Reanimated keeps the first frame's: clear, no height) can never take an
-  // open list away on a later re-render.
-  const resting = Platform.OS !== 'web' && up && opened;
+  // Open and still, on a phone: the list's open look is said by a plain style as well, so a phone that drops
+  // the settled animation values (Reanimated keeps the first frame's: clear) can never take an open list
+  // away on a later re-render. Kept while it closes (the close's own values win over it as they run).
+  const resting = Platform.OS !== 'web' && opened;
   return (
     <Animated.View style={[styles.resultsWrap, wrap, !up && styles.noTouch, resting && LIST_REST]}>
-      <MapGlass dense radius={18} style={[styles.results, glass, resting && natural.current > 0 && { height: 'auto' }]}>
+      <MapGlass dense radius={18} style={[styles.results, glass.style]}>
         <View
           onLayout={(e) => {
             const next = Math.round(e.nativeEvent.layout.height * 2) / 2;
             if (next <= 0 || next === natural.current) return;
             natural.current = next;
             if (!up) return;
-            h.value = reduce ? next : withTiming(next, LIST_EASE);
+            if (reduce) glass.jump(next); else glass.glide(next, ease);
           }}
         >
           {up ? children : kept.current}
@@ -382,7 +386,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   useEffect(() => () => { if (pending.current) clearTimeout(pending.current); }, []);
   const pill = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }], width: w.value }));
   const courtsV = useLit(courtsOn);
-  const courtsLit = useLitText(courtsV);
+  const courtsLit = useLitText(courtsV.v);
   const pick = (key: MapFilter) => {
     if (key === active) return;
     haptics.tap();
@@ -418,9 +422,9 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
         <View style={styles.chipGap} />
         <Pressable accessibilityRole="switch" accessibilityState={{ checked: courtsOn }} accessibilityLabel="Show courts" hitSlop={CHIP_REACH} onPress={() => { haptics.tap(); onCourts(); }} style={styles.chip}>
           {/* The green fades in and out over 180 ms, in step with the filter pill sliding beside it. */}
-          <GreenFill v={courtsV} radius={999} edge={1} />
-          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone v={courtsV} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
-          <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit]}>Courts</Animated.Text>
+          <GreenFill key={`fill${courtsV.key}`} v={courtsV.v} radius={999} edge={1} />
+          {courtsLoading ? <ActivityIndicator size="small" color={courtsOn ? colors.brandInk : colors.text} /> : <TwoTone key={`icon${courtsV.key}`} v={courtsV.v} off={<CourtGlyph size={15} color={colors.text} />} lit={<CourtGlyph size={15} color={colors.brandInk} />} />}
+          <Animated.Text key={`words${courtsV.key}`} maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, courtsLit]}>Courts</Animated.Text>
         </Pressable>
       </ScrollView>
     </View>
@@ -430,11 +434,20 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
 /** How long a control's green fill takes to come and go (Oct 22 sweep: it switched in one frame). */
 const FILL_MS = 180;
 
-/** 0 to 1 as a control turns on, and back: its green fill and its words follow it. */
+/**
+ * 0 to 1 as a control turns on, and back: its green fill and its words follow it. `key` changes each
+ * time it lands (on a phone): the views it moves take it, so they are built afresh at rest and an
+ * iPhone that drops a settled animation value can never show the old look on a later re-render.
+ */
 function useLit(on: boolean) {
   const v = useSharedValue(on ? 1 : 0);
-  useEffect(() => { v.value = withTiming(on ? 1 : 0, { duration: FILL_MS, easing: Easing.out(Easing.quad) }); }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
-  return v;
+  const [key, bump] = useRestKey();
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    v.value = withTiming(on ? 1 : 0, { duration: FILL_MS, easing: Easing.out(Easing.quad) }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { v, key };
 }
 
 /** Words that turn from the page's colour to the colour on green as the fill comes in. */
@@ -629,22 +642,24 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
   const reduce = useReducedMotion();
   const [natural, setNatural] = useState(0);
   const target = natural && room !== 0 ? (room == null ? natural : Math.min(natural, room)) : 0;
-  const w = useSharedValue(-1);
+  // Its width rests as a plain style held by React (useRestLength), so an iPhone that drops a settled
+  // animation value can never put the pill back to an older width on a later re-render.
+  const pillW = useRestLength('width');
   useEffect(() => {
     if (!target) return;
     // The edge's hairlines either side of the words.
     const to = target + 2 * StyleSheet.hairlineWidth;
-    if (w.value < 0 || reduce) w.value = to;
-    else w.value = withTiming(to, { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.2, 1) });
+    if (pillW.target.current == null || reduce) pillW.jump(to);
+    else if (to !== pillW.target.current) pillW.glide(to, (t, done) => withTiming(t, { duration: 240, easing: Easing.bezier(0.2, 0.8, 0.2, 1) }, done));
   }, [target]); // eslint-disable-line react-hooks/exhaustive-deps
-  const glide = useAnimatedStyle(() => (w.value < 0 ? {} : { width: w.value }));
   const icon = <Ionicons name={n ? 'people' : 'people-outline'} size={15} color={colors.brand} />;
   // The chevron rides the gliding edge (drawn at the glass's right, its room kept in the row), fading with whether there is a list.
   const chevV = useLit(!!n);
-  const chevLook = useAnimatedStyle(() => ({ opacity: chevV.value }));
+  const chevOn = chevV.v;
+  const chevLook = useAnimatedStyle(() => ({ opacity: chevOn.value }));
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={n ? 'Show the full list' : 'Show players'} onPress={() => { haptics.tap(); onOpen(); }} style={({ pressed }) => [styles.pillLift, pressed && styles.glassPressed]}>
-      <MapGlass radius={21} style={[styles.pillEdge, glide]}>
+      <MapGlass radius={21} style={[styles.pillEdge, pillW.style]}>
         {/* Laid out at the width it is going to, so the words never squeeze while the edge glides. */}
         <View style={[styles.playersPill, n ? styles.playersPillChev : null, target ? { width: target } : null]}>
           {icon}
@@ -652,7 +667,7 @@ export function PlayersPill({ items, query = '', filter = 'all', courts = [], lo
             <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.playersPillText} numberOfLines={1}>{words}</Text>
           </CrossFade>
         </View>
-        <Animated.View pointerEvents="none" style={[styles.pillChev, chevLook]}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></Animated.View>
+        <Animated.View key={chevV.key} pointerEvents="none" style={[styles.pillChev, chevLook]}><Ionicons name="chevron-up" size={14} color={colors.textMuted} /></Animated.View>
       </MapGlass>
       {/* The unseen copy, free of the room, to say how wide the pill wants to be (a point to spare, so a fraction never trails the words off). */}
       <View style={styles.pillMeasure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
@@ -888,6 +903,8 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
 /** How long a crossfade's old copy takes to go, and its new one to come. */
 const SWAP_OUT_MS = 140;
 const SWAP_IN_MS = 200;
+/** A crossfade layer shown and still: after its animated style, so it wins at rest. */
+const SWAP_SHOWN = { opacity: 1 } as const;
 
 /**
  * What it shows, crossfading to new content each time `id` changes: the old copy stays drawn in place
@@ -920,13 +937,18 @@ function CrossFade({ id, children, ghost, appear = false, free = false, style }:
 }
 
 function SwapLayer({ leaving = false, first = false, onGone, style, children }: { leaving?: boolean; first?: boolean; onGone?: () => void; style?: object; children: React.ReactNode }) {
-  const v = useSharedValue(first ? 1 : 0);
+  // The old copy is a layer of its own, built as it starts to leave: it starts fully there and fades out.
+  const v = useSharedValue(first || leaving ? 1 : 0);
+  // Each layer comes to rest once (shown), then is only ever taken away: shown and still, on a phone, that
+  // is said by a plain style as well, so an iPhone that drops the settled animation value can never leave
+  // a layer clear (its first frame) on a later re-render.
+  const [shown, setShown] = useState(first);
   const gone = useRef(onGone);
   gone.current = onGone;
   const done = useCallback(() => gone.current?.(), []);
   useEffect(() => {
     if (leaving) v.value = withTiming(0, { duration: SWAP_OUT_MS, easing: Easing.out(Easing.quad) }, (fin) => { 'worklet'; if (fin) runOnJS(done)(); });
-    else v.value = withTiming(1, { duration: SWAP_IN_MS, easing: Easing.out(Easing.quad) });
+    else v.value = withTiming(1, { duration: SWAP_IN_MS, easing: Easing.out(Easing.quad) }, (fin) => { 'worklet'; if (fin) runOnJS(setShown)(true); });
   }, [leaving]); // eslint-disable-line react-hooks/exhaustive-deps
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
@@ -935,7 +957,7 @@ function SwapLayer({ leaving = false, first = false, onGone, style, children }: 
       accessibilityElementsHidden={leaving}
       importantForAccessibility={leaving ? 'no-hide-descendants' : 'auto'}
       aria-hidden={leaving || undefined}
-      style={[style, look]}
+      style={[style, look, !leaving && shown && Platform.OS !== 'web' && SWAP_SHOWN]}
     >
       {children}
     </Animated.View>
