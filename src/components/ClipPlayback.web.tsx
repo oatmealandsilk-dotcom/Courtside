@@ -18,10 +18,12 @@ import { noteClipLoad } from '@/lib/netSpeed';
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, next = false, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
+  /** The page just below the one on screen: the one a swipe lands on next (see the wake-up below). */
+  next?: boolean;
   /**
    * It has three seconds in hand, or all of it (its `onReady` is only its first frame): on screen,
    * playing with that much fetched ahead of where it is (`onScreen` true); waiting off screen,
@@ -154,6 +156,23 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     if (active && !silent && !bare) showDisc();
     return () => { if (discTimer.current) clearTimeout(discTimer.current); };
   }, [active, silent, bare, discPinned]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Next in line, fetched and paused: Chrome puts a paused clip's player to sleep once it has sat
+  // idle for about 15 seconds, and one swiped onto then shows its first frame but does not move
+  // until the browser has woken it (a still with no disc, up to two seconds on a slow link). A seek
+  // to the very spot it stands on wakes it without changing its frame: done a moment after the
+  // page before is landed on (never in the way of that clip's own start), and every 10 s it waits.
+  useEffect(() => {
+    if (!next || active || !preload || warmOnly) return undefined;
+    const wake = () => {
+      const el = video.current;
+      if (!el || onScreen.current || !el.paused || el.seeking || el.readyState < 2) return;
+      el.currentTime = el.currentTime; // eslint-disable-line no-self-assign
+    };
+    const first = setTimeout(wake, 600);
+    const again = setInterval(wake, 10000);
+    return () => { clearTimeout(first); clearInterval(again); };
+  }, [next, active, preload, warmOnly]);
 
   // Swiped away and back within a few seconds, it picks up where it was (even
   // if its page was rebuilt meanwhile); later, it starts over (clipResume).

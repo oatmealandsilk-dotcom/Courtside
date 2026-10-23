@@ -1543,8 +1543,16 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const [goneIds, setGoneIds] = useState<Set<string>>(() => new Set());
   // `ok` true: the page's picture is in (a picture that failed counts as done
   // too: nothing waits on it, and its cover lifts). False: its video player was freed.
-  const markReady = useCallback((id: string, ok: boolean) => {
+  // Pages shown by the six-second fallback below rather than by their picture arriving: they are
+  // on show, but the lookahead (further down) waits for the real thing before it fetches further.
+  const [forcedIds, setForcedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markReady = useCallback((id: string, ok: boolean, forced = false) => {
     if (ok) {
+      setForcedIds((prev) => {
+        if (forced) return prev.has(id) ? prev : new Set(prev).add(id);
+        if (!prev.has(id)) return prev;
+        const next = new Set(prev); next.delete(id); return next;
+      });
       setReadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
       setGoneIds((prev) => { if (!prev.has(id)) return prev; const next = new Set(prev); next.delete(id); return next; });
     } else {
@@ -1569,7 +1577,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (!item) return undefined;
     const id = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : null;
     if (!id || readyIds.has(id)) return undefined;
-    const timer = setTimeout(() => markReady(id, true), 6000);
+    const timer = setTimeout(() => markReady(id, true, true), 6000);
     return () => clearTimeout(timer);
   }, [active, feed, readyIds, markReady]);
   // A post whose video only ever existed on the phone that made it will never
@@ -1681,7 +1689,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       const id = item?.type === 'hit' ? (item.story.videoUrl || item.story.imageUrl ? item.story.id : null)
         : item?.type === 'post' && reachable(item.post) && (item.post.videoUrl || (item.post.kind !== 'clip' && item.post.imageUrl)) ? item.post.id : null;
       if (!id) continue;
-      if (!inNow(id)) return false;
+      // Shown by the fallback only (still fetching its opening seconds): the link is not free yet.
+      if (!inNow(id) || forcedIds.has(id)) return false;
       // In a browser "in" is only the first frame: there the clip on screen must also be playing
       // with three seconds in hand, as a phone's has when it starts (a link with nothing to spare
       // never gets there), and while it needs the link the ones ahead must have three seconds in
@@ -1696,9 +1705,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const lookahead = useRef<ReadonlySet<string>>(new Set());
   {
     const keep = new Set<string>();
-    for (let k = -WINDOW; k <= EXTRA; k += 1) { const item = feed[active + k]; if (item && lookahead.current.has(keyOf(item))) keep.add(keyOf(item)); }
+    // The third page ahead is kept only while this feed is on show: a Home that goes out of sight
+    // (a group tab over For you, a screen pushed on top) frees that extra player and builds it
+    // again from the gate below once it is back, so hidden feeds hold no more than before.
+    const reach = playing ? EXTRA : AHEAD;
+    for (let k = -WINDOW; k <= reach; k += 1) { const item = feed[active + k]; if (item && lookahead.current.has(keyOf(item))) keep.add(keyOf(item)); }
     // On a phone every built page has its player: one step back keeps the page that moves out
-    // to third ahead as it is (it has its seconds in) instead of freeing it.
+    // to third ahead as it is (it has its seconds in) instead of freeing it, while on show.
     if (Platform.OS !== 'web') for (let k = -WINDOW; k <= AHEAD; k += 1) { const item = feed[active + k]; if (item) keep.add(keyOf(item)); }
     const third = feed[active + EXTRA];
     if (third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
@@ -1981,7 +1994,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} next={Platform.OS === 'web' && playing && ahead === 1} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2150,6 +2163,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
                           preload={near}
+                          next={Platform.OS === 'web' && playing && ahead === 1}
                           warmOnly={warming}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
