@@ -1,6 +1,7 @@
 import { forwardRef, useImperativeHandle } from 'react';
 import type { View } from 'react-native';
 import { flushSync } from 'react-dom';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { CROSSFADE_MS, REVEAL_MS, THEME_SWITCH, coverRadius, middleOf, type ThemeSwitcherHandle } from './themeSwitch';
 
 type Transition = { ready: Promise<void>; finished: Promise<void>; updateCallbackDone: Promise<void> };
@@ -15,15 +16,16 @@ let styled = false;
  * you tapped (the browser's view transitions: Chrome, Edge, Safari 18+);
  * with THEME_SWITCH 'crossfade', the photograph fades away over the new page.
  * Taps go straight through to the page while it runs, so a second pick starts
- * again from where the first was heading. Browsers without view transitions,
- * and anyone who asked their system for less motion, switch at once.
+ * again from where the first was heading. Browsers without view transitions
+ * switch at once, and so does Reduce Motion when the app honours it
+ * (src/lib/useReducedMotion, the same answer as on a phone).
  */
 export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObject<View | null> }>(function ThemeSwitcher(_props, ref) {
+  const reduced = useReducedMotion();
   useImperativeHandle(ref, () => ({
-    start(apply, from) {
+    start(_name, apply, from) {
       const doc = typeof document !== 'undefined' ? (document as TransitionDocument) : null;
-      const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-      if (!doc?.startViewTransition || still) {
+      if (!doc?.startViewTransition || reduced) {
         apply();
         return;
       }

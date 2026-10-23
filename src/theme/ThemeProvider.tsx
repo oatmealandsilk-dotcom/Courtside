@@ -277,13 +277,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       else void AsyncStorage.setItem(STORAGE_KEY, name);
     } catch {}
     target.current = name;
-    if (switcher.current) switcher.current.start(() => apply(name), from);
+    if (switcher.current) switcher.current.start(name, () => apply(name), from);
     else apply(name);
   };
   // The redraw has landed.
   useEffect(() => {
     if (target.current === theme) target.current = null;
-    if (stamp) switcher.current?.landed();
+    if (stamp) switcher.current?.landed(theme);
   }, [theme, stamp]);
 
   // Kept so existing callers of the old night-mode switch keep working.

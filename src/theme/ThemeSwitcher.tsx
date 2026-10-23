@@ -1,153 +1,241 @@
-import React, { forwardRef, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
-import Animated, { Easing, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Image as SvgImage, Mask, Rect } from 'react-native-svg';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
-import { CROSSFADE_MS, REVEAL_MS, THEME_SWITCH, coverRadius, middleOf, type ThemeSwitcherHandle } from './themeSwitch';
+import { useReducedMotion } from '@/lib/useReducedMotion';
+import {
+  CAPTURE_CAP_MS,
+  CROSSFADE_MS,
+  END_GRACE_MS,
+  LAND_CAP_MS,
+  REVEAL_MS,
+  THEME_SWITCH,
+  coverRadius,
+  middleOf,
+  type TapPoint,
+  type ThemeSwitcherHandle,
+} from './themeSwitch';
 
 /**
- * A theme change on a phone (Oct 21). The old veil (a see-through tint of the
- * new court raised over the screen while it recoloured) read as a faded blink;
- * now the new court spreads out in a circle from the card you tapped.
+ * A theme change on a phone (Oct 21, Oct 23). The old veil (a see-through
+ * tint of the new court raised over the screen while it recoloured) read as a
+ * grey, faded blink; now:
  *
- * 1. The app as it is, photographed and laid over itself: nothing moves yet.
- * 2. The app recolours beneath that photograph, out of sight, so a repaint in
- *    patches is never seen.
- * 3. The moment the new colours land, a circle opens in that photograph at
- *    the tap point and grows until the photograph is gone: through it you see
- *    the live app, already in its new colours. There is no second photograph:
- *    an earlier draft took one and waited for it, a second wait before
- *    anything moved (Oct 16, owner: "lets make it instant").
- *    (THEME_SWITCH 'crossfade' instead: the photograph simply fades away over
- *    the live new look.)
+ * 1. A frame after the tap (so the card's check has moved), the app as it is
+ *    is photographed and laid over itself as a plain picture: nothing moves.
+ * 2. The frame after that picture is on screen, the app recolours beneath it,
+ *    out of sight, so a repaint in patches is never seen.
+ * 3. Once the new colours have landed, the picture fades away over the live
+ *    new look (THEME_SWITCH 'crossfade'), or a circle opens in it from the
+ *    tapped card ('reveal'), and the picture is taken away.
  *
- * Everything that moves is the photograph, laid over the app as a sibling:
- * the app's own views (and so the glass tab bar's) are never faded or moved.
- * The circle runs on the animation thread, so a busy redraw can't stutter it.
- * A phone that can't take the photograph simply switches at once. A second
- * tap while one is running drops the running one where it is and starts again
- * from the court it was heading to.
+ * Only that picture ever fades or opens, a separate layer laid over the app:
+ * the app's own views (and so the glass tab bar's blur) are never faded, so
+ * the glass is never see-through. The move runs on the animation thread.
+ *
+ * Never stuck, whatever the phone does:
+ * - the picture must be on screen within CAPTURE_CAP_MS of the tap, or the
+ *   change simply happens at once, with no animation (also when the phone
+ *   can't photograph);
+ * - the picture moves after LAND_CAP_MS even if the redraw never reports in;
+ * - it is taken away END_GRACE_MS after its move should have ended, whether
+ *   or not the animation says it finished (a lost callback, a dropped settled
+ *   value), and it is unmounted, never left see-through.
+ *
+ * A second tap: while the picture still covers everything, the new court is
+ * simply put on beneath it instead. While one is already moving, the live
+ * look (the court being moved to) is photographed and slipped beneath the
+ * moving one, which carries on undisturbed, and the new court moves in from
+ * there: nothing jumps.
  */
-type Cover = { run: number; old: string; x: number; y: number };
-
-const HoleCircle = Animated.createAnimatedComponent(Circle);
+type Phase = 'capturing' | 'shown' | 'applied' | 'moving' | 'over';
+type Run = {
+  id: number;
+  name: string;
+  apply: () => void;
+  phase: Phase;
+  point: TapPoint;
+  uri?: string;
+  timer?: ReturnType<typeof setTimeout>;
+};
+type CoverSpec = { id: number; uri: string; x: number; y: number; reach: number; go: boolean };
 
 export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObject<View | null> }>(function ThemeSwitcher({ app }, ref) {
   const { width, height } = useWindowDimensions();
-  const [cover, setCover] = useState<Cover | null>(null);
-  const run = useRef(0);
-  // What the running change is waiting for, and what to do then.
-  const step = useRef<{ run: number; wait: 'old' | 'landed' | 'moving'; apply?: () => void } | null>(null);
-  const files = useRef<string[]>([]);
-  // The radius of the hole in the old photograph (reveal).
-  const grow = useSharedValue(0);
-  // How much of the old photograph shows (only a crossfade lowers it).
-  const fade = useSharedValue(1);
-  const reach = useRef(0);
-  const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const size = useRef({ width, height });
+  size.current = { width, height };
+  const still = useReducedMotion();
+  const stillRef = useRef(still);
+  stillRef.current = still;
+  const [covers, setCovers] = useState<CoverSpec[]>([]);
+  // Oldest first. At most one run that is not yet moving: the newest.
+  const runs = useRef<Run[]>([]);
+  const seq = useRef(0);
 
-  const release = () => {
-    for (const uri of files.current.splice(0)) {
-      try { releaseCapture(uri); } catch {}
+  const clear = (run: Run) => {
+    if (run.timer) clearTimeout(run.timer);
+    run.timer = undefined;
+  };
+  /** Take a run's picture away for good. */
+  const end = (run: Run) => {
+    if (run.phase === 'over') return;
+    run.phase = 'over';
+    clear(run);
+    runs.current = runs.current.filter((r) => r !== run);
+    const id = run.id;
+    setCovers((list) => (list.some((c) => c.id === id) ? list.filter((c) => c.id !== id) : list));
+    if (run.uri) {
+      try { releaseCapture(run.uri); } catch {}
     }
   };
-  const done = (which: number) => {
-    if (which !== run.current) return;
-    if (watchdog.current) clearTimeout(watchdog.current);
-    step.current = null;
-    setCover(null);
-    release();
+  /** The plain switch: no picture, the new court at once. */
+  const instant = (run: Run) => {
+    const apply = run.apply;
+    end(run);
+    apply();
   };
-  const photograph = () => (app.current ? captureRef(app.current, { format: 'jpg', quality: 0.92, result: 'tmpfile' }) : Promise.reject(new Error('no app')));
+  const reachOf = (point: TapPoint) => coverRadius(point, size.current.width, size.current.height);
+
+  /** The new colours are in (or we stopped waiting): two frames for the blur and glass to catch up, then the picture moves. */
+  const move = (run: Run) => {
+    if (run.phase !== 'applied') return;
+    run.phase = 'moving';
+    clear(run);
+    const duration = THEME_SWITCH === 'crossfade' ? CROSSFADE_MS : REVEAL_MS;
+    // Whatever the animation does, the picture is gone shortly after the move should have ended.
+    run.timer = setTimeout(() => end(run), duration + END_GRACE_MS + 50);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (run.phase !== 'moving') return;
+      const { x, y } = run.point;
+      const id = run.id;
+      setCovers((list) => list.map((c) => (c.id === id ? { ...c, x, y, reach: reachOf(run.point), go: true } : c)));
+    }));
+  };
+  const recolour = (run: Run) => {
+    run.phase = 'applied';
+    clear(run);
+    run.timer = setTimeout(() => move(run), LAND_CAP_MS);
+    run.apply();
+  };
+
+  // The picture is on screen: the frame after, the app recolours beneath it.
+  const onShown = useCallback((id: number) => {
+    const run = runs.current.find((r) => r.id === id);
+    if (!run || run.phase !== 'capturing') return;
+    clear(run);
+    run.phase = 'shown';
+    requestAnimationFrame(() => { if (run.phase === 'shown') recolour(run); });
+  }, []);
+  const onGone = useCallback((id: number) => {
+    const run = runs.current.find((r) => r.id === id);
+    if (run) end(run);
+  }, []);
 
   useImperativeHandle(ref, () => ({
-    start(apply, from) {
-      const mine = ++run.current;
-      cancelAnimation(grow);
-      cancelAnimation(fade);
-      grow.value = 0;
-      fade.value = 1;
-      setCover(null);
-      release();
-      step.current = { run: mine, wait: 'old', apply };
-      const point = from ?? middleOf(width, height);
-      reach.current = coverRadius(point, width, height);
-      // However it goes, the new court is on screen within about a second: never a photograph left stuck.
-      if (watchdog.current) clearTimeout(watchdog.current);
-      watchdog.current = setTimeout(() => {
-        const now = step.current;
-        if (mine !== run.current || !now) return;
-        if (now.wait === 'old' && now.apply) now.apply();
-        done(mine);
-      }, 1200);
-      photograph()
-        .then((uri) => {
-          files.current.push(uri);
-          if (mine !== run.current) return;
-          setCover({ run: mine, old: uri, x: point.x, y: point.y });
-        })
-        .catch(() => {
-          // No photograph: the plain switch, at once.
-          if (mine !== run.current) return;
-          done(mine);
-          apply();
-        });
-    },
-    landed() {
-      const now = step.current;
-      if (!now || now.wait !== 'landed' || now.run !== run.current) return;
-      const mine = now.run;
-      step.current = { run: mine, wait: 'moving' };
-      // One frame for the phone's own layers (blur, glass, the map) to catch up, then it moves:
-      // the hole opens straight onto the live app, so nothing else is waited for.
+    start(name, apply, from) {
+      const point = from ?? middleOf(size.current.width, size.current.height);
+      if (stillRef.current) {
+        // Reduce Motion (the app's own setting, src/lib/useReducedMotion): at once.
+        for (const run of runs.current.slice()) if (run.phase !== 'moving') end(run);
+        apply();
+        return;
+      }
+      const head = runs.current.find((r) => r.phase !== 'moving' && r.phase !== 'over');
+      if (head) {
+        // The old look still covers everything: the new pick simply takes this one's place beneath it.
+        head.name = name;
+        head.apply = apply;
+        head.point = point;
+        if (head.phase === 'applied') recolour(head);
+        return;
+      }
+      const run: Run = { id: ++seq.current, name, apply, phase: 'capturing', point };
+      runs.current.push(run);
+      // A slow photograph never holds the tap up: past the cap, the plain switch.
+      run.timer = setTimeout(() => { if (run.phase === 'capturing') instant(run); }, CAPTURE_CAP_MS);
+      // One frame first, so the tapped card's check is in the picture.
       requestAnimationFrame(() => {
-        if (mine !== run.current) return;
-        if (watchdog.current) clearTimeout(watchdog.current); // moving now: let it finish
-        const finish = (finished?: boolean) => {
-          'worklet';
-          if (finished) runOnJS(done)(mine);
-        };
-        if (THEME_SWITCH === 'crossfade') {
-          fade.value = withTiming(0, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad) }, finish);
-        } else {
-          grow.value = withTiming(reach.current, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic) }, finish);
-        }
+        if (run.phase !== 'capturing') return;
+        if (!app.current) { instant(run); return; }
+        captureRef(app.current, { format: 'jpg', quality: 0.9, result: 'tmpfile' })
+          .then((uri) => {
+            if (run.phase !== 'capturing') {
+              try { releaseCapture(uri); } catch {}
+              return;
+            }
+            run.uri = uri;
+            const { x, y } = run.point;
+            setCovers((list) => [...list, { id: run.id, uri, x, y, reach: reachOf(run.point), go: false }]);
+          })
+          .catch(() => { if (run.phase === 'capturing') instant(run); });
       });
+    },
+    landed(name) {
+      const run = runs.current.find((r) => r.phase === 'applied');
+      if (run && run.name === name) move(run);
     },
   }));
 
-  // The old photograph is on screen: now it is safe to recolour beneath it.
-  const oldShown = () => {
-    const now = step.current;
-    if (!now || now.wait !== 'old' || now.run !== run.current || !now.apply) return;
-    const apply = now.apply;
-    step.current = { run: now.run, wait: 'landed' };
-    requestAnimationFrame(() => { if (now.run === run.current) apply(); });
-  };
+  // Nothing left behind if the app itself goes.
+  useEffect(() => () => { for (const run of runs.current.slice()) end(run); }, []);
 
-  // The hole in the old photograph, through which the live new look shows.
-  const hole = useAnimatedProps(() => ({ r: grow.value }));
-  const oldLook = useAnimatedStyle(() => ({ opacity: fade.value }));
-
-  if (!cover) return null;
+  if (!covers.length) return null;
   return (
     <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, styles.top]}>
-      {/* Only this photograph, laid over the app, ever fades or opens: never the app (or its glass tab bar) itself. */}
-      <Animated.View style={[StyleSheet.absoluteFill, oldLook]}>
-        <Svg width={width} height={height}>
-          <Defs>
-            <Mask id="themeSwitchHole" maskUnits="userSpaceOnUse" x={0} y={0} width={width} height={height}>
-              <Rect x={0} y={0} width={width} height={height} fill="#fff" />
-              <HoleCircle cx={cover.x} cy={cover.y} r={0} fill="#000" animatedProps={hole} />
-            </Mask>
-          </Defs>
-          <SvgImage href={{ uri: cover.old }} onLoad={oldShown} x={0} y={0} width={width} height={height} preserveAspectRatio="none" mask="url(#themeSwitchHole)" />
-        </Svg>
-      </Animated.View>
+      {/* Newest first, so an older picture still moving stays on top of a newer one. */}
+      {covers.slice().reverse().map((cover) => (
+        <Cover key={cover.id} cover={cover} width={width} height={height} onShown={onShown} onGone={onGone} />
+      ))}
     </View>
+  );
+});
+
+const HoleCircle = Animated.createAnimatedComponent(Circle);
+
+/**
+ * One picture of an old look. It starts fully shown (a plain resting value,
+ * so a lost animation update can only ever leave it showing, and then the
+ * switcher's timer takes it away) and only ever moves once, when `go` turns on.
+ */
+const Cover = memo(function Cover({ cover, width, height, onShown, onGone }: { cover: CoverSpec; width: number; height: number; onShown: (id: number) => void; onGone: (id: number) => void }) {
+  const fade = useSharedValue(1);
+  const grow = useSharedValue(0);
+  const { id, go, reach } = cover;
+  useEffect(() => {
+    if (!go) return;
+    const finish = (finished?: boolean) => {
+      'worklet';
+      if (finished) runOnJS(onGone)(id);
+    };
+    if (THEME_SWITCH === 'crossfade') {
+      fade.value = withTiming(0, { duration: CROSSFADE_MS, easing: Easing.inOut(Easing.quad), reduceMotion: ReduceMotion.Never }, finish);
+    } else {
+      grow.value = withTiming(reach, { duration: REVEAL_MS, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never }, finish);
+    }
+  }, [go, id, reach, fade, grow, onGone]);
+  const look = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const hole = useAnimatedProps(() => ({ r: grow.value }));
+  const shown = () => onShown(id);
+
+  if (THEME_SWITCH === 'crossfade') {
+    return <Animated.Image source={{ uri: cover.uri }} onLoad={shown} fadeDuration={0} resizeMode="stretch" style={[styles.cover, { width, height }, look]} />;
+  }
+  const mask = `themeSwitchHole${id}`;
+  return (
+    <Svg width={width} height={height} style={styles.cover}>
+      <Defs>
+        <Mask id={mask} maskUnits="userSpaceOnUse" x={0} y={0} width={width} height={height}>
+          <Rect x={0} y={0} width={width} height={height} fill="#fff" />
+          <HoleCircle cx={cover.x} cy={cover.y} r={0} fill="#000" animatedProps={hole} />
+        </Mask>
+      </Defs>
+      <SvgImage href={{ uri: cover.uri }} onLoad={shown} x={0} y={0} width={width} height={height} preserveAspectRatio="none" mask={`url(#${mask})`} />
+    </Svg>
   );
 });
 
 const styles = StyleSheet.create({
   top: { zIndex: 9999 },
+  cover: { position: 'absolute', top: 0, left: 0 },
 });
