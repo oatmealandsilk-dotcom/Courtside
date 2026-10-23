@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ThemeSwitcher } from './ThemeSwitcher';
 import type { TapPoint, ThemeSwitcherHandle } from './themeSwitch';
 import { Image, Platform, StyleSheet, View } from 'react-native';
@@ -223,6 +223,35 @@ const ThemeContext = createContext({
 /** Themes whose page is dark. */
 const DARK_THEMES: ReadonlySet<ThemeName> = new Set<ThemeName>(['night', 'us-open']);
 
+/*
+ * The court whose look is actually on screen. During a change on a phone the
+ * app has already recoloured beneath a still picture of the old look (see
+ * ThemeSwitcher.tsx); this only moves on when that picture starts to fade
+ * (at once when there is none). Kept outside React's context so following it
+ * redraws only what reads it, never every themed view mid-change.
+ */
+let onScreen: ThemeName = readStored();
+const onScreenListeners = new Set<() => void>();
+function showOnScreen(name: string) {
+  if (!(name in themes) || name === onScreen) return;
+  onScreen = name as ThemeName;
+  for (const listener of onScreenListeners) listener();
+}
+const watchOnScreen = (listener: () => void) => {
+  onScreenListeners.add(listener);
+  return () => { onScreenListeners.delete(listener); };
+};
+const readOnScreen = () => onScreen;
+
+/**
+ * Whether the page on screen right now is dark: what the status bar's icons
+ * follow (app/_layout ThemedStatusBar), so they never change while a photo of
+ * the old look still covers the screen (light icons on cream, or dark on navy).
+ */
+export function useDarkOnScreen(): boolean {
+  return DARK_THEMES.has(useSyncExternalStore(watchOnScreen, readOnScreen, readOnScreen));
+}
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, updateTheme] = useState<ThemeName>(readStored);
   Object.assign(colors, themes[theme]);
@@ -245,6 +274,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (!live || !saved || !(saved in themes)) return;
         Object.assign(colors, themes[saved as ThemeName]);
         updateTheme(saved as ThemeName);
+        showOnScreen(saved);
       })
       .catch(() => {})
       .finally(() => { if (live) { clearTimeout(giveUp); setLoaded(true); } });
@@ -278,7 +308,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     } catch {}
     target.current = name;
     if (switcher.current) switcher.current.start(name, () => apply(name), from);
-    else apply(name);
+    else {
+      apply(name);
+      showOnScreen(name);
+    }
   };
   // The redraw has landed.
   useEffect(() => {
@@ -296,7 +329,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
             screen: the logo never drops out between the phone's picture and the app's (Oct 4).
             The app sits in a box of its own, in its page colour, so the switcher can photograph it. */}
         {loaded ? <View ref={app} collapsable={false} style={{ flex: 1, backgroundColor: themes[theme].bg }}>{children}</View> : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
-        <ThemeSwitcher ref={switcher} app={app} />
+        <ThemeSwitcher ref={switcher} app={app} onSettled={showOnScreen} />
       </View>
     </ThemeContext.Provider>
   );

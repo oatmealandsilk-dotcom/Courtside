@@ -21,7 +21,7 @@ import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
 
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
-import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
+import { ThemeProvider, useDarkOnScreen, useTheme } from '@/theme/ThemeProvider';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
@@ -185,7 +185,11 @@ function RootStack() {
  * nothing cream shows round the edges in a dark theme.
  */
 function ThemedStatusBar() {
-  const { dark, theme } = useTheme();
+  const { theme } = useTheme();
+  // The look on screen, not the court just picked: during a change the app
+  // recolours beneath a photo of the old look, and the icons wait for that
+  // photo to start fading (Oct 23).
+  const dark = useDarkOnScreen();
   const style = dark ? 'light' : 'dark';
   noteThemedStatusStyle(style);
   useEffect(() => {

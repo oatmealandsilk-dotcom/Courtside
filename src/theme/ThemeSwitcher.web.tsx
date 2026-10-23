@@ -1,8 +1,7 @@
 import { forwardRef, useImperativeHandle } from 'react';
-import type { View } from 'react-native';
 import { flushSync } from 'react-dom';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { CROSSFADE_MS, REVEAL_MS, THEME_SWITCH, coverRadius, middleOf, type ThemeSwitcherHandle } from './themeSwitch';
+import { CROSSFADE_MS, REVEAL_MS, THEME_SWITCH, coverRadius, middleOf, type ThemeSwitcherHandle, type ThemeSwitcherProps } from './themeSwitch';
 
 type Transition = { ready: Promise<void>; finished: Promise<void>; updateCallbackDone: Promise<void> };
 type TransitionDocument = Document & { startViewTransition?: (update: () => void) => Transition };
@@ -18,15 +17,17 @@ let styled = false;
  * Taps go straight through to the page while it runs, so a second pick starts
  * again from where the first was heading. Browsers without view transitions
  * switch at once, and so does Reduce Motion when the app honours it
- * (src/lib/useReducedMotion, the same answer as on a phone).
+ * (src/lib/useReducedMotion, the same answer as on a phone). The new court
+ * counts as on screen (onSettled) as soon as the page has redrawn in it.
  */
-export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObject<View | null> }>(function ThemeSwitcher(_props, ref) {
+export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, ThemeSwitcherProps>(function ThemeSwitcher({ onSettled }, ref) {
   const reduced = useReducedMotion();
   useImperativeHandle(ref, () => ({
-    start(_name, apply, from) {
+    start(name, apply, from) {
       const doc = typeof document !== 'undefined' ? (document as TransitionDocument) : null;
       if (!doc?.startViewTransition || reduced) {
         apply();
+        onSettled(name);
         return;
       }
       if (!styled) {
@@ -44,7 +45,7 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
       }
       const point = from ?? middleOf(innerWidth, innerHeight);
       const reach = coverRadius(point, innerWidth, innerHeight);
-      const transition = doc.startViewTransition(() => { flushSync(apply); });
+      const transition = doc.startViewTransition(() => { flushSync(apply); onSettled(name); });
       transition.ready
         .then(() => {
           if (THEME_SWITCH === 'crossfade') {
