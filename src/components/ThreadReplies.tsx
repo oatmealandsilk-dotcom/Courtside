@@ -138,7 +138,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         {/* Taken down by an admin: only its author and admins get it, and see why. */}
         {answer.removed ? <View style={{ paddingLeft: 42 }}><RemovedNote removed={answer.removed} quiet item={{ kind: 'answer', id: answer.id, authorId: answer.authorId }} /></View> : null}
         {!preview && <View style={styles.replyActions}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}><Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}>{children.length > 0 ? <View pointerEvents="none" style={styles.collapseMask}/> : null}<Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
           {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); }} style={styles.replyButton}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
@@ -201,7 +201,10 @@ const styleDefinitions = StyleSheet.create({
   rail: {position:'absolute',left:0,top:0,width:1.5,backgroundColor:colors.borderStrong},
   elbow: {position:'absolute',left:0,top:16,width:20,height:15,borderLeftWidth:1.5,borderBottomWidth:1.5,borderColor:colors.borderStrong,borderBottomLeftRadius:12},
   avatarRail: {position:'absolute',left:15,top:46,bottom:0,width:1.5,backgroundColor:colors.borderStrong},
-  collapse: {position:'absolute',left:5,width:20,height:28,backgroundColor:colors.bg,justifyContent:'center'},
+  collapse: {position:'absolute',left:5,width:20,height:28,justifyContent:'center'},
+  // Hides the rail inside the ⊖'s own ring, and only when a rail runs behind it: a square in the page
+  // colour behind the icon showed as a box over the page's soft top tint (and in Night).
+  collapseMask: {position:'absolute',left:2,top:6,width:16,height:16,borderRadius:8,backgroundColor:colors.bg},
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
   inlineComposer: { gap: 8, paddingLeft: 42 },
   // The same soft rounded box as the thread's own reply box.

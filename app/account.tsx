@@ -214,7 +214,7 @@ export default function AccountCentre() {
             <Wash height={240} strength={0.8} />
             {sheet === 'password' ? (
               <>
-                <SheetTitle title="Change password" line={info?.email ? `Create a new password for ${info.email}.` : undefined} onClose={() => setSheet(null)} />
+                <SheetTitle title="Change password" line={info?.email ? `Create a new password for ${info.email}.` : undefined} lines={2} onClose={() => setSheet(null)} />
                 <View style={styles.sheetBody}>
                   <PasswordFields password={password} again={password2} onPassword={setPassword} onAgain={setPassword2} onSubmit={() => { if (password.length >= 6 && password === password2) void run(() => actions.changePassword(password), 'Password updated.'); }} />
                   {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -224,7 +224,7 @@ export default function AccountCentre() {
             ) : null}
             {sheet === 'email' ? (
               <>
-                <SheetTitle title="Change email" line="We send a link to the new address; the change lands when you tap it." onClose={() => setSheet(null)} />
+                <SheetTitle title="Change email" line="We send a link to the new address; the change lands when you tap it." lines={2} onClose={() => setSheet(null)} />
                 <View style={styles.sheetBody}>
                   <Field soft value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" placeholder="New email" />
                   {error ? <Text style={styles.error}>{error}</Text> : null}

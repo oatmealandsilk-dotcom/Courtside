@@ -80,6 +80,15 @@ export default function AskCoach() {
   const veilRef = useRef<View>(null);
   const el = (r: React.RefObject<View | null>) => r.current as unknown as HTMLElement | null;
   const focusTitle = () => titleBox.current?.focus();
+  // In a browser the question's box grows with the words, as a phone's does (a browser's box stays two lines
+  // tall otherwise, and a longer question scrolled its first line out of sight).
+  useEffect(() => {
+    if (!web) return;
+    const box = titleBox.current as unknown as HTMLTextAreaElement | null;
+    if (!box?.style) return;
+    box.style.height = 'auto';
+    box.style.height = `${box.scrollHeight}px`;
+  }, [title, web]);
   /** The browser's version: keyframes on the compositor, forwards or backwards. */
   const playWeb = (a: { x: number; y: number; w: number; h: number }, rw: number, rh: number, backwards: boolean, done: () => void) => {
     const sx = a.w / rw, sy = a.h / rh;
@@ -201,6 +210,8 @@ export default function AskCoach() {
             placeholder="Your question"
             placeholderTextColor={colors.textFaint}
             multiline
+            // A browser's box starts one line tall (it grows with the words in the effect above).
+            {...(web ? ({ rows: 1 } as object) : null)}
             maxLength={140}
             returnKeyType="next"
             blurOnSubmit
