@@ -308,23 +308,9 @@ export function NearbyMap(props: NearbyMapProps) {
   // The map itself: made once per look, kept across everything else. Your
   // location arriving moves it (below) rather than making it again, which
   // faded every pin out and in and reloaded the map under the first-time flow.
-  const builtLook = useRef(theme);
   useEffect(() => {
-    // A new theme while the map is out of sight (its tab catching up after a pick, src/theme/catchUp.ts):
-    // made again a frame after the redraw, not straight after it, so the two never make one long frame.
-    const later = built.current && builtLook.current !== theme && outOfView.current();
-    builtLook.current = theme;
-    if (!later) return make();
-    // Covered now, as make() would (it is out of sight now), so the bare ground between is never seen either.
-    if (!expanded) { setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); }
-    let undo: (() => void) | undefined;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const f = requestAnimationFrame(() => { t = setTimeout(() => { undo = make(); }, 0); });
-    return () => { cancelAnimationFrame(f); if (t) clearTimeout(t); undo?.(); };
-  }, [expanded, theme, !expanded && !model.city, load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
-  function make(): (() => void) | undefined {
     const el = host.current;
-    if (!el) return undefined;
+    if (!el) return;
     const opening = (expanded && camera.current) || { center: [view.center.lng, view.center.lat] as [number, number], zoom: view.zoom };
     // A card made again (a new theme, its city back) out of sight is covered again, so it is never seen drawing.
     if (!expanded && built.current && outOfView.current()) { setCardSnap(true); setCardShown(false); setLoaderGone(false); setPhotoGone(false); }
@@ -496,7 +482,7 @@ export function NearbyMap(props: NearbyMapProps) {
       map.current = null;
       inMapPhoto.current = null;
     };
-  }
+  }, [expanded, theme, !expanded && !model.city, load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // Given up on: the opening curtain stops waiting for the card's map, and the card says so.
   useEffect(() => { if (!expanded && load.status === 'failed') painted(); }, [load.status]); // eslint-disable-line react-hooks/exhaustive-deps
   // The sheet over the map has gone: the first pins come in.
@@ -606,16 +592,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
   pinsNow.current = { items: markers, tpl };
-  // On a theme change (the tab catching up out of sight, src/theme/catchUp.ts) the pins are restyled a
-  // frame after the redraw rather than straight after it, so the two never make one long frame.
-  const pinsTheme = useRef(theme);
-  useEffect(() => {
-    if (pinsTheme.current === theme) { pinsOn.current?.set({ items: markers, tpl }); return undefined; }
-    pinsTheme.current = theme;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    const f = requestAnimationFrame(() => { t = setTimeout(() => { const now = pinsNow.current; if (now) pinsOn.current?.set(now); }, 0); });
-    return () => { cancelAnimationFrame(f); if (t) clearTimeout(t); };
-  }, [markers, tpl, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { pinsOn.current?.set({ items: markers, tpl }); }, [markers, tpl, mapGen]);
 
   // Picking someone, a court, a hit, or typing a city takes the map there.
   // (Again on a map made afresh, as when your location lands: a player opened from "Who's up today" stays in view.)
