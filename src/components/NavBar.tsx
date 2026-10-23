@@ -236,12 +236,6 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 </React.Fragment>
               );
             })}
-            {/* A theme picked on the Theme page: the bar in the court being left, over the live bar, fading with
-                the page (ThemeFade). The glass under it re-tints at the tap and is hidden by this until the
-                fade has gone; nothing that holds the glass ever fades. */}
-            <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
-              <BarCopy key={layer.key} op={layer.op} theme={layer.theme} activeRoute={activeRoute} profileAlerts={profileAlerts} />
-            ))} />
             <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, veilStyle]}>
               <Pressable accessible={false} importantForAccessibility="no" onPress={() => { closeCreateMenu(); }} style={StyleSheet.absoluteFill} />
             </Animated.View>
@@ -249,6 +243,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
           {/* The pill's thin light edge sits outside the glass's inside, where the veil can't reach: the same
               dim laid over just that edge, so it darkens with the rest (Oct 17, owner: "outer edge not brighter"). */}
           <Animated.View pointerEvents="none" style={[styles.veilRim, veilStyle]} />
+          {/* A theme picked on the Theme page: the whole pill in the court being left, edge included, laid over
+              the live one (beside the glass, never holding it) and fading with the page (ThemeFade). The glass
+              re-tints at the tap, under this; nothing that holds the glass ever fades. */}
+          <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
+            <BarCopy key={layer.key} op={layer.op} theme={layer.theme} activeRoute={activeRoute} profileAlerts={profileAlerts} />
+          ))} />
           </View>
         </Animated.View>
       </Animated.View>
@@ -393,7 +393,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
 }
 
 /**
- * The phone bar's inside in another court (the one a theme pick is leaving),
+ * The phone bar in another court (the one a theme pick is leaving),
  * laid over the live bar and fading to nothing with the Theme page's own
  * copies. Its ground is that court's page colour, solid: the live glass under
  * it has already taken the new court's tint, and the old glass over a page in
@@ -440,8 +440,8 @@ const BarCopy = React.memo(function BarCopy({ op, theme, activeRoute, profileAle
 });
 
 const styleDefinitions = StyleSheet.create({
-  // BarCopy's box: the pill's inside (within its hairline edge), laid out as the pill is, above the + (zIndex 2).
-  pillCopy: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 3, borderRadius: TAB_BAR_H / 2, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
+  // BarCopy's box: the pill exactly (its edge too), laid out as the pill is.
+  pillCopy: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: TAB_BAR_H / 2, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, borderWidth: StyleSheet.hairlineWidth, borderColor: 'rgba(255, 255, 255, 0.45)' },
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // The + stands above the veil while the Create box is up (zIndex 2 over the veil's 1).
   createAbove: { zIndex: 2 },
