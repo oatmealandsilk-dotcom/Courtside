@@ -112,10 +112,11 @@ export function boardSides(s: SessionDetail, author: string, hidden: ID[] = [], 
     : sessionPeople(s, hidden);
   if (s.kind !== 'match') {
     const all = [...opponents, ...partners];
-    return { you: author, them: all.length > 1 ? all.map((p) => firstName(p.name)).join(' / ') : all[0]?.name ?? '' };
+    return { you: author, them: all.length > 1 ? all.map((p) => firstName(p.name)).join(' / ') : all[0]?.name || 'Opponent' };
   }
-  if (!partners.length && opponents.length <= 1) return { you: author, them: opponents[0]?.name ?? '' };
-  return { you: [author, ...partners.map((p) => p.name)].map(firstName).join(' / '), them: opponents.map((o) => firstName(o.name)).join(' / ') };
+  // Nobody named on the other side: the board says so in words (owner, Oct 23: "just say opponent instead of leaving it blank").
+  if (!partners.length && opponents.length <= 1) return { you: author, them: opponents[0]?.name || 'Opponent' };
+  return { you: [author, ...partners.map((p) => p.name)].map(firstName).join(' / '), them: opponents.length ? opponents.map((o) => firstName(o.name)).join(' / ') : 'Opponents' };
 }
 
 /** Won / Lost / Unfinished, in words so the board never depends on colour alone. */
@@ -245,7 +246,7 @@ export type ScoreBoardProps = {
   sets: MatchSet[];
   /** The top row: the poster's side ("Alex Rivera", or "Alex / June" in doubles). */
   you: string;
-  /** The other side; empty draws a quiet dash rather than a made-up "Opponent". */
+  /** The other side (boardSides says "Opponent" when nobody was named); empty still draws a quiet dash. */
   them?: string;
   /** Whether the top row won the match; undefined when nobody said. */
   youWon?: boolean;
