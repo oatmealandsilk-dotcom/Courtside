@@ -373,14 +373,14 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         {health ? (
           <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
             {hr || avg ? (
-              <View style={[styles.hrRow, { gap: 26 * k }]}>
+              <View style={[styles.hrRow, { columnGap: 26 * k, rowGap: 6 * k }]}>
                 {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
                 {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
               </View>
             ) : null}
             {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
             {strain != null || kcal ? (
-              <View style={[styles.hrRow, { gap: 22 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
+              <View style={[styles.hrRow, { columnGap: 22 * k, rowGap: 6 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
                 {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
                 {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
               </View>
@@ -555,7 +555,11 @@ const styles = StyleSheet.create({
   sidewaysMiddle: { justifyContent: 'center', minHeight: 0 },
   statRow: { flexDirection: 'row', alignSelf: 'stretch', borderTopWidth: 1 },
   stat: { flex: 1, minWidth: 0 },
-  hrRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  // Wraps rather than running off the card's clipped edge: a unit keeps a
+  // readable floor (Figure in Duration.tsx), so on the share screen's small
+  // preview (a 375x667 phone) "158 max bpm  132 avg" outgrew the card and
+  // was cut to "132 av". A row that fits is laid out exactly as before.
+  hrRow: { flexDirection: 'row', alignItems: 'flex-end', flexWrap: 'wrap' },
   foot: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, minWidth: 0 },
   pending: { opacity: 0.6 },

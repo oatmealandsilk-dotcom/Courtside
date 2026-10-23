@@ -28,9 +28,20 @@ type AndroidFeel = { feel: Haptics.AndroidHaptics; older?: Haptics.AndroidHaptic
 const feelAndroid = ({ feel, older }: AndroidFeel) => Haptics.performAndroidHapticsAsync(feel)
   .catch(() => (older ? Haptics.performAndroidHapticsAsync(older) : undefined));
 
+/**
+ * A browser refuses to buzz before the page's first tap and logs an error each time it is asked
+ * (a message banner dropping in on a page just opened did that). So it is only asked for a real
+ * buzz (0 means none), once the person has touched the page.
+ */
+const mayBuzz = (fallback: number | number[]) => {
+  if (!canBuzz || fallback === 0) return false;
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+  return !activation || activation.hasBeenActive;
+};
+
 function run(work: () => Promise<void>, fallback: number | number[], onAndroid?: AndroidFeel | null) {
   try {
-    if (web) { if (canBuzz) navigator.vibrate(fallback); return; }
+    if (web) { if (mayBuzz(fallback)) navigator.vibrate(fallback); return; }
     if (android && onAndroid !== undefined) { if (onAndroid) void feelAndroid(onAndroid).catch(() => undefined); return; }
     void work().catch(() => undefined);
   } catch {

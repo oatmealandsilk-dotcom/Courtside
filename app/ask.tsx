@@ -73,7 +73,7 @@ export default function Ask() {
     <DragSheet fitContent
       closeSignal={closeSignal}
       onDismissed={() => (posted ? router.replace(`/question/${posted}`) : router.back())}
-      header={<SheetTitle title="Ask the room" line="Players and coaches answer, often within the hour." onClose={() => setCloseSignal((n) => n + 1)} />}
+      header={<SheetTitle title="Ask the room" line="Players and coaches answer, often within the hour." lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}
     >
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
