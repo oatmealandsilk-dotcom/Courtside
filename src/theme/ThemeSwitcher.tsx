@@ -103,10 +103,13 @@ export const ThemeSwitcher = forwardRef<ThemeSwitcherHandle, { app: React.RefObj
     run.phase = 'moving';
     clear(run);
     const duration = THEME_SWITCH === 'crossfade' ? CROSSFADE_MS : REVEAL_MS;
-    // Whatever the animation does, the picture is gone shortly after the move should have ended.
-    run.timer = setTimeout(() => end(run), duration + END_GRACE_MS + 50);
+    // Whatever the animation does, the picture is gone shortly after the move should have ended
+    // (counted again from when it is told to go, below; this one covers frames that never come).
+    run.timer = setTimeout(() => end(run), duration + END_GRACE_MS + 300);
     requestAnimationFrame(() => requestAnimationFrame(() => {
       if (run.phase !== 'moving') return;
+      clear(run);
+      run.timer = setTimeout(() => end(run), duration + END_GRACE_MS);
       const { x, y } = run.point;
       const id = run.id;
       setCovers((list) => list.map((c) => (c.id === id ? { ...c, x, y, reach: reachOf(run.point), go: true } : c)));
