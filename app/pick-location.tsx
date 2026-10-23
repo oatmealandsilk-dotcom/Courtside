@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -267,7 +268,7 @@ export default function PickLocation() {
     <Screen title="Add location" compactTitle scroll={false} bar={false} onBack={() => router.back()}>
       <View style={styles.search}>
         <Ionicons name="search" size={17} color={colors.textFaint} />
-        <TextInput
+        <TextBox
           ref={input}
           value={query}
           onChangeText={setQuery}

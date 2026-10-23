@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Image, KeyboardAvoidingView, Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -180,7 +181,7 @@ function Hit() {
           </Pressable>
         </View>
         <View style={[styles.bottom, { paddingBottom: insets.bottom + spacing.md }]}>
-          <TextInput
+          <TextBox
             value={caption}
             onChangeText={setCaption}
             placeholder="Say something…"

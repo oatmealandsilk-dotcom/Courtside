@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Image, Keyboard, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { show as showToast } from '@/lib/toast';
@@ -1610,7 +1611,7 @@ function Compose() {
   const withThumb = mode !== 'hit' && mode !== 'story' && !!media?.uri;
   // The minutes box: "90 min" at rest, just the number while typing. Under Add session stats, or a challenge entry's own row.
   const minutesBox = (
-    <TextInput
+    <TextBox
       ref={minutesInput}
       value={minutesFocused || !minutes ? minutes : `${minutes} min`}
       onChangeText={(text) => setMinutes(text.replace(/\D/g, '').slice(0, 3))}

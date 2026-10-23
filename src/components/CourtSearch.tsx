@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
@@ -112,7 +113,7 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
       <View style={styles.search}>
         <Ionicons name="search" size={16} color={colors.textFaint} />
         {/* A place's name is kept to 120 characters (hit_requests_place_check): longer failed to post. */}
-        <TextInput ref={input} value={typed} onChangeText={onType} maxLength={120} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ id: rows[0].c.id, name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
+        <TextBox ref={input} value={typed} onChangeText={onType} maxLength={120} placeholder="Search courts" placeholderTextColor={colors.textFaint} style={styles.searchInput} accessibilityLabel="Where" autoCorrect={false} returnKeyType="done" onSubmitEditing={() => { if (rows[0] && query) onChoose({ id: rows[0].c.id, name: labelOf(rows[0].c), lat: rows[0].c.lat, lng: rows[0].c.lng }); }} />
         {loadingWide && query ? <ActivityIndicator size="small" color={colors.textFaint} /> : typed ? (
           <Pressable accessibilityRole="button" accessibilityLabel="Clear" hitSlop={8} onPress={() => onType('')}><Ionicons name="close-circle" size={17} color={colors.textFaint} /></Pressable>
         ) : null}

@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, BackHandler, Dimensions, Keyboard, Platform, ScrollView, StyleSheet, Text, TextInput, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -358,7 +359,7 @@ export default function GroupForm() {
   const nameField = (
     <View style={styles.nameWrap}>
       <View style={[styles.nameBox, !!nameIssue && styles.nameBoxIssue]}>
-        <TextInput
+        <TextBox
           ref={nameBox}
           value={name}
           onChangeText={(t) => { setName(Array.from(t.replace(/\n/g, ' ')).slice(0, nameMax).join('')); setError(null); }}

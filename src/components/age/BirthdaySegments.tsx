@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, type NativeSyntheticEvent, type TextInputKeyPressEventData } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -47,7 +48,7 @@ export function BirthdaySegments({ value, onChange, onSubmit, label = 'Birthday 
   const cell = (part: Part, caption: string, placeholder: string, wide?: boolean) => (
     <View style={[styles.cell, wide && styles.cellWide]}>
       <Text style={[styles.caption, focus === part && styles.captionOn]}>{caption}</Text>
-      <TextInput
+      <TextBox
         ref={refs[part]}
         accessibilityLabel={caption}
         placeholder={placeholder}

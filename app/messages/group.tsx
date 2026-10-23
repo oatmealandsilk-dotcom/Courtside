@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -395,7 +396,7 @@ export default function ChatDetails() {
         <Text style={styles.addTo} numberOfLines={1}>{room > 0 ? `To ${name} · room for ${room} more` : `To ${name}`}</Text>
         {room <= 0 ? <LockNote text={fullText} tone="alert" /> : (
           <View style={styles.adding}>
-            <TextInput maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find people to add" />
+            <TextBox maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} style={styles.search} accessibilityLabel="Find people to add" />
             {pickedUsers.length ? (
               <View style={styles.chips}>
                 {pickedUsers.map((u) => {
@@ -475,7 +476,7 @@ export default function ChatDetails() {
             An empty spacer on the other side keeps the name centred under the picture. */}
         <View style={styles.nameRow}>
           <View style={styles.pencil} />
-          <TextInput maxFontSizeMultiplier={TextScale.TITLE}
+          <TextBox maxFontSizeMultiplier={TextScale.TITLE}
             ref={nameBox}
             value={title}
             onChangeText={(v) => setTitle(v.slice(0, 60))}

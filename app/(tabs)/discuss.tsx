@@ -10,6 +10,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { slidePagesTo } from '@/features/navigation/pageSlide';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
 
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -598,7 +599,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
             <Ionicons name="search" size={17} color={colors.textFaint} style={styles.searchIcon} />
-            <TextInput maxFontSizeMultiplier={TextScale.TITLE} ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder={largeText ? 'Search players or courts' : 'Search players, courts or places'} placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
+            <TextBox maxFontSizeMultiplier={TextScale.TITLE} ref={searchInput} accessibilityLabel="Search players, courts or places" placeholder={largeText ? 'Search players or courts' : 'Search players, courts or places'} placeholderTextColor={colors.textFaint} value={search} onChangeText={setSearch} onFocus={() => setSearching(true)} onBlur={() => setSearching(false)} returnKeyType="search" style={[styles.search, search ? styles.searchWithClear : null]} />
             {search ? (
               <Pressable accessibilityRole="button" accessibilityLabel="Clear search" hitSlop={10} onPress={() => setSearch('')} style={styles.searchClear}>
                 <Ionicons name="close-circle" size={18} color={colors.textFaint} />

@@ -1,6 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -448,7 +449,7 @@ export default function ShareSheet() {
 
         <View style={styles.search}>
           <Ionicons name="search" size={16} color={colors.textFaint} />
-          <TextInput
+          <TextBox
             value={search}
             onChangeText={setSearch}
             placeholder="Search"

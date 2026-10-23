@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 
@@ -91,7 +92,7 @@ export default function LinkPhone() {
           <Text style={styles.lead}>Link your number so friends who have it saved can find you on CourtSide. We’ll text you a code to check it’s yours. It’s never shown on your profile.</Text>
           <View style={styles.field}>
             <Ionicons name="call-outline" size={18} color={colors.textMuted} />
-            <TextInput value={typed} onChangeText={(t) => { setTyped(t); setError(''); }} placeholder="(919) 555-1234" placeholderTextColor={colors.textFaint}
+            <TextBox value={typed} onChangeText={(t) => { setTyped(t); setError(''); }} placeholder="(919) 555-1234" placeholderTextColor={colors.textFaint}
               keyboardType="phone-pad" textContentType="telephoneNumber" autoComplete="tel" autoFocus accessibilityLabel="Phone number"
               returnKeyType="send" onSubmitEditing={() => void send()} editable={!busy} style={styles.input} />
           </View>
@@ -104,7 +105,7 @@ export default function LinkPhone() {
           <Text style={styles.lead}>We texted a 6-digit code to {showPhone(sentTo)}.</Text>
           <View style={styles.field}>
             <Ionicons name="keypad-outline" size={18} color={colors.textMuted} />
-            <TextInput value={code} onChangeText={(t) => { const c = t.replace(/\D/g, '').slice(0, 6); setCode(c); setError(''); if (c.length === 6) void check(c); }}
+            <TextBox value={code} onChangeText={(t) => { const c = t.replace(/\D/g, '').slice(0, 6); setCode(c); setError(''); if (c.length === 6) void check(c); }}
               placeholder="123456" placeholderTextColor={colors.textFaint} keyboardType="number-pad" textContentType="oneTimeCode" autoComplete="sms-otp"
               autoFocus maxLength={6} accessibilityLabel="Code" editable={!busy} style={[styles.input, styles.code]} />
           </View>

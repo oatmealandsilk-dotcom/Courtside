@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -339,7 +340,7 @@ function SearchBox({ value, onChangeText }: { value: string; onChangeText: (s: s
   return (
     <View style={styles.search}>
       <Ionicons name="search" size={16} color={colors.textFaint} />
-      <TextInput
+      <TextBox
         maxFontSizeMultiplier={TextScale.TITLE}
         value={value}
         onChangeText={onChangeText}

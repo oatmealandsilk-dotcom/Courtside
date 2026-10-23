@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import { useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -82,7 +83,7 @@ export default function PickCourt() {
       <View style={styles.searchRow}>
         <View style={styles.search}>
           <Ionicons name="search" size={16} color={colors.textFaint} />
-          <TextInput
+          <TextBox
             value={query}
             onChangeText={setQuery}
             placeholder="Search courts and parks"

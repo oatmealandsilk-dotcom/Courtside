@@ -1,5 +1,6 @@
 import React, { forwardRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, TextInput, View, type NativeSyntheticEvent, type StyleProp, type TextInputKeyPressEventData, type ViewStyle } from 'react-native';
+import { TextBox } from '@/components/ui/TextBox';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -45,7 +46,7 @@ export const SearchField = forwardRef<TextInput, Props>(function SearchField(
   return (
     <View style={[styles.wrap, style]}>
       <Ionicons name="search" size={17} color={colors.textFaint} style={styles.glass} />
-      <TextInput
+      <TextBox
         maxFontSizeMultiplier={TextScale.TITLE}
         ref={ref}
         value={value}
