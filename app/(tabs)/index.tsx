@@ -2635,4 +2635,4 @@ function GroupedFeed() {
   );
 }
 
-export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(FeedTab);
+export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(FeedTab, '/');

@@ -379,4 +379,4 @@ const styleDefinitions = StyleSheet.create({
  tileViewsText:{fontSize:12,...font('600'),color:'#FFFFFF',textShadowColor:'rgba(0,0,0,0.6)',textShadowRadius:3},
 });
 
-export default asTabRoute<{ previewSection?: string }>(Profile);
+export default asTabRoute<{ previewSection?: string }>(Profile, '/profile');

@@ -1136,4 +1136,4 @@ const styleDefinitions = StyleSheet.create({
   weekPillText: { ...typography.caption, letterSpacing: 0, color: colors.brand },
 });
 
-export default asTabRoute<{ previewSection?: string }>(Discuss);
+export default asTabRoute<{ previewSection?: string }>(Discuss, '/discuss');

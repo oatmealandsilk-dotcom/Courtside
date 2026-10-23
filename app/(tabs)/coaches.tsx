@@ -349,4 +349,4 @@ function AskTip({ eligible, style }: { eligible: boolean; style: StyleProp<ViewS
   return <TipBubble tip="ask-coach" shown={askTip.shown} onClose={askTip.close} pointer="down" inline on="page" style={style} />;
 }
 
-export default asTabRoute(Coaching);
+export default asTabRoute(Coaching, '/coaches');

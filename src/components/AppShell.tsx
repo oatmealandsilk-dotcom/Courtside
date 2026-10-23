@@ -1,4 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
+import { catchUpNow } from '@/theme/catchUp';
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
@@ -452,6 +453,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!destination) return;
     // Community opens on its map, from the top, whenever the bar takes you there.
     if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
+    // A theme just picked: the tab this shows, and the one under the page closing, are on it as they show (catchUp).
+    if (destination !== pathname) catchUpNow(['active', destination]);
     // Already here: a second tap on the same icon takes the page back to the top.
     if (destination === pathname) requestScrollToTop(destination);
     // From a page pushed on top (settings, edit profile…), go back down to the

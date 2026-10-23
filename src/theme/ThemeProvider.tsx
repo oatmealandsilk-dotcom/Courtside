@@ -1,9 +1,8 @@
-import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { crossfade } from './crossfade';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
-import Animated, { Easing, ReduceMotion, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
+import { catchUpNow, installCatchUp, noteLive, tapped } from './catchUp';
 
 type Palette = Record<keyof typeof lightColors, string>;
 
@@ -199,32 +198,123 @@ function readStored(): ThemeName {
   }
 }
 
-const ThemeContext = createContext({
-  theme: 'default' as ThemeName,
-  setTheme: (_name: ThemeName) => {},
-  night: false,
+type ThemeValue = {
+  theme: ThemeName;
+  setTheme: (name: ThemeName) => void;
+  night: boolean;
   /**
    * The page itself is dark: Night, and New York's navy (Oct 5). What the
    * status bar's icons, the glass's tint and the like follow; `night` is only
    * the Night theme itself.
    */
-  dark: false,
-  setNight: (_value: boolean) => {},
+  dark: boolean;
+  setNight: (value: boolean) => void;
   /**
    * Inside a ThemeScope (the share screen's colour dots): the court here is
    * not the app's, so a themed style drawn here must never copy it into the
    * live `colors` the rest of the app reads (ThemeScope sets and puts back
    * those itself).
    */
-  scoped: false,
-});
+  scoped: boolean;
+};
 
 /** Themes whose page is dark. */
 const DARK_THEMES: ReadonlySet<ThemeName> = new Set<ThemeName>(['night', 'us-open']);
 
+/*
+ * A theme change, lag-free (Oct 23, owner: "It should just be super smooth. No lag").
+ *
+ * Recolouring the whole app at once is ~5,800 components (every tab stays
+ * mounted, the map and the feed included): a stall of a sixth of a second on
+ * a phone, which the old grey veil was there to hide. Now a tap recolours only
+ * what can be seen: the Theme page, Settings under it, the app's frame and the
+ * status bar, in one small redraw. The four tabs sit behind a ThemeGate each
+ * (catchUp.tsx) and catch up out of sight once the change has played, one tab
+ * per redraw, as background work.
+ *
+ * `live` is the court picked: what is saved and what the live `colors` object
+ * holds. A gate holding a tab back keeps its old court in its own context
+ * until it is let go.
+ */
+let live: ThemeName = 'default';
+let rootSet: ((name: ThemeName) => void) | null = null;
+/** Set once someone has picked a court, so a late read of the saved one never overrides their pick. */
+let picked = false;
+
+/** The court picked, whatever any held-back tab is still showing. */
+export const liveTheme = (): ThemeName => live;
+
+function saveTheme(name: ThemeName) {
+  try {
+    if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
+    else void AsyncStorage.setItem(STORAGE_KEY, name).catch(() => undefined);
+  } catch {}
+}
+
+/**
+ * Picks a court: saved at once, the live colours swapped, and what is on
+ * screen redrawn in one go. The tabs out of sight follow afterwards (catchUp).
+ */
+function setTheme(name: ThemeName) {
+  if (!(name in themes) || name === live) return;
+  picked = true;
+  saveTheme(name);
+  live = name;
+  Object.assign(colors, themes[name]);
+  tapped(name);
+  rootSet?.(name);
+}
+
+// Kept so existing callers of the old night-mode switch keep working.
+const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
+
+/** Straight to a court with nothing held back: the saved court read at launch. */
+function applyNow(name: ThemeName) {
+  live = name;
+  noteLive(name);
+  Object.assign(colors, themes[name]);
+  rootSet?.(name);
+  catchUpNow('all');
+}
+
+const values = new Map<ThemeName, ThemeValue>();
+/**
+ * The one context value per court, made once: the root and every gate hand out
+ * the same object for the same court, so a gate holding its court never looks
+ * like a change to anything under it.
+ */
+export function valueFor(name: ThemeName): ThemeValue {
+  let value = values.get(name);
+  if (!value) {
+    value = Object.freeze({ theme: name, setTheme, night: name === 'night', dark: DARK_THEMES.has(name), setNight, scoped: false });
+    values.set(name, value);
+  }
+  return value;
+}
+
+export const ThemeContext = createContext<ThemeValue>({
+  theme: 'default',
+  setTheme: (_name: ThemeName) => {},
+  night: false,
+  dark: false,
+  setNight: (_value: boolean) => {},
+  scoped: false,
+});
+
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, updateTheme] = useState<ThemeName>(readStored);
-  Object.assign(colors, themes[theme]);
+  // The live colours are set as the app first draws, not as this file loads: style sheets are
+  // written in the default palette, and the colour-to-slot map (slotOf) is built from it.
+  const [theme, updateTheme] = useState<ThemeName>(() => {
+    live = readStored();
+    noteLive(live);
+    Object.assign(colors, themes[live]);
+    return live;
+  });
+  useLayoutEffect(() => {
+    rootSet = updateTheme;
+    return () => { if (rootSet === updateTheme) rootSet = null; };
+  }, []);
+  useEffect(() => installCatchUp(), []);
 
   // A phone has no localStorage, and its own store can only be read back
   // asynchronously — so the app opens on the default and switches to the saved
@@ -237,100 +327,28 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [loaded, setLoaded] = useState(Platform.OS === 'web');
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
-    let live = true;
-    const giveUp = setTimeout(() => { if (live) setLoaded(true); }, 800);
+    let alive = true;
+    const giveUp = setTimeout(() => { if (alive) setLoaded(true); }, 800);
     AsyncStorage.getItem(STORAGE_KEY)
       .then((saved) => {
-        if (!live || !saved || !(saved in themes)) return;
-        Object.assign(colors, themes[saved as ThemeName]);
-        updateTheme(saved as ThemeName);
+        if (!alive || picked || !saved || !(saved in themes) || saved === live) return;
+        applyNow(saved as ThemeName);
       })
       .catch(() => {})
-      .finally(() => { if (live) { clearTimeout(giveUp); setLoaded(true); } });
-    return () => { live = false; clearTimeout(giveUp); };
+      .finally(() => { if (alive) { clearTimeout(giveUp); setLoaded(true); } });
+    return () => { alive = false; clearTimeout(giveUp); };
   }, []);
 
-  // A theme change redraws the whole app — every tab, the feed, the map —
-  // and the phone's own layers (blur, glass, gradients, the map's web view)
-  // catch up a moment after the rest. Seen bare, that is a screen repainting
-  // in patches. So on a phone a veil in the new court's page colour rises the
-  // moment you tap, the app recolours beneath it, and the veil lifts as soon
-  // as the new colours have landed.
-  // Oct 16, owner: "changing themes in settings has a slight delay in
-  // animation, lets make it instant". The phone used to photograph the screen
-  // first and wait for the photo before recolouring: a third to half a second
-  // of nothing, the delay he felt. Now nothing is waited for. The veil is
-  // always there, see-through, so raising it needs no redraw; its colour and
-  // how see-through it is run on the animation thread, so it answers on the
-  // very next frame however busy the redraw is. Tapping themes one after
-  // another moves the one veil from court to court: it never stacks or blinks.
-  const veil = useSharedValue(0);
-  const veilColor = useSharedValue<string>(themes[theme].bg);
-  // The court last asked for, until it is on screen.
-  const target = useRef<ThemeName | null>(null);
-  // Counts every recolour, so the veil lifts even when a quick tap back lands on
-  // the court already showing (React then has nothing new to draw).
-  const [stamp, setStamp] = useState(0);
-  const apply = (name: ThemeName) => {
-    Object.assign(colors, themes[name]);
-    updateTheme(name);
-    setStamp((n) => n + 1);
-  };
-  const setTheme = (name: ThemeName) => {
-    if (name === (target.current ?? theme)) return;
-    try {
-      if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
-      else void AsyncStorage.setItem(STORAGE_KEY, name);
-    } catch {}
-    // A browser that can cross-fade does it properly: the old look fades straight into the new one.
-    if (crossfade(() => apply(name))) return;
-    target.current = name;
-    // Up at once. Already up (a tap a moment ago): its colour slides to this court instead of jumping.
-    if (veil.value < 0.05) veilColor.value = themes[name].bg;
-    else veilColor.value = withTiming(themes[name].bg, { duration: 120 });
-    // Never skipped for Reduce Motion: a soft fade is the gentle way, the alternative a hard tinted blink.
-    veil.value = withTiming(VEIL_PEAK, { duration: 40, reduceMotion: ReduceMotion.Never });
-    // One frame for the veil to show, then the redraw. A later tap in that frame wins.
-    requestAnimationFrame(() => { if (target.current === name) apply(name); });
-  };
-  // The redraw has landed: a beat for the phone's own layers, then the veil lifts quickly.
-  useEffect(() => {
-    if (!target.current || target.current !== theme) return undefined;
-    target.current = null;
-    const frame = requestAnimationFrame(() => {
-      if (target.current) return; // another tap is on its way: that one lifts it
-      veil.value = withDelay(VEIL_HOLD, withTiming(0, { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: ReduceMotion.Never }), ReduceMotion.Never);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [theme, stamp, veil]);
-  const veilStyle = useAnimatedStyle(() => ({ opacity: veil.value, backgroundColor: veilColor.value }));
-
-  // Kept so existing callers of the old night-mode switch keep working.
-  const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
-
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, night: theme === 'night', dark: DARK_THEMES.has(theme), setNight, scoped: false }}>
+    <ThemeContext.Provider value={valueFor(theme)}>
       <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
         {loaded ? children : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
-        {/* Always here and see-through until a theme change raises it: showing it needs no redraw. */}
-        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" style={[StyleSheet.absoluteFill, { zIndex: 9999 }, veilStyle]} />
       </View>
     </ThemeContext.Provider>
   );
 }
-
-/**
- * How far the phone's tint rises: enough to hide the repaint, never a blank
- * screen. Lower than the old 0.72 now that it rises in a frame instead of
- * easing up for 180 ms: the tap reads as the screen turning to the new court
- * at once, not as a curtain dropping, and with the tint in the new court's own
- * page colour, the parts already redrawn are hidden by it all the same.
- */
-const VEIL_PEAK = 0.62;
-/** How long the veil stays up once the redraw lands, for blur, glass and the map to catch up (was 90 ms, then a 360 ms lift). */
-const VEIL_HOLD = 60;
 
 export const useTheme = () => useContext(ThemeContext);
 
@@ -351,19 +369,20 @@ export function ThemeScope({ theme, children }: { theme: ThemeName; children: Re
   const outer = useContext(ThemeContext);
   const value = useMemo(() => ({ ...outer, theme, night: theme === 'night', dark: DARK_THEMES.has(theme), scoped: true }), [outer, theme]);
   // Always the same shape, the app's own court too, so a change of court never starts the inside over.
-  React.useLayoutEffect(() => { Object.assign(colors, themes[outer.theme]); });
+  // Put back to the court picked (live), never a court the screen around it may still be holding.
+  useLayoutEffect(() => { Object.assign(colors, themes[live]); });
   Object.assign(colors, themes[theme]);
   return (
     <>
       <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
-      <PutBack theme={outer.theme} />
+      <PutBack />
     </>
   );
 }
 
-/** Puts the live colours back to the app's own court, right after a ThemeScope's inside is drawn. */
-function PutBack({ theme }: { theme: ThemeName }) {
-  Object.assign(colors, themes[theme]);
+/** Puts the live colours back to the court picked, right after a ThemeScope's inside is drawn. */
+function PutBack() {
+  Object.assign(colors, themes[live]);
   return null;
 }
 
@@ -393,40 +412,44 @@ for (const key of slotKeys) {
  */
 const remapCache = new Map<ThemeName, WeakMap<object, object>>();
 
-export function useThemedStyles<T extends object>(definitions: T): T {
-  const { theme, scoped } = useTheme();
-  // The live colour object is brought in line with the theme every time a
-  // themed screen draws, so a button reading `colors.brand` can never be a
-  // theme behind the page it sits on. Not inside a ThemeScope: a share
-  // picture redrawing on its own (an avatar hearing new people) would
-  // otherwise leave its court in the colours the rest of the app reads.
-  if (!scoped && (colors.bg !== themes[theme].bg || colors.brand !== themes[theme].brand)) Object.assign(colors, themes[theme]);
-  return useMemo(() => {
-    let cache = remapCache.get(theme);
-    if (!cache) { cache = new WeakMap(); remapCache.set(theme, cache); }
-    const hit = cache.get(definitions);
-    if (hit) return hit as T;
-    const target = themes[theme];
-    const remap = (value: unknown): unknown => {
-      if (typeof value === 'string') {
-        const key = slotOf.get(value);
-        if (key) return target[key];
-        // Preserve an eight-digit hex's alpha pair when swapping the colour.
-        if (value.length === 9 && value.startsWith('#')) {
-          const base = slotOf.get(value.slice(0, 7));
-          if (base) return target[base] + value.slice(7);
-        }
-        return value;
-      }
-      if (Array.isArray(value)) return value.map(remap);
-      if (value && typeof value === 'object') {
-        return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remap(item)]));
+/** A style sheet in a court's colours, made once per court and sheet (the same cache useThemedStyles reads). */
+export function remapFor<T extends object>(theme: ThemeName, definitions: T): T {
+  let cache = remapCache.get(theme);
+  if (!cache) { cache = new WeakMap(); remapCache.set(theme, cache); }
+  const hit = cache.get(definitions);
+  if (hit) return hit as T;
+  const target = themes[theme];
+  const remap = (value: unknown): unknown => {
+    if (typeof value === 'string') {
+      const key = slotOf.get(value);
+      if (key) return target[key];
+      // Preserve an eight-digit hex's alpha pair when swapping the colour.
+      if (value.length === 9 && value.startsWith('#')) {
+        const base = slotOf.get(value.slice(0, 7));
+        if (base) return target[base] + value.slice(7);
       }
       return value;
-    };
+    }
+    if (Array.isArray(value)) return value.map(remap);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, remap(item)]));
+    }
+    return value;
+  };
+  const out = remap(definitions) as T;
+  cache.set(definitions, out);
+  return out;
+}
 
-    const out = remap(definitions) as T;
-    cache.set(definitions, out);
-    return out;
-  }, [definitions, theme]);
+export function useThemedStyles<T extends object>(definitions: T): T {
+  const { theme, scoped } = useTheme();
+  // The live colour object is brought in line with the court picked every time
+  // a themed screen draws, so a button reading `colors.brand` can never be a
+  // theme behind. Always the court picked (live), never this screen's own: a
+  // tab still held on the old court (catchUp) must not put its court back into
+  // the colours the rest of the app reads. Not inside a ThemeScope: a share
+  // picture redrawing on its own (an avatar hearing new people) would
+  // otherwise leave its court in the colours the rest of the app reads.
+  if (!scoped && (colors.bg !== themes[live].bg || colors.brand !== themes[live].brand)) Object.assign(colors, themes[live]);
+  return useMemo(() => remapFor(theme, definitions), [definitions, theme]);
 }

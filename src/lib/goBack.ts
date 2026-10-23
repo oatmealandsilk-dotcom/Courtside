@@ -1,4 +1,5 @@
 import { router, type Href } from 'expo-router';
+import { catchUpNow, setCatchUpNav } from '@/theme/catchUp';
 
 /**
  * Home's own address. Not '/': that address is also the splash screen's
@@ -78,6 +79,32 @@ export function onPageChange(onChange: () => void): () => void {
   return rootNavigation?.addListener?.('state', onChange) ?? (() => undefined);
 }
 
+/** The page on top, by its route name ('settings', 'theme', '(tabs)'…), or null before the app is up. */
+function topPage(): string | null {
+  try {
+    if (!rootNavigation?.isReady()) return null;
+    const state = rootNavigation.getRootState() as NavState | undefined;
+    const route = state?.routes?.[state.index ?? (state.routes?.length ?? 1) - 1];
+    return route?.name ?? null;
+  } catch { return null; }
+}
+
+/** The tab the tabs are on ('/discuss', '/', '/coaches', '/profile'), whatever is open over them; null if unknown. */
+function currentTab(): string | null {
+  try {
+    if (!rootNavigation?.isReady()) return null;
+    const root = rootNavigation.getRootState() as NavState | undefined;
+    const tabs = root?.routes?.find((route) => route.name === '(tabs)');
+    const state = tabs?.state as NavState | undefined;
+    const route = state?.routes?.[state.index ?? 0];
+    if (!route) return null;
+    return route.name === 'index' ? '/' : `/${route.name}`;
+  } catch { return null; }
+}
+
+// The theme's catch-up (src/theme/catchUp.ts) asks which tab is on and when the tabs come back into view.
+setCatchUpNav({ currentTab, tabsOnShow, onPageChange });
+
 /**
  * Whether going to a tab means closing pages first: something is open on
  * top of the tabs. On a tab itself the tabs simply move across.
@@ -92,6 +119,8 @@ export function mustCloseToReachTabs(): boolean {
  * across to Home. Already on a tab, the tabs simply move across.
  */
 export function goHome() {
+  // A theme just picked: every tab is on it before any of them shows (catchUp).
+  catchUpNow('all');
   if (mustCloseToReachTabs()) router.dismissTo(HOME);
   else router.navigate(HOME);
 }
@@ -103,6 +132,10 @@ export function goHome() {
  * Home unless the page names another.
  */
 export function goBack(fallback: Href = HOME) {
+  // A theme just picked: the tab this may uncover is on it as it shows (catchUp). Not from the Theme
+  // page itself: Settings, under it, changed with the tap, so that Back stays instant.
+  if (!router.canGoBack()) catchUpNow('all');
+  else if (topPage() !== 'theme') catchUpNow('active');
   if (router.canGoBack()) router.back();
   // '/' is the splash screen's address too (see HOME): Home is meant.
   else router.replace(fallback === '/' ? HOME : fallback);

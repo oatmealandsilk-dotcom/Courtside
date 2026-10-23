@@ -201,5 +201,6 @@ function ThemedStatusBar() {
       // Not in this build: the window keeps its launch colour.
     }
   }, [theme]);
-  return <StatusBar style={style} />;
+  // Animated: on a theme change the icons fade across with the page rather than flipping (iOS).
+  return <StatusBar style={style} animated />;
 }
