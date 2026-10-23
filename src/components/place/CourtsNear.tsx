@@ -15,6 +15,7 @@ import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { FirstReveal } from '@/features/feed/FirstReveal';
+import { Fold } from '@/components/ui/Fold';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
@@ -94,7 +95,11 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
  * court the map or players say is members only or private never shows here,
  * nor one you follow: Your courts already shows it, with the same news.
  */
-export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number }) {
+export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
+  center: LatLng | null;
+  /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number;
+  /** The gap above it in its list, which the held strip takes with it as it folds shut. */ foldGap?: number;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const near = useNearCourts(center);
   const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts, seeing, shownAtCourt } = useApp();
@@ -117,8 +122,12 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
   }, [rows, hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, seeing, shownAtCourt]);
 
   // Nothing known about here yet: the strip's own shape holds its place, quietly, so nothing below
-  // it moves when the courts come (Oct 21). Once the answer is in and there are none, it goes.
-  if (center && !rows.length && near.loading) {
+  // it moves when the courts come (Oct 21). Once the answer is in and there are none, it folds shut,
+  // and the page under it glides up (Oct 22 sweep, item 47: it vanished and the page jumped 180 pt).
+  const holding = !!center && !rows.length && near.loading;
+  const [heldShown, setHeldShown] = useState(holding);
+  useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
+  if (!rows.length && (holding || heldShown)) {
     const held = (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
         <View style={styles.head}>
@@ -139,7 +148,11 @@ export function CourtsNear({ center, revealOrder }: { center: LatLng | null; /**
         </View>
       </View>
     );
-    return revealOrder === undefined ? held : <FirstReveal order={revealOrder}>{held}</FirstReveal>;
+    return (
+      <Fold open={holding} gap={foldGap} onClosed={() => setHeldShown(false)}>
+        {revealOrder === undefined ? held : <FirstReveal order={revealOrder}>{held}</FirstReveal>}
+      </Fold>
+    );
   }
   if (!center || !rows.length) return null;
   const strip = (

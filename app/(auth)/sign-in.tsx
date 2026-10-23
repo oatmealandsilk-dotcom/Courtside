@@ -6,7 +6,7 @@ import { OldEnoughCheck } from '@/components/OldEnoughCheck';
 import { blockDevice, carryBirthDate, dropCarriedBirthDate, isDeviceBlocked, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { readableInk } from '@/lib/badges';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Submit } from '@/components/sheet/SheetForm';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -18,7 +18,7 @@ import { Avatar, Button, Field } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { auth as remoteAuth, remote, type HandleStatus } from '@/data/remote';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
-import { SigningInAs, SigningInWith } from '@/components/SigningInAs';
+import { Lingering, SigningInAs, SigningInWith } from '@/components/SigningInAs';
 import { useLeave } from '@/components/LeaveCurtain';
 import { peekReferrer, peekShareTarget } from '@/features/invite/referral';
 import { useApp } from '@/store/AppContext';
@@ -33,6 +33,23 @@ import { TextScale } from '@/theme/textScale';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 
 type Mode = 'sign-in' | 'sign-up';
+
+// The welcome and the form cross-fade into each other (Oct 22 sweep, item 1:
+// the welcome used to cut to blank and the form fade up from nothing).
+const PAGE_IN = FadeIn.duration(280);
+const PAGE_OUT = FadeOut.duration(220);
+// Sign in ⇄ sign up (item 29): the extra boxes fade, and everything under them glides.
+const BOXES_IN = FadeIn.duration(240);
+const BOXES_OUT = FadeOut.duration(150);
+// On the web, Reanimated plays a layout transition as a translate plus a
+// scale, so a box whose height changes would squash its fields and text for
+// the length of the glide. There the boxes' own fades carry the change instead.
+const GLIDE = Platform.OS === 'web' ? undefined : LinearTransition.duration(260);
+// On the web a leaving layer is copied, and the welcome's own fade-ins restart
+// at nothing inside the copy, so it would cut to blank. There it stays mounted
+// and fades out itself (welcomeFade below).
+const WEB = Platform.OS === 'web';
+const WELCOME_OUT_MS = 220;
 
 /** A username made from a name: "Alex Reed" → "alexreed" (accents off, letters and numbers only, 20 at most); too short to use, nothing. */
 function suggestedHandle(name: string): string {
@@ -354,8 +371,21 @@ export default function SignIn() {
   // Android's Back goes back a step on this page, the same as its own back
   // buttons: from "Check your inbox" to the form, from "another account" to
   // the saved ones, from the form to the welcome. From there it leaves the app.
-  const backToForm = () => { setSent(null); setError(null); };
-  const backToWelcome = () => { setStarted(false); setError(null); setProviderError(null); };
+  // Back from the inbox panel: the form fades back in (on the page's first draw it simply shows, with the page).
+  const [leftInbox, setLeftInbox] = useState(false);
+  const backToForm = () => { setLeftInbox(true); setSent(null); setError(null); };
+  // The welcome fading out on the web (see WEB above): kept on screen, untouchable, until its fade ends.
+  const [leaving, setLeaving] = useState(false);
+  const welcomeFade = useSharedValue(1);
+  const welcomeFadeStyle = useAnimatedStyle(() => ({ opacity: welcomeFade.value }));
+  useEffect(() => {
+    if (!leaving) return undefined;
+    const done = setTimeout(() => setLeaving(false), WELCOME_OUT_MS + 40);
+    return () => clearTimeout(done);
+  }, [leaving]);
+  // Back to the welcome: it fades in as it is, without replaying its first-visit entrance.
+  const [cameBack, setCameBack] = useState(false);
+  const backToWelcome = () => { welcomeFade.value = 1; setLeaving(false); setCameBack(true); setStarted(false); setError(null); setProviderError(null); };
   // "Use another account" or "New here?" from the saved accounts goes back to them.
   const backToAccounts = () => { setUseAnother(false); setMode('sign-in'); setError(null); setProviderError(null); };
   // The form's back arrow: to the saved accounts, from "another account" or
@@ -375,27 +405,33 @@ export default function SignIn() {
   });
   // Autofill hints for Android's password manager (an iPhone keeps its own way; see Field).
   const fill = (hint: NonNullable<React.ComponentProps<typeof Field>['autoComplete']>) => (Platform.OS === 'android' ? hint : undefined);
-  const begin = (next: Mode) => { setMode(next); setStarted(true); setError(null); setProviderError(null); };
+  const begin = (next: Mode) => {
+    if (WEB) { welcomeFade.value = withTiming(0, { duration: WELCOME_OUT_MS }); setLeaving(true); }
+    setMode(next); setStarted(true); setError(null); setProviderError(null);
+  };
   const title = chooser ? 'Welcome back' : mode === 'sign-up' ? 'Create your account' : 'Sign in';
   // Came from "I'm in" on the peek (Oct 17): the form says what it is for, "Make a free account to join Sam's hit at 6pm".
   const [joining] = useState(() => { const t = peekShareTarget(); return t?.joinHit && t.label ? t.label : null; });
   const line = chooser ? 'Pick an account to carry on.' : mode === 'sign-up' ? (joining ?? 'Free, and it takes a minute.') : 'Tennis clips, people to hit with, and real coaches.';
 
   // The first visit: one big court with the name on it, one line, two ways in (src/features/welcome).
-  if (welcome) {
-    return (
-      <View style={styles.root}>
-        <Welcome onCreate={() => begin('sign-up')} onLogIn={() => begin('sign-in')} />
-        {via ? <SigningInWith provider={via} /> : null}
-        {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
-        {curtain}
-      </View>
-    );
-  }
-
+  // Each is a layer of its own, so one fades out while the other fades in.
   return (
-    <KeyboardScrollContext.Provider value={keyboard.reveal}>
     <View style={styles.root}>
+      {welcome || (WEB && leaving) ? (
+        <Animated.View
+          key="welcome"
+          entering={cameBack ? PAGE_IN : undefined}
+          exiting={WEB ? undefined : PAGE_OUT}
+          pointerEvents={welcome ? 'auto' : 'none'}
+          style={[StyleSheet.absoluteFill, WEB ? welcomeFadeStyle : null]}
+        >
+          <Welcome onCreate={() => begin('sign-up')} onLogIn={() => begin('sign-in')} still={cameBack} />
+        </Animated.View>
+      ) : null}
+      {welcome ? null : (
+    <Animated.View key="form" entering={PAGE_IN} exiting={PAGE_OUT} style={StyleSheet.absoluteFill}>
+    <KeyboardScrollContext.Provider value={keyboard.reveal}>
       <Wash height={420} strength={0.85} />
       <ScrollView
         ref={keyboard.scroller}
@@ -410,10 +446,11 @@ export default function SignIn() {
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : 'interactive'}
       >
-        <Animated.View entering={FadeIn.duration(360)} style={styles.column}>
+        <Animated.View layout={GLIDE} style={styles.column}>
           {sent ? (
             // Where the link went, and what to do with it: a panel, not a line of green text.
-            <View style={styles.inbox}>
+            // It fades in and out over the form rather than cutting (item 29).
+            <Animated.View key="inbox" entering={BOXES_IN} exiting={BOXES_OUT} style={styles.inbox}>
               <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>
               <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Check your inbox</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxBody}>
@@ -450,9 +487,9 @@ export default function SignIn() {
                   </Pressable>
                 ) : null}
               </View>
-            </View>
+            </Animated.View>
           ) : (
-            <>
+            <Animated.View key="form" entering={leftInbox ? BOXES_IN : undefined} exiting={BOXES_OUT} style={styles.column}>
               {showBack ? (
                 <Pressable accessibilityRole="button" accessibilityLabel="Back" onPress={goBackHere} hitSlop={12} style={styles.back}>
                   <Ionicons name="chevron-back" size={22} color={colors.text} />
@@ -507,7 +544,9 @@ export default function SignIn() {
                   </Pressable>
                 </View>
               ) : (
-                <View style={styles.form}>
+                // Each part below a change glides to its new place (item 29), nested so every
+                // box that comes or goes moves only what is under it.
+                <Animated.View layout={GLIDE} style={styles.form}>
                   {isSupabaseConfigured ? (
                     <>
               {/* Apple and Google first, full width and the same size, Apple on
@@ -536,15 +575,22 @@ export default function SignIn() {
                       {/* Android has no Sign in with Apple. Someone who made their account with
                           Apple on an iPhone gets in here with the email and a password set there. */}
                       {Platform.OS === 'android' && mode === 'sign-in' ? (
-                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.appleNote}>Made your account with Apple on an iPhone? On the iPhone, open Settings, then Account center, then Set a password. Then sign in here with that email and password.</Text>
+                        <Animated.View entering={BOXES_IN} exiting={BOXES_OUT}>
+                          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.appleNote}>Made your account with Apple on an iPhone? On the iPhone, open Settings, then Account center, then Set a password. Then sign in here with that email and password.</Text>
+                        </Animated.View>
                       ) : null}
+                    </>
+                  ) : null}
+                  <Animated.View layout={GLIDE} style={styles.form}>
+                  {isSupabaseConfigured ? (
+                    <>
                       <View style={styles.divider}>
                         <View style={styles.rule} />
                         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.dividerText}>or {mode === 'sign-up' ? 'sign up' : 'sign in'} with email</Text>
                         <View style={styles.rule} />
                       </View>
               {mode === 'sign-up' ? (
-                <>
+                <Animated.View key="new" entering={BOXES_IN} exiting={BOXES_OUT} style={styles.form}>
                   <Field soft value={name} onChangeText={setName} placeholder="Name" autoCapitalize="words" autoComplete={fill('name')} />
                   <Field
                     soft
@@ -568,16 +614,25 @@ export default function SignIn() {
                   {joining && birthDate && yearsOld(birthDate) >= 13 && yearsOld(birthDate) < 18 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>The hit you picked is with a player you don’t know yet, so it’s for players 18 and over. Once you’re in, you can join hits with friends who follow you back.</Text> : null}
                   {birthBlank ? <OldEnoughCheck checked={over13} onChange={setOver13} /> : null}
                   {ageBlocked ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ageNote}>Sorry, you can't create a CourtSide account.</Text> : null}
-                </>
+                </Animated.View>
               ) : null}
+                    </>
+                  ) : null}
+                  <Animated.View layout={GLIDE} style={styles.form}>
+                  {isSupabaseConfigured ? (
+                    <>
                       <Field soft value={email} onChangeText={setEmail} placeholder="Email" autoCapitalize="none" keyboardType="email-address" autoComplete={fill('email')} />
                       <Field soft value={password} onChangeText={setPassword} placeholder={mode === 'sign-up' ? 'Password, at least 6 characters' : 'Password'} autoCapitalize="none" secureTextEntry onSubmitEditing={submit} autoComplete={fill(mode === 'sign-up' ? 'new-password' : 'password')} />
                       {mode === 'sign-in' ? (
-                        <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={styles.forgot}>
-                          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>Forgot password?</Text>
-                        </Pressable>
+                        <Animated.View key="forgot" entering={BOXES_IN} exiting={BOXES_OUT} style={styles.forgot}>
+                          <Pressable accessibilityRole="button" accessibilityLabel="Forgot password" onPress={forgot} hitSlop={8} style={styles.forgotTap}>
+                            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.link}>Forgot password?</Text>
+                          </Pressable>
+                        </Animated.View>
                       ) : (
-                        <TermsCheck checked={agreed} onChange={setAgreed} />
+                        <Animated.View key="terms" entering={BOXES_IN} exiting={BOXES_OUT}>
+                          <TermsCheck checked={agreed} onChange={setAgreed} />
+                        </Animated.View>
                       )}
                     </>
                   ) : (
@@ -589,6 +644,7 @@ export default function SignIn() {
               hint='Demo build — no accounts, no database. Try "you", "miraplays", "devbackhand" or "tomascoach".'
             />
                   )}
+                  <Animated.View layout={GLIDE} style={styles.form}>
                   {error ? <Text style={styles.error}>{error}</Text> : null}
                   {notice ? <Text style={styles.notice}>{notice}</Text> : null}
                   <Submit label={!isSupabaseConfigured ? 'Enter' : mode === 'sign-in' ? 'Sign in' : 'Create account'} busyLabel={mode === 'sign-up' ? 'Creating your account…' : 'Signing in…'} onPress={() => { void submit(); }} disabled={!ready} busy={busy} />
@@ -608,19 +664,24 @@ export default function SignIn() {
                   ) : (
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footnote}>Mock data only. Nothing you do here leaves the device.</Text>
                   )}
-                </View>
+                  </Animated.View>
+                  </Animated.View>
+                  </Animated.View>
+                </Animated.View>
               )}
-            </>
+            </Animated.View>
           )}
         </Animated.View>
         {KEYBOARD_ROOM ? <Animated.View pointerEvents="none" style={keyboardRoom} /> : null}
       </ScrollView>
       <StatusShade wash={{ height: 420, strength: 0.85 }} />
-      {via ? <SigningInWith provider={via} /> : null}
-      {switchingAccount ? <SigningInAs name={switchingAccount.name} handle={switchingAccount.handle} avatarUrl={switchingAccount.avatarUrl} seed={switchingAccount.id} /> : null}
+    </KeyboardScrollContext.Provider>
+    </Animated.View>
+      )}
+      <Lingering value={via}>{(p) => <SigningInWith provider={p} />}</Lingering>
+      <Lingering value={switchingAccount}>{(a) => <SigningInAs name={a.name} handle={a.handle} avatarUrl={a.avatarUrl} seed={a.id} />}</Lingering>
       {curtain}
     </View>
-    </KeyboardScrollContext.Provider>
   );
 }
 
@@ -648,7 +709,8 @@ const styleDefinitions = StyleSheet.create({
   secondary: { ...lift, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.surface },
   secondaryText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   form: { gap: spacing.md },
-  forgot: { alignSelf: 'flex-end', paddingVertical: 2 },
+  forgot: { alignSelf: 'flex-end' },
+  forgotTap: { paddingVertical: 2 },
   link: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
   quietLink: { ...typography.small, fontSize: 14, color: colors.textMuted },
   linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },

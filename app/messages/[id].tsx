@@ -35,6 +35,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { Avatar, BrandWash, EmptyState } from '@/components/ui';
+import { useRestKey } from '@/components/ui/restMotion';
 import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, leaveGroupMessage, othersIn, sharesReceipts } from '@/features/messages/groups';
 import { HitGlyph } from '@/components/HitGlyph';
 import { joinedCount } from '@/features/hits/audience';
@@ -69,7 +70,7 @@ import { Slide, TimeAnchor, TimeSwipeArea } from '@/features/messages/MessageTim
 import { SwipeReply } from '@/features/messages/SwipeReply';
 import { buildRows, keepRows, type Gap, type ThreadRow } from '@/features/messages/threadRows';
 import {
-  Arrive, EmojiReactSheet, Flash, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
+  Arrive, EmojiReactSheet, Flash, GrowRoom, LEAVE_MS, LeaveRow, MessageInfoSheet, NewMessagesButton, ReactionsSheet, ReplyBar, ReplyQuote, SeenFaces, type ArriveMode,
 } from '@/features/messages/ChatBits';
 import { RichText } from '@/components/RichText';
 import { useApp } from '@/store/AppContext';
@@ -83,8 +84,14 @@ import { afterMenu, confirm, confirmAfterMenu, confirmBlock, confirmReport } fro
 import { REPORT_THANKS } from '@/features/moderation/reportThanks';
 import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
-import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+
+/** The held message's blur, its strength moved on the animation thread (see the hold menu). */
+const AnimatedBlurView = Reanimated.createAnimatedComponent(BlurView);
+/** The hold menu open and still: after its animated styles, so they win at rest on a phone. */
+const MENU_DIM_REST = { opacity: 1 } as const;
+const MENU_POP_REST = { opacity: 1, transform: [{ translateY: 0 }, { scale: 1 }] };
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
@@ -231,34 +238,35 @@ export default function Thread() {
   // Going to the message a reply answers: it lights up.
   const [flash, setFlash] = useState<{ id: string; n: number } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
+  // The emoji keyboard stays drawn a moment after it closes, so it can slide away with the bar rather than vanish.
+  const [emojiDrawn, setEmojiDrawn] = useState(false);
+  useEffect(() => {
+    if (emojiOpen) { setEmojiDrawn(true); return undefined; }
+    const t = setTimeout(() => setEmojiDrawn(false), 320);
+    return () => clearTimeout(t);
+  }, [emojiOpen]);
+  // Messages on their way out (unsent, deleted for you): each folds shut before it is gone (see LeaveRow).
+  const [leaving, setLeaving] = useState<ReadonlySet<string>>(() => new Set());
+  const leaveThen = useCallback((messageId: string, run: () => void) => {
+    setLeaving((now) => new Set(now).add(messageId));
+    setTimeout(() => {
+      run();
+      setLeaving((now) => { if (!now.has(messageId)) return now; const next = new Set(now); next.delete(messageId); return next; });
+    }, LEAVE_MS);
+  }, []);
   // A voice note recording in the box: the emoji keyboard steps aside.
   const [recording, setRecording] = useState(false);
-  // The emoji keyboard takes the phone keyboard's place at the phone keyboard's
-  // height, so switching between them leaves the typing bar where it was.
-  const keyboardHeight = useRef(Platform.OS === 'web' ? 260 : 300);
   const listRef = useRef<FlatList<ThreadRow>>(null);
-  useEffect(() => {
-    if (Platform.OS === 'web') return;
-    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
-      // An iPhone's keyboard height takes in the home-indicator strip; Android's
-      // already leaves out the navigation bar under it, so nothing comes off there.
-      keyboardHeight.current = Math.max(220, e.endCoordinates.height - (Platform.OS === 'ios' ? insets.bottom : 0));
-    });
-    return () => sub.remove();
-  }, [insets.bottom]);
   const [typingFocus, setTypingFocus] = useState(false);
   const focused = useIsFocused();
   // The room under the typing bar: a little above the home indicator with the
   // keyboard down, right on the keyboard with it up, riding on it frame by
   // frame on an iPhone. See keyboardLift.ts.
-  const emojiRoom = emojiOpen ? keyboardHeight.current + insets.bottom : 0;
-  const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom });
+  const emojiHeight = EMOJI_PANEL_HEIGHT + insets.bottom;
+  const emojiRoom = emojiOpen ? emojiHeight : 0;
+  const room = useKeyboardLift({ rest: Math.max(insets.bottom, 12) + 2, focused, typing: typingFocus, emojiRoom, emojiHeight });
   // Dragging the messages down puts the keyboard away (on an iPhone, following the finger).
-  const dragDown = useDragDownDismiss(
-    () => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); },
-    // On an iPhone the phone's own keyboard follows the finger by itself; the emoji keyboard is closed by the drag.
-    () => setEmojiOpen(false),
-  );
+  const dragDown = useDragDownDismiss(() => { composer.current?.blur(); Keyboard.dismiss(); setEmojiOpen(false); });
 
   const liveConversation = conversations.find((c) => c.id === id);
   // Someone took you out of this group (found out while it was open, or on
@@ -366,7 +374,9 @@ export default function Thread() {
   }, [typing]);
   const lastMessage = thread[thread.length - 1];
   // Your newest message's photos still going up: its line says "Sending…", not "Sent".
-  const lastReal = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system'), [thread]);
+  // A message folding away (unsend, delete for you) no longer counts as the newest: the receipt moves up as it folds, not after.
+  const lastReal = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system' && !leaving.has(m.id)), [thread, leaving]);
+  const lastAny = useMemo(() => [...thread].reverse().find((m) => m.kind !== 'system'), [thread]);
   const lastSending = useSendProgress(lastReal?.id ?? '') !== null;
   useEffect(() => {
     if (!lastMessage) return;
@@ -422,10 +432,15 @@ export default function Thread() {
   const readers = useMemo(() => (group ? people.filter((u) => sharesReceipts(u, { receiptsOffIds: receiptsOff }) && !blockedIds.includes(u.id)) : []), [group, people, blockedIds, receiptsOff]);
   // The rows, each kept as the same object while nothing about it changes, so its row is not drawn again.
   const rowCache = useRef(new Map<string, ThreadRow>());
-  const rows = useMemo(
-    () => keepRows(rowCache.current, buildRows(thread, { me: currentUserId, group, blockedIds, shownIds, readers })),
-    [thread, currentUserId, group, blockedIds, shownIds, readers],
-  );
+  // While messages fold away, every other row is already worked out without them (runs, corners, faces), so
+  // nothing moves again once they are gone; the leaving rows keep their own look as they fold.
+  const rows = useMemo(() => {
+    const opts = { me: currentUserId, group, blockedIds, shownIds, readers };
+    const all = buildRows(thread, opts);
+    if (!leaving.size) return keepRows(rowCache.current, all);
+    const live = new Map(buildRows(thread.filter((m) => !leaving.has(m.id)), opts).map((r) => [r.key, r]));
+    return keepRows(rowCache.current, all.map((r) => (leaving.has(r.message.id) ? r : live.get(r.key) ?? r)));
+  }, [thread, currentUserId, group, blockedIds, shownIds, readers, leaving]);
   // The list is upside down: its first row is the newest message.
   const data = useMemo(() => [...rows].reverse(), [rows]);
   const dataRef = useRef(data);
@@ -525,11 +540,16 @@ export default function Thread() {
   // the server has it, then "Seen" or "Sent" in a one-to-one chat (Seen only
   // when they let read receipts show). In a group, faces show who has read
   // up to where; "Sent" until anyone has.
-  const readLine = !typers.length && lastReal && lastReal.senderId === currentUserId && !lastReal.failed
-    ? lastSending || lastReal.sending ? 'Sending…' : group
-      ? (rows.some((r) => r.seenBy?.length && r.message.id === lastReal.id) ? null : 'Sent')
-      : other && sharesReceipts(other, conversation) && lastReal.readAtBy?.[other.id] ? 'Seen' : 'Sent'
-    : null;
+  const readLineOf = (m: Message | undefined) => (!typers.length && m && m.senderId === currentUserId && !m.failed
+    ? (m.id === lastReal?.id && lastSending) || m.sending ? 'Sending…' : group
+      ? (rows.some((r) => r.seenBy?.length && r.message.id === m.id) ? null : 'Sent')
+      : other && sharesReceipts(other, conversation) && m.readAtBy?.[other.id] ? 'Seen' : 'Sent'
+    : null);
+  const readLine = readLineOf(lastReal);
+  // The newest message folding away keeps its own line as it goes; the one before it grows its line over the same fold.
+  const lastAnyId = lastAny?.id;
+  const leavingLast = !!lastAnyId && lastAnyId !== lastReal?.id && leaving.has(lastAnyId);
+  const leavingLine = leavingLast ? readLineOf(lastAny) : null;
 
   // The calls the rows and the box make, made once (see Calls).
   const live = useRef<Calls | null>(null);
@@ -555,6 +575,7 @@ export default function Thread() {
     const got = m.replyToId ? byId.get(m.replyToId) : undefined;
     const original = got && (!hiddenAt || got.createdAt > hiddenAt) ? got : undefined;
     return (
+      <LeaveRow leaving={leaving.has(m.id)}>
       <MessageRow
         item={item}
         ctx={rowCtx}
@@ -565,22 +586,23 @@ export default function Thread() {
         senderBlocked={m.senderId !== currentUserId && blockedIds.includes(m.senderId)}
         held={menuId === m.id}
         flashKey={flash?.id === m.id ? flash.n : undefined}
-        readLine={m.id === lastRealId ? readLine : null}
+        readLine={m.id === lastRealId ? readLine : leavingLast && m.id === lastAnyId ? leavingLine : null}
+        readGrow={leavingLast && m.id === lastRealId}
         seenHidden={!!item.seenBy?.length && typingNow}
         canWrite={canWrite}
       />
+      </LeaveRow>
     );
-  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite]);
+  }, [rowCtx, byId, hiddenAt, group, currentUserId, blockedIds, shownIds, menuId, flash, lastRealId, readLine, typingNow, canWrite, leaving, leavingLast, lastAnyId, leavingLine]);
 
   // Android's Back closes what is open over the typing bar before it leaves
-  // the chat: the emoji keyboard, the "+" tray, then an edit or a reply (as
+  // the chat: the "+" tray, then an edit or a reply (as
   // Escape does on a computer). With none of them open, the chat closes.
   // Every hook stays above the "Conversation not found" page below: the chat
   // can go while this screen is open (you block them, leave the group) or
   // arrive after it opened (an alert tapped at launch), and React needs the
   // same hooks on every draw, or the whole app falls over.
   useAndroidBack(() => {
-    if (emojiOpen) { setEmojiOpen(false); return true; }
     if (composer.current?.plusIsOpen()) { composer.current.closePlus(); return true; }
     // The edit called off (endEditing's steps, written out: that is made further down).
     if (editing) { setEditing(null); composer.current?.setText(draftBeforeEdit.current ?? ''); draftBeforeEdit.current = null; return true; }
@@ -643,10 +665,29 @@ export default function Thread() {
   const statusLive = !typingLine && (!!atCourt || upToHit);
   // Every message of the chat is here (nothing older left to load): its start, with who it is with, can show above the first.
   const wholeHistory = noMoreOlder.current || thread.length < MESSAGE_PAGE;
-  // The emoji button swaps the phone keyboard for the emoji one and back.
+  /*
+   * The emoji button. On an iPhone or Android phone it brings up the phone's
+   * own keyboard, with its emoji key (owner, Oct 22: "clicking emoji should
+   * open the iPhone's emoji thing", the way Instagram and iMessage do); with
+   * the keyboard already up it changes nothing. In a browser, which has no
+   * emoji keyboard to call on, it swaps the app's own emoji keyboard in and
+   * out.
+   */
   const toggleEmoji = () => {
     composer.current?.closePlus();
-    if (emojiOpen) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); composer.current?.focus(); return; }
+    if (PHONE_EMOJI) {
+      // Android can close the keyboard (Back, or the gesture) while the box
+      // keeps focus, and focusing an already focused box does nothing. So let
+      // go first, then take it again, and the keyboard comes back.
+      if (Platform.OS === 'android' && !Keyboard.isVisible()) {
+        composer.current?.blur();
+        setTimeout(() => composer.current?.focus(), 50);
+        return;
+      }
+      composer.current?.focus();
+      return;
+    }
+    if (emojiOpen) { setEmojiOpen(false); composer.current?.focus(); return; }
     Keyboard.dismiss();
     setEmojiOpen(true);
   };
@@ -656,7 +697,7 @@ export default function Thread() {
    * the keyboard goes down behind the sheet or picker as it rises, and stays
    * down when it closes. (Left focused, the phone put the keyboard back on
    * the way out, and the whole bar dropped and rose again.) The emoji
-   * keyboard, being part of the page, simply stays open underneath: taking
+   * keyboard (browser only), being part of the page, simply stays open underneath: taking
    * it away would drop the bar in one jump.
    */
   const letGo = () => { composer.current?.blur(); Keyboard.dismiss(); };
@@ -799,10 +840,10 @@ export default function Thread() {
     lastKey.current = now;
     if (now - lastPing.current > 2000) { lastPing.current = now; typingLink.current?.ping(); }
   };
-  // Tapping into the words brings the phone keyboard back in the emoji keyboard's place.
+  // Tapping into the words brings the phone keyboard back in the emoji keyboard's place (browser only).
   const boxFocused = (on: boolean) => {
     setTypingFocus(on);
-    if (on && emojiOpen && !desktopWeb) { room.holdUntilKeyboard(emojiRoom); setEmojiOpen(false); }
+    if (on && emojiOpen && !desktopWeb) setEmojiOpen(false);
   };
   live.current = {
     openMenu,
@@ -855,6 +896,8 @@ export default function Thread() {
   const listHeader = (
     // The list is upside down: its header is the bottom of the chat. Someone typing shows there, under the newest message.
     <View style={styles.listBottom}>
+      {/* The dots' room grows and shrinks smoothly, so the chat glides up for them and back down (Oct 22 sweep). */}
+      <GrowRoom>
       {typers.length ? (
         <TypingBubble
           styles={styles}
@@ -866,6 +909,7 @@ export default function Thread() {
           })() : undefined}
         />
       ) : null}
+      </GrowRoom>
     </View>
   );
   const listFooter = (
@@ -1039,11 +1083,11 @@ export default function Thread() {
           onCopyLink={(url) => { void Clipboard.setStringAsync(url); haptics.tap(); if (!phoneSaysCopied) showToast({ title: 'Link copied', icon: 'link-outline' }); }}
           onEdit={() => startEditing(menuMessage)}
           // Both ask first; the card comes over the closing menu.
-          onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => actions.unsendMessage(messageId) }); }}
+          onUnsend={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Unsend message?', message: "It's removed for everyone in the chat.", confirmLabel: 'Unsend', destructive: true, onConfirm: () => leaveThen(messageId, () => actions.unsendMessage(messageId)) }); }}
           // Someone else's message: reported as the chat, naming them and pointing at this one message,
           // so an admin can read it in place and act on it (App Review 1.2, Oct 5).
           onReport={conversation ? () => { const m = menuMessage; const chatId = conversation.id; confirmReport('message', () => { void actions.reportChat(chatId, 'message', m.senderId, m.id).then((filed) => showToast(filed ? { title: REPORT_THANKS, icon: 'flag-outline' } : { title: 'Your report didn’t send', body: 'Check your connection and try again.', icon: 'alert-circle-outline' })); }, true); } : undefined}
-          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => actions.deleteMessageForMe(messageId) }); }}
+          onDelete={() => { const messageId = menuMessage.id; confirmAfterMenu({ title: 'Delete message?', message: menuPending ? 'It hasn’t been sent, so it’s simply removed.' : menu.mine ? "It's removed for you. Others in the chat still see it." : "It's removed for you only.", confirmLabel: 'Delete', destructive: true, onConfirm: () => leaveThen(messageId, () => actions.deleteMessageForMe(messageId)) }); }}
           // The Send-to sheet, once the menu has gone: pick chats (groups too) and it goes to each as it is.
           onForward={() => { const messageId = menuMessage.id; afterMenu(() => router.push({ pathname: '/share', params: { kind: 'message', id: messageId } })); }}
           doubleTap={defaultReaction}
@@ -1082,13 +1126,14 @@ export default function Thread() {
       <View style={styles.dock}>
         <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0), colors.bg]} style={styles.dockFade} />
         {editing ? (
-          <View style={styles.editBar}>
+          // In and out softly, as the Replying bar does (Oct 22 sweep).
+          <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.editBar}>
             <Ionicons name="create-outline" size={16} color={colors.brand} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.editLabel} numberOfLines={1}>Editing message</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Stop editing" hitSlop={10} onPress={endEditing} style={({ pressed }) => pressed && styles.pressedDim}>
               <Ionicons name="close" size={20} color={colors.textMuted} />
             </Pressable>
-          </View>
+          </Reanimated.View>
         ) : null}
         {replyTo && !editing && canWrite ? (
           <ReplyBar to={replyTo} who={replyTo.senderId === currentUserId ? 'yourself' : nameOf(replyTo.senderId)} onClose={() => setReplyTo(null)} />
@@ -1119,9 +1164,9 @@ export default function Thread() {
         ) : (
           <>
             {picked.length ? (
-              <View style={styles.trayWrap}>
+              <Reanimated.View entering={FadeIn.duration(160)} exiting={FadeOut.duration(110)} style={styles.trayWrap}>
                 <PhotoTray photos={picked} max={MAX_CHAT_PHOTOS} onRemove={(i) => setPicked((now) => now.filter((_, j) => j !== i))} onAdd={choosePhotos} />
-              </View>
+              </Reanimated.View>
             ) : null}
             <Composer
               ref={composer}
@@ -1139,11 +1184,12 @@ export default function Thread() {
       </View>
       {/* The room under the bar: above the home indicator, or the keyboard's height while it is up. */}
       <Reanimated.View pointerEvents="none" style={room.spacer} />
-      {emojiOpen && canWrite && !recording ? (
-        // Laid over the room under the bar, at the phone keyboard's height, so swapping keyboards leaves the bar where it was.
-        <View style={styles.emojiLayer}>
-          <EmojiKeyboard height={keyboardHeight.current} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
-        </View>
+      {(emojiOpen || emojiDrawn) && canWrite && !recording ? (
+        // In a browser only (a phone uses its own emoji keyboard): laid over the room under the bar, sliding
+        // up and away together with the bar (room.panel, Oct 22 sweep), or taking a phone browser's keyboard's place.
+        <Reanimated.View pointerEvents={emojiOpen ? 'auto' : 'none'} style={[styles.emojiLayer, room.panel]}>
+          <EmojiKeyboard height={EMOJI_PANEL_HEIGHT} bottomInset={insets.bottom} onPick={(emoji) => composer.current?.insert(emoji)} onDelete={() => composer.current?.deleteBack()} />
+        </Reanimated.View>
       ) : null}
     </View>
   );
@@ -1276,9 +1322,9 @@ const Composer = memo(function Composer({ ref, styles, pickedCount, editingBody,
   return (
     <>
       {mention && mentionRows.length ? (
-        <View style={styles.mentionTray}>
+        <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.mentionTray}>
           <MentionSuggestions candidates={mentionRows} onPick={pickMention} />
-        </View>
+        </Reanimated.View>
       ) : null}
       {plusOpen && tools && !voice.recording ? (
         // The "+": what else can go in the chat, one tap away (iMessage's apps row).
@@ -1437,7 +1483,7 @@ const noop = () => {};
  * read line), an event line, or a folded run. Drawn again only when one of
  * its own values changes (see Thread's renderRow).
  */
-const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, seenHidden, canWrite }: {
+const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlocked, originalHidden = false, senderBlocked = false, held, flashKey, readLine, readGrow = false, seenHidden, canWrite }: {
   item: ThreadRow;
   ctx: RowCtx;
   /** The message it answers, when it is here (undefined: gone, or not loaded yet). */
@@ -1453,6 +1499,8 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   flashKey?: number;
   /** Under your newest message: "Sending…", "Sent" or "Seen". */
   readLine: string | null;
+  /** The message under it is folding away: its line grows in over the fold rather than arriving after it. */
+  readGrow?: boolean;
   /** Someone is typing: the seen faces give way to the dots. */
   seenHidden: boolean;
   canWrite: boolean;
@@ -1461,6 +1509,11 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   const { message } = item;
   // Whether it comes in moving: settled the first time it is drawn.
   const [arrive] = useState(() => ctx.arrivalOf(message));
+  // Once its read line has grown in (the message under it leaving), the line stays in that room while it
+  // shows, so it is never rebuilt when the leaving message is gone (its fade-in would play a second time).
+  const grew = useRef(false);
+  if (!readLine) grew.current = false;
+  else if (readGrow) grew.current = true;
   const mine = message.senderId === me;
   const stamp = item.stamp ? <DayLine iso={message.createdAt} styles={styles} /> : null;
   // An event line ("Mira added Dev", "You named the group…"): a quiet
@@ -1743,11 +1796,12 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   }
 
   // Under your newest message, at its right edge: "Sending…", "Sent" or "Seen". In a group, the faces of who has read up to here.
-  const readUnder = readLine ? (
+  const readLineView = readLine ? (
     <Reanimated.View entering={arrive !== 'none' ? FadeIn.delay(110).duration(260).easing(Easing.out(Easing.cubic)) : undefined}>
       <Slide mine><Text accessibilityLiveRegion="polite" style={styles.readLine}>{readLine}</Text></Slide>
     </Reanimated.View>
   ) : null;
+  const readUnder = readLineView && grew.current ? <GrowRoom from="top" growIn>{readLineView}</GrowRoom> : readLineView;
   const seen = item.seenBy?.length && !seenHidden ? (
     <Slide mine={mine}>
       <SeenFaces people={item.seenBy.map((uid) => ctx.faceOf(uid)).filter((u): u is User => !!u)} align="right" />
@@ -2266,6 +2320,16 @@ function HoverBar({ tools, onMore }: { tools: HoverTools; onMore: () => void }) 
 }
 
 /**
+ * The hold menu's blur, its own component so each rebuild at rest (a new key)
+ * works out its first-frame strength from where the menu is now (full), never
+ * from the menu's first frame (none) (Oct 23).
+ */
+function MenuBlur({ p }: { p: SharedValue<number> }) {
+  const props = useAnimatedProps(() => ({ intensity: 14 * Math.max(0, Math.min(1, p.value)) }));
+  return <AnimatedBlurView pointerEvents="none" animatedProps={props} tint="dark" style={StyleSheet.absoluteFill} />;
+}
+
+/**
  * What a held message offers, the way iMessage and Instagram show it: the
  * chat dims, the message stays lifted where it was, the reactions sit above
  * it (with a "+" for any emoji) and the actions below. Reply comes first.
@@ -2297,9 +2361,15 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const still = useReducedMotion();
   const p = useSharedValue(still ? 1 : 0);
   const lift = useSharedValue(1);
+  // Open and still (Oct 23): on a phone the dim, the reactions and the actions then rest in plain styles
+  // as well, and the blur is built afresh at its full strength, so an iPhone that drops a settled
+  // animation value can never leave the menu clear (its first frame) on a later re-render while it is up.
+  const [menuRest, setMenuRest] = useState(still);
+  const [blurKey, blurLanded] = useRestKey();
+  const landed = useCallback(() => { setMenuRest(true); blurLanded(); }, [blurLanded]);
   useEffect(() => {
     if (still) return;
-    p.value = withSpring(1, { damping: 22, stiffness: 340, mass: 0.7 });
+    p.value = withSpring(1, { damping: 22, stiffness: 340, mass: 0.7 }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
     lift.value = withSequence(withTiming(1.055, { duration: 120, easing: Easing.out(Easing.quad) }), withSpring(1.03, { damping: 13, stiffness: 280 }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -2315,6 +2385,8 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const liftLook = useAnimatedStyle(() => ({ transform: [{ scale: lift.value }] }));
   const barLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * 10 }, { scale: 0.55 + 0.45 * p.value }] }));
   const cardLook = useAnimatedStyle(() => ({ opacity: Math.min(1, p.value * 1.4), transform: [{ translateY: (1 - p.value) * -8 }, { scale: 0.82 + 0.18 * p.value }] }));
+  // Kept through the close (its own values win over these as they run); the menu is gone once it has closed.
+  const menuAtRest = menuRest && Platform.OS !== 'web';
   const text = message.kind === 'text';
   // A photo's caption can be copied like any message's words.
   const caption = message.kind === 'photo' && !!message.body.trim();
@@ -2382,8 +2454,10 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   return (
     <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => leave(onClose)}><SwipeArea on={false}>
       <View style={StyleSheet.absoluteFill}>
-        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook]}>
-          {Platform.OS === 'ios' ? <BlurView intensity={14} tint="dark" style={StyleSheet.absoluteFill} /> : null}
+        {/* The blur comes and goes by its own strength, never under a fade: blur under a fading parent
+            can turn see-through on the iPhone (Oct 17; Oct 22 sweep, item 5). Only the dim fades. */}
+        {Platform.OS === 'ios' ? <MenuBlur key={blurKey} p={p} /> : null}
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook, menuAtRest && MENU_DIM_REST]}>
           <View style={[StyleSheet.absoluteFill, styles.menuBackdrop]} />
         </Reanimated.View>
         <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
@@ -2406,7 +2480,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
           </Reanimated.View>
         ) : null}
         {canReact ? (
-          <Reanimated.View style={[styles.menuReactions, { top: top - shift, height: BAR_H, transformOrigin: mine ? 'right bottom' : 'left bottom' }, side(BAR_W), barLook]}>
+          <Reanimated.View style={[styles.menuReactions, { top: top - shift, height: BAR_H, transformOrigin: mine ? 'right bottom' : 'left bottom' }, side(BAR_W), barLook, menuAtRest && MENU_POP_REST]}>
             {REACTIONS.map((emoji, i) => (
               <Reanimated.View key={emoji} entering={still ? undefined : ZoomIn.delay(40 + i * 28).springify().damping(13).stiffness(260)}>
               <Pressable
@@ -2435,7 +2509,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
             <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuHintText, { color: colors.onMedia }]}>Pick what a double tap leaves</Text>
           </Reanimated.View>
         ) : null}
-        <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook]}>
+        <Reanimated.View style={[styles.menuCard, { top: shown.y + shown.h + GAP - shift, width: CARD_W, transformOrigin: mine ? 'right top' : 'left top' }, side(CARD_W), cardLook, menuAtRest && MENU_POP_REST]}>
           {actionRows.map((a, i) => (
             <Pressable key={a.key} accessibilityRole="button" onPress={() => pick(a.run)} style={({ pressed }) => [styles.menuRow, i > 0 && styles.menuRowRule, pressed && styles.menuRowPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.menuLabel, a.danger && { color: colors.danger }]}>{a.label}</Text>
@@ -2455,6 +2529,10 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
 }
 
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
+/** On a phone the emoji button brings up the phone's own keyboard (and its emoji key); the app's emoji keyboard is for browsers. */
+const PHONE_EMOJI = Platform.OS !== 'web';
+/** The app's own emoji keyboard's height (browsers only), the bottom inset aside. */
+const EMOJI_PANEL_HEIGHT = 260;
 
 /**
  * The text with its last visible character taken off: an emoji can be several
@@ -2492,7 +2570,7 @@ function RecordingStrip({ mode, elapsed, slide, onThrow, styles }: { mode: 'hold
   const dot = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const hint = useAnimatedStyle(() => ({ opacity: 1 - Math.min(1, -slide.value / CANCEL_AT) * 0.8, transform: [{ translateX: slide.value * 0.7 }] }));
   return (
-    <Reanimated.View entering={FadeIn.duration(140)} style={styles.recording}>
+    <Reanimated.View entering={FadeIn.duration(140)} exiting={FadeOut.duration(100)} style={styles.recording}>
       {mode === 'locked' ? (
         <ComposerTool label="Throw the recording away" onPress={onThrow} styles={styles}>
           <Ionicons name="trash-outline" size={21} color={colors.danger} />

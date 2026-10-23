@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type ViewStyle } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
-import Reanimated, { useAnimatedKeyboard, useAnimatedStyle } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, runOnJS, ZoomOut, useAnimatedKeyboard, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
@@ -11,6 +11,10 @@ import { Avatar, BrandWash, EmptyState, Screen } from '@/components/ui';
 import { brandBoxShadow, brandShadow } from '@/theme/fillMode';
 import { GROUP_CAP, GroupAvatar, chatLockNote, groupLockNote, groupName, isGroupChat, named, othersIn } from '@/features/messages/groups';
 import { LockBadge, LockNote } from '@/features/messages/LockNote';
+import { GrowRoom } from '@/features/messages/ChatBits';
+import { useRestKey } from '@/components/ui/restMotion';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import type { User } from '@/data/types';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
@@ -35,6 +39,42 @@ const useFooterLift: (less: number) => ViewStyle = Platform.OS === 'web'
     const keyboard = useAnimatedKeyboard();
     return useAnimatedStyle(() => ({ bottom: Math.max(0, keyboard.height.value - less) })) as ViewStyle;
   };
+
+/*
+ * How the picks move (Oct 22 sweep: "picking the first person makes the
+ * Chat/Create group footer pop up; chips and ticks pop too"): the footer
+ * slides up from the bottom edge and back down, a chip grows in softly and
+ * the others make room, and a tick fills from its middle.
+ */
+// The footer travels its own height (not the window's, as the slide presets do: on a computer that was
+// off screen for nearly all of it and then popped in), on a shared value so web and phone move alike.
+const FOOTER_IN_MS = 260;
+const FOOTER_OUT_MS = 220;
+const CHIP_IN = ZoomIn.duration(180).easing(Easing.out(Easing.cubic));
+const CHIP_OUT = ZoomOut.duration(130);
+const CHIP_GLIDE = LinearTransition.duration(200).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
+
+/** The round tick at the end of a row: its fill grows from the middle when ticked, and shrinks away when not. */
+function Tick({ on, styles }: { on: boolean; styles: { tick: object; tickFill: object } }) {
+  const p = useSharedValue(on ? 1 : 0);
+  // Built afresh each time it lands, on a phone, so an iPhone that drops a settled animation value can
+  // never shrink a picked person's tick away (or bring an unpicked one back) on a later re-render.
+  const [fillKey, landed] = useRestKey();
+  const first = React.useRef(true);
+  React.useEffect(() => {
+    if (first.current) { first.current = false; return; }
+    const done = (finished?: boolean) => { 'worklet'; if (finished) runOnJS(landed)(); };
+    p.value = on ? withSpring(1, { damping: 16, stiffness: 320, mass: 0.7 }, done) : withTiming(0, { duration: 140 }, done);
+  }, [on, p, landed]);
+  const fill = useAnimatedStyle(() => ({ transform: [{ scale: p.value }] }));
+  return (
+    <View style={styles.tick}>
+      <Reanimated.View key={fillKey} style={[styles.tickFill, fill]}>
+        <Ionicons name="checkmark" size={15} color={colors.brandInk} />
+      </Reanimated.View>
+    </View>
+  );
+}
 
 /**
  * Starting a chat. On a computer it is a small box over your inbox, the way
@@ -172,48 +212,104 @@ export default function NewMessage() {
   };
   const pickedUsers = picked.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const chips = pickedUsers.length ? (
-    <View style={styles.chips}>
+    <Reanimated.View layout={CHIP_GLIDE} exiting={FadeOut.duration(130)} style={styles.chips}>
       {pickedUsers.map((u) => {
         // Someone ticked who can't be in the group shows the lock here too, beside the way to take them out.
         const stuck = blockers.includes(u.id);
         return (
-          <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={[styles.chip, stuck && styles.chipStuck]}>
+          <Reanimated.View key={u.id} entering={CHIP_IN} exiting={CHIP_OUT} layout={CHIP_GLIDE}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`Remove ${u.name}`} onPress={() => { void toggle(u.id); }} style={({ pressed }) => [styles.chip, stuck && styles.chipStuck, pressed && { opacity: PRESS_DIM }]}>
             <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={20} />
             {stuck ? <Ionicons name="lock-closed" size={11} color={colors.textMuted} /> : null}
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.chipText, stuck && styles.chipTextStuck]} numberOfLines={1}>{firstName(u)}</Text>
             <Ionicons name="close" size={13} color={stuck ? colors.textMuted : colors.brand} />
           </Pressable>
+          </Reanimated.View>
         );
       })}
-    </View>
+    </Reanimated.View>
   ) : null;
   // The notes sit above the button, pinned with it, so they are on screen wherever the list is scrolled.
   const blockersText = blockers.length ? groupLockNote(namesOf(blockers), true) : null;
   const notes = [blockersText, note && note.text !== blockersText ? note.text : null].filter((t): t is string => !!t);
   const held = !!blockers.length || busy;
-  const footer = (phone: boolean) => (picked.length || notes.length ? (
-    <Reanimated.View style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift]}>
-      {notes.map((text) => (
-        <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
-      ))}
-      {picked.length > 1 ? (
-        <TextBox maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
-      ) : null}
-      {picked.length ? (
-        <Pressable accessibilityRole="button" accessibilityState={{ disabled: held, busy }} disabled={held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, picked.length > 1 && styles.startGroup, held && styles.startHeld, pressed && { opacity: 0.85, transform: [{ scale: 0.98 }] }]}>
-          <BrandWash radius={buttonShape.radius} curve />
-          {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
-          {picked.length > 1 && !sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{picked.length === 1 ? 'Chat' : sameGroup ? 'Open group' : busy ? 'Creating group…' : `Create group · ${picked.length + 1} people`}</Text>
-        </Pressable>
-      ) : null}
-    </Reanimated.View>
-  ) : null);
+  // The footer slides up from under the screen's edge by its own height, and is kept drawn while it slides
+  // back down, showing what it last said (the way the chat's emoji keyboard is kept, emojiDrawn).
+  const footerShown = !!(picked.length || notes.length);
+  const lastFooter = useRef({ picked, notes, held, busy, sameGroup: !!sameGroup });
+  if (footerShown) lastFooter.current = { picked, notes, held, busy, sameGroup: !!sameGroup };
+  const [footerDrawn, setFooterDrawn] = useState(footerShown);
+  const footerH = useRef(120);
+  const footerY = useSharedValue(footerShown ? 0 : 120);
+  const footerFade = useSharedValue(footerShown ? 1 : 0);
+  const footerStill = useReducedMotion();
+  // Up and still: see `footerRest` below.
+  const [footerUp, setFooterUp] = useState(footerShown);
+  useEffect(() => {
+    if (footerShown) {
+      setFooterDrawn(true);
+      const up = (done?: boolean) => { 'worklet'; if (done) runOnJS(setFooterUp)(true); };
+      // Reduce Motion: it only fades.
+      if (footerStill) { footerY.value = 0; footerFade.value = withTiming(1, { duration: 180 }, up); return undefined; }
+      footerFade.value = 1;
+      footerY.value = withTiming(0, { duration: FOOTER_IN_MS, easing: Easing.out(Easing.cubic) }, up);
+      return undefined;
+    }
+    // Taken down once it has gone, and only then not up: the draw that starts the way out keeps the plain
+    // resting place (the way out's own values win over it as they run).
+    if (footerStill) footerFade.value = withTiming(0, { duration: 160 });
+    else footerY.value = withTiming(footerH.current + 4, { duration: FOOTER_OUT_MS, easing: Easing.in(Easing.quad) });
+    const t = setTimeout(() => { setFooterDrawn(false); setFooterUp(false); }, (footerStill ? 160 : FOOTER_OUT_MS) + 40);
+    return () => clearTimeout(t);
+  }, [footerShown, footerStill, footerY, footerFade]);
+  const footerSlide = useAnimatedStyle(() => ({ opacity: footerFade.value, transform: [{ translateY: footerY.value }] }));
+  // Up and still, on a phone: the footer's place is said by a plain style as well, so a phone that drops the
+  // settled animation values (Reanimated keeps the first frame's: below the edge, clear) can never take
+  // Chat / Create group away on a later re-render.
+  const footerRest = Platform.OS !== 'web' && footerUp ? FOOTER_REST : null;
+  const footer = (phone: boolean) => {
+    if (!footerShown && !footerDrawn) return null;
+    const f = footerShown ? { picked, notes, held, busy, sameGroup: !!sameGroup } : lastFooter.current;
+    return (
+      <Reanimated.View
+        pointerEvents={footerShown ? 'auto' : 'none'}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h) footerH.current = h;
+        }}
+        style={[styles.footer, phone && { paddingBottom: footerBottom }, phone && footerLift, footerSlide, footerRest]}
+      >
+        {f.notes.map((text) => (
+          <LockNote key={text} text={text} tone={note?.alert && text === note.text ? 'alert' : 'lock'} onClose={text === note?.text ? () => setNote(null) : undefined} />
+        ))}
+        {/* The group name's room opens and closes with it, so the footer's top edge glides rather than jumps. */}
+        <View style={styles.groupNameRoom}>
+          <GrowRoom from="top">
+            {f.picked.length > 1 ? (
+              <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(120)} style={styles.groupNameWrap}>
+                <TextBox maxFontSizeMultiplier={TextScale.TITLE} value={title} onChangeText={(v) => setTitle(v.slice(0, 60))} placeholder="Group name (optional)" placeholderTextColor={colors.textFaint} style={styles.groupName} accessibilityLabel="Group name" />
+              </Reanimated.View>
+            ) : null}
+          </GrowRoom>
+        </View>
+        {f.picked.length ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ disabled: f.held, busy: f.busy }} disabled={f.held} onPress={() => { void start(); }} style={({ pressed }) => [styles.start, f.picked.length > 1 && styles.startGroup, f.held && styles.startHeld, pressed && { transform: [{ scale: PRESS_SHRINK }] }]}>
+            <BrandWash radius={buttonShape.radius} curve />
+            {/* Two or more ticked: the group is the point now, so the button says so with its people. */}
+            {f.picked.length > 1 && !f.sameGroup ? <Ionicons name="people" size={19} color={colors.brandInk} /> : null}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.startText}>{f.picked.length === 1 ? 'Chat' : f.sameGroup ? 'Open group' : f.busy ? 'Creating group…' : `Create group · ${f.picked.length + 1} people`}</Text>
+          </Pressable>
+        ) : null}
+      </Reanimated.View>
+    );
+  };
 
   const list = (
     <>
+      {/* Your groups step aside once someone is ticked: they fade while their room closes, and the people glide up. */}
+      <GrowRoom from="top">
       {groups.length ? (
-        <>
+        <Reanimated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(130)}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>Groups</Text>
           {groups.map(({ conversation, name, people }) => (
             <Pressable
@@ -234,8 +330,9 @@ export default function NewMessage() {
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
             </Pressable>
           ))}
-        </>
+        </Reanimated.View>
       ) : null}
+      </GrowRoom>
       {matches.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.label}>{groups.length ? (term ? 'People' : 'Suggested') : term ? 'Results' : 'Suggested'}</Text> : null}
       {matches.map((user) => {
         const on = picked.includes(user.id);
@@ -258,7 +355,7 @@ export default function NewMessage() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
             </View>
-            {locked ? null : <View style={[styles.tick, on && styles.tickOn]}>{on ? <Ionicons name="checkmark" size={15} color={colors.brandInk} /> : null}</View>}
+            {locked ? null : <Tick on={on} styles={styles} />}
           </Pressable>
         );
       })}
@@ -282,7 +379,8 @@ export default function NewMessage() {
                   <Text style={styles.to}>To</Text>
                   <TextBox maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
                 </View>
-                {chips}
+                {/* The chips' row opens and closes smoothly, the list gliding down and back up under it. */}
+                <GrowRoom from="top">{chips}</GrowRoom>
               </View>
             </>
           )}
@@ -311,13 +409,16 @@ export default function NewMessage() {
           <Text style={styles.to}>To</Text>
           <TextBox maxFontSizeMultiplier={TextScale.TITLE} value={query} onChangeText={setQuery} placeholder="Search" placeholderTextColor={colors.textFaint} autoCapitalize="none" autoCorrect={false} autoFocus style={styles.toInput} accessibilityLabel="To" />
         </View>
-        {chips}
+        <GrowRoom from="top">{chips}</GrowRoom>
         <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollBody, picked.length || notes.length ? { paddingBottom: 150 + notes.length * 90 } : null]}>{list}</ScrollView>
         {footer(false)}
       </View>
     </View>
   );
 }
+
+/** The footer up and still: after its animated style, so it wins at rest. */
+const FOOTER_REST = { opacity: 1, transform: [{ translateY: 0 }] };
 
 const styleDefinitions = StyleSheet.create({
   // Dark and blurred behind the box, so the inbox recedes instead of reading as a second copy of the list.
@@ -339,7 +440,8 @@ const styleDefinitions = StyleSheet.create({
   name: { ...typography.body, ...font('600'), color: colors.text },
   handle: { ...typography.small, color: colors.textMuted },
   tick: { width: 24, height: 24, borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  tickOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  // The tick's fill, grown from the middle over the ring (Tick).
+  tickFill: { position: 'absolute', top: -1.5, left: -1.5, right: -1.5, bottom: -1.5, borderRadius: 12, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
   // The face sits 5px in from the pill's round end, so the pill hugs it.
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 5, paddingRight: 9, minHeight: 30, borderRadius: 15, backgroundColor: colors.brandDim },
@@ -350,6 +452,9 @@ const styleDefinitions = StyleSheet.create({
   // Someone you can't pick right now, dimmed the way the Send-to sheet's locked tiles are.
   locked: { opacity: 0.45 },
   footer: { position: 'absolute', left: 0, right: 0, bottom: 0, gap: spacing.sm, padding: spacing.lg, paddingBottom: spacing.xl, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // The group name's room: the footer's gap under it comes off while it is shut, and goes inside it while open.
+  groupNameRoom: { marginBottom: -spacing.sm },
+  groupNameWrap: { paddingBottom: spacing.sm },
   groupName: { ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12, backgroundColor: colors.bgElevated, outlineStyle: 'none' } as object,
   start: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, ...brandShadow, backgroundColor: colors.brand, flexDirection: 'row', gap: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   startGroup: { boxShadow: brandBoxShadow },

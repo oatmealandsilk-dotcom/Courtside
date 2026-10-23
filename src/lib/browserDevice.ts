@@ -14,3 +14,11 @@ export function isDesktopBrowser() {
   const ipad = browser.platform === 'MacIntel' && browser.maxTouchPoints > 1;
   return !browser.userAgentData?.mobile && !mobileAgent && !ipad;
 }
+
+/** A browser on an iPhone or iPad (an iPad can call itself a Mac): where the iPhone app can actually be installed. */
+export function isAppleMobileBrowser() {
+  if (Platform.OS !== 'web' || typeof navigator === 'undefined') return false;
+  const browser = navigator as Navigator & { maxTouchPoints?: number };
+  if (/iPhone|iPad|iPod/i.test(browser.userAgent ?? '')) return true;
+  return browser.platform === 'MacIntel' && (browser.maxTouchPoints ?? 0) > 1;
+}

@@ -1,8 +1,9 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
+import * as haptics from '@/lib/haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -10,7 +11,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { GroupAvatar, MAX_PINNED_CHATS, eventText, findDirectChat, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, messageSummary, othersIn } from '@/features/messages/groups';
 import { ChatSheet, type SheetOption } from '@/features/messages/ChatSheet';
 import { SwipeRow } from '@/features/messages/SwipeRow';
-import { PageSwipeBack } from '@/components/PageSwipeBack';
+import { PageSwipeBack, pageSwipeStrip } from '@/components/PageSwipeBack';
 import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -32,6 +33,18 @@ import { TextScale } from '@/theme/textScale';
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
 /** Chats drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
 const FIRST_ROWS = 14;
+/*
+ * How the chats move (Oct 22 sweep: "deleting, pinning, a new message moving a
+ * chat to the top, and switching All/Groups/Coaches all snap the list"): a
+ * chat that changes place glides there, one that leaves fades out, one that
+ * comes in fades up. Only transforms and the row's own fill move; no glass.
+ */
+const ROW_GLIDE = LinearTransition.duration(260).easing(Easing.bezier(0.25, 0.8, 0.25, 1));
+const ROW_IN = FadeIn.duration(200);
+// A section switch: the chats that come in wait until those staying have mostly glided into place, so two are never drawn on one spot.
+const ROW_IN_SWITCH = FadeIn.duration(180).delay(140);
+// Quick, so a leaving chat is gone before the one gliding up reaches its spot.
+const ROW_OUT = FadeOut.duration(110);
 
 interface Thread {
   conversation: Conversation;
@@ -56,7 +69,8 @@ interface Thread {
  *
  * Each row slides to the left for Mute and Delete, as iMessage's, WhatsApp's
  * and Telegram's do. A drag to the right, from anywhere on the page, pulls
- * the whole inbox with the finger and goes back (PageSwipeBack, Oct 22).
+ * the whole inbox with the finger and goes back (PageSwipeBack, Oct 22; the
+ * system's own swipe on iOS 26, the app's on older iPhones, Oct 23).
  * Holding a row offers Mark as read / unread, Mute, Delete and Pin (up to
  * three chats sit at the top) and, for a group, Leave. A muted chat keeps its place but goes quiet:
  * a small bell-off after the time, and a grey dot instead of a green one.
@@ -73,6 +87,10 @@ export default function Inbox() {
   // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
   const { section: askedSection } = useLocalSearchParams<{ section?: string }>();
   const [section, setSection] = useState<Section>(askedSection === 'coaches' || askedSection === 'clients' ? askedSection : 'all');
+  // The draw right after a section switch (see ROW_IN_SWITCH).
+  const drawnSection = React.useRef(section);
+  const switched = drawnSection.current !== section;
+  useEffect(() => { drawnSection.current = section; }, [section]);
   // The row being held, and which of its two lists is showing.
   const [held, setHeld] = useState<{ conversation: Conversation; name: string; step: 'menu' | 'mute' } | null>(null);
   // The one row slid open to its actions.
@@ -81,6 +99,9 @@ export default function Inbox() {
   const inboxY = useSharedValue(0);
   const rowOpen = useSharedValue(false);
   useEffect(() => { rowOpen.value = openRow !== null; }, [openRow, rowOpen]);
+  // The page's own back drag (older iPhones) stands down while a row is open or the hold menu is up.
+  const pageStand = useSharedValue(false);
+  useEffect(() => { pageStand.value = openRow !== null || held !== null; }, [openRow, held, pageStand]);
   useAnimatedReaction(() => inboxY.value, (y, prev) => {
     if (prev != null && Math.abs(y - prev) > 2 && rowOpen.value) { rowOpen.value = false; runOnJS(setOpenRow)(null); }
   }, []);
@@ -164,6 +185,11 @@ export default function Inbox() {
   // like the settings. msg notifications, etc respond too slow"). A search always looks through them all.
   const arrived = useArrived();
   const shownThreads = arrived || search.trim() ? threads : threads.slice(0, FIRST_ROWS);
+  // The draw where the rest of the list mounts because the page has arrived: those rows were already
+  // there on opening, so they simply show (no burst of fades, mostly off screen).
+  const arrivedOnce = useRef(false);
+  const bulk = arrived && !arrivedOnce.current;
+  useEffect(() => { if (arrived) arrivedOnce.current = true; }, [arrived]);
 
   // Up to hit today: people you can message (or already talk to) who said so today, never someone blocked.
   const upToday = useMemo(() => {
@@ -250,7 +276,7 @@ export default function Inbox() {
     ];
 
   return (
-    <PageSwipeBack onBack={() => goBack()}>
+    <PageSwipeBack onBack={() => goBack()} standDown={pageStand} onStandDown={() => setOpenRow(null)}>
     <Screen
       offsetY={inboxY}
       onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
@@ -264,6 +290,7 @@ export default function Inbox() {
           accessibilityRole="button"
           accessibilityLabel="Start a new message"
           hitSlop={8}
+          style={({ pressed }) => pressed && { opacity: PRESS_DIM }}
         >
           <Ionicons name="create-outline" size={23} color={colors.text} />
         </Pressable>
@@ -274,7 +301,7 @@ export default function Inbox() {
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.upTodayTitle}>Up to hit today</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
+          <ScrollView horizontal {...pageSwipeStrip} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
             {upToday.map((u) => (
               <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`${u.name} is up to hit today. Message them`} onPress={() => openWith(u)} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
                 <View style={styles.faceRing}>
@@ -295,6 +322,8 @@ export default function Inbox() {
       {threads.length === 0 ? (
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
+        // The rows there when the page opens are simply there; only later changes move.
+        <LayoutAnimationConfig skipEntering>
         <View style={styles.list}>
           {shownThreads.map((t, index) => {
             const { conversation, muted, unread, name } = t;
@@ -347,8 +376,8 @@ export default function Inbox() {
               }] : []),
             ];
             return (
+              <Animated.View key={conversation.id} layout={ROW_GLIDE} entering={bulk && index >= FIRST_ROWS ? undefined : switched ? ROW_IN_SWITCH : ROW_IN} exiting={ROW_OUT}>
               <SwipeRow
-                key={conversation.id}
                 actions={actionsUnder}
                 actionCount={canMute ? 2 : 1}
                 open={openRow === conversation.id}
@@ -362,13 +391,15 @@ export default function Inbox() {
                   line={(said) => preview(t.group, t.last, said)}
                   typing={typing}
                   onOpen={() => { if (openRow) { setOpenRow(null); return; } router.push(`/messages/${conversation.id}`); }}
-                  onHold={() => { setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
+                  onHold={() => { haptics.tap(); setOpenRow(null); setHeld({ conversation, name, step: 'menu' }); }}
                   rowActions={rowActions}
                 />
               </SwipeRow>
+              </Animated.View>
             );
           })}
         </View>
+        </LayoutAnimationConfig>
       )}
       <ChatSheet
         visible={!!held}

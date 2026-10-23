@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -111,8 +112,9 @@ export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetr
     return () => clearTimeout(t);
   }, [status]);
   if (status === 'painted' || (status === 'loading' && !slow)) return null;
+  // Fades in and out (Oct 22 sweep: it popped), and from one wording to the other (keyed): a plain surface, never glass.
   return (
-    <View style={styles.pillSpot}>
+    <Animated.View key={status} entering={FadeIn.duration(180)} exiting={FadeOut.duration(160)} style={styles.pillSpot}>
       {status === 'failed' ? (
         <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={onRetry} style={({ pressed }) => [styles.pill, pressed && { opacity: PRESS_DIM }]}>
           <Text style={styles.pillText}>Map didn’t load · <Text style={styles.pillAgain}>Tap to try again</Text></Text>
@@ -123,7 +125,7 @@ export function MapLoadPill({ status, onRetry }: { status: MapLoadStatus; onRetr
           <Text style={styles.pillText}>Loading map…</Text>
         </View>
       )}
-    </View>
+    </Animated.View>
   );
 }
 

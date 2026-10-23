@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, FadeIn, ZoomIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import React, { useEffect, useRef, useState } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, FadeIn, FadeOut, ZoomIn, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -16,6 +16,41 @@ const STROKE = 3;
 const R = (RING - STROKE) / 2;
 const LAP = 2 * Math.PI * R;
 
+// On the web a leaving view is copied and the ring's ZoomIn restarts inside the
+// copy, so there the overlay is kept mounted and faded out by Lingering instead.
+const WEB = Platform.OS === 'web';
+const OUT_MS = 200;
+const OVERLAY_OUT = WEB ? undefined : FadeOut.duration(OUT_MS);
+
+/**
+ * Shows `children(value)` while there is a value. On native it simply goes
+ * (the overlay's own exiting fades it); on the web it stays on screen, out of
+ * the way of taps, and fades out over OUT_MS before it goes.
+ */
+export function Lingering<T>({ value, children }: { value: T | null | undefined; children: (v: T) => React.ReactNode }) {
+  const kept = useRef<T | null>(null);
+  if (value != null) kept.current = value;
+  const present = value != null;
+  const [, setGone] = useState(0);
+  const fade = useSharedValue(1);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  useEffect(() => {
+    if (present) { fade.value = 1; return undefined; }
+    if (!WEB || kept.current == null) { kept.current = null; return undefined; }
+    fade.value = withTiming(0, { duration: OUT_MS });
+    const done = setTimeout(() => { kept.current = null; setGone((n) => n + 1); }, OUT_MS + 40);
+    return () => clearTimeout(done);
+  }, [present, fade]);
+  if (!WEB) return present ? <>{children(value as T)}</> : null;
+  const shown = present ? (value as T) : kept.current;
+  if (shown == null) return null;
+  return (
+    <Animated.View pointerEvents={present ? 'box-none' : 'none'} style={[StyleSheet.absoluteFill, { zIndex: 100 }, fadeStyle]}>
+      {children(shown)}
+    </Animated.View>
+  );
+}
+
 /**
  * Picking a saved account: the whole screen becomes that account — its
  * picture grows into the middle, a thin arc turns around it while the
@@ -26,7 +61,7 @@ export function SigningInAs({ name, handle, avatarUrl, seed }: { name: string; h
   const styles = useThemedStyles(styleDefinitions);
   const spin = useSpin();
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in as ${name}`}>
+    <Animated.View entering={FadeIn.duration(180)} exiting={OVERLAY_OUT} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in as ${name}`}>
       <Wash height={420} />
       <Animated.View entering={ZoomIn.duration(360).easing(Easing.out(Easing.cubic))} style={styles.center}>
         <View style={styles.ringBox}>
@@ -62,7 +97,7 @@ export function SigningInWith({ provider }: { provider: 'apple' | 'google' }) {
   const spin = useSpin();
   const label = provider === 'apple' ? 'Apple' : 'Google';
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in with ${label}`}>
+    <Animated.View entering={FadeIn.duration(180)} exiting={OVERLAY_OUT} style={styles.root} accessibilityLiveRegion="polite" accessibilityLabel={`Signing in with ${label}`}>
       <Wash height={420} />
       <Animated.View entering={ZoomIn.duration(360).easing(Easing.out(Easing.cubic))} style={styles.center}>
         <View style={styles.ringBox}>

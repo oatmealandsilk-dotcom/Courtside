@@ -19,6 +19,8 @@ import { PostTile } from '@/components/PostTile';
 import { TOPIC_META } from '@/components/QuestionCard';
 import { SearchField } from '@/components/SearchField';
 import { Avatar, DottedRule, EmptyState } from '@/components/ui';
+import { FoldList } from '@/components/ui/Fold';
+import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import type { Post, Question, User } from '@/data/types';
 import { useBarInset } from '@/features/navigation/barInset';
 import { canReadContacts } from '@/features/contacts/phoneContacts';
@@ -41,6 +43,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 
 type Tab = 'all' | 'people' | 'posts' | 'threads' | 'courts';
+/** A recent search's own key, for its row. */
+const recentKey = (r: Recent) => `${r.kind}:${r.key}`;
+/** The width of the green line under the tab picked. */
+const TAB_LINE = 24;
 const TABS: { value: Tab; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'people', label: 'People' },
@@ -100,6 +106,11 @@ export default function Search() {
   const pickingTag = q.mode === 'tag' && q.text.length < 2;
   // The tabs come with something to sort: not for "@" or "#" on their own.
   const showTabs = q.text.length > 0 && !pickingTag;
+  // The green line under the tabs slides to the tab picked, as on Profile and Community, rather than
+  // jumping there (Oct 22 sweep, item 46).
+  const [tabsW, setTabsW] = useState(0);
+  const tabW = tabsW > 0 ? (tabsW - spacing.sm * 2) / TABS.length : 0;
+  const tabLine = useTabUnderline(Math.max(0, TABS.findIndex((t) => t.value === tab)), TABS.length, tabW);
   const blocked = useMemo(() => new Set(blockedIds), [blockedIds]);
   // People search: everyone, teens included, by the same rule for every
   // account (so it never says who is a teen); never you, anyone blocked
@@ -485,7 +496,8 @@ export default function Search() {
                 <Text style={styles.seeAll}>Clear all</Text>
               </Pressable>
             </View>
-            {shownRecents.map((r, i) => recentRow(r, i === 0))}
+            {/* A removed search folds out and the rows under it glide up (Oct 22 sweep, item 46). */}
+            <FoldList items={shownRecents} keyOf={recentKey} render={(r, i) => recentRow(r, i === 0)} />
           </View>
         ) : null}
         {tags.length ? (
@@ -643,16 +655,16 @@ export default function Search() {
           />
         </View>
         {showTabs ? (
-          <View style={styles.tabs} accessibilityRole="tablist">
+          <View style={styles.tabs} accessibilityRole="tablist" onLayout={(e) => { const w = e.nativeEvent.layout.width; if (Math.abs(w - tabsW) > 0.5) setTabsW(w); }}>
             {TABS.map((t) => {
               const on = tab === t.value;
               return (
                 <Pressable key={t.value} accessibilityRole="tab" accessibilityState={{ selected: on }} hitSlop={{ top: 3, bottom: 3 }} onPress={() => setTab(t.value)} style={styles.tab}>
                   <Text style={[styles.tabText, on && styles.tabTextOn]}>{t.label}</Text>
-                  {on ? <View style={styles.tabLine} /> : null}
                 </Pressable>
               );
             })}
+            {tabW > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabLine, { left: spacing.sm + (tabW - TAB_LINE) / 2 }, tabLine.style]} /> : null}
           </View>
         ) : null}
         {!typing ? beforeTyping() : q.mode === 'people' && !q.text ? followedBody() : pickingTag ? tagBody() : tab === 'all' ? allTab() : oneTab()}
@@ -675,7 +687,7 @@ const styleDefinitions = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   tabText: { ...typography.smallStrong, fontSize: 14, color: colors.textFaint },
   tabTextOn: { color: colors.text },
-  tabLine: { position: 'absolute', bottom: 0, width: 24, height: 2, borderRadius: 1, backgroundColor: colors.brand },
+  tabLine: { position: 'absolute', bottom: 0, width: TAB_LINE, height: 2, borderRadius: 1, backgroundColor: colors.brand },
   head: { height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg },
   // A grouped list's head (DESIGN.md): a step above the 16/500 names under it.
   headTitle: { ...typography.heading, color: colors.text },

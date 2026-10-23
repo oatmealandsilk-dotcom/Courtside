@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
@@ -100,7 +100,16 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
  * The rows are siblings in the list rather than nested, so each one reports
  * its own place in it (the sheet scrolls to a row by that).
  */
-export function CommentThread({ thread, big = false, open, onToggle, onReply, onPressBody, onRowLayout, isFresh }: {
+/**
+ * In the comments sheet (`glide`): replies shown with "View replies" fade in,
+ * hidden ones and deleted comments fade out, and the rows below glide to
+ * their new places rather than jumping (Oct 22 sweep, item 17).
+ */
+const ROW_GLIDE = LinearTransition.duration(220);
+const ROW_OUT = FadeOut.duration(160);
+const REPLY_IN = FadeIn.duration(200);
+
+export function CommentThread({ thread, big = false, open, onToggle, onReply, onPressBody, onRowLayout, isFresh, glide = false }: {
   thread: Thread;
   big?: boolean;
   /** The replies are showing. */
@@ -114,8 +123,13 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   onRowLayout?: (commentId: ID, y: number, height: number) => void;
   /** Rows that just arrived slide in; the ones already there just appear. */
   isFresh?: (comment: Comment) => boolean;
+  /** Rows come, go and move smoothly (the comments sheet; a still preview keeps its plain rows). */
+  glide?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  // Replies already open when the sheet first draws are simply there; ones opened later fade in.
+  const drawn = useRef(false);
+  useEffect(() => { drawn.current = true; }, []);
   // The comment the sheet was opened at (a reported one, from Reports): it lights up for a moment as it is scrolled to.
   const jump = useJump();
   const count = thread.replies.length;
@@ -126,7 +140,9 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   const row = (c: Comment, reply: boolean) => (
     <Animated.View
       key={c.id}
-      entering={isFresh?.(c) ? FadeInDown.duration(260) : undefined}
+      entering={isFresh?.(c) ? FadeInDown.duration(260) : glide && reply && drawn.current ? REPLY_IN : undefined}
+      exiting={glide ? ROW_OUT : undefined}
+      layout={glide ? ROW_GLIDE : undefined}
       onLayout={onRowLayout ? (e) => onRowLayout(c.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
     >
       {jump && jump.at === c.id ? <JumpFlash lit={jump.lit} inset={8} /> : null}
@@ -144,18 +160,19 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
       {row(thread.top, false)}
       {open ? thread.replies.map((c) => row(c, true)) : null}
       {count ? (
+        <Animated.View key={`${thread.top.id}:toggle`} layout={glide ? ROW_GLIDE : undefined} exiting={glide ? ROW_OUT : undefined} style={[styles.toggleWrap, { marginLeft: replyIndent(big) }]}>
         <Pressable
-          key={`${thread.top.id}:toggle`}
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
           accessibilityLabel={open ? 'Hide replies' : `View ${count} ${count === 1 ? 'reply' : 'replies'}`}
           hitSlop={{ top: 4, bottom: 8, left: 8, right: 24 }}
           onPress={onToggle}
-          style={[styles.toggle, { marginLeft: replyIndent(big) }]}
+          style={styles.toggle}
         >
           <View style={styles.dash} />
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.toggleText, big && styles.toggleTextBig]}>{open ? 'Hide replies' : `View ${count} ${count === 1 ? 'reply' : 'replies'}`}</Text>
         </Pressable>
+        </Animated.View>
       ) : null}
     </>
   );
@@ -171,7 +188,9 @@ const styleDefinitions = StyleSheet.create({
   // Tucked up under the comment (or its last reply), closer than the gap
   // between comments. A full finger's height (44pt: a browser ignores
   // hitSlop), the extra hanging into the gap below, so the words sit where they did.
-  toggle: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, alignSelf: 'flex-start', marginTop: -12, minHeight: 44, paddingTop: 6, paddingRight: spacing.lg, marginBottom: -16 },
+  toggle: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, minHeight: 44, paddingTop: 6, paddingRight: spacing.lg },
+  // Tucked up under the comment, the extra hanging into the gap below (the margins sit here so the whole button stays inside what holds it).
+  toggleWrap: { alignSelf: 'flex-start', marginTop: -12, marginBottom: -16 },
   dash: { width: 24, height: StyleSheet.hairlineWidth * 2, marginTop: 8, backgroundColor: colors.textFaint, opacity: 0.6 },
   toggleText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   toggleTextBig: { fontSize: 13 },

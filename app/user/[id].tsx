@@ -1,7 +1,8 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { show as showToast } from '@/lib/toast';
-import { Image, Modal, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { RisingSheet } from '@/components/RisingSheet';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { requestSection } from '@/features/navigation/swipeOrder';
@@ -10,6 +11,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LevelPill } from '@/components/LevelPill';
 import { SectionPager } from '@/components/SectionPager';
+import Reanimated from 'react-native-reanimated';
+import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
@@ -38,7 +41,6 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
-import { SwipeArea } from '@/features/navigation/swipePress';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -72,6 +74,9 @@ function UserProfile() {
   const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
+  // The green line under Posts / Clips / Tagged rides with the swipe and glides on a tap, as on your own profile (Oct 22).
+  const [tabWidth, setTabWidth] = useState(0);
+  const underline = useTabUnderline(TABS.indexOf(tab), TABS.length, tabWidth);
   const { width: windowWidth } = useWindowDimensions();
   const [gridW, setGridW] = useState(0);
   const tileW = Math.floor((gridW || windowWidth - spacing.lg * 2) / 3);
@@ -241,40 +246,35 @@ function UserProfile() {
           {/* Their tennis, as the player card's banner: the whole of it opens their Tennis profile. */}
           <PlayerCard user={user} variant="banner" onPress={() => router.push(isMe ? { pathname: '/profile-details' } : { pathname: '/profile-details', params: { userId: user.id } })} />
 
-          <View style={styles.tabs}>
+          <View style={styles.tabs} onLayout={(e) => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>
             {TABS.map((t) => (
-              <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={[styles.tab, tab === t && styles.tabOn]}>
+              <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}>
                 <Text style={{ color: tab === t ? colors.brand : colors.textMuted, ...font(tab === t ? '700' : '400') }}>{t}<Text style={[styles.tabCount, tab === t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text>
               </Pressable>
             ))}
+            {tabWidth > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabLine, { width: tabWidth }, underline.style]} /> : null}
           </View>
           {/* Posts, Clips and Tagged side by side: a swipe slides between them,
               the way your own profile does, instead of landing on a tile as a tap. */}
-          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
+          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} progress={underline.progress} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
         </>
       )}
 
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}><SwipeArea on={false}>
-        {/* The backdrop is a plain surface, not a button: a button here would
-            wrap the menu's buttons, which the web refuses to nest. */}
-        <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
-          <View style={[styles.sheet, { paddingBottom: menuBottom }]}>
-            <View style={styles.grabber} />
-            <Text style={styles.sheetTitle}>{user.name}</Text>
-            {menu.map((item, index) => (
-              <Pressable
-                key={item.label}
-                accessibilityRole="button"
-                onPress={() => { setMenuOpen(false); item.onPress(); }}
-                style={({ pressed }) => [styles.menuRow, index > 0 && styles.menuBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
-              >
-                <Ionicons name={item.icon} size={21} color={item.danger ? colors.danger : colors.text} />
-                <Text style={[styles.menuLabel, item.danger && { color: colors.danger }]}>{item.label}</Text>
-              </Pressable>
-            ))}
-          </View>
-        </Pressable>
-      </SwipeArea></Modal>
+      <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
+          <View style={styles.grabber} />
+          <Text style={styles.sheetTitle}>{user.name}</Text>
+          {menu.map((item, index) => (
+            <Pressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={() => { setMenuOpen(false); item.onPress(); }}
+              style={({ pressed }) => [styles.menuRow, index > 0 && styles.menuBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name={item.icon} size={21} color={item.danger ? colors.danger : colors.text} />
+              <Text style={[styles.menuLabel, item.danger && { color: colors.danger }]}>{item.label}</Text>
+            </Pressable>
+          ))}
+      </RisingSheet>
     </Screen>
   );
 }
@@ -302,8 +302,9 @@ const styleDefinitions = StyleSheet.create({
   lockedTitle: { ...typography.heading, color: colors.text },
   lockedBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   tabs: { flexDirection: 'row', marginTop: 16, borderBottomWidth: 2, borderBottomColor: colors.border },
-  tab: { flex: 1, alignItems: 'center', paddingVertical: 18, marginBottom: -2, borderBottomWidth: 2, borderBottomColor: 'transparent' },
-  tabOn: { borderBottomColor: colors.brand },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 18 },
+  // Drawn over the row's grey rule, exactly where the selected tab's own green edge used to sit.
+  tabLine: { position: 'absolute', left: 0, bottom: -2, height: 2, backgroundColor: colors.brand },
   tabCount: { fontSize: 12, ...font('600'), color: colors.textFaint },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: 0, minHeight: 120, paddingBottom: spacing.xl },
   tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
@@ -313,7 +314,6 @@ const styleDefinitions = StyleSheet.create({
   tilePlayFlat: { textShadowColor: 'transparent', textShadowRadius: 0 },
   tileViews: { position: 'absolute', left: 6, bottom: 5, flexDirection: 'row', alignItems: 'center', gap: 3 },
   tileViewsText: { fontSize: 12, ...font('600'), color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
-  backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   sheet: {
     backgroundColor: colors.bg,
     borderTopLeftRadius: radius.xl,

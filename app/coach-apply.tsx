@@ -5,10 +5,12 @@ import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as DocumentPicker from 'expo-document-picker';
+import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { useRestKey } from '@/components/ui/restMotion';
 
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
-import { Button, Field, Screen } from '@/components/ui';
+import { Button, Collapse, Field, Screen } from '@/components/ui';
 import { ApplicationStatus } from '@/components/ApplicationStatus';
 import { useApp } from '@/store/AppContext';
 import type { CoachApplication, CoachSpecialty } from '@/data/types';
@@ -255,18 +257,23 @@ export default function CoachApply() {
                 {isUstaLink(ntrpLink) ? <LinkCheck url={asLink(ntrpLink)} styles={styles} /> : null}
               </View>
               {error('rating')}
-              <Pressable accessibilityRole="button" onPress={() => setWhereOpen((o) => !o)} style={styles.where}>
-                <Ionicons name={whereOpen ? 'chevron-down' : 'chevron-forward'} size={16} color={colors.brand} />
-                <Text style={styles.whereText}>Where do I find my link?</Text>
-              </Pressable>
-              {whereOpen ? (
-                <View style={styles.note}>
-                  <Text style={styles.noteText}>
-                    UTR: open app.utrsports.net, go to your own profile, and copy the address from the top of the page. It ends in a number, like /profiles/1234567.{'\n\n'}
-                    NTRP: sign in on usta.com, open the page that shows your NTRP rating, and copy its address.
-                  </Text>
-                </View>
-              ) : null}
+              {/* The answer folds open with a smooth height change and the arrow turns (Oct 22 sweep). */}
+              <View>
+                <Pressable accessibilityRole="button" accessibilityState={{ expanded: whereOpen }} onPress={() => setWhereOpen((o) => !o)} style={({ pressed }) => [styles.where, pressed && { opacity: 0.6 }]}>
+                  <TurningArrow open={whereOpen} />
+                  <Text style={styles.whereText}>Where do I find my link?</Text>
+                </Pressable>
+                <Collapse open={whereOpen}>
+                  <View style={{ paddingTop: spacing.lg }}>
+                    <View style={styles.note}>
+                      <Text style={styles.noteText}>
+                        UTR: open app.utrsports.net, go to your own profile, and copy the address from the top of the page. It ends in a number, like /profiles/1234567.{'\n\n'}
+                        NTRP: sign in on usta.com, open the page that shows your NTRP rating, and copy its address.
+                      </Text>
+                    </View>
+                  </View>
+                </Collapse>
+              </View>
             </>
           ) : null}
 
@@ -382,6 +389,17 @@ function LinkCheck({ url, styles }: { url: string; styles: ReturnType<typeof use
       <Text style={styles.linkCheckText}>Open it to check it is your page</Text>
     </Pressable>
   );
+}
+
+/** The fold's arrow: turns a quarter from pointing on to pointing down, rather than swapping. */
+function TurningArrow({ open }: { open: boolean }) {
+  const turn = useSharedValue(open ? 1 : 0);
+  // Built afresh each time it lands (on a phone), so its first frame is the way it points now and a
+  // settled turn an iPhone drops unsynced can never point it back on a later re-render.
+  const [restKey, landed] = useRestKey();
+  useEffect(() => { turn.value = withTiming(open ? 1 : 0, { duration: 220, easing: REasing.bezier(0.22, 0.61, 0.36, 1) }, (done) => { 'worklet'; if (done) runOnJS(landed)(); }); }, [open, turn, landed]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 90}deg` }] }));
+  return <Reanimated.View key={restKey} style={style}><Ionicons name="chevron-forward" size={16} color={colors.brand} /></Reanimated.View>;
 }
 
 const styleDefinitions = StyleSheet.create({

@@ -13,7 +13,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { GlassFill, liquidGlass } from '@/components/ui/Glass';
+import { GlassFill, liquidGlass, useGlassSteady } from '@/components/ui/Glass';
 import { BrandWash } from '@/components/ui';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -109,19 +109,22 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
     </View>
   ) : null;
   const shell = [styles.pill, { borderRadius: 999 }];
+  // While the clip's words fade (comments opening, a pinch), the iPhone's blur
+  // stands down for a plain fill of the same colour: blur under a fade can go
+  // see-through (Oct 17; Oct 22 sweep, item 5). At rest it looks as it always has.
+  const steady = useGlassSteady();
+  const blurLayer = Platform.OS === 'ios' && steady ? <BlurView pointerEvents="none" intensity={30} tint="dark" style={StyleSheet.absoluteFill} /> : null;
   // The workout card's own colour (Oct 3): the theme's brand with the same wash,
   // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
   const glass = !isDark
     // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
     ? liquidGlass
       // iOS 26: Apple's glass carrying the theme's colour, the wash faint inside it.
-      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.4} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
-      : Platform.OS === 'ios'
-      ? <BlurView intensity={30} tint="dark" style={[shell, styles.tintEdge, { backgroundColor: withAlpha(colors.brand, 0.4) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</BlurView>
-      : <View style={[shell, styles.tintEdge, styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'web' ? 0.46 : 0.5) }]}><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
-    : Platform.OS === 'ios'
-      ? <BlurView intensity={30} tint="dark" style={[shell, styles.iosFill]}>{inner}</BlurView>
-      : <View style={[shell, styles.flatFill]}>{inner}</View>;
+      ? <View style={[shell, styles.tintEdge]}><GlassFill radius={15 * k} tint={colors.brand} strength={0.4} fill={withAlpha(colors.brand, 0.5)} /><View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
+      // One container either way: only its blur layer comes and goes with a fade, so the
+      // contents never remount (the chevron's nudge plays through).
+      : <View style={[shell, styles.tintEdge, Platform.OS !== 'ios' && styles.webGlass, { backgroundColor: withAlpha(colors.brand, Platform.OS === 'ios' && steady ? 0.4 : Platform.OS === 'web' ? 0.46 : 0.5) }]}>{blurLayer}<View style={[StyleSheet.absoluteFill, styles.faintWash]}><BrandWash radius={15 * k} glow /></View>{inner}</View>
+    : <View style={[shell, Platform.OS === 'ios' && steady ? styles.iosFill : styles.flatFill]}>{blurLayer}{inner}</View>;
   const measure = (node: React.ReactNode) => (
     <View style={styles.room} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w !== room) setRoom(w); }}>{rulers}{node}</View>
   );
