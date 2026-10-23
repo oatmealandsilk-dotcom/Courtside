@@ -1538,9 +1538,14 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       setGoneIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
     }
   }, []);
-  // A browser's clip on screen that is playing with a few seconds in hand (its `ready` is only its first frame).
+  // A browser's clips with three seconds in hand (their `ready` is only the first frame): the one
+  // on screen, playing with that much ahead of it, and those waiting off screen with that much in.
   const [steadyId, setSteadyId] = useState<string | null>(null);
-  const markSteady = useCallback((id: string) => setSteadyId(id), []);
+  const [steadyIds, setSteadyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markSteady = useCallback((id: string, onScreen: boolean) => {
+    if (onScreen) setSteadyId(id);
+    else setSteadyIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
+  }, []);
   /** The page's picture is in right now, in the player that is actually built. */
   const inNow = (id: string) => readyIds.has(id) && !goneIds.has(id);
   // Whatever is on screen is shown within a few seconds, ready or not: a
@@ -1652,21 +1657,26 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // feed on show (a group tab behind For you never builds ahead). On a phone a clip is "in" when
   // its opening seconds are (the same point the clip on screen starts at), so the extra fetch
   // only ever uses a link the nearer clips are done with, and a slow link never sees it. In a
-  // browser, where only the next clip fetched before, the second page ahead also fetches up to
-  // its first frame and the third just its opening. A page that got its fetch keeps it while it
-  // stays in reach, so nothing is built twice.
+  // browser, where only the next clip fetched before, the second page ahead fetches too, on the
+  // same terms (the clip on screen playing with three seconds in hand, the next with three in).
+  // A page that got its fetch keeps it while it stays in reach, so nothing is built twice.
   const lookaheadOk = (upTo: number) => {
     if (!playing || !warmed || !playable || warming || !connectionIsQuick()) return false;
+    let clipOnScreen = false;
     for (let k = 0; k <= upTo; k += 1) {
       const item = feed[active + k];
       const id = item?.type === 'hit' ? (item.story.videoUrl || item.story.imageUrl ? item.story.id : null)
         : item?.type === 'post' && reachable(item.post) && (item.post.videoUrl || (item.post.kind !== 'clip' && item.post.imageUrl)) ? item.post.id : null;
       if (!id) continue;
       if (!inNow(id)) return false;
-      // In a browser "in" is only the first frame: the clip on screen must also be playing with
-      // a few seconds in hand, as a phone's has when it starts (a link with nothing to spare never gets there).
+      // In a browser "in" is only the first frame: there the clip on screen must also be playing
+      // with three seconds in hand, as a phone's has when it starts (a link with nothing to spare
+      // never gets there), and while it needs the link the next one must have three seconds in too.
+      // With no clip on screen (a written post, a tip), the next one's first frame will do.
       const video = item?.type === 'hit' ? !!item.story.videoUrl : item?.type === 'post' && !!item.post.videoUrl;
-      if (k === 0 && video && Platform.OS === 'web' && steadyId !== id) return false;
+      if (!video || Platform.OS !== 'web') continue;
+      if (k === 0) { if (steadyId !== id) return false; clipOnScreen = true; }
+      else if (clipOnScreen && steadyId !== id && !steadyIds.has(id)) return false;
     }
     return true;
   };
@@ -1678,7 +1688,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     // to third ahead as it is (it has its seconds in) instead of freeing it.
     if (Platform.OS !== 'web') for (let k = -WINDOW; k <= AHEAD; k += 1) { const item = feed[active + k]; if (item) keep.add(keyOf(item)); }
     const third = feed[active + EXTRA];
-    if (third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
+    if (Platform.OS !== 'web' && third && !keep.has(keyOf(third)) && lookaheadOk(2)) keep.add(keyOf(third));
     const second = feed[active + 2];
     if (Platform.OS === 'web' && second && !keep.has(keyOf(second)) && lookaheadOk(1)) keep.add(keyOf(second));
     if (keep.size !== lookahead.current.size || [...keep].some((key) => !lookahead.current.has(key))) lookahead.current = keep;
@@ -1914,10 +1924,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               // it, the one you are most likely to land on starts instantly, and
               // scrolling stays smooth.
               // On top of that, a page that got its lookahead (above) fetches too: on a phone the third
-              // page ahead, like the others; in a browser the second up to its first frame, the third its opening.
+              // page ahead, in a browser the second, each like the others.
               const extra = ahead >= 2 && lookahead.current.has(keyOf(item));
               const near = Platform.OS === 'web' ? ((ahead === 0 || ahead === 1) && (!warming || ahead === 0)) || extra : distance <= 1 || (ahead > 0 && ahead <= AHEAD) || extra;
-              const fetchAhead = Platform.OS === 'web' && extra ? (ahead === 2 ? 'frame' as const : 'opening' as const) : undefined;
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
               const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;
@@ -1958,7 +1967,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} fetchAhead={fetchAhead} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={() => markSteady(story.id)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2127,7 +2136,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
                           preload={near}
-                          fetchAhead={fetchAhead}
                           warmOnly={warming}
                           onDoubleTap={() => likeByTap(post.id, liked)}
                           trimStart={post.trimStart}
@@ -2140,7 +2148,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand}
                           discPinned={index === 0 && !scope}
                           onReady={(ok) => markReady(post.id, ok)}
-                          onSteady={() => markSteady(post.id)}
+                          onSteady={(onScreen) => markSteady(post.id, onScreen)}
                           held={held && myStage?.key === `p:${post.id}`}
                           onStage={myStage?.key === `p:${post.id}`}
                           onPaused={rowBackOnPause}

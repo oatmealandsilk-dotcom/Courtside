@@ -18,21 +18,16 @@ import { noteClipLoad } from '@/lib/netSpeed';
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, fetchAhead, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
   /**
-   * A lookahead page past the next one (the Feed, once the clip on screen is playing): 'frame'
-   * fetches in full until its first frame is in and then holds, 'opening' only its opening
-   * (what a browser fetches for 'metadata'). Without it a preloaded clip fetches in full.
+   * It has three seconds in hand, or all of it (its `onReady` is only its first frame): on screen,
+   * playing with that much fetched ahead of where it is (`onScreen` true); waiting off screen,
+   * that much from its start. The Feed fetches further ahead only once the link has room to spare.
    */
-  fetchAhead?: 'frame' | 'opening';
-  /**
-   * The clip on screen is playing with three seconds in hand, or all of it (its `onReady` is only
-   * its first frame): the connection has room to spare, so the Feed may fetch further ahead.
-   */
-  onSteady?: () => void;
+  onSteady?: (onScreen: boolean) => void;
   /** The author's rate (1 is normal) and level (0–1), honoured at playback. */
   speed?: number; volume?: number;
   /** Nothing over the picture at all: no sound disc, no length line. */
@@ -132,20 +127,21 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     if (stallFrom.current) { const stalled = now - stallFrom.current; stallFrom.current = 0; if (stalled >= 500) noteClipLoad(Math.max(2000, stalled)); }
     steadyCheck(el);
   };
-  // Said once each time it is on screen (onSteady).
+  // Said once each time it comes on screen or leaves it (onSteady).
   const steady = useRef(false);
   const steadyCheck = (el: HTMLVideoElement) => {
-    if (!onScreen.current || steady.current || el.paused) return;
+    if (steady.current || (onScreen.current && el.paused) || (!onScreen.current && !preload)) return;
     const length = el.duration;
     if (!Number.isFinite(length) || length <= 0) return;
     let end = 0;
     for (let i = 0; i < el.buffered.length; i += 1) if (el.buffered.start(i) <= el.currentTime + 0.1 && el.buffered.end(i) >= el.currentTime) end = el.buffered.end(i);
-    if (end >= length - 0.1 || end - el.currentTime >= 3) { steady.current = true; latestSteady.current?.(); }
+    if (end >= length - 0.1 || end - el.currentTime >= 3) { steady.current = true; latestSteady.current?.(onScreen.current); }
   };
   const stalled = (el: HTMLVideoElement) => { if (onScreen.current && !waitFrom.current && !stallFrom.current && el.currentTime > 0.1) stallFrom.current = Date.now(); };
-  // What the browser is asked to fetch: the clip on screen and the next one in full (as before),
-  // a lookahead page as `fetchAhead` says, the rest nothing.
-  const fetchHint = active ? 'auto' : !preload ? 'none' : warmOnly || fetchAhead === 'opening' || (fetchAhead === 'frame' && ready) ? 'metadata' : 'auto';
+  // What the browser is asked to fetch: the clip on screen and those preloaded in full, a feed
+  // warming up out of sight only its opening. (Never 'metadata' for a page you may land on: a clip
+  // Chrome parked there does not fetch on when told 'auto', only once it plays, and stalls then.)
+  const fetchHint = active || preload ? (warmOnly && !active ? 'metadata' : 'auto') : 'none';
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => latestReady.current?.(false), [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -257,7 +253,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); }} onProgress={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); }} onProgress={(e) => steadyCheck(e.currentTarget)} onCanPlayThrough={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `600 13px ${fontFamily.semibold}` }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
