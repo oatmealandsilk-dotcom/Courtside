@@ -1,5 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, type GestureResponderEvent } from 'react-native';
 
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 
@@ -18,7 +18,8 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  * Now, inside a swipeable area:
  *   - the look waits PRESS_LOOK_DELAY. A swipe (or a scroll) takes the finger
  *     well inside that, the press is cancelled before it ever showed, and the
- *     card never moves;
+ *     card never moves. A finger already on the move (past MOVE_SLOP) by the
+ *     time the wait is up never shows it either, however slowly it drags;
  *   - a quick tap still flashes its look (shown on release, held FLASH_MS)
  *     and fires exactly as before;
  *   - a finger that rests longer and then swipes shows the look, and it is
@@ -26,6 +27,8 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  * Everywhere else (pushed pages, sheets, a desktop browser) nothing changes.
  */
 export const PRESS_LOOK_DELAY = 120;
+/** How far a finger may drift before the press counts as the start of a swipe or a scroll. */
+const MOVE_SLOP = 4;
 /** The shortest a quick tap's look is shown for, so it reads as a flash rather than nothing. */
 const FLASH_MS = 100;
 /** The phone's usual hold for a long press, start to finish, as Pressable had it before any delay. */
@@ -35,6 +38,14 @@ const WEB_LONG_PRESS = 450;
 const WEB_PRESS_DELAY = 50;
 
 const SwipeAreaContext = createContext(false);
+
+/** Where a touch is on the page: a phone's touch event and react-native-web's alike. */
+type Point = { pageX?: number; pageY?: number };
+const pointOf = (e: GestureResponderEvent): { x: number; y: number } | null => {
+  const n = e.nativeEvent as unknown as Point & { touches?: ArrayLike<Point>; changedTouches?: ArrayLike<Point> };
+  const t = n.touches?.[0] ?? n.changedTouches?.[0] ?? n;
+  return typeof t.pageX === 'number' && typeof t.pageY === 'number' ? { x: t.pageX, y: t.pageY } : null;
+};
 
 /** Marks everything inside as being on a page that swipes sideways (while `on`). */
 export function SwipeArea({ on = true, children }: { on?: boolean; children: React.ReactNode }) {
@@ -69,7 +80,8 @@ export function pressDelayProps(delayLongPress: number | undefined): { delayLong
 /**
  * Drives a press look (`look(true)` to show it, `look(false)` to let it go)
  * for a press that may sit inside a swipeable area. Wire `pressIn` / `pressOut`
- * to the Pressable's onPressIn / onPressOut and spread `delay` onto it.
+ * to the Pressable's onPressIn / onPressOut, `touchStart` / `pressMove` to its
+ * onTouchStart / onPressMove, and spread `delay` onto it.
  * Outside a swipeable area (or with `enabled` false) the look follows the
  * finger exactly as a plain Pressable's does, and `delay` is undefined.
  */
@@ -80,6 +92,9 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   // When the look went on (0 while it is off), and a quick tap's pending hide.
   const shownAt = useRef(0);
   const hide = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Where this finger came down, and whether it has since moved off like a swipe or a scroll.
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const moved = useRef(false);
   const clearHide = () => { if (hide.current) { clearTimeout(hide.current); hide.current = null; } };
   const drop = useCallback(() => {
     clearHide();
@@ -95,10 +110,20 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   }, [inSwipe, drop]);
   useEffect(() => clearHide, []);
 
+  const touchStart = (e: GestureResponderEvent) => {
+    if (!inSwipe) return;
+    start.current = pointOf(e);
+    moved.current = false;
+  };
+  const pressMove = (e: GestureResponderEvent) => {
+    if (!inSwipe || moved.current || !start.current) return;
+    const at = pointOf(e);
+    if (at && Math.hypot(at.x - start.current.x, at.y - start.current.y) > MOVE_SLOP) moved.current = true;
+  };
   const pressIn = () => {
     if (!inSwipe) { lookRef.current(true); return; }
-    // The page is already sliding under this finger: no look at all.
-    if (isPageDragging()) return;
+    // The page is already sliding under this finger, or the finger is on its way: no look at all.
+    if (isPageDragging() || moved.current) return;
     clearHide();
     shownAt.current = Date.now();
     lookRef.current(true);
@@ -112,5 +137,5 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (left > 0) hide.current = setTimeout(() => { hide.current = null; drop(); }, left);
     else drop();
   };
-  return { inSwipe, pressIn, pressOut, delay: inSwipe ? pressDelayProps(delayLongPress) : undefined };
+  return { inSwipe, touchStart, pressMove, pressIn, pressOut, delay: inSwipe ? pressDelayProps(delayLongPress) : undefined };
 }

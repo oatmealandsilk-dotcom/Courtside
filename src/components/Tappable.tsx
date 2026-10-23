@@ -88,6 +88,8 @@ export function Tappable({
       onLongPress={disabled ? undefined : onLongPress}
       delayLongPress={delayLongPress}
       {...press.delay}
+      onTouchStart={press.touchStart}
+      onPressMove={press.pressMove}
       disabled={disabled}
       hitSlop={hitSlop}
       accessibilityRole={accessibilityRole}

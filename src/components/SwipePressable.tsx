@@ -13,15 +13,17 @@ import { useSwipePressLook } from '@/features/navigation/swipePress';
  */
 export const SwipePressable = forwardRef<View, PressableProps>(function SwipePressable(props, ref) {
   const [look, setLook] = useState(false);
-  const { inSwipe, pressIn, pressOut, delay } = useSwipePressLook(setLook, { delayLongPress: props.delayLongPress ?? undefined });
+  const { inSwipe, touchStart, pressMove, pressIn, pressOut, delay } = useSwipePressLook(setLook, { delayLongPress: props.delayLongPress ?? undefined });
   if (!inSwipe) return <Pressable ref={ref} {...props} />;
-  const { style, children, onPressIn, onPressOut } = props;
+  const { style, children, onPressIn, onPressOut, onTouchStart, onPressMove } = props;
   const withLook = (state: PressableStateCallbackType): PressableStateCallbackType => ({ ...state, pressed: look });
   return (
     <Pressable
       ref={ref}
       {...props}
       {...delay}
+      onTouchStart={(e: GestureResponderEvent) => { touchStart(e); onTouchStart?.(e); }}
+      onPressMove={(e: GestureResponderEvent) => { pressMove(e); onPressMove?.(e); }}
       onPressIn={(e: GestureResponderEvent) => { pressIn(); onPressIn?.(e); }}
       onPressOut={(e: GestureResponderEvent) => { pressOut(); onPressOut?.(e); }}
       style={typeof style === 'function' ? (state) => style(withLook(state)) : style}
