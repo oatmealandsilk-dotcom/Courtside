@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
+import type { SharedValue } from 'react-native-reanimated';
 
 import { isPageSwipeLocked, setPageDragging } from '@/features/navigation/swipeLock';
 
@@ -23,7 +24,7 @@ const EASE = 'cubic-bezier(.2,.8,.25,1)';
  * (sliding an open row shut) is the row's. Only the page moves (a transform,
  * never its opacity), so the glass over it stays glass.
  */
-export function PageSwipeBack({ children, onBack }: { children: React.ReactNode; onBack: () => void }) {
+export function PageSwipeBack({ children, onBack }: { children: React.ReactNode; onBack: () => void; standDown?: SharedValue<boolean> }) {
   const wrap = useRef<View>(null);
   const taking = useRef(false);
   const latest = useRef(onBack);
@@ -120,6 +121,9 @@ export function PageSwipeBack({ children, onBack }: { children: React.ReactNode;
   // Once the page has the finger, whatever it went down on (a row) lets go of its press.
   return <View ref={wrap} style={styles.fill} onMoveShouldSetResponderCapture={() => taking.current}>{children}</View>;
 }
+
+/** Older iPhones mark a sideways strip with this (PageSwipeBack.tsx); here the page finds strips itself (scrollsSideways). */
+export const pageSwipeStrip = {};
 
 /** Whether the finger landed on something that scrolls sideways (a strip), inside the page. */
 function scrollsSideways(target: HTMLElement | null, page: HTMLElement): boolean {

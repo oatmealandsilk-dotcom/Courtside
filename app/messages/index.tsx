@@ -10,7 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { GroupAvatar, MAX_PINNED_CHATS, eventText, findDirectChat, groupName, hasGroupControls, isGroupChat, isMuted, leaveGroupMessage, messageSummary, othersIn } from '@/features/messages/groups';
 import { ChatSheet, type SheetOption } from '@/features/messages/ChatSheet';
 import { SwipeRow } from '@/features/messages/SwipeRow';
-import { PageSwipeBack } from '@/components/PageSwipeBack';
+import { PageSwipeBack, pageSwipeStrip } from '@/components/PageSwipeBack';
 import { MUTE_CHOICES, muteUntil } from '@/features/messages/mute';
 import { useLinkPreview } from '@/features/messages/linkPreview';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -56,7 +56,8 @@ interface Thread {
  *
  * Each row slides to the left for Mute and Delete, as iMessage's, WhatsApp's
  * and Telegram's do. A drag to the right, from anywhere on the page, pulls
- * the whole inbox with the finger and goes back (PageSwipeBack, Oct 22).
+ * the whole inbox with the finger and goes back (PageSwipeBack, Oct 22; the
+ * system's own swipe on iOS 26, the app's on older iPhones, Oct 23).
  * Holding a row offers Mark as read / unread, Mute, Delete and Pin (up to
  * three chats sit at the top) and, for a group, Leave. A muted chat keeps its place but goes quiet:
  * a small bell-off after the time, and a grey dot instead of a green one.
@@ -250,7 +251,7 @@ export default function Inbox() {
     ];
 
   return (
-    <PageSwipeBack onBack={() => goBack()}>
+    <PageSwipeBack onBack={() => goBack()} standDown={rowOpen}>
     <Screen
       offsetY={inboxY}
       onRefresh={isDesktopBrowser() ? undefined : actions.refresh}
@@ -274,7 +275,7 @@ export default function Inbox() {
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.upTodayTitle}>Up to hit today</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
+          <ScrollView horizontal {...pageSwipeStrip} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
             {upToday.map((u) => (
               <Pressable key={u.id} accessibilityRole="button" accessibilityLabel={`${u.name} is up to hit today. Message them`} onPress={() => openWith(u)} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
                 <View style={styles.faceRing}>

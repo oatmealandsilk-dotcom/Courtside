@@ -11,8 +11,8 @@ const SPRING = { stiffness: 420, damping: 38, mass: 0.9, overshootClamping: true
  * An inbox row that slides (see rowSwipe.ts). `actions` sit under its right
  * end (Mute, Delete), uncovered by a drag to the left. A drag to the right
  * on a closed row is let go at once, so the screen's own full-width back
- * swipe has it and the whole inbox follows the finger; on an open row it
- * closes the row. Only one row is open at a time: `open` says whether this
+ * swipe has it (iOS 26's, or PageSwipeBack's on older iPhones) and the whole
+ * inbox follows the finger; on an open row it closes the row. Only one row is open at a time: `open` says whether this
  * one is, `onOpen` tells the list. The browser's version is SwipeRow.web.tsx.
  */
 export function SwipeRow({ actions, actionCount, open, onOpen, children }: {
