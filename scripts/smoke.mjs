@@ -713,10 +713,23 @@ function watchThemeChange(label, bg) {
 }
 
 /**
- * Waits out the browser's theme cross-fade: while it runs, the browser draws a picture of the page
- * over it and a tap lands on nothing (Back would not go back).
+ * Waits out a theme change: the Theme page's fade (its old look's copies fading off) and the tabs
+ * catching up out of sight (src/theme/catchUp.ts), as the app reports them.
  */
-const themeFadeDone = (page) => page.waitUntil(() => page.call(() => !document.getAnimations().some((a) => /^::view-transition/.test(a.effect?.pseudoElement ?? ''))), 5000, 'the theme cross-fade to finish');
+const themeFadeDone = (page) => page.waitUntil(() => page.call(() => window.__courtsideTheme?.settled?.() ?? true), 5000, 'the theme change to settle');
+
+/**
+ * The Profile page's own colour (the first wall-to-wall coloured box under "Edit profile"): a tab
+ * left on an old court after a theme change would show here.
+ */
+const profilePageColour = (page) => page.call(() => {
+  const el = [...document.querySelectorAll('div')].find((d) => d.childElementCount === 0 && d.textContent === 'Edit profile' && d.getBoundingClientRect().height > 0);
+  for (let x = el; x && x !== document.body; x = x.parentElement) {
+    const colour = getComputedStyle(x).backgroundColor;
+    if (x.getBoundingClientRect().width >= innerWidth - 1 && colour !== 'rgba(0, 0, 0, 0)') return colour;
+  }
+  return null;
+});
 
 /** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
 const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
@@ -1235,6 +1248,9 @@ const STEPS = [
       await page.waitFor({ label: 'Account center' });
       await page.tap({ label: 'Go back' });
       await page.waitFor({ text: 'Edit profile' });
+      // The tabs caught up with the change out of sight: Profile, under Settings, is back on the default court.
+      const profileBg = await profilePageColour(page);
+      if (profileBg !== DEFAULT_BG) throw new Error(`Profile is still drawn in another court after the theme change (${profileBg}, want ${DEFAULT_BG})`);
     },
   },
   {
