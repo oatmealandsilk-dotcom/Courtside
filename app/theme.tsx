@@ -69,7 +69,9 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   const on = useSharedValue(active ? 1 : 0);
   const push = useSharedValue(1);
   useEffect(() => {
-    on.value = withTiming(active ? 1 : 0, { duration: 140, easing: Easing.out(Easing.quad) });
+    // The old check goes at once, like the new one arrives at once: the phone's photo of the old look
+    // is taken a frame after the tap, and must not hold a half-faded check that then blinks back on.
+    on.value = active ? withTiming(1, { duration: 140, easing: Easing.out(Easing.quad) }) : 0;
   }, [active, on]);
   // The card answers the tap itself with a little push, before the rest of the app has recoloured.
   // The check is there at once, on the very next frame, rather than easing in after the redraw.
