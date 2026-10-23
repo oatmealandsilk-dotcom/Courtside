@@ -20,6 +20,7 @@ import { show as showToast } from '@/lib/toast';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /** How wide photos sit in a chat: the same reach as a shared card. */
 export const PHOTO_W = 236;
@@ -310,7 +311,7 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
     }
   };
   return (
-    <Modal visible={viewerShown} transparent animationType="none" statusBarTranslucent onRequestClose={close} supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}>
+    <Modal visible={viewerShown} transparent animationType="none" statusBarTranslucent onRequestClose={close} supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']}><SwipeArea on={false}>
       {/* A root of its own: a Modal is drawn apart from the app, and the row's swipe and the photo's swipe down must hear each other. */}
       <GestureHandlerRootView style={styles.viewer}>
         <Pager
@@ -365,7 +366,7 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
           </Reanimated.View>
         ) : null}
       </GestureHandlerRootView>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

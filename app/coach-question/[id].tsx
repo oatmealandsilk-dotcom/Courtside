@@ -27,6 +27,7 @@ import type { CoachQuestion, CoachReply } from '@/data/types';
 import { SPECIALTY_LABEL } from '@/features/coaching/bookings';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { useModalSheetBottom } from '@/lib/modalSheet';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /**
  * One Ask-a-Coach thread: the player's question and every coach reply. An
@@ -318,7 +319,7 @@ export default function CoachQuestionDetail() {
       )}
 
       {/* The question's menu, the same sheet a profile's "…" opens: Delete for the asker, Report for anyone else. */}
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}><SwipeArea on={false}>
         {/* The backdrop is a plain surface, not a button: a button here would
             wrap the menu's button, which the web refuses to nest. */}
         <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
@@ -356,7 +357,7 @@ export default function CoachQuestionDetail() {
             ) : null}
           </View>
         </Pressable>
-      </Modal>
+      </SwipeArea></Modal>
     </Screen>
   );
 }

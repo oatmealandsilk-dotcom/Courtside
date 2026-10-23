@@ -13,6 +13,7 @@ import { show as showToast } from '@/lib/toast';
 import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from './CoverPage';
 import { MediaThumb } from './MediaThumb';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -601,7 +602,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         {expanded ? (
           // Tap-through to a full-size look. A Modal draws it at the top of the
           // page, so nothing on the form (the caption, Tag players) can sit on it.
-          <Modal visible transparent animationType="none" onRequestClose={() => setExpanded(false)}>
+          <Modal visible transparent animationType="none" onRequestClose={() => setExpanded(false)}><SwipeArea on={false}>
           <div
             role="dialog"
             aria-label="Media preview"
@@ -629,7 +630,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
               />
             ) : null}
           </div>
-          </Modal>
+          </SwipeArea></Modal>
         ) : null}
 
         {value.kind === 'video' && !noCover && bare && value.uri ? (

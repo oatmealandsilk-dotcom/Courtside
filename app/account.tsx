@@ -26,6 +26,7 @@ import { StatusShade } from '@/components/StatusShade';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 import { TextScale } from '@/theme/textScale';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -204,7 +205,7 @@ export default function AccountCentre() {
         {row('trash-outline', 'Delete account', undefined, () => { setConfirmWord(''); setSheet('delete'); }, true, 1)}
       </View>
 
-      <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}>
+      <Modal visible={sheet !== null} transparent animationType="fade" onRequestClose={() => setSheet(null)}><SwipeArea on={false}>
         {/* The dimmed page behind is its own button, beside the sheet rather than around it:
             wrapped around it, a click in a password box also counted as a click on the page and closed the sheet. */}
         {/* Android (edge to edge) does not shrink the sheet's window for the keyboard either, so it is lifted the same way. */}
@@ -245,7 +246,7 @@ export default function AccountCentre() {
             ) : null}
           </View>
         </KeyboardAvoidingView>
-      </Modal>
+      </SwipeArea></Modal>
     </Screen>
   );
 }

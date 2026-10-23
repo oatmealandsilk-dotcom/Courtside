@@ -1,6 +1,8 @@
 import React, { forwardRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type TextInputProps, type TextStyle, type ViewStyle } from 'react-native';
 
+import { colors, TextScale } from '@/theme';
+
 /**
  * React Native's TextInput, with its grey example ("Search", "Message…")
  * drawn by the app on an iPhone so it sits in the middle of a one-line box.
@@ -25,12 +27,14 @@ import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type 
  * minimum instead. Many-line boxes are React Native's own text view, which
  * places its example itself: those, Android and the web are passed straight
  * through.
+ *
+ * Use it controlled (with `value`), as every box in the app is: an
+ * uncontrolled box only knows it is empty from onChangeText, so a
+ * ref.clear() would leave the example hidden.
  */
 type Props = TextInputProps;
 
 const OWN_EXAMPLE = Platform.OS === 'ios';
-// iOS's own placeholder grey, should a box not name one.
-const IOS_PLACEHOLDER = 'rgba(60,60,67,0.3)';
 
 // What places and sizes the box among its neighbours: worn by the holder, so
 // the box sits exactly where the bare TextInput did.
@@ -70,7 +74,10 @@ export const TextBox = forwardRef<TextInput, Props>(function TextBox(props, ref)
     if (OUTER.has(key)) { outer[key] = inner[key]; delete inner[key]; }
   }
   if (typeof lineHeight === 'number' && outer.height === undefined) {
-    const cap = props.allowFontScaling === false ? 1 : props.maxFontSizeMultiplier ? Math.min(fontScale, Math.max(1, props.maxFontSizeMultiplier)) : fontScale;
+    // The same cap the words get: their own, or the app's default for text that names none (lib/textScale).
+    // (0 means no cap at all, as on a Text.)
+    const most = props.maxFontSizeMultiplier === undefined ? TextScale.DEFAULT : props.maxFontSizeMultiplier;
+    const cap = props.allowFontScaling === false ? 1 : most ? Math.min(fontScale, Math.max(1, most)) : fontScale;
     inner.minHeight = Math.max(num(inner.minHeight), lineHeight * cap + padTop + padBottom + bTop + bBottom);
   }
   // Fill the holder when it is stretched or given a height, as the bare box would have.
@@ -86,7 +93,8 @@ export const TextBox = forwardRef<TextInput, Props>(function TextBox(props, ref)
     fontVariant: flat.fontVariant,
     letterSpacing: flat.letterSpacing,
     textAlign: flat.textAlign === 'center' || flat.textAlign === 'right' ? flat.textAlign : 'left',
-    color: (placeholderTextColor as string | undefined) ?? IOS_PLACEHOLDER,
+    // Should a box not name one, the theme's faint ink, so it reads on every court and in Night.
+    color: (placeholderTextColor as string | undefined) ?? colors.textFaint,
   };
   return (
     <View style={outer as ViewStyle}>

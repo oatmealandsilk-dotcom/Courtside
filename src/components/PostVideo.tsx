@@ -19,6 +19,7 @@ import { allowTurning, stayUpright } from '@/lib/orientation';
 import { useHoldTour } from '@/features/tour/tourHold';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 const HIDE_AFTER_MS = 3000;
 // On a computer, how long the mouse rests before the controls (and in full screen the pointer) go.
@@ -290,7 +291,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
 
       {/* Full screen: the same player, the whole screen (turns with the phone),
           the same buttons — a tap brings them up, a tap puts them away. */}
-      <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
+      <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}><SwipeArea on={false}>
         {/* A gesture root of its own: a Modal is drawn apart from the app, and on Android
             the pinch, the double tap and the swipe down hear nothing without one. */}
         <GestureHandlerRootView style={styles.fullRoot}>
@@ -319,7 +320,7 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
           </Animated.View>
         </View>
         </GestureHandlerRootView>
-      </Modal>
+      </SwipeArea></Modal>
     </View>
   );
 }

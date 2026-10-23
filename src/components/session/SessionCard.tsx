@@ -1,5 +1,6 @@
 import React from 'react';
-import { Pressable, StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { StyleSheet, Text, View, type TextStyle } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
@@ -419,9 +420,9 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   );
   if (!onPress) return <View accessible accessibilityRole="summary" accessibilityLabel={spoken}>{body}</View>;
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint={accessibilityHint ?? 'Opens the stats'} onPress={onPress} style={({ pressed }) => [pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] }]}>
+    <SwipePressable accessibilityRole="button" accessibilityLabel={spoken} accessibilityHint={accessibilityHint ?? 'Opens the stats'} onPress={onPress} style={({ pressed }) => [pressed && { opacity: 0.92, transform: [{ scale: 0.99 }] }]}>
       {body}
-    </Pressable>
+    </SwipePressable>
   );
 }
 

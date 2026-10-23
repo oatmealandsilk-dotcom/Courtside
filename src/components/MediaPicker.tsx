@@ -16,6 +16,7 @@ import { canShrinkVideo } from '@/lib/shrinkVideo';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 export interface PickedMedia {
   uri?: string;
@@ -459,7 +460,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         />
       ) : null}
       {/* Full screen, the clip playing with sound. One tap anywhere brings it back. */}
-      <Modal visible={expandedShown} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}>
+      <Modal visible={expandedShown} transparent animationType="none" statusBarTranslucent onRequestClose={() => setExpanded(false)}><SwipeArea on={false}>
         {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
         <GestureHandlerRootView style={{ flex: 1, backgroundColor: 'transparent' }}>
           <ZoomableMedia onDismiss={() => setExpanded(false)}>
@@ -472,7 +473,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             <Ionicons name="close" size={22} color="white" />
           </Pressable>
         </GestureHandlerRootView>
-      </Modal>
+      </SwipeArea></Modal>
       {!!error && <Text style={{ color: colors.danger }}>{error}</Text>}
     </View>;
   }
@@ -508,7 +509,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
         </Pressable>
       )}
 
-      <Modal visible={expandedShown} transparent animationType="none" onRequestClose={() => setExpanded(false)}>
+      <Modal visible={expandedShown} transparent animationType="none" onRequestClose={() => setExpanded(false)}><SwipeArea on={false}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close preview"
@@ -526,7 +527,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             {value?.kind === 'video' ? 'Cover frame · tap to close' : 'Tap to close'}
           </Text>
         </Pressable>
-      </Modal>
+      </SwipeArea></Modal>
       <Ionicons name={selection === 'video' ? 'videocam-outline' : 'images-outline'} size={30} color={colors.textMuted}/>
       <Text style={{ color: colors.text, fontSize: 16, ...font('600') }}>{value ? describe(value) : label ?? (compact ? 'Photo or video' : 'Select a photo or video')}</Text>
       {/* An empty box's title already says what it does; the line under it is only for a filled one. */}

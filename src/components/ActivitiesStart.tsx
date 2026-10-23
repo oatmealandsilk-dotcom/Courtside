@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -103,17 +104,17 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
       <View style={styles.card}>
         {offer ? (
           <View style={styles.connect}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`} disabled={busy} onPress={() => { void connect(); }} style={({ pressed }) => [styles.row, styles.connectTap, pressed && styles.pressed]}>
+            <SwipePressable accessibilityRole="button" accessibilityLabel={`Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`} disabled={busy} onPress={() => { void connect(); }} style={({ pressed }) => [styles.row, styles.connectTap, pressed && styles.pressed]}>
               <View style={styles.tile}><Ionicons name="pulse" size={18} color={colors.brand} /></View>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText} numberOfLines={2}>{busy ? 'Connecting…' : `Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`}</Text>
-            </Pressable>
+            </SwipePressable>
             {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}
-            <Pressable accessibilityRole="button" accessibilityLabel="Hide connect row" disabled={busy} hitSlop={6} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
+            <SwipePressable accessibilityRole="button" accessibilityLabel="Hide connect row" disabled={busy} hitSlop={6} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="close" size={18} color={colors.textFaint} />
-            </Pressable>
+            </SwipePressable>
           </View>
         ) : null}
-        <Pressable
+        <SwipePressable
           accessibilityRole="button"
           accessibilityLabel={!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
           onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
@@ -122,12 +123,12 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
           <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText}>{!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && styles.pressed]}>
+        </SwipePressable>
+        <SwipePressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && styles.pressed]}>
           <View style={styles.tile}><Ionicons name="add" size={20} color={colors.brand} /></View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText}>Log a session</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
+        </SwipePressable>
       </View>
 
       {few ? (
@@ -148,11 +149,11 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
               </View>
             ))}
             {/* Where to find the people you already know (owner, Oct 6). The teen rules are the Find friends page's own. */}
-            <Pressable accessibilityRole="link" accessibilityLabel={contacts ? CONTACTS_LABEL : 'Share your invite link'} onPress={() => router.push(contacts ? '/find-contacts' : '/invite')} style={({ pressed }) => [styles.row, people.length > 0 && styles.rowLine, pressed && styles.pressed]}>
+            <SwipePressable accessibilityRole="link" accessibilityLabel={contacts ? CONTACTS_LABEL : 'Share your invite link'} onPress={() => router.push(contacts ? '/find-contacts' : '/invite')} style={({ pressed }) => [styles.row, people.length > 0 && styles.rowLine, pressed && styles.pressed]}>
               <View style={styles.tile}><Ionicons name={contacts ? 'people' : 'paper-plane'} size={18} color={colors.brand} /></View>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText} numberOfLines={1}>{contacts ? 'Find friends from contacts' : 'Share your invite link'}</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-            </Pressable>
+            </SwipePressable>
           </View>
         </View>
       ) : null}

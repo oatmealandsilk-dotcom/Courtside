@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -77,7 +78,7 @@ export function GroupInvitesSection({ onOpen }: {
           const p = problem?.id === inv.groupId ? problem : full ? { id: inv.groupId, text: INVITE_FULL, full: true } : null;
           return (
             <View key={inv.groupId} style={[styles.row, i > 0 && styles.line]}>
-              <Pressable
+              <SwipePressable
                 accessibilityRole="link"
                 accessibilityLabel={`${who} invited you to ${inv.name}, ${inv.ask ? 'Ask to join' : 'Open'}, ${members}. Open it`}
                 onPress={() => open(`/g/${inv.groupId}`)}
@@ -89,9 +90,9 @@ export function GroupInvitesSection({ onOpen }: {
                   <Text style={styles.name} numberOfLines={1}>{inv.name}</Text>
                   <Text style={styles.meta} numberOfLines={1}>{inv.ask ? 'Ask to join' : 'Open'} · {members}</Text>
                 </View>
-              </Pressable>
+              </SwipePressable>
               <View style={styles.buttons}>
-                <Pressable
+                <SwipePressable
                   accessibilityRole="button"
                   accessibilityLabel={`Join ${inv.name}`}
                   accessibilityHint={full ? INVITE_FULL : undefined}
@@ -102,8 +103,8 @@ export function GroupInvitesSection({ onOpen }: {
                   style={({ pressed }) => [styles.btn, styles.btnJoin, full && styles.btnOff, (pressed || (!!answering && !(busyHere && answering?.accept))) && styles.btnDim]}
                 >
                   {busyHere && answering?.accept ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={[styles.btnText, styles.btnTextJoin]}>Join</Text>}
-                </Pressable>
-                <Pressable
+                </SwipePressable>
+                <SwipePressable
                   accessibilityRole="button"
                   accessibilityLabel={`Not now, ${inv.name}`}
                   accessibilityState={{ busy: busyHere && !answering?.accept, disabled: !!answering }}
@@ -113,7 +114,7 @@ export function GroupInvitesSection({ onOpen }: {
                   style={({ pressed }) => [styles.btn, styles.btnQuiet, (pressed || (!!answering && !(busyHere && !answering?.accept))) && styles.btnDim]}
                 >
                   {busyHere && !answering?.accept ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={[styles.btnText, styles.btnTextQuiet]}>Not now</Text>}
-                </Pressable>
+                </SwipePressable>
               </View>
               {p ? (
                 <View style={styles.problem} accessibilityLiveRegion="polite">

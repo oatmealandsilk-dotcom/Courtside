@@ -12,6 +12,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing } from '@/theme';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 export type ReplyAttachment = NonNullable<Answer['media']>;
 
@@ -78,7 +79,7 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
         <Pressable ref={frame} accessibilityRole="imagebutton" accessibilityLabel="Photo in this reply. Tap to see it full screen." onPress={open} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
           <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
         </Pressable>
-        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent onRequestClose={close}>
+        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent onRequestClose={close}><SwipeArea on={false}>
           {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
           <GestureHandlerRootView style={{ flex: 1 }}>
             <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
@@ -88,7 +89,7 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
               <Ionicons name="close" size={22} color="white" />
             </Pressable>
           </GestureHandlerRootView>
-        </Modal>
+        </SwipeArea></Modal>
       </>
     );
   }

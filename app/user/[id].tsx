@@ -38,6 +38,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 const TABS = ['Posts', 'Clips', 'Tagged'] as const;
 
@@ -253,7 +254,7 @@ function UserProfile() {
         </>
       )}
 
-      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}><SwipeArea on={false}>
         {/* The backdrop is a plain surface, not a button: a button here would
             wrap the menu's buttons, which the web refuses to nest. */}
         <Pressable accessibilityLabel="Close menu" onPress={() => setMenuOpen(false)} style={styles.backdrop}>
@@ -273,7 +274,7 @@ function UserProfile() {
             ))}
           </View>
         </Pressable>
-      </Modal>
+      </SwipeArea></Modal>
     </Screen>
   );
 }

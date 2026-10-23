@@ -14,6 +14,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { messageSummary } from './groupRules';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /*
  * The small pieces of a chat that sit around the bubbles: the quote a reply
@@ -232,7 +233,7 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title?
   const insets = useSafeAreaInsets();
   useModalOpenWhile(visible);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><SwipeArea on={false}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdrop}>
         <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, spacing.lg) + spacing.sm }]} onStartShouldSetResponder={() => true}>
           <View style={styles.grabber} />
@@ -240,7 +241,7 @@ function Sheet({ visible, title, onClose, children }: { visible: boolean; title?
           {children}
         </View>
       </Pressable>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 
@@ -298,7 +299,7 @@ export function EmojiReactSheet({ visible, onPick, onClose }: { visible: boolean
   const insets = useSafeAreaInsets();
   useModalOpenWhile(visible);
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}><SwipeArea on={false}>
       <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.backdropClear}>
         <View style={styles.emojiSheet} onStartShouldSetResponder={() => true}>
           <View style={styles.grabber} />
@@ -306,7 +307,7 @@ export function EmojiReactSheet({ visible, onPick, onClose }: { visible: boolean
           <EmojiKeyboard height={300} bottomInset={insets.bottom} onPick={(e) => { onClose(); onPick(e); }} />
         </View>
       </Pressable>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

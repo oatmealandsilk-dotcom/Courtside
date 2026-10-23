@@ -24,11 +24,17 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  *     and fires exactly as before;
  *   - a finger that rests longer and then swipes shows the look, and it is
  *     dropped in the very moment the page swipe starts, not 130 ms later.
- * Everywhere else (pushed pages, sheets, a desktop browser) nothing changes.
+ * Everywhere else (pushed pages, sheets, a desktop browser) nothing changes; a
+ * sheet opened from a tab says so with <SwipeArea on={false}>, and so does the
+ * clip handle (StatsPill), which keeps its own press.
  */
 export const PRESS_LOOK_DELAY = 120;
-/** How far a finger may drift before the press counts as the start of a swipe or a scroll. */
-const MOVE_SLOP = 4;
+/**
+ * How far a finger may drift before the press counts as the start of a swipe or a scroll. A thumb
+ * tap rolls 4 to 8 points and still gets its look; 8 is still under every sideways swipe's take-over
+ * distance (8 to 14 points, gestureClaim) and an iPhone scroll's (about 10).
+ */
+const MOVE_SLOP = 8;
 /** The shortest a quick tap's look is shown for, so it reads as a flash rather than nothing. */
 const FLASH_MS = 100;
 /** The phone's usual hold for a long press, start to finish, as Pressable had it before any delay. */
@@ -109,6 +115,9 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     return () => { dropListeners.delete(drop); unsubscribe(); };
   }, [inSwipe, drop]);
   useEffect(() => clearHide, []);
+  // Leaving a swipeable area mid-press (a phone turned, a browser resized, a swipe surface switched
+  // off) takes any look on show with it, so it can never come back stuck on.
+  useEffect(() => { if (!inSwipe) drop(); }, [inSwipe, drop]);
 
   const touchStart = (e: GestureResponderEvent) => {
     if (!inSwipe) return;

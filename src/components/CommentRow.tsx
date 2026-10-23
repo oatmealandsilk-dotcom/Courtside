@@ -20,6 +20,7 @@ import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { TextScale } from '@/theme/textScale';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -187,11 +188,11 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         ) : null}
       </View>
       {comment.imageUrl ? (
-        <Modal visible={viewerShown} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent>
+        <Modal visible={viewerShown} transparent animationType="fade" onRequestClose={() => setViewing(false)} statusBarTranslucent><SwipeArea on={false}>
           <Pressable accessibilityRole="button" accessibilityLabel="Close the photo" onPress={() => setViewing(false)} style={styles.viewer}>
             <ExpoImage source={{ uri: comment.imageUrl }} style={styles.viewerImage} contentFit="contain" cachePolicy="memory-disk" />
           </Pressable>
-        </Modal>
+        </SwipeArea></Modal>
       ) : null}
       {onUnhide ? null : (
         <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>

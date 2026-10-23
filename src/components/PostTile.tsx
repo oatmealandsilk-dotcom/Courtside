@@ -1,6 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Highlighted, plain } from '@/components/CourtSearch';
@@ -41,7 +42,7 @@ export function PostTile({ post, width, height, onPress, label, words }: {
   const tag = missing.length ? post.tags.map((t) => t.replace(/^#/, '')).find(hits) : undefined;
   const place = missing.length && !tag ? [post.court?.name, post.location].find((x): x is string => !!x && hits(x)) : undefined;
   return (
-    <Pressable
+    <SwipePressable
       accessibilityRole="link"
       accessibilityLabel={label ?? `Open ${post.kind}: ${post.body}`}
       onPress={onPress}
@@ -68,7 +69,7 @@ export function PostTile({ post, width, height, onPress, label, words }: {
       {/* Several photos: the stacked mark, where a clip has its play mark. */}
       {picture ? <CarouselMark post={post} /> : null}
       {clip && (post.views ?? 0) > 0 ? <TileViews views={post.views ?? 0} /> : null}
-    </Pressable>
+    </SwipePressable>
   );
 }
 

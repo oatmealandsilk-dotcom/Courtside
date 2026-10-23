@@ -46,6 +46,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { PhotoCarousel } from '@/components/PhotoCarousel';
 import { photosOf } from '@/features/compose/carousel';
 import { TextScale } from '@/theme/textScale';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 interface Props {
   post: Post;
@@ -378,7 +379,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {burst}
       </View>
       {!post.videoUrl ? (
-        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}>
+        <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent supportedOrientations={['portrait', 'landscape', 'landscape-left', 'landscape-right']} onRequestClose={closeFull}><SwipeArea on={false}>
           {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
           <GestureHandlerRootView style={styles.fullRoot}>
             <ZoomableMedia ref={zoom} home={home} onDismiss={() => { setFull(false); setHome(undefined); }}>
@@ -388,7 +389,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
               <Ionicons name="close" size={22} color="white" />
             </Pressable>
           </GestureHandlerRootView>
-        </Modal>
+        </SwipeArea></Modal>
       ) : null}
 
       <View style={[styles.details, lane]}>

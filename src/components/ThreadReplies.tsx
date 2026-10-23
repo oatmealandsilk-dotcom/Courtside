@@ -202,9 +202,10 @@ const styleDefinitions = StyleSheet.create({
   elbow: {position:'absolute',left:0,top:16,width:20,height:15,borderLeftWidth:1.5,borderBottomWidth:1.5,borderColor:colors.borderStrong,borderBottomLeftRadius:12},
   avatarRail: {position:'absolute',left:15,top:46,bottom:0,width:1.5,backgroundColor:colors.borderStrong},
   collapse: {position:'absolute',left:5,width:20,height:28,justifyContent:'center'},
-  // Hides the rail inside the ⊖'s own ring, and only when a rail runs behind it: a square in the page
-  // colour behind the icon showed as a box over the page's soft top tint (and in Night).
-  collapseMask: {position:'absolute',left:2,top:6,width:16,height:16,borderRadius:8,backgroundColor:colors.bg},
+  // Breaks the rail around the ⊖ as before (the full 28-point span), and only when a rail runs behind
+  // it, but no wider than the rail: a whole square in the page colour behind the icon showed as a box
+  // over the page's soft top tint (and in Night).
+  collapseMask: {position:'absolute',left:8.5,top:0,width:3,height:28,backgroundColor:colors.bg},
   replyBody: { fontSize: 15, lineHeight: 23, color: colors.text, paddingLeft: 42 },
   inlineComposer: { gap: 8, paddingLeft: 42 },
   // The same soft rounded box as the thread's own reply box.

@@ -10,6 +10,7 @@ import { measureForEdit } from '@/features/compose/photoEdit';
 import * as haptics from '@/lib/haptics';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { spacing, typography, font } from '@/theme';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /** How far past the edge a drag or a pinch may stretch before it resists, as a share of the overshoot. */
 const RUBBER = 0.32;
@@ -187,7 +188,7 @@ export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
   // The dark surround: a ring whose hole is exactly the circle, as wide as it needs to be to cover the screen.
   const ring = Math.max(screenW, screenH) * 1.5;
   return (
-    <Modal visible={cropShown} animationType="fade" statusBarTranslucent onRequestClose={onCancel}>
+    <Modal visible={cropShown} animationType="fade" statusBarTranslucent onRequestClose={onCancel}><SwipeArea on={false}>
       {/* Its own gesture root: a Modal is drawn apart from the app, and on Android the
           photo could not be moved or pinched without one (as in ChatPhotoViews). */}
       <GestureHandlerRootView style={styles.root}>
@@ -219,7 +220,7 @@ export function CircleCrop({ uri, onDone, onCancel, corner = 0.5 }: {
           </Pressable>
         </View>
       </GestureHandlerRootView>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

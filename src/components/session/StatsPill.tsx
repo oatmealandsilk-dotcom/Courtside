@@ -9,6 +9,7 @@ import { Tappable } from '@/components/Tappable';
 import type { ID, SessionDetail } from '@/data/types';
 import { pillPieces, resultWord, spokenDuration } from '@/features/activity/format';
 import { spokenScore } from '@/features/activity/score';
+import { SwipeArea } from '@/features/navigation/swipePress';
 import { localDay } from '@/features/practice/stats';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -126,16 +127,19 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   );
   if (!onPress) return measure(<View accessible accessibilityLabel={spoken} style={styles.self}>{glass}</View>);
   return measure(
-    <Tappable
-      onPress={() => { haptics.tap(); onPress(); }}
-      // The clip handle keeps its own press (owner, Oct 5: "The handle that pops up on clips and you click it is perfect, don't change that").
-      scaleTo={0.96}
-      hitSlop={8}
-      accessibilityLabel={`${spoken}. Opens the stats.`}
-      style={styles.self}
-    >
-      {glass}
-    </Tappable>,
+    // The clip handle keeps its own press (owner, Oct 5: "The handle that pops up on clips and you click it is perfect, don't change that"):
+    // it dips on touch-down, even on the Feed's sideways-swiping tab row, without the swipe pages' wait (swipePress).
+    <SwipeArea on={false}>
+      <Tappable
+        onPress={() => { haptics.tap(); onPress(); }}
+        scaleTo={0.96}
+        hitSlop={8}
+        accessibilityLabel={`${spoken}. Opens the stats.`}
+        style={styles.self}
+      >
+        {glass}
+      </Tappable>
+    </SwipeArea>,
   );
 }
 

@@ -48,6 +48,7 @@ import { studioLine } from '@/features/coaching/studioSummary';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
@@ -287,7 +288,7 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
         {groupsAsking || invites ? <View style={styles.menuDot} /> : null}
       </Tappable>
     </View>
-    <Modal visible={!!at} transparent animationType="fade" statusBarTranslucent onRequestClose={close}>
+    <Modal visible={!!at} transparent animationType="fade" statusBarTranslucent onRequestClose={close}><SwipeArea on={false}>
       {/* The backdrop beside the menu, not around it: a button may not hold buttons in a browser. */}
       <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
       {at ? <View style={[styles.menu, { top: at.top, right: at.right }]} accessibilityRole="menu">
@@ -301,7 +302,7 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Settings</Text>
         </Pressable>
       </View> : null}
-    </Modal>
+    </SwipeArea></Modal>
   </>;
 }
 /**

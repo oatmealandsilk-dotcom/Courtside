@@ -87,6 +87,7 @@ import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, canc
 import { BlurView } from 'expo-blur';
 import { colors, lift, pageIsDark, radius, spacing, typography, font, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /** One line of words in the typing box, and how many it grows to before it scrolls inside. */
 const INPUT_LINE = 21;
@@ -2379,7 +2380,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
   const close = () => { if (settledMenu()) leave(onClose); };
   const pick = (run: () => void) => { if (!settledMenu()) return; leave(() => { onClose(); run(); }); };
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => leave(onClose)}>
+    <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={() => leave(onClose)}><SwipeArea on={false}>
       <View style={StyleSheet.absoluteFill}>
         <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimLook]}>
           {Platform.OS === 'ios' ? <BlurView intensity={14} tint="dark" style={StyleSheet.absoluteFill} /> : null}
@@ -2449,7 +2450,7 @@ function MessageMenu({ target, me, styles, canReply, canReact, pending, canDelet
           ) : null}
         </Reanimated.View>
       </View>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

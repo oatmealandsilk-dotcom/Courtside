@@ -11,6 +11,7 @@ import { alsoChoices, setConfirmHost, type ConfirmOptions } from '@/lib/confirm'
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 // Timed by hand below, so Reduce Motion is honoured here (fade only) rather than by skipping the fade too.
 const NEVER = ReduceMotion.Never;
@@ -259,9 +260,9 @@ export function ConfirmHost() {
     return <FullWindowOverlay unstable_accessibilityContainerViewIsModal>{layer}</FullWindowOverlay>;
   }
   return (
-    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => answer('cancel')}>
+    <Modal visible transparent animationType="none" statusBarTranslucent navigationBarTranslucent onRequestClose={() => answer('cancel')}><SwipeArea on={false}>
       {layer}
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

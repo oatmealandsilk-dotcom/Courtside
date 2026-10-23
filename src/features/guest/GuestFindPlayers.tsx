@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -75,10 +76,10 @@ export function GuestFindPlayers() {
           </Pressable>
         </View>
       ) : (
-        <Pressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} style={({ pressed }) => [styles.pill, styles.locate, pressed && styles.pressed]}>
+        <SwipePressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} style={({ pressed }) => [styles.pill, styles.locate, pressed && styles.pressed]}>
           <Ionicons name="navigate-outline" size={15} color={colors.brandInk} />
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, styles.locateText]}>{locating ? 'Finding you…' : 'Use my location'}</Text>
-        </Pressable>
+        </SwipePressable>
       )}
       {note ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.note}>{note}</Text> : null}
 
@@ -125,14 +126,14 @@ export function GuestFindPlayers() {
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
           </View>
           {courts.map(({ c, miles }) => (
-            <Pressable key={c.id} accessibilityRole="link" onPress={() => router.push({ pathname: '/court/[id]', params: { id: c.id, name: c.name, lat: String(c.lat), lng: String(c.lng) } })} style={({ pressed }) => [styles.court, pressed && styles.pressed]}>
+            <SwipePressable key={c.id} accessibilityRole="link" onPress={() => router.push({ pathname: '/court/[id]', params: { id: c.id, name: c.name, lat: String(c.lat), lng: String(c.lng) } })} style={({ pressed }) => [styles.court, pressed && styles.pressed]}>
               <View style={styles.courtTile}><CourtGlyph size={22} color={colors.brand} /></View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtName} numberOfLines={1}>{c.name || 'Tennis courts'}</Text>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtMeta} numberOfLines={1}>{[c.count > 1 ? `${c.count} courts` : '1 court', formatSpotMiles(miles, false), c.lit ? 'Lights' : null].filter(Boolean).join(' · ')}</Text>
               </View>
               <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
-            </Pressable>
+            </SwipePressable>
           ))}
         </View>
       ) : null}

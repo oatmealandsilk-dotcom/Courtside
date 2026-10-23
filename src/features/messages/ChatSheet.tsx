@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 export interface SheetOption {
   key: string;
@@ -60,7 +61,7 @@ export function ChatSheet({ visible, title, options, onClose }: {
     };
   }, [visible]);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><SwipeArea on={false}>
       {/* The backdrop is a plain surface, not a button: a button here would
           wrap the sheet's buttons, which the web refuses to nest. */}
       <Pressable accessibilityLabel="Close" onPress={() => { if (armed.current) onClose(); }} style={styles.backdrop}>
@@ -86,7 +87,7 @@ export function ChatSheet({ visible, title, options, onClose }: {
           ))}
         </View>
       </Pressable>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -180,14 +181,14 @@ function StepRow({ title, icon, done, fresh, note, onPress }: { title: string; i
   }, [fresh, done, reduced, pop]);
   const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   return (
-    <Pressable accessibilityRole={done ? undefined : 'link'} accessibilityState={{ checked: done }} accessibilityLabel={done ? `${title}, done` : title} disabled={done} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
+    <SwipePressable accessibilityRole={done ? undefined : 'link'} accessibilityState={{ checked: done }} accessibilityLabel={done ? `${title}, done` : title} disabled={done} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Reanimated.View style={[styles.disc, done ? styles.discDone : null, popStyle]}>
         {done ? (fresh ? <DrawnTick size={14} color={colors.brandInk} delay={120} /> : <Ionicons name="checkmark" size={14} color={colors.brandInk} />) : <Ionicons name={icon} size={14} color={colors.brand} />}
       </Reanimated.View>
       <Text style={[styles.rowText, done && styles.rowDone]} numberOfLines={1}>{title}</Text>
       {note ? <Text style={styles.note}>{note}</Text> : null}
       {done ? null : <Ionicons name="chevron-forward" size={15} color={colors.textMuted} />}
-    </Pressable>
+    </SwipePressable>
   );
 }
 

@@ -13,6 +13,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
 import type { MediaCrop } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 /**
  * Choosing a clip's cover, on its own calm page the way Instagram does it:
@@ -110,7 +111,7 @@ export function CoverPage({ visible, uri, from, to, start, photo, ratio, fit, cr
   const picH = picW ? picW / ratio : 0;
 
   return (
-    <Modal visible={visible} transparent statusBarTranslucent animationType={reduce ? 'fade' : 'slide'} onRequestClose={onCancel}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType={reduce ? 'fade' : 'slide'} onRequestClose={onCancel}><SwipeArea on={false}>
       <View style={styles.page}>
         <View style={styles.column}>
           <View style={[styles.bar, { paddingTop: isPhone ? insets.top + spacing.xl : Platform.OS !== 'web' ? Math.max(insets.top + spacing.xl, spacing.sm + spacing.xxl) : spacing.sm + spacing.xxl }]}>
@@ -143,7 +144,7 @@ export function CoverPage({ visible, uri, from, to, start, photo, ratio, fit, cr
           </View>
         </View>
       </View>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 

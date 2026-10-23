@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 import { colors, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 export interface MenuSheetItem {
   icon: keyof typeof Ionicons.glyphMap;
@@ -29,7 +30,7 @@ export function MenuSheet({ visible, onClose, title, items }: { visible: boolean
   // Clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
   const bottom = useModalSheetBottom(visible, spacing.xxl);
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><SwipeArea on={false}>
       {/* The backdrop is a plain surface, not a button: a button here would
           wrap the menu's buttons, which the web refuses to nest. */}
       <Pressable accessibilityLabel="Close menu" onPress={onClose} style={styles.backdrop}>
@@ -55,7 +56,7 @@ export function MenuSheet({ visible, onClose, title, items }: { visible: boolean
           ))}
         </View>
       </Pressable>
-    </Modal>
+    </SwipeArea></Modal>
   );
 }
 
