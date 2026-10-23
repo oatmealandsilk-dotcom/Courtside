@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 import { router } from 'expo-router';
@@ -10,6 +10,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Screen } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
+import { tapPoint, type TapPoint } from '@/theme/themeSwitch';
 import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
@@ -29,7 +30,7 @@ export default function ThemePage() {
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Applies everywhere straight away. Pick the court you would rather be on.</Text>
       <View style={styles.list}>
         {themeList.map((option) => (
-          <ThemeCard key={option.name} option={option} active={shown === option.name} onPick={() => { haptics.tap(); setPicked(option.name); setTheme(option.name); }} styles={styles} />
+          <ThemeCard key={option.name} option={option} active={shown === option.name} onPick={(from) => { haptics.tap(); setPicked(option.name); setTheme(option.name, from); }} styles={styles} />
         ))}
       </View>
     </Screen>
@@ -63,7 +64,7 @@ const styleDefinitions = StyleSheet.create({
  * check that pops in. Everything runs on the
  * animation thread, so it is smooth even as the whole app recolours.
  */
-function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeList)[number]; active: boolean; onPick: () => void; styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>> }) {
+function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeList)[number]; active: boolean; onPick: (from?: TapPoint) => void; styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>> }) {
   const palette = themes[option.name];
   const on = useSharedValue(active ? 1 : 0);
   const push = useSharedValue(1);
@@ -72,12 +73,13 @@ function ThemeCard({ option, active, onPick, styles }: { option: (typeof themeLi
   }, [active, on]);
   // The card answers the tap itself with a little push, before the rest of the app has recoloured.
   // The check is there at once, on the very next frame, rather than easing in after the redraw.
-  const pick = () => {
+  // The new court spreads out from the tap itself (Oct 21).
+  const pick = (event: GestureResponderEvent) => {
     if (!active) {
       push.value = withSequence(withTiming(0.992, { duration: 50 }), withTiming(1, { duration: 120, easing: Easing.out(Easing.quad) }));
       on.value = 1;
     }
-    onPick();
+    onPick(tapPoint(event));
   };
   // The edge and the check take this theme's own colour, not the one the app is wearing now.
   // No outline change at all: the check alone says which one is on.
