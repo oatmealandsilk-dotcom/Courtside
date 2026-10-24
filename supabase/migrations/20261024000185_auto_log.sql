@@ -1,9 +1,12 @@
 -- CourtSide · migration 20261024000185: tennis logs itself, privately.
 --
 -- NOT APPLIED — run it in the Supabase SQL editor as one piece, AFTER 183
--- and 184 (both live) and BEFORE the trackers function that sends
--- "unsure" is deployed. It is all-or-nothing: if a check fails, it stops
--- and nothing at all changes. Safe to run more than once.
+-- and 184 (both live) and AFTER (or with) the trackers function that sends
+-- "unsure"; deploying the function first is safe (record_activity reads the
+-- payload by name, so today's version simply ignores "unsure"). The other
+-- way round, a Fitbit "Sport" session filed in between would be logged as
+-- tennis. It is all-or-nothing: if a check fails, it stops and nothing at
+-- all changes. Safe to run more than once.
 --
 -- What it does (the owner, Oct 24): "auto logged so that your streaks always
 -- show up, but it will auto log privately so only you can see and then you
@@ -43,15 +46,22 @@
 --     A tracker that takes the session back (WHOOP deleted it) takes the
 --     auto-logged session with it, unless it was posted or has tags. A
 --     tracker that changes its length changes the untouched session's too.
+--   * The player's own log wins: logging a session (any app build, even one
+--     that never saw the auto log) takes the place of an untouched auto log
+--     of it (no post, no tags) instead of failing with "Already logged.".
+--   * Invites: a session the server logged by itself is not the invitee
+--     doing something (invite_first_action, invite_second_day).
 --   * No backfill: sessions already waiting in To do stay there.
 --
--- Needs 138 (note_detected_activity, sweep_activities, record_activity,
--- mark_activity_logged, withdraw_activity) and 183 (send_activity_pushes)
--- live. The check stops without changing anything if any of them is other
--- than those (or this file's own, so a second run passes).
+-- Needs the live versions read on Oct 24 (138's note_detected_activity and
+-- sweep_activities, record_activity, mark_activity_logged, withdraw_activity,
+-- 183's send_activity_pushes, 116's invite_second_day, invite_first_action).
+-- The check stops without changing anything if any of them is other than
+-- those (or this file's own, so a second run passes).
 --
--- To undo: run 138's functions and 183's send_activity_pushes again, then
--- update public.user_state set auto_log = false; (the columns can stay).
+-- To undo: run supabase/rollback/185_undo.sql in the SQL editor (it puts
+-- back the exact live versions from before this file and takes out its new
+-- functions and trigger; the new columns stay, unused).
 
 begin;
 
@@ -60,12 +70,14 @@ do $$
 declare
   r record;
   want jsonb := '{
-    "note_detected_activity": ["804e5d88e5a616bd9890a116f8d749bd", "d9ee430ea01b64dcf0e17f1142033f42"],
+    "note_detected_activity": ["804e5d88e5a616bd9890a116f8d749bd", "9a0b06b7998de89c687b7565a695f38d"],
     "send_activity_pushes":   ["662ae4e0364d645f59480587a15c2b5c", "42d79ffd3e542dd6c7bf0d59a26e67b5"],
-    "sweep_activities":       ["f4f320c3bf39edc4bb488c1966b4900b", "d6846ea202903742988d907ed13359de"],
+    "sweep_activities":       ["f4f320c3bf39edc4bb488c1966b4900b", "5485dc5bfbd06b393e33a98f3df766fb"],
     "record_activity":        ["7dd7db000e6fe7421b6147c4d8b18eca", "9f3886906f9636336f08a1a445b0a4a5"],
-    "mark_activity_logged":   ["044c9ee535f1637deae6e5efea2e9bfe", "78853133ed58c2be43cb5011c5b52583"],
-    "withdraw_activity":      ["18f79010bf2780b2719160e9a7d44962", "d9571fe1d56ac2f53891d4979cce908a"]
+    "mark_activity_logged":   ["044c9ee535f1637deae6e5efea2e9bfe", "22ed463e49e4793805aeb63cd3174390"],
+    "withdraw_activity":      ["18f79010bf2780b2719160e9a7d44962", "d9571fe1d56ac2f53891d4979cce908a"],
+    "invite_first_action":    ["d908956bf0346e22406b4ba45e4b6ba2", "921304feccd26712d5098653ecce73b6"],
+    "invite_second_day":      ["b2da94c30b820977f86e3b77c8ceb0f7", "f1c199bd787c4e2f55115e25d8b8156d"]
   }';
 begin
   if to_regclass('public.detected_activities') is null or to_regclass('public.practice_sessions') is null
@@ -77,7 +89,7 @@ begin
                   k.value as ok
              from jsonb_each(want) k loop
     if r.n <> 1 or not coalesce(r.ok @> to_jsonb(r.now_is), false) then
-      raise exception 'Migration 20261024000185 stopped before changing anything: % changed since migration 138/183. This file must be brought up to date with that change first.', r.fn;
+      raise exception 'Migration 20261024000185 stopped before changing anything: % changed since it was read on Oct 24. This file must be brought up to date with that change first.', r.fn;
     end if;
   end loop;
 end $$;
@@ -168,6 +180,7 @@ declare
   v_who text;
   v_day text;
   v_push boolean;
+  v_logged boolean;
 begin
   select * into v_a from public.detected_activities where id = a_id;
   if not found then return 'missing'; end if;
@@ -179,19 +192,25 @@ begin
   if v_a.score_state = 'PENDING_SCORE' and not force_pending then return 'pending'; end if;
 
   -- The same session seen twice (WHOOP and the Watch, say): the earlier row
-  -- carries the alert, this one stays quiet. Only ever the same sport.
+  -- carries the alert, this one stays quiet. Only ever the same sport. A copy
+  -- already logged counts whichever was filed first: two copies filed at the
+  -- same moment (a webhook and a sync) never both log themselves (185).
   select o.id into v_twin from public.detected_activities o
-   where o.user_id = v_a.user_id and o.id <> v_a.id and o.sport = v_a.sport and o.status in ('new', 'logged', 'dismissed') and o.created_at <= v_a.created_at
+   where o.user_id = v_a.user_id and o.id <> v_a.id and o.sport = v_a.sport and o.status in ('new', 'logged', 'dismissed')
+     and (o.created_at <= v_a.created_at or o.status = 'logged')
      and (abs(extract(epoch from o.started_at - v_a.started_at)) <= 600
           or extract(epoch from least(o.ended_at, v_a.ended_at) - greatest(o.started_at, v_a.started_at))
              >= 0.5 * least(extract(epoch from o.ended_at - o.started_at), extract(epoch from v_a.ended_at - v_a.started_at)))
-   order by o.created_at limit 1;
+   order by (o.status = 'logged') desc, o.created_at limit 1;
   if v_twin is not null then
     update public.detected_activities set status = 'duplicate', duplicate_of = v_twin, notified_at = now(), updated_at = now() where id = v_a.id;
     -- auto log: the earlier copy was too short, or only "maybe tennis", to log
     -- itself; this one is sure, 20 minutes or more. The session is logged
     -- after all, under the earlier copy (the app follows a duplicate to it).
-    if public.auto_log_activity(v_twin, v_a.id) and not quiet and v_a.ended_at >= now() - interval '12 hours'
+    -- Asked first, on its own line: inside one "and" the database may skip
+    -- the call once "not quiet" is false, and the session would never log.
+    v_logged := public.auto_log_activity(v_twin, v_a.id);
+    if v_logged and not quiet and v_a.ended_at >= now() - interval '12 hours'
        and (select push_activity from public.user_state where user_id = v_a.user_id) is distinct from false then
       perform public.send_activity_pushes(v_a.user_id, array[v_twin]);
     end if;
@@ -344,12 +363,25 @@ declare
   r record;
   v_filed uuid[] := '{}';
   v_push boolean;
+  v_note text;
+  v_d uuid;
 begin
   for r in select id from public.detected_activities
             where status = 'new' and notified_at is null and score_state = 'PENDING_SCORE'
               and ended_at between now() - interval '12 hours' and now() - interval '45 minutes'
               and public.activity_allowed(user_id, source, sport) loop
-    if public.note_detected_activity(r.id, true, true) = 'filed' then v_filed := v_filed || r.id; end if;
+    v_note := public.note_detected_activity(r.id, true, true);
+    if v_note = 'filed' then
+      v_filed := v_filed || r.id;
+    elsif v_note = 'duplicate' then
+      -- The later copy that got its earlier, shorter copy logged after all
+      -- (note_detected_activity's twin rule): that one's "Tennis logged" goes out here.
+      select d.duplicate_of into v_d from public.detected_activities d where d.id = r.id;
+      if v_d is not null and exists (select 1 from public.detected_activities o join public.practice_sessions s on s.id = o.session_id
+                                      where o.id = v_d and o.status = 'logged' and s.auto_logged) then
+        v_filed := v_filed || v_d;
+      end if;
+    end if;
   end loop;
   for r in select distinct d.user_id from public.detected_activities d where d.id = any(v_filed) loop
     select push_activity into v_push from public.user_state where user_id = r.user_id;
@@ -472,6 +504,10 @@ language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' and new.activity_id is not null then
     update public.detected_activities set status = 'logged', session_id = new.id, updated_at = now() where id = new.activity_id and user_id = new.user_id;
+  elsif tg_op = 'DELETE' and current_setting('courtside.replacing_auto', true) = '1' then
+    -- The player's own log of it is taking its place (replace_auto_log): the
+    -- row stays, and its notification, and the new session marks it below.
+    return null;
   elsif tg_op = 'DELETE' and old.activity_id is not null and old.auto_logged then
     update public.detected_activities set status = 'dismissed', session_id = null, updated_at = now() where id = old.activity_id and status = 'logged';
     delete from public.notifications where user_id = old.user_id and kind = 'activity' and target_id = old.activity_id::text;
@@ -482,6 +518,32 @@ begin
 end $$;
 
 revoke all on function public.mark_activity_logged() from public, anon, authenticated;
+
+-- The player logs a session the server already logged for them (an app
+-- build from before this file, or a phone that has not read the auto log
+-- yet): their log, with what they chose (match, score, minutes), takes its
+-- place instead of failing with "Already logged.". Only while the auto log
+-- is untouched (no post, nobody tagged); otherwise the unique index answers
+-- as before. Runs after guard_session_activity (names go in order), so the
+-- activity is already known to be theirs.
+create or replace function public.replace_auto_log() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if new.activity_id is not null and not new.auto_logged then
+    perform set_config('courtside.replacing_auto', '1', true);
+    delete from public.practice_sessions s
+     where s.activity_id = new.activity_id and s.user_id = new.user_id and s.auto_logged
+       and public.session_unposted(s.id, s.user_id)
+       and not exists (select 1 from public.session_tags t where t.session_id = s.id);
+    perform set_config('courtside.replacing_auto', '', true);
+  end if;
+  return new;
+end $$;
+
+revoke all on function public.replace_auto_log() from public, anon, authenticated;
+drop trigger if exists hand_log_replaces_auto on public.practice_sessions;
+create trigger hand_log_replaces_auto before insert on public.practice_sessions
+  for each row execute function public.replace_auto_log();
 
 -- The app's "Not tennis? Remove": the player's own auto-logged session for
 -- row a goes, and the row is hidden for good. True when something changed.
@@ -529,21 +591,77 @@ end $$;
 
 revoke all on function public.withdraw_activity(uuid, text, text) from public, anon, authenticated;
 
+-- ------------------------------------------------- 7b. invites ($1 each)
+-- The live versions (invite_first_action 80/102, invite_second_day 116), but
+-- a session the server logged by itself is not the invitee doing anything:
+-- a WHOOP connected once must not "do a first thing" or "come back on a
+-- second day" with nobody opening the app. A session they log themselves
+-- still counts, as before.
+create or replace function public.invite_first_action(u uuid, inviter uuid) returns timestamptz
+language sql stable security definer set search_path = public as $$
+  select min(t) from (
+              select created_at as t from public.follows           where follower_id = u and following_id is distinct from inviter
+    union all select created_at        from public.posts             where author_id = u
+    union all select created_at        from public.questions         where author_id = u
+    union all select created_at        from public.answers           where author_id = u
+    union all select created_at        from public.comments          where author_id = u
+    union all select created_at        from public.hit_requests      where author_id = u
+    union all select created_at        from public.hit_joins         where user_id = u
+    union all select created_at        from public.messages          where sender_id = u
+    union all select created_at        from public.practice_sessions where user_id = u and not auto_logged
+  ) s
+$$;
+
+create or replace function public.invite_second_day(u uuid, joined timestamptz) returns timestamptz
+language sql stable security definer set search_path = public as $$
+  with s(t) as (
+              select updated_at        from public.push_tokens    where user_id = u
+    union all select last_seen_at      from public.device_sightings where user_id = u
+    union all select first_seen_at     from public.device_sightings where user_id = u
+    union all select seen_at           from public.last_seen      where user_id = u
+    union all select seen_at           from public.exact_spots    where user_id = u
+    union all select first_seen_at     from public.feed_signals   where user_id = u
+    union all select last_seen_at      from public.feed_signals   where user_id = u
+    union all select updated_at        from public.user_state     where user_id = u
+    union all select first_at          from public.app_opens      where user_id = u
+    union all select created_at        from public.posts          where author_id = u
+    union all select created_at        from public.comments       where author_id = u
+    union all select created_at        from public.post_likes     where user_id = u
+    union all select created_at        from public.questions      where author_id = u
+    union all select created_at        from public.answers        where author_id = u
+    union all select created_at        from public.messages       where sender_id = u
+    union all select viewed_at         from public.story_views    where user_id = u
+    union all select created_at        from public.hit_joins      where user_id = u
+    union all select created_at        from public.hit_requests   where author_id = u
+    union all select created_at        from public.court_checkins where user_id = u
+    union all select created_at        from public.follows        where follower_id = u
+    union all select created_at        from public.practice_sessions where user_id = u and not auto_logged
+  )
+  select min(t) from s
+   where t >= joined + interval '20 hours' and t < joined + interval '14 days' and t <= now()
+$$;
+
+revoke all on function public.invite_first_action(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.invite_second_day(uuid, timestamptz) from public, anon, authenticated;
+
 -- ------------------------------------------------------------- 8. last check
 do $$
 declare
   f record;
   want jsonb := '{
-    "note_detected_activity(uuid,boolean,boolean)": "d9ee430ea01b64dcf0e17f1142033f42",
+    "note_detected_activity(uuid,boolean,boolean)": "9a0b06b7998de89c687b7565a695f38d",
     "send_activity_pushes(uuid,uuid[])": "42d79ffd3e542dd6c7bf0d59a26e67b5",
-    "sweep_activities()": "d6846ea202903742988d907ed13359de",
+    "sweep_activities()": "5485dc5bfbd06b393e33a98f3df766fb",
     "record_activity(uuid,text,text,jsonb,boolean)": "9f3886906f9636336f08a1a445b0a4a5",
-    "mark_activity_logged()": "78853133ed58c2be43cb5011c5b52583",
+    "mark_activity_logged()": "22ed463e49e4793805aeb63cd3174390",
     "withdraw_activity(uuid,text,text)": "d9571fe1d56ac2f53891d4979cce908a",
     "auto_log_activity(uuid,uuid)": "7c46097c4c3e8aa429d2a299407999a6",
     "remove_auto_log(uuid)": "3d98c7b6be1719f47bc0d10ecfb592ac",
     "activity_day(uuid,timestamp with time zone,integer)": "c89246ac98557b36d290aa63d9e44329",
-    "session_unposted(uuid,uuid)": "67a5c254f1a37d6c700f64fb88fa05d6"
+    "session_unposted(uuid,uuid)": "67a5c254f1a37d6c700f64fb88fa05d6",
+    "replace_auto_log()": "830c9cbba8bf899a665689f5a9da3b89",
+    "invite_first_action(uuid,uuid)": "921304feccd26712d5098653ecce73b6",
+    "invite_second_day(uuid,timestamp with time zone)": "f1c199bd787c4e2f55115e25d8b8156d"
   }';
   k text;
 begin
