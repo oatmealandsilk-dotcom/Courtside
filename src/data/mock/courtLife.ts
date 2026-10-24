@@ -57,10 +57,13 @@ export const DEMO_FACTS: Record<string, CourtFacts> = {
 };
 export const demoFactsFor = (courtId: string): CourtFacts => DEMO_FACTS[courtId] ?? blankFacts(courtId);
 
-/** Right now: Alder Park is free and three adults are playing (Sam among them); Cypress Hollow has a wait. */
+/** Right now: Alder Park is free and three adults are playing (Sam among them); Cypress Hollow has a wait; Marigold is free; Dev + 2 at Juniper. */
 export const DEMO_NOW: Record<string, CourtRightNow> = {
   [park(1).id]: { courtId: park(1).id, status: 'free', statusAt: minutesAgo(20), playing: 3, friendIds: ['u-sam'], youHere: false },
   [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 0, friendIds: [], youHere: false },
+  // Two courts not followed, so Courts near you has news to show too: Marigold said free, Dev and two more at Juniper.
+  [park(4).id]: { courtId: park(4).id, status: 'free', statusAt: minutesAgo(10), playing: 0, friendIds: [], youHere: false },
+  [park(5).id]: { courtId: park(5).id, playing: 3, friendIds: ['u-dev'], youHere: false },
 };
 export const demoNowFor = (courtId: string): CourtRightNow => DEMO_NOW[courtId] ?? { courtId, playing: 0, friendIds: [], youHere: false };
 

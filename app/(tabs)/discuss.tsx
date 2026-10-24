@@ -733,7 +733,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 court; then the note under it says what happens next ("Pick a time" when the court
                 is already picked). "Post a hit", not just "Post", for a screen reader: a post
                 elsewhere is a photo or clip. */}
-            {FIND_PLAYERS_LOOK !== 'now' && !listedHits.length ? null : (() => {
+            {(FIND_PLAYERS_LOOK === 'A' || FIND_PLAYERS_LOOK === 'B') && !listedHits.length ? null : (() => {
               const court = !listedHits.length ? promptCourt : null;
               const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
               return (

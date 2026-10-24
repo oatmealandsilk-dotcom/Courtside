@@ -24,6 +24,10 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { FIND_PLAYERS_LOOK } from '@/features/players/findPlayersLook';
+import { CourtsNearHeld, CourtsNearLook } from '@/components/place/CourtsNearLooks';
+
+/** Looks C to F draw the strip in CourtsNearLooks. */
+const NEW_LOOK = FIND_PLAYERS_LOOK === 'C' || FIND_PLAYERS_LOOK === 'D' || FIND_PLAYERS_LOOK === 'E' || FIND_PLAYERS_LOOK === 'F' ? FIND_PLAYERS_LOOK : null;
 
 const CARD = 168;
 const MOST = 8;
@@ -131,7 +135,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
   const [heldShown, setHeldShown] = useState(holding);
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
   if (!rows.length && (holding || heldShown)) {
-    const held = FIND_PLAYERS_LOOK === 'B' ? (
+    const held = NEW_LOOK ? <CourtsNearHeld look={NEW_LOOK} /> : FIND_PLAYERS_LOOK === 'B' ? (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
@@ -171,6 +175,10 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
     );
   }
   if (!center || !rows.length) return null;
+  if (NEW_LOOK) {
+    const look = <CourtsNearLook look={NEW_LOOK} rows={rows} badges={badges} />;
+    return revealOrder === undefined ? look : <FirstReveal order={revealOrder}>{look}</FirstReveal>;
+  }
   if (FIND_PLAYERS_LOOK === 'B') {
     // Look B: the nearest few as slim rows (name, how far, chevron); See all opens the map with every court.
     const list = (
