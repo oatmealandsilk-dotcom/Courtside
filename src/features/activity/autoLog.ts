@@ -65,21 +65,27 @@ export function useAutoLog(): AutoLog {
  * it). Now it shows whenever nothing brings sessions in, however many people
  * you follow, until its × closes it on this phone. Settings → Health and
  * nutrition still connects.
+ *
+ * Profile's "Log your hits automatically" card (owner, Oct 24: "I like the
+ * small card on profile") is the same offer in a second place, with its own
+ * ×: closing one leaves the other.
  */
-const closedKey = (userId: string) => `courtside.autoLogRow.closed:${userId}`;
-/** Per account: true closed, false open, missing still being read. */
+export type ConnectPlace = 'activities' | 'profile';
+const closedKey = (place: ConnectPlace, userId: string) => (place === 'activities' ? `courtside.autoLogRow.closed:${userId}` : `courtside.autoLogProfile.closed:${userId}`);
+/** Per place and account: true closed, false open, missing still being read. */
 const closedRows = new Map<string, boolean>();
 const readingRows = new Set<string>();
 const rowListeners = new Set<() => void>();
 const emitRows = () => rowListeners.forEach((fn) => fn());
 const subscribeRows = (fn: () => void) => { rowListeners.add(fn); return () => { rowListeners.delete(fn); }; };
 
-function readClosed(userId: string) {
-  if (closedRows.has(userId) || readingRows.has(userId)) return;
-  readingRows.add(userId);
-  void AsyncStorage.getItem(closedKey(userId))
-    .then((raw) => { closedRows.set(userId, closedRows.get(userId) === true || raw !== null); }, () => { if (!closedRows.has(userId)) closedRows.set(userId, false); })
-    .finally(() => { readingRows.delete(userId); emitRows(); });
+function readClosed(place: ConnectPlace, userId: string) {
+  const at = `${place}:${userId}`;
+  if (closedRows.has(at) || readingRows.has(at)) return;
+  readingRows.add(at);
+  void AsyncStorage.getItem(closedKey(place, userId))
+    .then((raw) => { closedRows.set(at, closedRows.get(at) === true || raw !== null); }, () => { if (!closedRows.has(at)) closedRows.set(at, false); })
+    .finally(() => { readingRows.delete(at); emitRows(); });
 }
 
 export interface ConnectRow {
@@ -92,18 +98,18 @@ export interface ConnectRow {
   close: () => void;
 }
 
-export function useConnectRow(): ConnectRow {
+export function useConnectRow(place: ConnectPlace = 'activities'): ConnectRow {
   const auto = useAutoLog();
   const { currentUserId } = useApp();
-  useEffect(() => { if (currentUserId) readClosed(currentUserId); }, [currentUserId]);
+  useEffect(() => { if (currentUserId) readClosed(place, currentUserId); }, [place, currentUserId]);
   // Not offered until this phone has said whether it was closed, so it never flashes up and away.
-  const closed = useSyncExternalStore(subscribeRows, () => (currentUserId ? closedRows.get(currentUserId) ?? true : true), () => true);
+  const closed = useSyncExternalStore(subscribeRows, () => (currentUserId ? closedRows.get(`${place}:${currentUserId}`) ?? true : true), () => true);
   const close = useCallback(() => {
     if (!currentUserId) return;
-    closedRows.set(currentUserId, true);
-    void AsyncStorage.setItem(closedKey(currentUserId), new Date().toISOString()).catch(() => undefined);
+    closedRows.set(`${place}:${currentUserId}`, true);
+    void AsyncStorage.setItem(closedKey(place, currentUserId), new Date().toISOString()).catch(() => undefined);
     emitRows();
-  }, [currentUserId]);
+  }, [place, currentUserId]);
   const source: AutoLogSource | null = auto.apple ? 'apple-health' : auto.whoop ? 'whoop' : null;
   return { auto, source, offer: auto.ready && !auto.connected && !!source && !closed, close };
 }

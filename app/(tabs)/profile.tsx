@@ -1,7 +1,8 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { themeList, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { ThemeTile } from '@/components/ThemeTile';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
 import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
@@ -9,6 +10,7 @@ import { router } from 'expo-router';
 import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { PhoneAppRow } from '@/features/phoneApp/PhoneAppCard';
+import { ConnectCard } from '@/features/activity/ConnectCard';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
@@ -36,7 +38,7 @@ import { buttonShape, colors, spacing, typography, font, lift, withAlpha } from 
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { TipBubble } from '@/components/TipBubble';
-import { forNewPlayer, useTip } from '@/features/tips/tips';
+import { forNewPlayer, tipWaiting, useTip } from '@/features/tips/tips';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
 import { useFirstWeek } from '@/features/onboarding/FirstWeek';
@@ -55,6 +57,10 @@ const tallButton = { minHeight: buttonShape.profileHeight };
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
+/** The theme tip's pointer: under the middle of the menu button (38), less half the pointer. */
+const MENU_POINTER = 19 - 6;
+/** How long an account has been here before the theme tip: past the first days, once the app is familiar. */
+const THEME_TIP_DAYS = 3;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -79,6 +85,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const tourOpen = useTourOpen();
  const { isPhone } = useResponsive();
  const inboxTipEligible = isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt);
+ // "Make CourtSide yours" (owner, Oct 24): once, after the first few days, while the app still wears its own court.
+ const joinedAt = user?.joinedAt ? Date.parse(user.joinedAt) : NaN;
+ const themeTipEligible = isPhone && !tourOpen && previewSection === undefined && Number.isFinite(joinedAt) && Date.now() - joinedAt >= THEME_TIP_DAYS * 86_400_000;
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -183,6 +192,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
    <InboxTip eligible={inboxTipEligible} live={live} style={styles.inboxTip} />
+   <ThemeTip eligible={themeTipEligible} live={live} style={styles.inboxTip} />
    {firstWeek.card}
    {!hasMoved && !firstWeek.showing && !firstWeek.deciding && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
@@ -196,6 +206,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>}
    {/* The website only: "Get CourtSide on your iPhone", until closed or the phone app is opened (R3, Oct 20 sweep). */}
    <PhoneAppRow />
+   {/* The phone apps: "Log your hits automatically" while nothing brings sessions in (Oct 24), after the setup cards above. */}
+   {hasMoved && !firstWeek.showing && !firstWeek.deciding && skipped.length === 0 && <ConnectCard />}
    {/* The picture in the middle, the name under it, and who follows whom in
        one quiet line — the post counts moved down to the Posts / Clips / Tagged row. */}
    <View style={styles.identity}>
@@ -266,6 +278,17 @@ function InboxTip({ eligible, live, style }: { eligible: boolean; live: boolean;
  return live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={style} /> : null;
 }
 /**
+ * "Make CourtSide yours" (owner, Oct 24: "I like theme thing too"): once, at
+ * the ☰ (Theme is in its menu), for someone here a few days who has never
+ * changed the app's court. Picking a theme anywhere counts as knowing it
+ * (app/theme.tsx), and it never shows over another tip.
+ */
+function ThemeTip({ eligible, live, style }: { eligible: boolean; live: boolean; style: StyleProp<ViewStyle> }) {
+ const { theme } = useTheme();
+ const tip = useTip('theme', useShownAt('/profile') && eligible && theme === 'default' && tipWaiting('theme'));
+ return live ? <TipBubble tip="theme" shown={tip.shown} onClose={tip.close} pointer="up" pointerRight={MENU_POINTER} inline on="page" style={style} /> : null;
+}
+/**
  * ☰ at the top of your profile: a small menu under it with Groups (and how
  * many are asking to join the ones you run) and Settings. A brand dot on the
  * ☰ while someone is asking. A see-through Modal holding a card placed under
@@ -275,18 +298,20 @@ function InboxTip({ eligible, live, style }: { eligible: boolean; live: boolean;
 function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: number; groupCount: number; invites: number }) {
   // Invites to groups waiting for your answer (migration 181) light the same dot.
   const invitesWords = invites ? `${invites} ${invites === 1 ? 'invite' : 'invites'}` : '';
+  const { theme } = useTheme();
+  const themeLabel = themeList.find((t) => t.name === theme)?.label ?? 'CourtSide';
   const styles = useThemedStyles(styleDefinitions);
   const anchor = useRef<View>(null);
   const { width } = useWindowDimensions();
   const [at, setAt] = useState<{ top: number; right: number } | null>(null);
   const open = () => anchor.current?.measureInWindow((x, y, w, h) => setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }));
   const close = () => setAt(null);
-  const go = (path: '/groups' | '/settings') => { close(); router.push(path); };
+  const go = (path: '/groups' | '/theme' | '/settings') => { close(); router.push(path); };
   // Android: a message that arrives while the menu is open shows as the phone's own alert, not under it (see modalOpen).
   useModalOpenWhile(!!at);
   return <>
     <View ref={anchor} collapsable={false}>
-      <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
+      <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups, theme and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
         <Ionicons name="menu-outline" size={30} color={colors.text}/>
         {groupsAsking || invites ? <View style={styles.menuDot} /> : null}
       </Tappable>
@@ -299,6 +324,12 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
           <Ionicons name="people-outline" size={20} color={colors.text}/>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Groups</Text>
           {groupsAsking || invites ? <View style={styles.menuTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuTagText}>{groupsAsking ? `${groupsAsking} asking` : invitesWords}</Text></View> : groupCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{groupCount}</Text> : null}
+        </Pressable>
+        {/* Theme, one tap from Profile (owner, Oct 24), with the court it wears now as in Settings. */}
+        <Pressable accessibilityRole="menuitem" accessibilityLabel={`Theme, ${themeLabel}`} onPress={() => go('/theme')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
+          <Ionicons name="color-palette-outline" size={20} color={colors.text}/>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Theme</Text>
+          <ThemeTile name={theme} />
         </Pressable>
         <Pressable accessibilityRole="menuitem" accessibilityLabel="Settings" onPress={() => go('/settings')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
           <Ionicons name="settings-outline" size={20} color={colors.text}/>

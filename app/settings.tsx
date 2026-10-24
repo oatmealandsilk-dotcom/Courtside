@@ -16,8 +16,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
-import { useTheme, themeList, themes, type ThemeName } from '@/theme/ThemeProvider';
-import { Wash } from '@/components/Wash';
+import { useTheme, themeList } from '@/theme/ThemeProvider';
+import { ThemeTile } from '@/components/ThemeTile';
 import { buttonShape, colors, font, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
@@ -312,22 +312,6 @@ export default function Settings() {
     </Screen>
   );
 }
-
-/**
- * The Theme row's icon: the chosen court as a tiny page — its ground with its
- * wash faintly on it — the same picture the Theme page shows for each court.
- */
-function ThemeTile({ name }: { name: ThemeName }) {
-  const p = themes[name];
-  return (
-    <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
-      <Wash theme={name} height={26} strength={0.9} fade={p.bg} />
-    </View>
-  );
-}
-const tile = StyleSheet.create({
-  box: { width: 26, height: 24, borderRadius: 7, borderWidth: 1, overflow: 'hidden' },
-});
 
 const styleDefinitions = StyleSheet.create({
   // You, at the top, on the page's own wash: no card around it.

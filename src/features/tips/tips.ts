@@ -9,7 +9,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme';
 
 export const TIP_WORDS: Record<TipKey, string> = {
   'map-who-sees': 'Tap here to choose who sees you: players nearby, only friends, or just you.',
@@ -34,6 +34,8 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // after you post your first one, pointing at "No one in yet".
   'join-hit': 'Tap I’m in to join. A chat opens to sort the details.',
   'hit-posted': 'We’ll tell you when someone’s in.',
+  // Profile's ☰, once, a few days in, while the app wears its own court (Oct 24, owner).
+  theme: 'Make CourtSide yours: pick a court theme here.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */

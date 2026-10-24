@@ -11,6 +11,7 @@ import { liveTheme, remapFor, themeList, themes, useTheme, useThemedStyles, type
 import { FADE_MS, FadeCopy, FadeFill, FadeSpot, FadeText, useThemeFade, type FadeStore } from '@/theme/ThemeFade';
 import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { learned } from '@/features/tips/tips';
 
 const LEAD = 'Applies everywhere straight away. Pick the court you would rather be on.';
 
@@ -27,6 +28,8 @@ export default function ThemePage() {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, setTheme } = useTheme();
   const { store, begin } = useThemeFade();
+  // Found the themes: Profile's "Make CourtSide yours" tip has done its job, however this page was reached.
+  useEffect(() => { learned('theme'); }, []);
   // The check pops in only on a pick, not when the page opens.
   const opened = useRef(false);
   useEffect(() => { opened.current = true; }, []);
