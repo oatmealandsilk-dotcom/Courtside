@@ -10,11 +10,14 @@ import type { HitAudience, HitRequest, ID } from '@/data/types';
 
 const HOUR = 3_600_000;
 
-/** The three answers on the hit form, in its order. */
-export const AUDIENCES: { value: HitAudience; icon: 'people-outline' | 'mail-unread-outline' | 'lock-closed-outline'; title: string; line: string }[] = [
-  { value: 'everyone', icon: 'people-outline', title: 'Everyone', line: 'Players nearby see it on Find Players.' },
-  { value: 'invite_first', icon: 'mail-unread-outline', title: 'Invite first', line: 'The people you invite get first dibs. Then it opens to everyone.' },
-  { value: 'invite_only', icon: 'lock-closed-outline', title: 'Only people I invite', line: 'Never shows to anyone else.' },
+/**
+ * The three answers on the hit form, in its order: the name its "Who sees it"
+ * row and menu show, and the one line a screen reader hears with it.
+ */
+export const AUDIENCES: { value: HitAudience; title: string; line: string }[] = [
+  { value: 'everyone', title: 'Everyone', line: 'Players nearby see it on Find Players.' },
+  { value: 'invite_first', title: 'Invite first', line: 'Your invites get first go, then it opens to everyone.' },
+  { value: 'invite_only', title: 'Only people I invite', line: 'No one else sees it.' },
 ];
 
 /**

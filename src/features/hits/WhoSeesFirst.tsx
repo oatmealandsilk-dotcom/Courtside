@@ -10,56 +10,67 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { RisingSheet } from '@/components/RisingSheet';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 import { AUDIENCES, EVERYONE_FRIENDS_LINE } from './audience';
 
 /*
- * "Who sees it first" on the hit form (migration 76): three answers you tap,
- * rows of one grouped list. Everyone is today's hit; Invite
- * first and Only people I invite open a row of the people you follow to
- * tick (the players from "Ask to hit" already ticked, first), and "My
- * groups" when you are in one. Only people you can message are offered: the
- * hit goes to each of them as a card in your chat with them, the same card
- * "Ask to hit" sends.
+ * "Who sees it" on the hit form (migration 76): one quiet row in the sheet's
+ * Level / Players needed list, "Who sees it   Everyone ›", that opens a small
+ * menu of the three answers. Everyone is today's hit; Invite first and Only
+ * people I invite open a row of the people you follow to tick (the players
+ * from "Ask to hit" already ticked, first), and "My groups" when you are in
+ * one. Only people you can message are offered: the hit goes to each of them
+ * as a card in your chat with them, the same card "Ask to hit" sends.
  */
 
 export const HIT_INVITE_MAX = 20;
 
+/** An answer's name, as the row and the menu say it. */
+const nameOf = (v: HitAudience) => AUDIENCES.find((o) => o.value === v)!.title;
 /** `forFriends`: the poster is not known to be an adult, so "Everyone" reaches only their followers and says so. */
-export function AudienceCards({ value, onChange, forFriends = false }: { value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
+const lineOf = (v: HitAudience, forFriends: boolean) => (forFriends && v === 'everyone' ? EVERYONE_FRIENDS_LINE : AUDIENCES.find((o) => o.value === v)!.line);
+
+/**
+ * The small menu the row opens: the phone's own bottom sheet, a small title
+ * and the three answers, one line each, a tick on the chosen one.
+ */
+export function AudienceMenu({ visible, onClose, value, onChange, forFriends = false }: { visible: boolean; onClose: () => void; value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  // One grouped list, a row per answer on a hairline (Oct 7: three lifted cards with a ringed one read heavy):
-  // the chosen row's icon and radio take the brand, the rest stay quiet.
+  const bottom = useModalSheetBottom(visible, spacing.xxl);
   return (
-    <View style={styles.group} accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
-      {AUDIENCES.map((option, i) => {
-        const o = forFriends && option.value === 'everyone' ? { ...option, line: EVERYONE_FRIENDS_LINE } : option;
-        const on = o.value === value;
-        return (
-          <Pressable
-            key={o.value}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: on }}
-            accessibilityLabel={`${o.title}. ${o.line}`}
-            onPress={() => { if (!on) { haptics.tap(); onChange(o.value); } }}
-            style={({ pressed }) => [styles.option, pressed && !on && styles.pressedRow]}
-          >
-            <View style={[styles.optionIcon, on && styles.optionIconOn]}>
-              <Ionicons name={o.icon} size={17} color={on ? colors.brand : colors.textMuted} />
-            </View>
-            {/* The words own the hairline, so it starts at them, not at the icon. */}
-            <View style={[styles.optionBody, i > 0 && styles.rule]}>
-              <View style={styles.words}>
-                <Text style={styles.title}>{o.title}</Text>
-                <Text style={styles.line}>{o.line}</Text>
-              </View>
-              <View style={[styles.radio, on && styles.radioOn]}>
-                {on ? <Ionicons name="checkmark" size={13} color={colors.brandInk} /> : null}
-              </View>
-            </View>
-          </Pressable>
-        );
-      })}
-    </View>
+    <RisingSheet visible={visible} onClose={onClose} closeLabel="Close menu" sheetStyle={[styles.menu, { paddingBottom: bottom }]}>
+      <View style={styles.grabber} />
+      <Text style={styles.menuTitle}>Who sees it</Text>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
+        {AUDIENCES.map((o, i) => {
+          const on = o.value === value;
+          return (
+            <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${o.title}. ${lineOf(o.value, forFriends)}`}
+              onPress={() => { onClose(); if (!on) { haptics.tap(); onChange(o.value); } }}
+              style={({ pressed }) => [styles.menuRow, i > 0 && styles.rule, pressed && styles.pressedRow]}>
+              <Text style={[styles.menuName, on && styles.menuNameOn]}>{o.title}</Text>
+              {on ? <Ionicons name="checkmark" size={18} color={colors.brand} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </RisingSheet>
+  );
+}
+
+/** The row itself: the question left and the answer right with a ›, one more row of the Level / Players needed list. */
+export function AudienceSettingRow({ value, onOpen, forFriends = false }: { value: HitAudience; onOpen: () => void; forFriends?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Who sees it: ${nameOf(value)}. ${lineOf(value, forFriends)}`} accessibilityHint="Opens the choices"
+      onPress={() => { haptics.untap(); onOpen(); }} style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}>
+      <Text style={styles.settingTitle}>Who sees it</Text>
+      <View style={styles.settingValue}>
+        <Text style={styles.settingValueText} numberOfLines={1}>{nameOf(value)}</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+      </View>
+    </Pressable>
   );
 }
 
@@ -138,12 +149,12 @@ export function GroupsCard({ on, onChange, count }: { on: boolean; onChange: (on
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The grouped list: one white box on the page's soft shadow, the answers as rows inside it.
+  // My groups' card: one white box on the page's soft shadow.
   group: { ...lift, borderRadius: radius.lg, backgroundColor: colors.surface, overflow: 'hidden' },
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.md + 2 },
   optionBody: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingRight: spacing.md + 2, minHeight: 60 },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  // A small tile, quiet until its row is chosen, then the brand's pale tint.
+  // A small tile, quiet until the card is on, then the brand's pale tint.
   optionIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   optionIconOn: { backgroundColor: colors.brandDim },
   pressed: { opacity: PRESS_DIM },
@@ -151,8 +162,6 @@ const styleDefinitions = StyleSheet.create({
   words: { flex: 1, minWidth: 0, gap: 2 },
   title: { ...typography.body, ...font('600'), color: colors.text },
   line: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
-  radio: { width: 22, height: 22, borderRadius: radius.pill, borderWidth: 1.5, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
-  radioOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   faces: { gap: spacing.md, paddingVertical: 2, paddingRight: spacing.sm },
   face: { width: 60, alignItems: 'center', gap: 4 },
   ring: { padding: 2, borderRadius: 30, borderWidth: 2, borderColor: 'transparent' },
@@ -163,4 +172,16 @@ const styleDefinitions = StyleSheet.create({
   faceNameOn: { color: colors.text, ...font('600') },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   empty: { ...typography.small, color: colors.textMuted },
+  // The small menu, the MenuSheet's own sheet without its icons.
+  menu: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm },
+  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
+  menuTitle: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingBottom: spacing.sm },
+  menuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  menuName: { ...typography.body, color: colors.text },
+  menuNameOn: { ...font('600') },
+  // The "Who sees it" row, a row of the Level / Players needed list.
+  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48 },
+  settingTitle: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
+  settingValue: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  settingValueText: { ...typography.body, color: colors.textMuted },
 });
