@@ -20,6 +20,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, pageIsDark, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 // Why it didn't go through is said when it is tried, in the app's own note, so the row stays one line.
 const refusedNote = (why: string) => showToast({ title: 'Only you can see this session', body: why, icon: 'lock-closed-outline', long: true });
@@ -219,7 +220,7 @@ const styleDefinitions = StyleSheet.create({
   wait: { alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.xxl },
   none: { ...typography.body, color: colors.textMuted },
   // The session box: the logged session card's colours and court, 28 round, the clock its headline.
-  box: { borderRadius: 28, overflow: 'hidden', paddingHorizontal: 22, paddingTop: 20, paddingBottom: 22, gap: 6, minHeight: 210, justifyContent: 'space-between' },
+  box: { borderRadius: corner(28), overflow: 'hidden', paddingHorizontal: 22, paddingTop: 20, paddingBottom: 22, gap: 6, minHeight: 210, justifyContent: 'space-between' },
   boxTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 22 },
   boxEyebrow: { ...font('600'), fontSize: 11.5, letterSpacing: 1.1, flex: 1 },
   // A fixed size that fits the box up to '10:00:00' (sessions stop at 10 hours). Shrink-to-fit drew it as a dot on iPhone (Oct 7, owner).

@@ -12,6 +12,7 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { relativeTime } from '@/lib/format';
 import { confirm } from '@/lib/confirm';
 import { colors, radius, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Nothing is kept until the coach is switched on, so the screen says so. */
 export default function CoachMemoryRoute() {
@@ -113,7 +114,7 @@ function CoachMemoryScreen() {
 
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
-  card: { ...lift, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, gap: spacing.sm, marginBottom: spacing.lg },
+  card: { ...lift, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface, gap: spacing.sm, marginBottom: spacing.lg },
   cardTitle: { ...typography.smallStrong, color: colors.textMuted, paddingBottom: spacing.xs },
   error: { ...typography.small, color: colors.danger, textAlign: 'center', paddingBottom: spacing.sm },
   summary: { ...typography.body, color: colors.text, lineHeight: 22 },

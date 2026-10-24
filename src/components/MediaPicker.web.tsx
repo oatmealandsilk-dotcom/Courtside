@@ -14,6 +14,7 @@ import { framesAt } from '@/features/compose/frames';
 import { CoverPage } from './CoverPage';
 import { MediaThumb } from './MediaThumb';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 export type { PickedMedia, MediaPickerProps } from './MediaPicker';
 
@@ -490,7 +491,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
             // it gets narrower instead of cutting off the top and bottom, so the
             // whole picture shows, exactly as it will in the feed. About half
             // the screen tall at most, so the caption shows under it.
-            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(55vh * 16 / 9))' : `min(100%, calc(55vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), margin: '0 auto', borderRadius: 16, overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
+            style={{ position: 'relative', width: orientation === 'landscape' ? 'min(100%, calc(55vh * 16 / 9))' : `min(100%, calc(55vh * ${portraitRatio}))`, aspectRatio: orientation === 'landscape' ? '16 / 9' : String(portraitRatio), margin: '0 auto', borderRadius: corner(16), overflow: 'hidden', background: '#000', cursor: 'zoom-in' }}
             onClick={() => setExpanded(true)}
             role="button"
             tabIndex={0}
@@ -553,7 +554,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
                 playsInline
                 style={{
                   width: '100%', maxWidth: 320, aspectRatio: '9 / 16', maxHeight: 460,
-                  borderRadius: 14, background: '#000', objectFit: 'contain',
+                  borderRadius: corner(14), background: '#000', objectFit: 'contain',
                 }}
               />
             ) : value.uri ? (
@@ -562,7 +563,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
                 alt={describe(value)}
                 style={{
                   width: '100%', maxWidth: 320, maxHeight: 460,
-                  objectFit: 'contain', borderRadius: 14, background: '#000',
+                  objectFit: 'contain', borderRadius: corner(14), background: '#000',
                 }}
               />
             ) : null}
@@ -714,7 +715,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
 }
 
 const styleDefinitions = StyleSheet.create({
-  choice: { padding: 20, borderRadius: 18, backgroundColor: colors.surface, gap: 6 },
+  choice: { padding: 20, borderRadius: corner(18), backgroundColor: colors.surface, gap: 6 },
   dropzone: {
     borderWidth: 1,
     borderStyle: 'dashed',

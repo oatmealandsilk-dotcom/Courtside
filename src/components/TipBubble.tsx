@@ -5,6 +5,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from '
 import { tipWords, type TipKey } from '@/features/tips/tips';
 import { colors, font, pageIsDark } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /**
  * A just-in-time tip: a small dark bubble with one line, a little pointer,
@@ -77,7 +78,7 @@ const styleDefinitions = StyleSheet.create({
   // Inline: the room in the page, and the tip laid out at its top (not clipped, so its shadow is never cut off).
   room: { zIndex: 1 },
   inlineWrap: { position: 'absolute', left: 0, right: 0, top: 0, paddingVertical: 4, alignItems: 'center' },
-  bubble: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: 300, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 14, backgroundColor: INK, boxShadow: '0px 6px 20px rgba(0,0,0,0.25)' },
+  bubble: { flexDirection: 'row', alignItems: 'center', gap: 10, maxWidth: 300, paddingVertical: 10, paddingHorizontal: 14, borderRadius: corner(14), backgroundColor: INK, boxShadow: '0px 6px 20px rgba(0,0,0,0.25)' },
   text: { flexShrink: 1, color: '#FFFFFF', fontSize: 14, lineHeight: 19, ...font('500') },
   // Never squeezed onto two lines by a long tip.
   ok: { flexShrink: 0, color: '#A9D3B0', fontSize: 13, ...font('700') },

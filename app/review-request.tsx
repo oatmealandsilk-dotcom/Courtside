@@ -17,6 +17,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * "Ask for a review" (Oct 5, owner): a small sheet over something of yours
@@ -141,7 +142,7 @@ export default function ReviewRequestSheet() {
 }
 
 const styleDefinitions = StyleSheet.create({
-  target: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: 20, backgroundColor: colors.surface },
+  target: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: corner(20), backgroundColor: colors.surface },
   thumb: { width: 40, height: 50, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
   noThumb: { alignItems: 'center', justifyContent: 'center' },
   kind: { ...typography.smallStrong, color: colors.textMuted },
@@ -150,7 +151,7 @@ const styleDefinitions = StyleSheet.create({
   body: { ...typography.body, color: colors.text, lineHeight: 22 },
   count: { ...typography.small, color: colors.textFaint, marginTop: -spacing.md },
   error: { ...typography.small, color: colors.danger, ...font('500') },
-  status: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.brandDim },
+  status: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.brandDim },
   statusTitle: { ...typography.bodyStrong, color: colors.text },
   empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
   rules: { ...typography.smallStrong, color: colors.text, textAlign: 'center', textDecorationLine: 'underline', paddingVertical: spacing.xs },

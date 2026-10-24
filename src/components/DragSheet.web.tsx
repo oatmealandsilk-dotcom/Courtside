@@ -7,6 +7,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { setSidePanel } from '@/features/feed/sidePanel';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 import { CLOSE_MS, OPEN_MS_WEB, SIDE_MIN_WINDOW, SNAP_MS_WEB, currentY, getStage, glideSamples, onFrame, place as stagePlace, setFull, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
+import { corner } from '@/theme/look';
 
 const EASE = 'cubic-bezier(.22,.61,.36,1)';
 /** Apple's own sheet curve: a fast start that glides to rest, the web's stand-in for the phone's spring. */
@@ -187,7 +188,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
           backgroundColor: colors.bg,
           // The page behind is the same colour, and on a dark court the shadow all but vanishes: a faint edge keeps it a panel.
           border: `1px solid ${colors.border}`,
-          borderRadius: 22,
+          borderRadius: corner(22),
           overflow: 'hidden',
           boxShadow: '0 18px 50px rgba(0,0,0,0.22), 0 4px 14px rgba(0,0,0,0.10)',
           display: 'flex', flexDirection: 'column',
@@ -266,7 +267,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
           width: 'min(520px, calc(100% - 48px))',
           ...(fitContent ? { maxHeight: 'min(80vh, 720px)' } : { height: 'min(78vh, 680px)' }),
           backgroundColor: colors.bg,
-          borderRadius: 22,
+          borderRadius: corner(22),
           overflow: 'hidden',
           boxShadow: '0 24px 60px rgba(0,0,0,0.28), 0 4px 14px rgba(0,0,0,0.12)',
           display: 'flex', flexDirection: 'column',
@@ -481,7 +482,7 @@ function Sheet({
         style={{
           position: 'absolute', left: 0, right: 0, bottom: 0,
           backgroundColor: colors.bg,
-          borderTopLeftRadius: 24, borderTopRightRadius: 24,
+          borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24),
           overflow: 'hidden',
           boxShadow: '0 -10px 28px rgba(0,0,0,0.28)',
           display: 'flex', flexDirection: 'column',
@@ -821,7 +822,7 @@ function StageSheet({
         style={{
           position: 'absolute', left: 0, right: 0, bottom: 0,
           backgroundColor: colors.bg,
-          borderTopLeftRadius: 24, borderTopRightRadius: 24,
+          borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24),
           // On black rather than a dimmed page: a hairline edge keeps the dark themes' sheets reading as a card.
           borderTop: `0.5px solid ${colors.border}`, borderLeft: `0.5px solid ${colors.border}`, borderRight: `0.5px solid ${colors.border}`,
           boxSizing: 'border-box',

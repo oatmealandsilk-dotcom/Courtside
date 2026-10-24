@@ -9,6 +9,7 @@ import { voteCounts } from '@/components/VoteControls';
 import { Wash } from '@/components/Wash';
 import { useApp } from '@/store/AppContext';
 import { colors, font, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * A page in the feed while the app is young: early people say what they
@@ -75,7 +76,7 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   thanks: { ...typography.smallStrong, color: colors.success, paddingHorizontal: spacing.sm },
   // A quiet row onto the board, carrying its top tip.
-  board: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  board: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   boardPressed: { backgroundColor: colors.surface },
   score: { width: 34, alignItems: 'center' },
   scoreText: { fontSize: 15, ...font('600'), color: colors.brand, fontVariant: ['tabular-nums'] },

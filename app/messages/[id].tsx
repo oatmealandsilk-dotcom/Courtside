@@ -86,6 +86,7 @@ import * as haptics from '@/lib/haptics';
 import type { HitRequest, ID, Message, Post, Question, User } from '@/data/types';
 import Reanimated, { Easing, FadeIn, FadeInDown, FadeInUp, FadeOut, ZoomIn, cancelAnimation, runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { BlurView } from 'expo-blur';
+import { corner } from '@/theme/look';
 
 /** The held message's blur, its strength moved on the animation thread (see the hold menu). */
 const AnimatedBlurView = Reanimated.createAnimatedComponent(BlurView);
@@ -2777,7 +2778,7 @@ const styleDefinitions = StyleSheet.create({
   bubble: {
     paddingHorizontal: 12,
     paddingVertical: 7,
-    borderRadius: 18,
+    borderRadius: corner(18),
   },
   // Yours in the court's colour (deepened where its ink needed it); theirs a shade deeper than the page,
   // with no outline. Round all over on their own; in a run (Instagram's rule) the corners on the sender's
@@ -2973,7 +2974,7 @@ const styleDefinitions = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-end',
     minHeight: 46,
-    borderRadius: 23,
+    borderRadius: corner(23),
     backgroundColor: colors.surface,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: `${colors.borderStrong}77`,

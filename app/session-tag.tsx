@@ -20,6 +20,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { brandBoxShadow } from '@/theme/fillMode';
+import { corner } from '@/theme/look';
 
 /** How long an alert opened on a slow connection waits for your tags before saying they couldn't be loaded. */
 const GIVE_UP_MS = 10_000;
@@ -260,7 +261,7 @@ const styleDefinitions = StyleSheet.create({
   notice: { ...typography.bodyStrong, color: colors.text },
   hint: { ...typography.small, color: colors.textMuted, marginTop: -spacing.sm },
   // Who tagged you: the sheet's white card on a soft shadow.
-  who: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, paddingRight: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  who: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, paddingRight: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   whoWords: { flex: 1, minWidth: 0, gap: 2 },
   whoName: { ...typography.body, ...font('600'), color: colors.text },
   whoSub: { ...typography.small, color: colors.textMuted },

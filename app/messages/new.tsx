@@ -22,6 +22,7 @@ import { useApp, type GroupOutcome } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 
 /**
@@ -423,7 +424,7 @@ const FOOTER_REST = { opacity: 1, transform: [{ translateY: 0 }] };
 const styleDefinitions = StyleSheet.create({
   // Dark and blurred behind the box, so the inbox recedes instead of reading as a second copy of the list.
   backdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.overlay, padding: spacing.xl, backdropFilter: 'blur(10px) saturate(0.8)', WebkitBackdropFilter: 'blur(10px) saturate(0.8)' } as object,
-  box: { ...lift, width: '100%', maxWidth: 480, height: '72%', maxHeight: 640, borderRadius: 20, backgroundColor: colors.bg, overflow: 'hidden' },
+  box: { ...lift, width: '100%', maxWidth: 480, height: '72%', maxHeight: 640, borderRadius: corner(20), backgroundColor: colors.bg, overflow: 'hidden' },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.lg, minHeight: 52, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headSide: { width: 32, alignItems: 'flex-end' },
   title: { ...typography.bodyStrong, color: colors.text },

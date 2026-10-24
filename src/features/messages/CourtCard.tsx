@@ -11,6 +11,7 @@ import { formatMiles, milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { colors, font, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /**
  * The card's width, and its map's height: a slim strip of map, so a court
@@ -94,7 +95,7 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, joinTop = f
 
 const styleDefinitions = StyleSheet.create({
   card: {
-    borderRadius: 18,
+    borderRadius: corner(18),
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     backgroundColor: colors.surface,

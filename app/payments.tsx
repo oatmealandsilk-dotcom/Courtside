@@ -10,6 +10,7 @@ import { statusLabel, usePaidBooking } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Every coaching booking you have paid for, with what it cost and whether
@@ -68,7 +69,7 @@ export default function Payments() {
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   total: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   words: { flex: 1, gap: 2, minWidth: 0 },

@@ -22,6 +22,7 @@ import { openBookingCount, studioSetup, waitingQuestionCount } from '@/features/
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 // New services are live lessons only: the one kind Apple lets the app take card payments for (see PAID_KINDS).
 // A service of another kind made before Oct 5 can still be opened and edited as it is.
@@ -531,7 +532,7 @@ function SaveButton({ state, onPress }: { state: SaveState; onPress: () => void 
 
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   cardTitle: { ...typography.heading, color: colors.text },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { opacity: PRESS_DIM },

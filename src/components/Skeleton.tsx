@@ -3,6 +3,7 @@ import { Animated, Easing, StyleSheet, View, type DimensionValue, type StyleProp
 
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Grey outlines of what is about to appear, breathing gently while it loads,
@@ -108,5 +109,5 @@ const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 2, justifyContent: 'space-between' },
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
-  card: { gap: 12, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  card: { gap: 12, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
 });

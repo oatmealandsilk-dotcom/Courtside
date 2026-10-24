@@ -79,6 +79,7 @@ import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
+import { corner } from '@/theme/look';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 /** What a session was, the log sheet's three. */
@@ -1808,7 +1809,7 @@ function Compose() {
 
 const styleDefinitions = StyleSheet.create({
   choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  choiceSheet: { width: '100%', maxWidth: 400, borderRadius: 24, padding: 20, gap: 12, backgroundColor: colors.bg },
+  choiceSheet: { width: '100%', maxWidth: 400, borderRadius: corner(24), padding: 20, gap: 12, backgroundColor: colors.bg },
   choiceSheetTight: { padding: 16, gap: 10 },
   // Only the choices scroll, and only when the box is held shorter than they are.
   choiceScroll: { flexGrow: 0, flexShrink: 1 },
@@ -1816,7 +1817,7 @@ const styleDefinitions = StyleSheet.create({
   choiceListTight: { gap: 8 },
   choiceHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 8 },
   choiceTitle: { fontSize: 22, ...font('700'), color: colors.text },
-  choiceOption: { padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface },
+  choiceOption: { padding: 20, gap: 8, borderRadius: corner(18), backgroundColor: colors.surface },
   choiceOptionTight: { paddingVertical: 14, paddingHorizontal: 16, gap: 5 },
   choiceOptionTighter: { paddingVertical: 12, gap: 4 },
   choiceChallenge: { borderWidth: 1, borderColor: colors.brand },

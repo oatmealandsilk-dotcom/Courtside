@@ -11,6 +11,7 @@ import { weekRange } from '@/features/recap/recap';
 import { RECORD_ICON, RECORD_LABEL, recordValue } from '@/features/records/records';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** A record set in the last week wears gold: the one to be proud of now. */
 const FRESH_DAYS = 7;
@@ -151,8 +152,8 @@ const styleDefinitions = StyleSheet.create({
   only: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   onlyText: { ...typography.small, color: colors.textMuted },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  tile: { ...lift, flexGrow: 1, flexBasis: '45%', minWidth: 140, borderRadius: 18, backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 12, gap: 4, borderWidth: 1.5, borderColor: 'transparent' },
-  tileLike: { ...lift, borderRadius: 18, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
+  tile: { ...lift, flexGrow: 1, flexBasis: '45%', minWidth: 140, borderRadius: corner(18), backgroundColor: colors.surface, paddingHorizontal: 14, paddingVertical: 12, gap: 4, borderWidth: 1.5, borderColor: 'transparent' },
+  tileLike: { ...lift, borderRadius: corner(18), backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
   // One line, always the same height, so the numbers of two tiles side by side line up.
   tileHead: { flexDirection: 'row', alignItems: 'center', gap: 5, height: 18 },
   tileLabel: { ...typography.small, ...font('500'), color: colors.textMuted, flexShrink: 1 },

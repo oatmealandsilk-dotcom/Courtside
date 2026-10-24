@@ -39,6 +39,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
   { value: 'practice', label: 'Practice' },
@@ -729,7 +730,7 @@ const styleDefinitions = StyleSheet.create({
   secondText: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   pressed: { opacity: PRESS_DIM },
   // The tracker's sessions waiting to be logged, as Your sessions lists them: how long, big, with the tracker's tag; what; the day and times.
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
   pickRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: 14 },
   pickLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pickIcon: { width: 22, height: 32, alignItems: 'center', justifyContent: 'center' },

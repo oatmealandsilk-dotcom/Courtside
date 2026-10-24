@@ -11,6 +11,7 @@ import { Wash } from '@/components/Wash';
 import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 import { useAndroidBack } from '@/lib/androidBack';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
+import { corner } from '@/theme/look';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Out of the way fast: a quick ease-in, the way a card is tossed down. */
@@ -612,7 +613,7 @@ const styleDefinitions = StyleSheet.create({
   sheet: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
     backgroundColor: colors.bg,
-    borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24),
     overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 28, shadowOffset: { width: 0, height: -10 }, elevation: 16,
   },

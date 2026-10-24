@@ -23,6 +23,7 @@ import { TextScale, oneLine } from '@/theme/textScale';
 import { courtLink, shareLink } from '@/lib/shareLink';
 import { courtShareText, hitShareText, postShareText, profileShareText, questionShareText } from '@/features/share/shareText';
 import { isMapCourtId } from '@/features/places/courtName';
+import { corner } from '@/theme/look';
 
 /**
  * Instagram's Send sheet, CourtSide's way (Oct 22, owner picked B): a
@@ -515,7 +516,7 @@ const styleDefinitions = StyleSheet.create({
   fallback: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   bar: { paddingTop: spacing.sm, paddingHorizontal: spacing.lg, gap: spacing.md },
   note: {
-    ...typography.body, color: colors.text, backgroundColor: colors.surfaceAlt, borderRadius: 20,
+    ...typography.body, color: colors.text, backgroundColor: colors.surfaceAlt, borderRadius: corner(20),
     paddingHorizontal: 16, paddingTop: 10, paddingBottom: 10, textAlignVertical: 'center',
     ...(Platform.OS === 'web' ? ({ outlineStyle: 'none', resize: 'none' } as object) : {}),
   },

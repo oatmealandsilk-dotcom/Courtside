@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { TextScale, colors, oneLine, radius, spacing, typography } from '@/theme';
+import { trackCorner } from '@/theme/look';
 
 export interface Segment<T extends string> {
   value: T;
@@ -132,7 +133,7 @@ const styleDefinitions = StyleSheet.create({
   track: {
     flexDirection: 'row',
     backgroundColor: colors.surface,
-    borderRadius: radius.pill,
+    borderRadius: trackCorner(TRACK_PAD),
     borderWidth: 1,
     borderColor: colors.border,
     padding: TRACK_PAD,
@@ -144,7 +145,7 @@ const styleDefinitions = StyleSheet.create({
     flex: 1,
     paddingVertical: 9,
     paddingHorizontal: spacing.sm,
-    borderRadius: radius.pill,
+    borderRadius: radius.chip,
     alignItems: 'center',
   },
   segmentLarge: { paddingVertical: 12 },
@@ -156,7 +157,7 @@ const styleDefinitions = StyleSheet.create({
   segmentLoose: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', minWidth: 64, paddingHorizontal: spacing.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   segmentActive: { backgroundColor: colors.brand, borderColor: colors.brand },
   // Sits where the first segment sits, the track's padding in from its inner edge, on a phone and in a browser alike.
-  glider: { position: 'absolute', left: TRACK_PAD, top: TRACK_PAD, borderRadius: radius.pill, backgroundColor: colors.brand },
+  glider: { position: 'absolute', left: TRACK_PAD, top: TRACK_PAD, borderRadius: radius.chip, backgroundColor: colors.brand },
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
   labelLarge: { ...typography.bodyStrong },

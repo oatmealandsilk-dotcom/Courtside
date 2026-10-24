@@ -128,7 +128,7 @@ const ThemeCard = memo(function ThemeCard({ option, active, onPick, styles, fade
       <Animated.View style={[styles.card, cardStyle]}>
         <FadeSpot store={fade} render={(layers) => layers.map((layer) => <FadeFill key={layer.key} op={layer.op} color={themes[layer.theme].surface} radius={radius.lg} testID="theme-fade-card" />)} />
         <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
-          <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} />
+          <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} swatch />
         </View>
         <View style={styles.words}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{option.label}</Text>

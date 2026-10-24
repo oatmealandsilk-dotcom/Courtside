@@ -28,6 +28,7 @@ import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -324,7 +325,7 @@ const styleDefinitions = StyleSheet.create({
   sectionNote: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm },
   // Borderless grouped list: the list is a shade off the page, rows are separated by hairlines that start past the icons.
   // Flatter than the app's usual lift: a settings list should sit on the page, not float (Oct 2).
-  card: { boxShadow: '0px 1px 3px rgba(42, 36, 24, 0.05)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { boxShadow: '0px 1px 3px rgba(42, 36, 24, 0.05)', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
   rowPressed: { backgroundColor: colors.surfaceAlt },
   lead: { width: 26, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },

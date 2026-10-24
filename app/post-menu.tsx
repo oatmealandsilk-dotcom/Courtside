@@ -31,6 +31,7 @@ import { useOpenOutside } from '@/features/share/openOutside';
 import { useAndroidBack } from '@/lib/androidBack';
 import { useDemotedPosts } from '@/features/feed/demoted';
 import type { Post, Story } from '@/data/types';
+import { corner } from '@/theme/look';
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -569,7 +570,7 @@ const styleDefinitions = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
   // A drag with a mouse moves the sheet rather than selecting its words.
   // A drag moves the whole sheet (its transform), centred and capped on a wide window, so pulling it down still closes it there.
-  sheet: { width: '100%', maxWidth: SHEET_MAX_W, alignSelf: 'center', backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: spacing.md, userSelect: 'none' },
+  sheet: { width: '100%', maxWidth: SHEET_MAX_W, alignSelf: 'center', backgroundColor: colors.bg, borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24), paddingHorizontal: spacing.md, userSelect: 'none' },
   // The same grabber as the comments sheet's, in a strip a finger can find.
   grabberStrip: { height: 24, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   grabber: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong },
@@ -589,9 +590,9 @@ const styleDefinitions = StyleSheet.create({
   glyph: { width: 22, alignItems: 'center' },
   rowPressed: { backgroundColor: colors.surfaceAlt },
   // The Instagram overlay's hidden copy, clipped to the sheet, and the sheet-coloured cover over it (the rows draw on top).
-  stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  stickerClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden', borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24) },
   stickerStage: { position: 'absolute', left: 0, bottom: 0 },
-  stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  stickerCover: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.bg, borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24) },
   label: { ...font('500'), fontSize: 16, letterSpacing: -0.1, color: colors.text },
   labelDanger: { color: colors.danger },
   note: { ...typography.small, color: colors.textMuted },

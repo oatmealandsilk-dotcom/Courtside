@@ -10,6 +10,7 @@ import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { relativeTime } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** For a coach: every open question, the ones with no reply yet at the top. */
 export default function CoachInbox() {
@@ -52,7 +53,7 @@ export function QuestionsPanel() {
 
 const styleDefinitions = StyleSheet.create({
   // The same grouped card as the bookings, so the studio's tabs read alike.
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   title: { ...typography.bodyStrong, color: colors.text },

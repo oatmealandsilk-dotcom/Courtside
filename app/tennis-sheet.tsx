@@ -16,6 +16,7 @@ import { showUndo } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 type Kind = 'limit' | 'goal' | 'achievements';
 type IconName = keyof typeof Ionicons.glyphMap;
@@ -216,7 +217,7 @@ function Sheet({ kind, id }: { kind: Kind; id?: string }) {
 const styleDefinitions = StyleSheet.create({
   grid: { paddingTop: spacing.xs },
   menuBody: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xxl },
-  options: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  options: { borderRadius: corner(16), backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.lg, minHeight: 54 },
   optionLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   optionText: { ...typography.body, ...font('500'), color: colors.text },

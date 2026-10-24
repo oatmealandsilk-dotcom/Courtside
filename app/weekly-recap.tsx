@@ -21,6 +21,7 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
@@ -153,7 +154,7 @@ const styleDefinitions = StyleSheet.create({
   wait: { paddingTop: spacing.xxl, alignItems: 'center' },
   body: { gap: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xxl },
   // A rest week's card.
-  rest: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
+  rest: { ...lift, borderRadius: corner(24), backgroundColor: colors.surface, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   restDisc: { width: 56, height: 56, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
   restTitle: { ...font('600'), fontSize: 22, letterSpacing: -0.3, color: colors.text, marginTop: spacing.xs },
   restLine: { ...typography.body, color: colors.textMuted, textAlign: 'center' },

@@ -7,6 +7,7 @@ import { Toggle } from '@/components/ui';
 import * as haptics from '@/lib/haptics';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * "Who can join" as two big cards you tap, the way Strava asks whether a
@@ -84,7 +85,7 @@ const styleDefinitions = StyleSheet.create({
   list: { gap: spacing.sm },
   card: {
     ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 76,
-    paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20,
+    paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20),
     backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.surface,
   },
   cardOn: { borderColor: colors.brand },

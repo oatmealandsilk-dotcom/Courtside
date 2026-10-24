@@ -13,6 +13,7 @@ import { shownStreak, streakLabel } from '@/features/practice/streakFlame';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * "Friends on a streak" (owner, Oct 5: "go for streak board"), at the foot
@@ -101,7 +102,7 @@ export function FriendsOnStreak() {
 
 const styleDefinitions = StyleSheet.create({
   // The same card as the recap's highlights above it.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', marginTop: spacing.lg },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', marginTop: spacing.lg },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   label: { ...typography.caption, fontSize: 12, letterSpacing: 1.4, color: colors.brand },
   headNote: { ...typography.small, color: colors.textMuted, flexShrink: 1 },

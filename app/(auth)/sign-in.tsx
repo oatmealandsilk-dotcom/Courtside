@@ -31,6 +31,7 @@ import { Welcome } from '@/features/welcome/Welcome';
 import { buttonShape, colors, lift, radius, spacing, typography, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { preloadNearbyMap } from '@/components/NearbyMap';
+import { corner } from '@/theme/look';
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -701,7 +702,7 @@ const styleDefinitions = StyleSheet.create({
   invitedHandle: { ...typography.bodyStrong, fontSize: 16, lineHeight: 23, color: colors.text },
   // Each remembered account is its own soft card, like the app's own cards.
   accounts: { gap: spacing.md },
-  account: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14, borderRadius: 20, backgroundColor: colors.surface },
+  account: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: spacing.lg, paddingVertical: 14, borderRadius: corner(20), backgroundColor: colors.surface },
   accountName: { ...typography.bodyStrong, fontSize: 16, color: colors.text },
   accountMeta: { ...typography.small, color: colors.textMuted },
   go: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },

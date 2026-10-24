@@ -11,6 +11,7 @@ import { Collapse } from '@/components/ui/Collapse';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Your record against this player, on their profile (Oct 4, owner;
@@ -69,7 +70,7 @@ export function HeadToHeadCard({ userId, name }: { userId: ID; name: string }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface },
+  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: corner(20), backgroundColor: colors.surface },
   // The space under the card, inside the fold, so it opens and closes with it.
   gap: { paddingBottom: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 2 },
