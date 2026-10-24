@@ -10,6 +10,10 @@ export const lightColors = {
   // sign to people without the app, so it is always our green, as Strava's is always its orange.
   brandBright: '#7ED492',
   court: '#527C56', clay: '#A06F53', hard: '#3E6982', grass: '#748360',
+  // What a court is played on, as a colour (Courts near you): blue hard, terracotta clay, green grass, and the
+  // court's own colour for anything else. The same on every light court (hard, clay and grass above wear the
+  // court's theme: London's hard is purple, New York's grass blue), deep enough for white letters on them.
+  surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#4F7A53',
   info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
   // Two colours only for decoration (a group's face), never for a warning or
   // an error, so a gold or rose group never reads as something gone wrong.

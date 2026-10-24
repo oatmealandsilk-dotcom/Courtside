@@ -228,7 +228,7 @@ export function courtRows(courts: Court[], from: LatLng | null): CourtRow[] {
     const name = plain(row.c.name);
     const same = byName.get(name)?.find((kept) => milesBetween(kept.c, row.c) <= 1.5);
     if (same) {
-      same.c = { ...same.c, count: same.c.count + row.c.count, lit: same.c.lit || row.c.lit || undefined };
+      same.c = { ...same.c, count: same.c.count + row.c.count, lit: same.c.lit || row.c.lit || undefined, surface: same.c.surface ?? row.c.surface };
       continue;
     }
     const kept = { ...row };
