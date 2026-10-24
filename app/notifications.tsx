@@ -290,10 +290,14 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
  * gives ("Run · 32 min · …"), so it is said once. Undefined while it is still
  * waiting, or not held here: the row reads as the alert did.
  */
-function activityNow(a: DetectedActivity | undefined): { who: string; verb: string; opens: boolean } | undefined {
+function activityNow(a: DetectedActivity | undefined, auto = false): { who: string; verb: string; opens: boolean } | undefined {
   if (!a) return undefined;
   const what = isTennisActivity(a) ? 'Tennis' : 'Activity';
+  // Logged for you by the server, privately (migration 185): the tap opens its post page.
+  if (a.status === 'logged' && auto) return { who: 'Tennis logged.', verb: 'Only you can see it. Tap to add the score or post it.', opens: true };
   if (a.status === 'logged') return { who: `${what} logged.`, verb: 'Tap to post it.', opens: true };
+  // The tracker only said "Sport" (Fitbit, migration 185).
+  if (a.status === 'new' && a.unsure) return { who: 'Was this tennis?', verb: 'Tap to log it.', opens: true };
   if (a.status === 'dismissed') return { who: `${what} detected.`, verb: 'You hid it.', opens: false };
   if (a.status === 'withdrawn') return { who: `${what} detected.`, verb: 'No longer on your tracker.', opens: false };
   return undefined;
@@ -301,7 +305,10 @@ function activityNow(a: DetectedActivity | undefined): { who: string; verb: stri
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions } = useApp();
+  // Tracker sessions the server logged for you (migration 185), by the tracker session's id.
+  const autoLogged = useMemo(() => new Set(sessions.filter((x) => x.autoLogged && x.activityId).map((x) => x.activityId!)), [sessions]);
+  const nowOf = (a: DetectedActivity | undefined) => activityNow(a, !!a && autoLogged.has(a.id));
   // Each person and post by id, once: every row looks its people and its post up several times, and
   // searching the whole list each time was slow to open (Oct 10, owner: "the buttons like the settings.
   // msg notifications, etc respond too slow"). The first of any id wins, as searching found it.
@@ -416,7 +423,7 @@ export default function Notifications() {
     if (group.kind === 'group-invite') return group.preview ? `invited you to ${group.preview}` : VERB['group-invite'];
     // A workout you have since logged (the tap opens the post for it), hidden or gone: no longer "Tap to log it".
     if (group.kind === 'activity') {
-      const now = activityNow(detectedActivities.find((a) => a.id === group.targetId));
+      const now = nowOf(detectedActivities.find((a) => a.id === group.targetId));
       if (now) return now.verb;
     }
     // "Your week on court 6h 15m, 4 sessions — up 2h. Best streak yet.": the server's line, as the phone alert said it.
@@ -622,7 +629,7 @@ export default function Notifications() {
                 : group.kind === 'review-request' ? reviewAsk(group.preview).who
                 : group.kind === 'weekly-recap' ? 'Your week on court'
                 : group.found ? `${foundTitle(group.found.activityIds.length, allTennis(group.found.activityIds, group.found.previews, detectedActivities))}.`
-                : group.kind === 'activity' ? (activityNow(activity)?.who ?? detectedWho(group.preview, activity?.sport))
+                : group.kind === 'activity' ? (nowOf(activity)?.who ?? detectedWho(group.preview, activity?.sport))
                 : rest.length === 0
                 ? nameOf(first)
                 : rest.length === 1
@@ -630,7 +637,7 @@ export default function Notifications() {
                   : `${nameOf(first)}, ${nameOf(rest[0])} and ${rest.length - 1} ${rest.length - 1 === 1 ? 'other' : 'others'}`;
             const heading = index === 0 || groups[index - 1].section !== group.section ? group.section : null;
             // A hidden session (or one gone from the tracker) has nothing to open: the row stays, as a record of the alert.
-            const dead = group.kind === 'activity' && activityNow(activity)?.opens === false;
+            const dead = group.kind === 'activity' && nowOf(activity)?.opens === false;
             const thumb = thumbFor(group);
             const hitChat = hitChatFor(group);
             const tag = tagFor(group);

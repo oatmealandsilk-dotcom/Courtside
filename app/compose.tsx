@@ -198,7 +198,11 @@ function Compose() {
    */
   const [fromLive] = useState(() => (params.live === '1' && !params.activity && liveSession && liveSession.userId === currentUserId && liveState(liveSession) === 'finished' ? liveSession : null));
   const flagsOn = useTennisFlags();
-  const [liveTwins] = useState(() => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, { me: currentUserId, flags: flagsOn }) : {}));
+  const [liveTwins] = useState(() => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, {
+    me: currentUserId, flags: flagsOn,
+    // Logged for you by the server and not posted (migration 185): still this live session's to post.
+    autoIds: new Set(sessions.filter((x) => x.autoLogged && x.activityId && !posts.some((p) => p.authorId === currentUserId && p.session?.sessionId === x.id)).map((x) => x.activityId!)),
+  }) : {}));
   // The live session with no tracker copy waiting: logged from here by hand, with the clock's time.
   const liveOnly = !!fromLive && !liveTwins.waiting;
   const liveMins = fromLive ? liveMinutes(fromLive) : 0;
@@ -947,6 +951,12 @@ function Compose() {
     if (!added) { slideAway(); return; }
     confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: slideAway });
   };
+  // Keep private (logged for you already): closes, and a live session it came from is done with.
+  const keepPrivate = () => {
+    const go = () => { liveLogged(); slideAway(); };
+    if (!added) { go(); return; }
+    confirm({ title: 'Discard post?', message: 'The session stays in your log, private.', confirmLabel: 'Discard', destructive: true, onConfirm: go });
+  };
   const hideIt = () => {
     // From Finish: the live session thrown away, asked first (a tracker's copy of it stays waiting, as it was).
     if (fromLive) {
@@ -1632,7 +1642,7 @@ function Compose() {
               ticked={ticked}
               error={logError}
               // Logged for you already: Keep private just closes (asked first when something was written or added).
-              onJustLog={autoOpen ? leaveLog : justLog}
+              onJustLog={autoOpen ? keepPrivate : justLog}
               onShare={submit}
               shareDisabled={!(opened || liveOnly) || !postsChecked}
               label="Post session"

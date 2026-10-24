@@ -1431,6 +1431,37 @@ const STEPS = [
     },
   },
   {
+    // Oct 24 (migration 185): a tracker's tennis the server logged for you, privately. Your sessions says
+    // "Logged for you" with a "Not tennis? Remove" (asked first; Cancel here, so nothing is removed), and its
+    // Post it opens the post page: "Logged privately · only you see it", the kind chips, Keep private and
+    // Not tennis? Remove. Closed again, nothing posted.
+    name: 'auto-logged',
+    title: 'A session logged for you: Not tennis? Remove, and its post page',
+    async run(page) {
+      await page.tap({ label: 'Profile' });
+      await page.tap({ label: /tennis profile\./ });
+      await page.reveal({ label: 'See all your sessions' });
+      await page.tap({ label: 'See all your sessions' });
+      await page.reveal({ label: /^Not tennis\? Remove: / });
+      await page.waitFor({ text: /Logged for you/ });
+      await page.tap({ label: /^Not tennis\? Remove: / });
+      await page.waitFor({ text: 'It comes off your streak and totals, and won’t come back.' });
+      await page.tap({ label: 'Cancel' });
+      await page.gone({ text: 'It comes off your streak and totals, and won’t come back.' });
+      // Its own Post it, in the same row as its Not tennis? link.
+      await page.tap({ css: 'div:has(> [aria-label^="Not tennis? Remove: "]) [aria-label^="Post it: "]' });
+    },
+    expect: [{ text: 'Logged privately · only you see it' }, { text: 'Keep private' }, { label: 'Not tennis? Remove this session' }, { text: 'Post session' }],
+    after: async (page) => {
+      await page.tap({ text: 'Keep private' });
+      await page.gone({ text: 'Logged privately · only you see it' });
+      await page.waitFor({ label: /^Not tennis\? Remove: / });
+      await page.tap({ label: 'Go back' });
+      await page.tap({ label: 'Community' });
+      await page.waitFor({ label: 'Community' });
+    },
+  },
+  {
     // Strava's share after posting (Oct 15): a session posted from Your sessions ("Post it") opens the Share
     // session screen by itself, and Done goes back to the feed it landed on. Last, since it adds a post.
     name: 'post-session-share',

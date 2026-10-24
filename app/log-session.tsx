@@ -666,6 +666,10 @@ function LogSession() {
           {fresh ? null : (
             <Section title="When">
               <DayPicker value={playedOn} onChange={setPlayedOn} />
+              {/* Your tracker's session that day is in your log already (logged for you, migration 185): logging it again counts it twice. */}
+              {sessions.some((x) => x.userId === currentUserId && x.autoLogged && x.day === playedOn)
+                ? <Text style={styles.hint}>Your tracker already logged a session this day. Add the score to that one in Your sessions.</Text>
+                : null}
             </Section>
           )}
           {/* Optional, at the foot, folded away (Oct 8, owner): the two taps to log stay two taps. */}

@@ -42,7 +42,8 @@ const W_MIRA_3 = weekAgo(3, 1);
 export const demoSessions: PracticeSession[] = [
   // Two tiebreaks (Oct 10): the first set's, 7-6(5), and a match tiebreak instead of a third set, so the demo shows "7–6(5) 3–6 (10–7)".
   { id: 'ses-demo-1', userId: CURRENT_USER_ID, day: dayAgo(1), minutes: 90, kind: 'match', won: true, sets: [[7, 6, 5], [3, 6], [10, 7]], note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(1, 20) },
-  { id: 'ses-demo-2', userId: CURRENT_USER_ID, day: dayAgo(2), minutes: 62, kind: 'practice', activityId: 'act-demo-2', createdAt: loggedAt(2, 19) },
+  // Logged for you by the server from the Watch's session (migration 185, Oct 24): "Logged for you · Apple Watch", Not tennis? Remove.
+  { id: 'ses-demo-2', userId: CURRENT_USER_ID, day: dayAgo(2), minutes: 62, kind: 'practice', activityId: 'act-demo-2', autoLogged: true, createdAt: loggedAt(2, 19) },
   // Mira retired at 3-1 in the second (the ScoreBoard's "ret.", Oct 22).
   { id: 'ses-demo-10', userId: CURRENT_USER_ID, day: dayAgo(3), minutes: 75, kind: 'match', won: true, sets: [[6, 3], [3, 1]], ended: { how: 'retired', side: 1 }, note: 'At Alder Park', courtId: at(1), createdAt: loggedAt(3, 19) },
   { id: 'ses-demo-3', userId: CURRENT_USER_ID, day: dayAgo(4), minutes: 45, kind: 'drills', createdAt: loggedAt(4, 8) },

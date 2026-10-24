@@ -52,7 +52,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, autoLogLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
@@ -170,6 +170,13 @@ export default function Settings() {
           label: appleAllAlerts || whoopAllAlerts ? 'Workouts' : 'Tennis sessions',
           detail: `From ${alertSourceWords}`,
           toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) },
+        }] : []),
+        // Oct 24 (migration 185): your tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows.
+        ...(activityAlerts && autoLogLive ? [{
+          icon: 'checkmark-done-outline' as const,
+          label: 'Log tennis automatically',
+          detail: 'Private until you post it · keeps your streak',
+          toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
         }] : []),
         // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
         { icon: 'stats-chart-outline' as const, label: 'Weekly recap', detail: 'Mondays at 8am: your week on court', toggle: { value: prefs.pushRecap, onChange: (v: boolean) => actions.setPref('pushRecap', v) } },

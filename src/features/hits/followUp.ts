@@ -71,9 +71,12 @@ export function dueHits(hits: HitRequest[], { me, sessions, activities, flags, a
       if (end > now || now - end > STALE_MS) return false;
       const day = localDay(h.startsAt);
       if (!days.includes(day)) return false;
-      if (trackerFor(h, { me, activities, flags })?.status === 'logged') return false;
+      const tracked = trackerFor(h, { me, activities, flags });
+      // Logged by the server for you (migration 185) is still yours to fill in: asked, and the tap opens its post page.
+      const auto = tracked?.status === 'logged' ? sessions.find((s) => s.id === tracked.sessionId && s.autoLogged) : undefined;
+      if (tracked?.status === 'logged' && !auto) return false;
       if (liveCovers(h, live, me, now)) return false;
-      return !sessions.some((s) => s.userId === me && s.day === day && Date.parse(s.createdAt) >= Date.parse(h.startsAt));
+      return !sessions.some((s) => s.userId === me && s.day === day && s !== auto && Date.parse(s.createdAt) >= Date.parse(h.startsAt));
     })
     .sort((a, b) => b.startsAt.localeCompare(a.startsAt));
 }

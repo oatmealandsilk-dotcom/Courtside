@@ -223,11 +223,14 @@ const cover = (span: { from: number; to: number }, a: DetectedActivity) => Math.
  * log: the sheet says so, as saving again would count the same game twice.
  * Tennis only, as for a hit: a run that morning is not the session.
  */
-export function liveTracker(s: LiveSession, activities: DetectedActivity[], { me, flags, now = Date.now() }: { me: ID; flags: TennisFlags; now?: number }): { waiting?: DetectedActivity; logged?: DetectedActivity } {
+export function liveTracker(s: LiveSession, activities: DetectedActivity[], { me, flags, now = Date.now(), autoIds }: { me: ID; flags: TennisFlags; now?: number; autoIds?: Set<ID> }): { waiting?: DetectedActivity; logged?: DetectedActivity } {
   const span = liveSpan(s, now);
   const same = activities.filter((a) => a.userId === me && isTennisActivity(a) && sourceOn(a, flags) && sameGame(span, a));
   const fullest = (list: DetectedActivity[]) => [...list].sort((x, y) => cover(span, y) - cover(span, x))[0];
-  return { waiting: fullest(same.filter((a) => a.status === 'new')), logged: fullest(same.filter((a) => a.status === 'logged')) };
+  // One the server logged for you and nobody posted (`autoIds`, migration 185) is still waiting for
+  // you: Finish opens its post page, never a second log of the same game.
+  const auto = (a: DetectedActivity) => a.status === 'logged' && !!autoIds?.has(a.id);
+  return { waiting: fullest(same.filter((a) => a.status === 'new' || auto(a))), logged: fullest(same.filter((a) => a.status === 'logged' && !auto(a))) };
 }
 
 /* ------------------------------------------------ "Still playing?" */

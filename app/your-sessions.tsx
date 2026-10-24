@@ -326,8 +326,10 @@ export default function YourSessions() {
                 const share = () => router.push({ pathname: '/share-session', params: postId ? { post: postId, session: s.id } : { session: s.id } });
                 // Where it came from, on the day's line: the tracker's name ("WHOOP"), or who shared it with you. Logged
                 // by hand is the usual, so it says nothing. A tag copy whose title already names them says it once.
-                const source = s.fromSessionId ? (people ? '' : fromFirst ? `with ${fromFirst}` : 'Shared with you')
+                const tracked = s.fromSessionId ? (people ? '' : fromFirst ? `with ${fromFirst}` : 'Shared with you')
                   : pick.type === 'tracker' ? pickSource(pick) : s.activityId ? 'Tracker' : '';
+                // Logged for you by the server, privately (migration 185): "Logged for you · WHOOP".
+                const source = s.autoLogged ? `Logged for you${tracked ? ` · ${tracked}` : ''}` : tracked;
                 return (
                   <FoldAway key={s.id} gone={leaving.has(s.id)}>
                   <Logged
@@ -348,6 +350,8 @@ export default function YourSessions() {
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
                     onShare={share}
                     onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => removeSession(s.id) })}
+                    // Logged for you and not posted: the undo in plain sight (it never comes back to To do).
+                    onNotTennis={s.autoLogged && !postId ? () => confirm({ title: 'Not tennis?', message: 'It comes off your streak and totals, and won’t come back.', confirmLabel: 'Remove', destructive: true, onConfirm: () => removeSession(s.id) }) : undefined}
                     line={i > 0}
                     record={recordIds.has(s.id)}
                     flyby={flyby}
@@ -549,7 +553,7 @@ function TaggedYou({ tag, tagger, line }: { tag: SessionTag; tagger: User; line:
  * where it came from ("WHOOP", "with Mira") reads on the day's line, so
  * nothing on the big line is ever squeezed to fit beside the buttons.
  */
-function Logged({ session: s, people, onOpen, openWord, hideNote = false, source, far = null, postId, postable, onPost, onShare, onRemove, line, record = false, flyby = null }: {
+function Logged({ session: s, people, onOpen, openWord, hideNote = false, source, far = null, postId, postable, onPost, onShare, onRemove, onNotTennis, line, record = false, flyby = null }: {
   session: PracticeSession;
   /** "vs Mira" (accepted), "vs June · Waiting", "with Dev", a name you typed. */
   people: PeopleLine | null;
@@ -565,6 +569,8 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
   postId?: string; postable: boolean; onPost: () => void; onShare: () => void;
   /** A hold on the row: remove it from your log (after a yes). Offered to a screen reader as an action of its own. */
   onRemove: () => void;
+  /** Logged for you by the server (migration 185): a small "Not tennis? Remove" under the row. */
+  onNotTennis?: () => void;
   line: boolean;
   /** It holds a personal record now: a small gold "Record" beside its length. */
   record?: boolean;
@@ -630,6 +636,11 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
       </Pressable>
       {/* Its own button under the words, outside the row's: a button inside a button is not allowed in a browser. */}
       {flyby ? <View style={styles.flybyRow}>{flyby}</View> : null}
+      {onNotTennis ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Not tennis? Remove: ${title}`} hitSlop={8} onPress={onNotTennis} style={({ pressed }) => [styles.notTennis, pressed && styles.pressed]}>
+          <Text style={styles.notTennisText}>Not tennis? Remove</Text>
+        </Pressable>
+      ) : null}
       {/* Beside the big number, outside the row's own button. Post it / Posted keep a slot of the same width on every
           row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
@@ -656,6 +667,8 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 const styleDefinitions = StyleSheet.create({
   // A card of rows (To do, a week of sessions): the Share card's cream and a lighter lay of its wash (SoftCard), no shadow, rows parted by a hairline.
   group: { borderRadius: 20, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  notTennis: { alignSelf: 'flex-start', paddingLeft: 22 + spacing.md, paddingTop: 4, paddingBottom: spacing.sm },
+  notTennisText: { ...typography.small, color: colors.textMuted },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
   weekName: { flex: 1 },
