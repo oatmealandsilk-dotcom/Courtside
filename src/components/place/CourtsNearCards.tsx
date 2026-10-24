@@ -9,7 +9,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { SwipePressable } from '@/components/SwipePressable';
 import { tintOf } from '@/components/place/AerialCourt';
-import { open, Room, type CourtBadge } from '@/components/place/CourtsNearLooks';
+import { open, type CourtBadge } from '@/components/place/CourtsNearLooks';
 import { useOnNow } from '@/components/place/CourtsNearPictures';
 import { labelOf } from '@/features/places/courtName';
 import type { CourtRow } from '@/features/players/courts';
@@ -22,17 +22,15 @@ export type CardLook = 'J' | 'K' | 'L' | 'M';
 
 const CARD = 168;
 
-/** A tiny court from above in its surface's colour, white lines, standing on end. */
+/** A tiny court from above in its surface's colour, standing on end: outline, service lines, centre line and net only, so it stays crisp at 18 pt. */
 function CourtMark({ tint }: { tint: string }) {
   const w = 18; const h = 26; const l = { stroke: colors.onMedia, strokeWidth: 1 };
   return (
     <Svg width={w} height={h} viewBox={`0 0 ${w} ${h}`}>
       <Rect x={0} y={0} width={w} height={h} rx={2.5} fill={tint} />
       <Rect x={2.5} y={2.5} width={w - 5} height={h - 5} fill="none" {...l} />
-      <Line x1={4.5} y1={2.5} x2={4.5} y2={h - 2.5} {...l} />
-      <Line x1={w - 4.5} y1={2.5} x2={w - 4.5} y2={h - 2.5} {...l} />
-      <Line x1={4.5} y1={8} x2={w - 4.5} y2={8} {...l} />
-      <Line x1={4.5} y1={h - 8} x2={w - 4.5} y2={h - 8} {...l} />
+      <Line x1={2.5} y1={8} x2={w - 2.5} y2={8} {...l} />
+      <Line x1={2.5} y1={h - 8} x2={w - 2.5} y2={h - 8} {...l} />
       <Line x1={w / 2} y1={8} x2={w / 2} y2={h - 8} {...l} />
       <Line x1={1} y1={h / 2} x2={w - 1} y2={h / 2} stroke={colors.onMedia} strokeWidth={1.6} />
     </Svg>
@@ -81,7 +79,7 @@ export function CourtsCards({ look, rows, badges }: { look: CardLook; rows: Cour
                 {look === 'L' || look === 'K' ? null : pill}
               </View>
               <View>
-                <Room />
+                <Room tight={look === 'K'} />
                 {look === 'L' ? (
                   <View style={styles.over}>
                     <View style={styles.nameRow}>
@@ -117,6 +115,20 @@ export function CourtsCards({ look, rows, badges }: { look: CardLook; rows: Cour
   );
 }
 
+/**
+ * Two lines of name and one of distance, unseen: the room the original cards' words take (gap 4),
+ * so the strip is as tall as the held one before it. K's tighter words (gap 2) give back the 2 pt its tile's room adds.
+ */
+function Room({ tight }: { tight: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.room, tight && styles.overK]} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.unseen]} numberOfLines={2}>{'Courts\nnear you'}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.unseen]} numberOfLines={1}>1 mi</Text>
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.sm },
@@ -143,6 +155,8 @@ const styleDefinitions = StyleSheet.create({
   metaGrow: { flex: 1, minWidth: 0 },
   over: { position: 'absolute', top: 0, left: 0, right: 0, gap: 4 },
   overK: { gap: 2 },
+  room: { gap: 4 },
+  unseen: { opacity: 0 },
   badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2, flexShrink: 1 },
   badgeText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   badgeHit: { backgroundColor: colors.brandDim },
