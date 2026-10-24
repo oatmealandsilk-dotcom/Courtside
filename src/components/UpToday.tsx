@@ -21,6 +21,7 @@ import * as haptics from '@/lib/haptics';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { OPEN_LABELS } from '@/components/openToHitLook';
 
 const FACE = 52;
 /** Every face's slot, yours included, so the faces sit on one even rhythm (yours used to be wider). Wide enough for "You’re open" and its dot. */
@@ -51,6 +52,15 @@ const TILL_PAD_BOTTOM = 44 - TILL_LINE - TILL_PAD_TOP;
  * height whether or not anyone is open. The rest of its 44pt hangs below.
  */
 const TILL_ROOM = 2 * TILL_LINE + 6;
+/** The looks in openToHitLook.ts: the ring's drawn box (OpenRing: face, gap, ring), a name's line and a caption's. */
+const RING_BOX = FACE + 13;
+const NAME_LINE = 16;
+const META_LINE = 14;
+/** A player's item: ring, name, how far, until when. */
+const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
+/** B's pill: how tall, and how far up it reaches over the ring's bottom edge. */
+const PILL_H = 16;
+const PILL_UP = 11;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string }
@@ -112,7 +122,10 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);
-  const till = up ? tillLabel(me.openToHitUntil) : null;
+  const look = OPEN_LABELS;
+  const till = up ? tillLabel(me.openToHitUntil, look !== 'now') : null;
+  // A/B/C: the words inside the switch, under your ring. Off, "I’m free"; on, only what the time line does not already say.
+  const switchWords = !up ? 'I’m free' : look === 'C' || !till ? (look === 'B' ? 'You' : 'You’re open') : null;
   // A tap on your own ring brings the tip (holding it is how you edit), unless the Location note is up then.
   const [tapped, setTapped] = useState(false);
   const holdTip = useTip('hold-to-edit', tapped);
@@ -153,6 +166,39 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
         {/* Your own: the ring is the switch; once on, the time under it opens the sheet. Two presses side by side, never one inside the other. */}
+        {look !== 'now' ? (
+          <View style={[styles.item, styles.mine]}>
+            <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
+              <View>
+                <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
+                {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
+              </View>
+              {switchWords ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{switchWords}</Text> : null}
+            </Pressable>
+            {/* The way into your time: 44pt tall, all of it below the switch (in B the pill's own top sits on the ring's edge, the pill drawn over it). */}
+            {up && till ? (
+              <Pressable accessibilityRole="button" accessibilityLabel={`Open ${till}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [look === 'A' ? styles.linkA : look === 'B' ? styles.linkB : styles.linkC, pressed && styles.pressed]}>
+                {look === 'A' ? (
+                  <View style={styles.lineA}>
+                    <View style={styles.dot} />
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>{`T${till.slice(1)}`}</Text>
+                    <Ionicons name="chevron-forward" size={11} color={colors.textMuted} />
+                  </View>
+                ) : look === 'B' ? (
+                  <>
+                    <View style={styles.pill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.pillText} numberOfLines={1}>{till.replace(/^till /, '')}</Text></View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameB]} numberOfLines={1}>You</Text>
+                  </>
+                ) : (
+                  <View style={styles.lineC}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{till}</Text>
+                    <Ionicons name="chevron-forward" size={10} color={colors.textMuted} />
+                  </View>
+                )}
+              </Pressable>
+            ) : null}
+          </View>
+        ) : (
         <View style={styles.item}>
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
             <View>
@@ -178,6 +224,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
             </View>
           )}
         </View>
+        )}
         {people.map((p) => {
           const theirs = tillLabel(p.until);
           const far = p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
@@ -194,7 +241,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
           );
         })}
         {!people.length ? (
-          <View style={styles.empty}>
+          <View style={[styles.empty, look !== 'now' && styles.emptyOnRing]}>
             {onLocation ? (
               <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
@@ -244,4 +291,19 @@ const styleDefinitions = StyleSheet.create({
   emptyHint: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   emptyLink: { ...typography.smallStrong, color: colors.brand, marginTop: 2 },
   tip: { bottom: '100%', left: 0, right: 0, alignItems: 'flex-start' },
+  // A/B/C (OPEN_LABELS): your item held at a player's height, so the row never jumps as you turn on or off.
+  mine: { minHeight: MINE_H },
+  // A: one centred line where a player's name sits; its 44pt runs on down inside your item.
+  linkA: { marginTop: 5, height: 44, marginBottom: NAME_LINE - 44, alignItems: 'center' },
+  lineA: { flexDirection: 'row', alignItems: 'center', gap: 3, height: NAME_LINE },
+  // B: a small pill on the ring's bottom edge, then "You"; the press is the pill and the word.
+  linkB: { marginTop: -PILL_UP, height: 44, marginBottom: 1 + NAME_LINE + PILL_H - 44, alignItems: 'center' },
+  pill: { height: PILL_H, minWidth: 34, paddingHorizontal: 6, borderRadius: PILL_H / 2, backgroundColor: colors.open, borderWidth: 1.5, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  pillText: { ...typography.caption, fontSize: 10, lineHeight: 12, letterSpacing: 0, color: colors.onMedia },
+  nameB: { marginTop: 1 },
+  // C: "till 12am ›" muted, centred under "You’re open".
+  linkC: { marginTop: 1, height: 44, marginBottom: META_LINE - 44, alignItems: 'center' },
+  lineC: { flexDirection: 'row', alignItems: 'center', gap: 1, height: META_LINE },
+  // The empty words, centred on your ring (the item's own 2 above it, then the ring's box).
+  emptyOnRing: { height: RING_BOX, marginTop: 2 },
 });

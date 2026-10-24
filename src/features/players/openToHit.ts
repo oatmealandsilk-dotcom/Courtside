@@ -39,10 +39,10 @@ export function onTheMinute(at: Date | number | string): Date {
 /** Whether this moment (already on the minute) is 12am, where the phone is: the one-tap end of today, or 12am itself. */
 const isMidnight = (d: Date) => d.getHours() === 0 && d.getMinutes() === 0;
 
-/** "8pm", "8:30pm", "noon" or "midnight": a clock time the way people say it. */
-export function clockWords(at: Date): string {
+/** "8pm", "8:30pm", "noon" or "midnight": a clock time the way people say it. `short`: midnight reads "12am" (the Open to hit row's tighter looks). */
+export function clockWords(at: Date, short = false): string {
   const d = onTheMinute(at);
-  if (isMidnight(d)) return 'midnight';
+  if (isMidnight(d)) return short ? '12am' : 'midnight';
   const h = d.getHours();
   const m = d.getMinutes();
   if (h === 12 && m === 0) return 'noon';
@@ -53,14 +53,14 @@ export function clockWords(at: Date): string {
  * Until when someone is open, as the ring's line says it (Oct 5, owner):
  * "till 8pm", "till midnight", never "4h". Null when there is no time, or it has passed.
  */
-export function tillLabel(iso: string | null | undefined): string | null {
+export function tillLabel(iso: string | null | undefined, short = false): string | null {
   if (!iso) return null;
   const at = Date.parse(iso);
   if (!Number.isFinite(at) || at <= Date.now()) return null;
   const d = onTheMinute(at);
   // Past midnight into the small hours reads plainly ("till 1am"); tomorrow's daytime says so.
   const tomorrow = d.toDateString() !== new Date().toDateString() && !isMidnight(d) && d.getHours() >= 6;
-  return `till ${clockWords(d)}${tomorrow ? ' tomorrow' : ''}`;
+  return `till ${clockWords(d, short)}${tomorrow ? ' tomorrow' : ''}`;
 }
 
 /** The later of two "open until" times (a profile's and the map's), or whichever there is. */
