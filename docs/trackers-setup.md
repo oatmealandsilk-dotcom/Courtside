@@ -305,8 +305,56 @@ How it works, briefly: the app asks the server for the tracker's sign-in page;
 the player says yes on the tracker's site; the tracker sends them back to
 `/callback/<tracker>`; the server holds the keys for up to ten minutes until the
 phone that started it collects them (so a sign-in link forwarded to someone
-else can never put their tracker on the wrong account). From then on, each
-time the app opens (at most hourly per tracker) and on "Sync now", the server
+else can never put their tracker on the wrong account). From then on, every
+hour on its own (auto sync, below), each time the app opens (at most hourly
+per tracker) and on "Sync now", the server
 looks for tennis and files it through `record_activity`, the same path WHOOP
 uses, so the same match seen by two trackers files one alert. Disconnecting
 removes that tracker's sessions and its stats on posts.
+
+## Auto sync: the server looks every hour (Oct 24)
+
+What it is for (owner, Oct 24: "Do auto sync"): before this, a Fitbit, Oura
+or Polar session was only found when the player opened the app. Now the
+server looks for every connected player once an hour, app open or not, so
+"Tennis detected — log it?" arrives on its own, the way WHOOP's does.
+
+Words: **pg_cron** is the database's alarm clock (it runs a job at set
+times); **pg_net** is how the database calls a web address; **Vault** is the
+database's locked drawer for secrets.
+
+How it works:
+
+- At 20 past every hour, the job `courtside-tracker-auto-sync` (migration
+  184) calls `https://auth.courtsidebase.com/functions/v1/trackers/sync-all`.
+- `/sync-all` lets in only a call carrying the Vault secret
+  `trackers_sync_secret` in its `x-courtside-sync` header. Migration 184 makes
+  that secret itself (random, 64 characters) the first time it runs; nobody
+  types, copies or sees it. The function asks the database whether a header
+  matches (`trackers_sync_ok`, which only the server can call). There is
+  nothing to paste into the function's secrets.
+- The function answers at once and carries on: every connection that reads
+  tennis (with keys, and a tracker whose codes are in), longest since a sync
+  first, 4 players at a time, at most 100 seconds per run, skipping anyone
+  synced in the last 30 minutes. Each gets the same 36-hour look the phone
+  asks for.
+- Alerts: only for sessions of **20 minutes or more** (owner, Oct 24: "I like
+  only sessions over 20"). This is in the database (migration 183,
+  `send_activity_pushes`), so it covers WHOOP's alerts too. Shorter sessions
+  still land quietly in To do and Notifications.
+- The usual rules still apply: one alert per session, only for a session that
+  ended in the last 12 hours, never when the player switched these alerts
+  off, and **never between 10pm and 7am where it was played: that alert is
+  skipped, not held until morning** (the session still waits in To do).
+- No double alerts: the phone's own hourly look still runs (quietly, the app
+  shows its own banner). Whichever looks first files the session; the other
+  finds it already filed (`record_activity` keeps one row per tracker id, and
+  `note_detected_activity` answers "already").
+- A player whose sync fails is written to the crash reports once
+  (`app_errors`, screen `trackers`, at most every 6 hours each), so "check
+  crashes" finds it.
+
+For Claude, to switch it on: deploy `trackers` (with `--no-verify-jwt`)
+first, then run migrations 183 and 184 (each safe to run twice), then their
+read-only checks at the bottom. To stop it:
+`select cron.unschedule('courtside-tracker-auto-sync');`
