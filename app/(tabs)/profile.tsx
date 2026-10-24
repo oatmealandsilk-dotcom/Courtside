@@ -1,7 +1,7 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
-import { themeList, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { DEFAULT_THEME, themeList, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { ThemeTile } from '@/components/ThemeTile';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
@@ -299,8 +299,8 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
   const invitesWords = invites ? `${invites} ${invites === 1 ? 'invite' : 'invites'}` : '';
   const { theme } = useTheme();
   const themeLabel = themeList.find((t) => t.name === theme)?.label ?? 'CourtSide';
-  // Never opened the Theme page on this phone, and still on the app's own court.
-  const themeNew = useTipWaiting('theme') && theme === 'default';
+  // Never opened the Theme page on this phone, and still on the court a new player gets.
+  const themeNew = useTipWaiting('theme') && theme === DEFAULT_THEME;
   const styles = useThemedStyles(styleDefinitions);
   const anchor = useRef<View>(null);
   const { width } = useWindowDimensions();

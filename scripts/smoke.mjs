@@ -678,9 +678,9 @@ const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
   return true;
 }), 15000, 'a session in Your sessions');
 
-/** The page colours of the Paris and CourtSide courts, as the browser writes them (src/theme). */
+/** The page colours of the Paris court and the default court (Clean since Oct 24), as the browser writes them (src/theme). */
 const PARIS_BG = 'rgb(248, 240, 233)';
-const DEFAULT_BG = 'rgb(248, 247, 242)';
+const DEFAULT_BG = 'rgb(255, 255, 255)';
 
 /**
  * Runs inside the page, just before a theme card is tapped: from the tap on,
@@ -1241,11 +1241,11 @@ const STEPS = [
       log(`theme: check moved ${took.ring} ms after the tap, page colour ${took.page} ms`);
       await themeFadeDone(page);
     },
-    expect: [{ css: '[aria-label="Paris theme"][aria-checked="true"]' }, { css: '[aria-label="CourtSide theme"][aria-checked="false"]' }],
+    expect: [{ css: '[aria-label="Paris theme"][aria-checked="true"]' }, { css: '[aria-label="Clean theme"][aria-checked="false"]' }],
     // Back to the default court, so every later step sees the app as it always was.
     after: async (page) => {
-      await page.call(watchThemeChange, 'CourtSide theme', DEFAULT_BG);
-      await page.tap({ label: 'CourtSide theme' });
+      await page.call(watchThemeChange, 'Clean theme', DEFAULT_BG);
+      await page.tap({ label: 'Clean theme' });
       await page.waitUntil(() => page.call(() => window.__themeTiming?.page != null), 10000, 'the CourtSide page colour back');
       await themeFadeDone(page);
       await page.tap({ label: 'Go back' });
