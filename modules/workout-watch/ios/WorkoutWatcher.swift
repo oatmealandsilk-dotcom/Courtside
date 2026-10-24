@@ -18,8 +18,9 @@ import UserNotifications
  *   "Run · Log it on CourtSide.": the server's own words for WHOOP's alert
  *   (migration 107; "Activity detected" since 131, owner, Oct 5). Never a
  *   number on the lock screen.
- * - Only one that ended in the last 12 hours, 5 minutes to 10 hours long
- *   (the server keeps no other), never between 10pm and 7am here, tennis
+ * - Only one that ended in the last 12 hours, 20 minutes to 10 hours long
+ *   (owner, Oct 24: "I like only sessions over 20"; the server keeps 5
+ *   minutes and up, and the app's check files those quietly), never between 10pm and 7am here, tennis
  *   only unless the person said yes to every workout, no tennis at all when
  *   WHOOP already sends its own tennis alert (one session, one alert), and
  *   no other workout when WHOOP sends those too (its every-workout switch), none
@@ -113,6 +114,12 @@ final class WorkoutWatcher: @unchecked Sendable {
   private static let freshFor: TimeInterval = 12 * 3600
   /** The lengths the server keeps, in minutes (record_activity). */
   private static let minutes = 5...600
+  /**
+   * The lengths that get an alert, in minutes: 20 or more (owner, Oct 24: "I like only sessions over 20";
+   * the server's rule for every tracker, migration 183). A shorter one is still filed, quietly, by the
+   * app's own check.
+   */
+  private static let alertMinutes = 20...600
   /** The workouts already announced (see Seen), newest last, at most this many. */
   private static let rememberAtMost = 200
   /**
@@ -391,14 +398,16 @@ final class WorkoutWatcher: @unchecked Sendable {
   /** Whether a workout just saved to Health should get an alert. */
   private func deserves(_ w: HKWorkout, prefs: Prefs, now: Date) -> Bool {
     let length = Int((w.endDate.timeIntervalSince(w.startDate) / 60).rounded())
-    guard WorkoutWatcher.minutes.contains(length) else { return false }
+    guard WorkoutWatcher.minutes.contains(length), WorkoutWatcher.alertMinutes.contains(length) else { return false }
     guard w.endDate > now.addingTimeInterval(-WorkoutWatcher.freshFor), w.endDate < now.addingTimeInterval(600) else { return false }
     let tennis = w.workoutActivityType == .tennis
     guard tennis ? prefs.tennis : prefs.workouts else { return false }
     // WHOOP sends its own "Tennis detected" for the session (the server's push, which only stays quiet when
     // the app has already handed the Watch's copy over): from any source, tennis gets no second alert from
     // here. Runs and the rest still do, and the app's own check files the tennis all the same. (Fitbit, Oura
-    // and Polar never push from the server, so their copies need no such rule.)
+    // and Polar push from the server too since Oct 24, but the server files an Oura or Polar session quietly
+    // for a player who reads tennis from Apple Health, so this alert stands in for those; Fitbit does not
+    // write to Health.)
     if tennis && prefs.skipWhoopTennis { return false }
     // The same for every other workout once WHOOP sends those too (its every-workout switch): a run from
     // the Watch and WHOOP's copy of it buzz once, and a catch-up gives one "4 workouts found", not two.

@@ -8,14 +8,21 @@
 -- What it does (the owner, Oct 24: "Do auto sync"): until now a Fitbit, Oura
 -- or Polar session was found only when the player opened the app (at most
 -- hourly, src/features/activity/check.ts). From this file on, the server
--- looks for every connected player once an hour, app open or not, and
+-- looks for every connected player twice an hour, app open or not, and
 -- "Tennis detected — log it?" arrives on its own, the way WHOOP's does:
 --
---   * At 20 past every hour, pg_cron (the database's clock) calls the
+--   * At 20 and 50 past every hour, pg_cron (the database's clock) calls the
 --     trackers function's /sync-all through pg_net (the database's way to
 --     call a web address). The function gives every connection that reads
 --     tennis the same 36-hour look the phone asks for, 4 players at a time,
---     for at most 100 seconds, skipping any synced in the last 30 minutes.
+--     for at most 100 seconds, skipping any synced in the last 25 minutes.
+--     (Twice an hour, not once: an evening session ending at 9:30pm is
+--     found at 9:50, before the night rule below, not at 10:20 after it.)
+--     An older connection still owed its one 30-day look back gets it from
+--     whichever comes first, this or the app.
+--   * A player who also reads tennis from Apple Health: an Oura or Polar
+--     session is filed quietly here, since those apps can save it into
+--     Apple Health and the iPhone alerts for it there (one session, one alert).
 --   * Alerts: only sessions of 20 minutes or more (migration 183, and the
 --     function itself), by the usual rules: once per session (the phone's
 --     own look and this one never both alert: record_activity files a
@@ -23,9 +30,10 @@
 --     answers 'already' for one it has seen), not when it ended over 12
 --     hours ago, not when the player switched these alerts off, and not
 --     between 10pm and 7am where it was played: that alert is skipped, not
---     held till morning (the session still waits in To do).
+--     held till morning (the session still waits in To do). Holding it till
+--     morning is a separate change, waiting on the owner.
 --   * A player whose sync fails is written to the crash reports once
---     (app_errors, screen 'trackers', at most every 6 hours each).
+--     (app_errors, screen 'trackers', at most once a day each).
 --
 -- The secret: /sync-all answers only a call carrying the Vault secret
 -- "trackers_sync_secret" in its x-courtside-sync header. This file makes it
@@ -76,12 +84,12 @@ revoke all on function public.trackers_sync_ok(text) from public, anon, authenti
 grant execute on function public.trackers_sync_ok(text) to service_role;
 
 -- ---------------------------------------------------------- 3. the scheduler
--- At 20 past every hour (the other hourly jobs run at 5, 10, 25 and 40 past).
+-- At 20 and 50 past every hour (the other hourly jobs run at 5, 10, 25 and 40 past).
 -- Scheduling the same job name again replaces it. pg_net waits 10 seconds at
 -- most: the function answers at once and carries on by itself.
 do $$
 begin
-  perform cron.schedule('courtside-tracker-auto-sync', '20 * * * *', $job$
+  perform cron.schedule('courtside-tracker-auto-sync', '20,50 * * * *', $job$
     select net.http_post(
       url := 'https://auth.courtsidebase.com/functions/v1/trackers/sync-all',
       headers := jsonb_build_object('Content-Type', 'application/json',
@@ -106,7 +114,7 @@ begin
      or not has_function_privilege('service_role', 'public.trackers_sync_ok(text)', 'execute') then
     raise exception 'Migration 20261024000184 stopped: trackers_sync_ok is not server only. Nothing was changed.';
   end if;
-  if not exists (select 1 from cron.job where jobname = 'courtside-tracker-auto-sync' and schedule = '20 * * * *' and active) then
+  if not exists (select 1 from cron.job where jobname = 'courtside-tracker-auto-sync' and schedule = '20,50 * * * *' and active) then
     raise exception 'Migration 20261024000184 stopped: the hourly job is not scheduled. Nothing was changed.';
   end if;
 end $$;
@@ -116,10 +124,10 @@ commit;
 -- ------------------------------------------------------- 5. checks to run afterwards
 -- Read-only. Paste one at a time into the SQL editor (remove the leading "-- ").
 --
--- (a) The job (expect one row, 20 * * * *, active):
+-- (a) The job (expect one row, 20,50 * * * *, active):
 -- select jobname, schedule, active from cron.job where jobname = 'courtside-tracker-auto-sync';
 --
--- (b) Its last runs (expect succeeded, after 20 past the hour):
+-- (b) Its last runs (expect succeeded, at 20 and 50 past the hour):
 -- select status, start_time from cron.job_run_details
 --  where jobid = (select jobid from cron.job where jobname = 'courtside-tracker-auto-sync') order by start_time desc limit 5;
 --

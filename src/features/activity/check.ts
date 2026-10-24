@@ -13,7 +13,7 @@ import { dismissWorkoutAlerts, presentedWorkoutAlerts } from '@/features/health/
  * WHOOP's servers, so the phone asks ours to look (at most hourly — WHOOP's
  * own alert usually arrives first). Fitbit, Oura and Polar (migration 69)
  * are asked of the server the same way, at most hourly each (and, since
- * Oct 24, the server also looks for them by itself every hour and sends the
+ * Oct 24, the server also looks for them by itself twice an hour and sends the
  * alert: trackers /sync-all, migration 184; this look stays quiet). The server
  * decides, once and under a lock, whether a session is new, so two checks at
  * once never announce it twice.
