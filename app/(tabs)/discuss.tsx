@@ -1090,7 +1090,8 @@ const styleDefinitions = StyleSheet.create({
   sectionWord: { ...typography.bodyStrong, fontSize: 16 },
   more: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.border, marginTop: spacing.md },
   moreText: { ...typography.smallStrong, color: colors.text },
-  section: { flex: 1, alignItems: 'center', paddingVertical: 18 },
+  // Closer under the title (Oct 24, owner: "a bit too much space above Find Players and Discussions"); the underline keeps its room below.
+  section: { flex: 1, alignItems: 'center', paddingTop: 6, paddingBottom: 16 },
   sectionUnderline: { position: 'absolute', left: 0, bottom: -1, height: 2, backgroundColor: colors.brand, borderRadius: 1 },
   // No gap: Cancel brings its own room in as it slides in (SearchCancel).
   searchRow: { flexDirection: 'row', alignItems: 'center' },
