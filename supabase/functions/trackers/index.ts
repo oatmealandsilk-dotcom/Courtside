@@ -33,14 +33,23 @@
 //                         come from that tracker yet). Answers {fresh, days}:
 //                         the sessions it just filed and how many days it
 //                         looked back. The app asks when it opens, at most
-//                         hourly, and on "Sync now"
-//   /disconnect         — (signed-in) {provider}: tells the tracker, removes what
+//                         hourly, and on "Sync now". Always quiet (the phone
+//                         shows its own banner)
+//   /sync-all           — (the server's hourly pg_cron job only, migration 184:
+//                         header x-courtside-sync = Vault "trackers_sync_secret")
+//                         the same 36-hour look for every connection that reads
+//                         tennis, 4 at a time, for at most 100 s, with the
+//                         lock-screen alert on for sessions of 20 minutes or
+//                         more. Answers 202 at once and carries on. Owner, Oct 24:
+//                         "Do auto sync"
+//   /disconnect        — (signed-in) {provider}: tells the tracker, removes what
 //                         it sent (forget_tracker_data), forgets the keys
 //
 // Deploy:   supabase functions deploy trackers --no-verify-jwt
 //           (the trackers' redirects carry no app token; /start, /finish,
-//            /sync and /disconnect check the person's token themselves).
-//           Run migration 69 first.
+//            /sync and /disconnect check the person's token themselves;
+//            /sync-all checks the scheduler's secret).
+//           Run migration 69 first; 183 and 184 for the hourly run.
 // Secrets:  FITBIT_CLIENT_ID / FITBIT_CLIENT_SECRET (a Google Cloud OAuth
 //           client of type "Web application", with the Google Health API
 //           switched on), OURA_CLIENT_ID / OURA_CLIENT_SECRET,
@@ -450,11 +459,28 @@ async function polarTennis(uid: string, since: Date): Promise<Found> {
 const FIND: Record<ProviderId, (uid: string, since: Date) => Promise<Found>> = { fitbit: fitbitTennis, oura: ouraTennis, polar: polarTennis };
 
 /**
- * Files tennis from the last `hours`, quietly (the app shows its own banner).
+ * Only a session this long or longer may buzz the lock screen (owner, Oct 24:
+ * "I like only sessions over 20"). Shorter ones are still filed, quietly, into
+ * To do and Notifications. The database has the same rule for every tracker
+ * (send_activity_pushes, migration 183); this keeps /sync-all quiet for them
+ * even before that migration is in.
+ */
+const ALERT_MIN_MINUTES = 20;
+const longEnough = (s: Session) => (Date.parse(s.payload.ended_at) - Date.parse(s.payload.started_at)) / 60_000 >= ALERT_MIN_MINUTES - 0.5;
+
+/**
+ * Files tennis from the last `hours`. Quietly unless `alerts` (the app's own
+ * /sync: the phone shows its own banner); with `alerts` (/sync-all, the
+ * hourly run on the server) a session of ALERT_MIN_MINUTES or more may send
+ * "Tennis detected", by the database's usual rules (note_detected_activity:
+ * once per session, not at night where it was played, not when switched off,
+ * not when it ended over 12 hours ago). A session already filed, by either,
+ * is never alerted again (record_activity upserts by the tracker's own id,
+ * and note_detected_activity answers 'already' once notified_at is set).
  * A session the tracker no longer lists as tennis (deleted, or changed) is
  * taken back, unless it was logged, as WHOOP's are. Returns the ids just filed.
  */
-async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<string[]> {
+async function syncTennis(uid: string, p: ProviderId, hours: number, alerts = false): Promise<string[]> {
   const { data: ok } = await admin.rpc('tennis_allowed', { u: uid, src: p });
   if (ok !== true) return [];
   const since = new Date(Date.now() - hours * 3_600_000);
@@ -470,7 +496,7 @@ async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<st
   // A failing record is said once per sync, and at most every 6 hours (crash reports share a rate limit).
   let reported = false;
   for (const s of found.sessions) {
-    const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: true });
+    const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: !(alerts && longEnough(s)) });
     if (error) { console.error(`[trackers] ${p} record`, error.message); if (!reported) { reported = true; await report(uid, `[trackers] ${p} record: ${error.message}`, { tag: `[trackers] ${p} record`, hours: 6 }); } continue; }
     if (data?.id) filed += 1;
     if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
@@ -529,6 +555,76 @@ async function revoke(uid: string, p: ProviderId) {
       await fetch(`https://www.polaraccesslink.com/v3/users/${encodeURIComponent(row.member_id)}`, { method: 'DELETE', signal: t, headers: { authorization: `Bearer ${row.access_token}` } }).then((r) => r.body?.cancel());
     }
   } catch { /* best effort */ }
+}
+
+// ------------------------------------------------- the hourly run (auto sync)
+// Owner, Oct 24: "Do auto sync": "Tennis detected — log it?" arrives on its
+// own, with the app closed. pg_cron calls /sync-all once an hour (migration
+// 184); before this the trackers were read only when the app opened.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+/** Players synced at the same time: gentle on Google's, Oura's and Polar's rate limits. */
+const SYNC_ALL_AT_ONCE = 4;
+/** No new player is started after this; the run's wall-clock limit is 150 s (400 s on a paid plan). */
+const SYNC_ALL_BUDGET_MS = 100_000;
+/** A connection the phone (or a run) synced this recently is left for the next hour. */
+const SYNC_ALL_FRESH_MS = 30 * 60_000;
+/** The phone's own look: the last 36 hours. */
+const SYNC_ALL_HOURS = 36;
+
+/**
+ * The header pg_cron sends, checked against the Vault secret
+ * "trackers_sync_secret" (made by migration 184, never typed or seen by
+ * anyone) by trackers_sync_ok, which only the server may call. False on any
+ * doubt, so nothing but the scheduled job gets in.
+ */
+async function isScheduler(req: Request): Promise<boolean> {
+  const s = req.headers.get('x-courtside-sync') ?? '';
+  if (s.length < 32 || s.length > 200) return false;
+  const { data, error } = await admin.rpc('trackers_sync_ok', { s });
+  if (error) console.error('[trackers] sync-all check', error.message);
+  return data === true;
+}
+
+/**
+ * Every connection that reads tennis (Fitbit, Oura, Polar, set up on the
+ * server, with keys), longest since a sync first, each given the usual
+ * 36-hour look with alerts on. One player's failure never stops the rest:
+ * it is reported once (app_errors, screen 'trackers', at most every 6 hours).
+ */
+async function syncAll(): Promise<{ players: number; done: number; failed: number; left: number }> {
+  const t0 = Date.now();
+  const live = PROVIDERS.filter(isSetUp);
+  const tally = { players: 0, done: 0, failed: 0, left: 0 };
+  if (!live.length) return tally;
+  const [{ data: conns, error: e1 }, { data: keys, error: e2 }] = await Promise.all([
+    admin.from('health_connections').select('user_id, provider, last_synced_at').in('provider', live).eq('reads_workouts', true)
+      .order('last_synced_at', { ascending: true, nullsFirst: true }).limit(2000),
+    admin.from('tracker_tokens').select('user_id, provider').in('provider', live).limit(5000),
+  ]);
+  if (e1 || e2) { console.error('[trackers] sync-all list', (e1 ?? e2)!.message); return tally; }
+  const keyed = new Set(((keys ?? []) as { user_id: string; provider: string }[]).map((k) => `${k.user_id}:${k.provider}`));
+  const todo = ((conns ?? []) as { user_id: string; provider: ProviderId; last_synced_at: string | null }[])
+    .filter((c) => keyed.has(`${c.user_id}:${c.provider}`))
+    .filter((c) => !c.last_synced_at || Date.now() - Date.parse(c.last_synced_at) > SYNC_ALL_FRESH_MS);
+  tally.players = todo.length;
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length && Date.now() - t0 < SYNC_ALL_BUDGET_MS) {
+      const c = todo[next++];
+      try {
+        await syncTennis(c.user_id, c.provider, SYNC_ALL_HOURS, true);
+        tally.done += 1;
+      } catch (e) {
+        tally.failed += 1;
+        console.error(`[trackers] ${c.provider} auto sync`, e);
+        await report(c.user_id, `[trackers] ${c.provider} auto sync: ${String(e)}`, { tag: `[trackers] ${c.provider} auto sync`, hours: 6 });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SYNC_ALL_AT_ONCE, todo.length) }, worker));
+  tally.left = todo.length - next;
+  console.log('[trackers] sync-all', JSON.stringify({ ...tally, ms: Date.now() - t0 }));
+  return tally;
 }
 
 Deno.serve(async (req) => {
@@ -604,6 +700,15 @@ Deno.serve(async (req) => {
     const { error } = await admin.from('tracker_pending').insert({ n, user_id: opened.uid, provider: p, answer, expires_at: new Date(Date.now() + SIGN_IN_MS).toISOString() });
     if (error) { console.error('[trackers] pending', error.message); return go('failed'); }
     return go(`pending&p=${p}&n=${n}`);
+  }
+
+  if (path === '/sync-all') {
+    // The server's own hourly run only: refused, and nothing said why, for anyone else.
+    if (req.method !== 'POST' || !(await isScheduler(req))) return json({ error: 'not allowed' }, 403);
+    // pg_net waits only seconds: answer at once, and carry on after the answer.
+    const run = syncAll().catch((e) => { console.error('[trackers] sync-all', e); return null; });
+    if (typeof EdgeRuntime !== 'undefined') { EdgeRuntime.waitUntil(run); return json({ started: true }, 202); }
+    return json({ ran: await run });
   }
 
   const uid = await whoIs(req);
