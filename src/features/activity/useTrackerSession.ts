@@ -107,8 +107,8 @@ export function useTrackerSession(activityId: ID | undefined) {
   const save = async (input: LogInput): Promise<ID> => {
     if (!activity) throw new Error('That session is no longer here.');
     if (logged) return logged.id;
-    // Its server-logged session is still on its way: a moment, not "Already logged.".
-    if (adopting) throw new Error('Saving…');
+    // Logged by the server, its session still on its way: compose treats "Already logged." as logged (Save celebrates, Post attaches it).
+    if (adopting) throw new Error('Already logged.');
     if (saving.current) throw new Error('Saving…');
     saving.current = true;
     try {
