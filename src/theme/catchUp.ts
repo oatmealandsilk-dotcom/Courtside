@@ -190,11 +190,18 @@ function step() {
   } else startTransition(() => next.set(live));
 }
 
-/** Runs `fn` once the app has a quiet moment (at most a few frames on). */
+/**
+ * Runs `fn` once the app has a quiet moment (at most a few frames on). The
+ * limit is kept here, not left to the platform: a phone's requestIdleCallback
+ * ignores its timeout (RN 0.86), so a busy feed could otherwise hold it to the
+ * safety net.
+ */
 function whenIdle(fn: () => void) {
+  let done = false;
+  const run = () => { if (done) return; done = true; fn(); };
   const idle = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => unknown }).requestIdleCallback;
-  if (typeof idle === 'function') idle.call(globalThis, fn, { timeout: 120 });
-  else setTimeout(fn, 0);
+  if (typeof idle === 'function') idle.call(globalThis, run, { timeout: 120 });
+  setTimeout(run, typeof idle === 'function' ? 120 : 0);
 }
 
 /** Everything is on the court picked: the watchers stand down. */
