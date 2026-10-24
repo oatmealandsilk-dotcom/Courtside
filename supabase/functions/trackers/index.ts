@@ -26,9 +26,11 @@
 //                         same player. Only then is the tracker put on the account
 //                         (so a sign-in link sent to someone else can never put
 //                         their tracker on the sender's account), and the past
-//                         week is looked through for tennis (Oct 5; was three days)
+//                         30 days are looked through for tennis (Oct 24; was a week)
+//   Sync problems go to app_errors (screen 'trackers', message '[trackers] …').
 //   /sync               — (signed-in) {provider, days?}: tennis in the last 36
-//                         hours (or `days`, at most 7). Answers {fresh, days}:
+//                         hours (or `days`, at most 30; 30 while nothing has
+//                         come from that tracker yet). Answers {fresh, days}:
 //                         the sessions it just filed and how many days it
 //                         looked back. The app asks when it opens, at most
 //                         hourly, and on "Sync now"
@@ -51,7 +53,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import {
   isProvider, PROVIDERS, type ProviderId, type Session,
-  fitbitFromOtherApp, fitbitIsTennis, fitbitSession, type FitbitExercise,
+  fitbitCounts, fitbitFromOtherApp, fitbitSession, type FitbitExercise,
   ouraIsTennis, ouraSession, type OuraBeat, type OuraWorkout,
   polarIsTennis, polarSession, type PolarExercise,
 } from './workouts.ts';
@@ -162,6 +164,29 @@ const expiry = (t: Record<string, unknown>) => (typeof t.expires_in === 'number'
 /** Tennis sessions on or off for this person's tracker (the app offers to turn them on again when off). */
 const setReadsWorkouts = (uid: string, p: ProviderId, on: boolean) =>
   admin.from('health_connections').update({ reads_workouts: on }).match({ user_id: uid, provider: p }).then(() => undefined);
+/**
+ * As far back as a sync looks: record_activity keeps 30 days, and Past
+ * workouts shows 31. A sync looks this far on connecting, when asked, and
+ * while nothing has come from that tracker yet.
+ */
+const LOOK_BACK_DAYS = 30;
+/**
+ * A sync problem, filed with the app's crash reports (app_errors, screen
+ * "trackers"), so a check of those finds it without the function's log.
+ * Best effort; never the keys.
+ */
+async function report(uid: string, message: string, onceIn?: { tag: string; hours: number }) {
+  try {
+    if (onceIn) {
+      // At most one of these a player every `hours` (a sync runs hourly).
+      const { count } = await admin.from('app_errors').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('screen', 'trackers')
+        .like('message', `${onceIn.tag}%`).gte('created_at', new Date(Date.now() - onceIn.hours * 3_600_000).toISOString());
+      if ((count ?? 0) > 0) return;
+    }
+    const { error } = await admin.from('app_errors').insert({ user_id: uid, message: message.slice(0, 2000), screen: 'trackers', platform: 'server', fatal: false });
+    if (error) console.error('[trackers] report', error.message);
+  } catch { /* best effort */ }
+}
 const unlock = (uid: string, p: ProviderId) => admin.from('tracker_tokens').update({ refresh_lock_until: null }).match({ user_id: uid, provider: p }).then(() => undefined);
 const tokenRow = async (uid: string, p: ProviderId) => (await admin.from('tracker_tokens').select('*').match({ user_id: uid, provider: p }).maybeSingle()).data as
   { access_token: string; refresh_token: string | null; expires_at: string | null; member_id: string | null } | null;
@@ -233,8 +258,14 @@ async function apiGet(uid: string, p: ProviderId, address: string, post?: unknow
 }
 
 // ----------------------------------------------------------- the workouts
-/** Tennis sessions since `since`, the ids of every tennis session the tracker listed, and whether that list was the whole window. */
-type Found = { sessions: Session[]; tennisIds: Set<string>; complete: boolean; refused: boolean };
+/**
+ * Tennis sessions since `since`, the ids of every tennis session the tracker
+ * listed, and whether that list was the whole window. `failed`: why the
+ * tracker's list could not be read (the sync then reports it, and does not
+ * call the tracker synced). `skipped`: Fitbit only, how many workouts of each
+ * other type it listed, so a sync that finds nothing says what it did see.
+ */
+type Found = { sessions: Session[]; tennisIds: Set<string>; complete: boolean; refused: boolean; failed?: string; skipped?: Record<string, number> };
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
 /**
@@ -309,10 +340,13 @@ async function fitbitTennis(uid: string, since: Date): Promise<Found> {
   let retries = 0;
   const tennis: FitbitExercise[] = [];
   let next = '';
+  const skipped: Record<string, number> = {};
+  out.skipped = skipped;
+  // 8 pages of 25: 200 workouts, room for a month of daily training.
   for (let i = 0; i < 8; i += 1) {
     const q = new URLSearchParams({ pageSize: '25', ...(filter ? { filter } : {}), ...(family ? { dataSourceFamily: family } : {}), ...(next ? { pageToken: next } : {}) });
     const res = await apiGet(uid, 'fitbit', `${GOOGLE_HEALTH}/dataTypes/exercise/dataPoints?${q.toString().replace(/\+/g, '%20')}`);
-    if (!res) return out;
+    if (!res) { out.failed = 'no working key (Google refused the refresh, or the keys are gone)'; return out; }
     if (!res.ok) {
       const no = await googleError(res);
       const unlinked = no.reasons.includes('ACCOUNT_NOT_LINKED');
@@ -326,6 +360,7 @@ async function fitbitTennis(uid: string, since: Date): Promise<Found> {
         retries += 1; i -= 1; continue;
       }
       console.error('[trackers] fitbit list', said(res.status, no));
+      out.failed = `list ${said(res.status, no)}`;
       // Only the player's own account turns tennis off (and the app offers to
       // connect again): their Google account has no Google Health profile any
       // more, or the yes to their workouts is missing. Any other refusal is
@@ -340,7 +375,9 @@ async function fitbitTennis(uid: string, since: Date): Promise<Found> {
     let ended = false;
     for (const e of body.dataPoints ?? []) {
       if (Date.parse(e.exercise?.interval?.startTime ?? '') < early) { ended = true; continue; }
-      if (fitbitIsTennis(e) && !fitbitFromOtherApp(e)) tennis.push(e);
+      if (fitbitCounts(e) && !fitbitFromOtherApp(e)) { tennis.push(e); continue; }
+      const what = `${e.exercise?.exerciseType ?? 'NO_TYPE'}${fitbitFromOtherApp(e) ? `@${e.dataSource?.platform}` : ''}`.slice(0, 60);
+      skipped[what] = (skipped[what] ?? 0) + 1;
     }
     next = body.nextPageToken ?? '';
     if (!next || ended) { out.complete = true; break; }
@@ -420,12 +457,28 @@ async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<st
   if (ok !== true) return [];
   const since = new Date(Date.now() - hours * 3_600_000);
   const found = await FIND[p](uid, since);
-  if (found.refused) { await setReadsWorkouts(uid, p, false); return []; }
+  if (found.refused) { await setReadsWorkouts(uid, p, false); await report(uid, `[trackers] ${p} refused: tennis turned off, the player must connect again`); return []; }
+  if (found.failed) {
+    // Not called synced: the time on the player's screen stays the last one that worked.
+    await report(uid, `[trackers] ${p} sync failed: ${found.failed}`, { tag: `[trackers] ${p} sync failed`, hours: 6 });
+    return [];
+  }
   const fresh: string[] = [];
+  let filed = 0;
   for (const s of found.sessions) {
     const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: true });
-    if (error) { console.error(`[trackers] ${p} record`, error.message); continue; }
+    if (error) { console.error(`[trackers] ${p} record`, error.message); await report(uid, `[trackers] ${p} record: ${error.message}`); continue; }
+    if (data?.id) filed += 1;
     if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
+  }
+  // A long look (a week or more: connecting, "Sync now", a first look back)
+  // that kept nothing: say what the tracker did list (Fitbit), so "my
+  // sessions don't show" has an answer without the server's log. None at all
+  // means another Google account, or a watch not synced to its app yet.
+  if (found.skipped && hours >= 7 * 24 && filed === 0) {
+    const other = Object.entries(found.skipped);
+    const tag = `[trackers] ${p} nothing kept`;
+    await report(uid, `${tag} in ${Math.round(hours / 24)} days; ${found.sessions.length} tennis; other workouts: ${other.length ? other.map(([k, n]) => `${k}×${n}`).join(', ') : 'none listed'}${found.complete ? '' : ' (list cut short)'}`, { tag, hours: 24 });
   }
   if (found.complete) {
     const { data: mine } = await admin.from('detected_activities').select('external_id').eq('user_id', uid).eq('source', p)
@@ -438,7 +491,12 @@ async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<st
   return fresh;
 }
 
-/** Puts a collected sign-in on this account, turns tennis sessions on, and looks through the past week (each one lands in Notifications to log). */
+/**
+ * Puts a collected sign-in on this account, turns tennis sessions on, and
+ * looks through the past 30 days (Oct 24: a week left a new player's older
+ * sessions out). Those from the last 8 days land in Notifications; every one
+ * waits in To do / Past workouts to log.
+ */
 async function link(uid: string, p: ProviderId, a: Answer): Promise<{ error?: string; fresh: string[] }> {
   const { error } = await admin.from('tracker_tokens').upsert({
     user_id: uid, provider: p, access_token: a.access_token, refresh_token: a.refresh_token, expires_at: a.expires_at,
@@ -448,7 +506,7 @@ async function link(uid: string, p: ProviderId, a: Answer): Promise<{ error?: st
   const { error: e2 } = await admin.from('health_connections').upsert({ user_id: uid, provider: p, connected_at: new Date().toISOString(), reads_workouts: true });
   if (e2) return { error: e2.message, fresh: [] };
   let fresh: string[] = [];
-  try { fresh = await syncTennis(uid, p, 168); } catch (e) { console.error(`[trackers] ${p} first sync`, e); }
+  try { fresh = await syncTennis(uid, p, LOOK_BACK_DAYS * 24); } catch (e) { console.error(`[trackers] ${p} first sync`, e); await report(uid, `[trackers] ${p} first sync: ${String(e)}`); }
   return { fresh };
 }
 
@@ -582,8 +640,14 @@ Deno.serve(async (req) => {
 
   if (path === '/sync') {
     if (!(await tokenRow(uid, p))) return json({ error: `${NAME[p]} is not connected.` }, 400);
-    const days = typeof posted.days === 'number' && posted.days > 0 ? Math.min(posted.days, 7) : 1.5;
-    try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); return json({ error: 'sync failed' }, 500); }
+    let days = typeof posted.days === 'number' && posted.days > 0 ? Math.min(posted.days, LOOK_BACK_DAYS) : 1.5;
+    // Nothing ever kept from this tracker (a player who connected before the
+    // 30-day first look, Oct 24): look back the whole 30 days, until something is.
+    if (days < LOOK_BACK_DAYS) {
+      const { count } = await admin.from('detected_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('source', p);
+      if (count === 0) days = LOOK_BACK_DAYS;
+    }
+    try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); await report(uid, `[trackers] ${p} sync: ${String(e)}`); return json({ error: 'sync failed' }, 500); }
   }
 
   if (path === '/disconnect') {

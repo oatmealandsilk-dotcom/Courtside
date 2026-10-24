@@ -163,6 +163,11 @@ Once it shows as connected, record one real **Tennis** workout on the Fitbit
 checks it arrives as tennis (Google has not written down how a Fitbit "Tennis"
 workout is labelled, so one real session settles it). Only what the watch
 records counts: tennis typed into the Fitbit app by hand does not come in.
+A workout the watch recognised by itself comes in as "Sport" (Fitbit's
+automatic recognition has no Tennis): those are offered too, for the player
+to log or dismiss. On connecting, and on **Sync now**, CourtSide looks back
+30 days. If a player's sessions still don't show, Claude checks the crash
+reports for a "[trackers]" line, which says what Google sent instead.
 
 ### Limits until Google has checked CourtSide (read before opening Fitbit to everyone)
 

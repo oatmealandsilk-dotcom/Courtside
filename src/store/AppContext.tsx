@@ -8799,8 +8799,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return true;
     }
     if (provider === 'whoop') { await remote.whoop('sync'); return true; }
-    // Fitbit, Oura, Polar: "Sync now" looks back a week for tennis.
-    if (isTracker(provider)) { await remote.trackers('sync', { provider, days: 7 }); return true; }
+    // Fitbit, Oura, Polar: "Sync now" looks back 30 days for tennis (a server from before Oct 24 looks back a week).
+    if (isTracker(provider)) { await remote.trackers('sync', { provider, days: 30 }); return true; }
     return false;
   }, []);
 

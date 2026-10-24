@@ -52,7 +52,7 @@ const iso = (ms: number) => new Date(ms).toISOString();
 export type FitbitExercise = {
   /** "users/<player>/dataTypes/exercise/dataPoints/<the workout's own id>" */
   name?: string;
-  dataSource?: { platform?: string; device?: { displayName?: string } };
+  dataSource?: { platform?: string; recordingMethod?: string; device?: { displayName?: string } };
   exercise?: {
     interval?: { startTime?: string; endTime?: string; startUtcOffset?: string };
     exerciseType?: string; displayName?: string;
@@ -83,7 +83,23 @@ const whole = (v: unknown) => num(typeof v === 'string' && /^\d+(\.\d+)?$/.test(
  * with one real session.
  */
 export const fitbitIsTennis = (e: FitbitExercise) =>
-  e.exercise?.exerciseType === 'TENNIS' || (e.exercise?.exerciseType === 'OTHER' && lower(e.exercise?.displayName) === 'tennis');
+  e.exercise?.exerciseType === 'TENNIS' || (e.exercise?.exerciseType === 'OTHER' && namedTennis(e.exercise?.displayName));
+/** A player's own name for a workout that says tennis ("Tennis", "Tennis match"), never table tennis. */
+const namedTennis = (s: unknown) => /(^|[^a-z])tennis([^a-z]|$)/.test(lower(s)) && !/table|pop|beach|paddle|platform/.test(lower(s));
+
+/**
+ * What a Fitbit records when nobody picks Tennis on the watch (Oct 24:
+ * Trishiv's Fitbit linked fine and brought nothing). Its automatic
+ * recognition (SmartTrack) has no Tennis: a game of tennis comes in as the
+ * generic "Sport" (SPORT), or under the racket catch-all. Filed the same way
+ * as tennis, as a session the player can log or dismiss (they appear in To
+ * do); a player who also plays football just dismisses that one. Aerobic
+ * workouts, walks and runs stay out.
+ */
+const MAYBE_TENNIS = new Set(['SPORT', 'SPORTS', 'RACKET_SPORTS', 'RACKET_SPORT']);
+export const fitbitMaybeTennis = (e: FitbitExercise) => MAYBE_TENNIS.has(e.exercise?.exerciseType ?? '');
+/** Tennis, or a session that may well be tennis, for the player to confirm. */
+export const fitbitCounts = (e: FitbitExercise) => fitbitIsTennis(e) || fitbitMaybeTennis(e);
 
 /**
  * Workouts another app put into Google Health (an Apple Watch's through Apple
