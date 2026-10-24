@@ -19,8 +19,12 @@ import { brandBoxShadow } from '@/theme/fillMode';
  * and green kept for the one thing to press.
  */
 
-/** The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said). */
-export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number }) {
+/**
+ * The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said).
+ * `edge`: a hairline along its foot while the form under it is scrolled, so the top of the form passing under
+ * the title reads as scrolled rather than cut off (Oct 24: a light swipe left "1h 00m" hard against the line).
+ */
+export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize, edge = false }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number; edge?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.titleRow}>
@@ -31,6 +35,7 @@ export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose
       <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
         <Ionicons name="close" size={18} color={colors.textMuted} />
       </Pressable>
+      {edge ? <View pointerEvents="none" style={styles.edge} /> : null}
     </View>
   );
 }
@@ -265,6 +270,8 @@ export function FormFold({ open, render }: { open: boolean; render: () => React.
 
 const styleDefinitions = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  // Laid over the row's foot, so showing it never moves anything.
+  edge: { position: 'absolute', left: 0, right: 0, bottom: 0, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
   title: { ...typography.title, fontSize: 24, letterSpacing: -0.5, color: colors.text },
   line: { ...typography.small, color: colors.textMuted },
   lineBrand: { color: colors.brand, ...font('600') },

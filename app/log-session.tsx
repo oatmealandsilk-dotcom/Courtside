@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -151,7 +151,14 @@ function LogSession() {
   const { activity, hit, edit, focus, hand } = useLocalSearchParams<{ activity?: string; hit?: string; edit?: string; focus?: string; hand?: string }>();
   const { actions, detectedActivities, remoteLoaded, ready, hitRequests, currentUserId, users, posts, stories, sessions, sessionTags, sessionTagsReady, manualStatsReady } = useApp();
   // The box you type in stays above a phone's keyboard, and so do the names listed under it.
-  const { scroller, onScroll, reveal } = useKeyboardReveal();
+  const { scroller, onScroll: keepOffset, reveal } = useKeyboardReveal();
+  // Whether the form is scrolled from its top: the title then draws its edge (SheetTitle edge).
+  const [scrolled, setScrolled] = useState(false);
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    keepOffset(e);
+    const now = e.nativeEvent.contentOffset.y > 1;
+    if (now !== scrolled) setScrolled(now);
+  };
   // The hit it was opened for: the prompt's words, or the hit itself if the app was reloaded on the way.
   const [fromHit] = useState(() => {
     if (!hit) return null;
@@ -460,23 +467,23 @@ function LogSession() {
   });
 
   const header = editing ? (
-    <SheetTitle title={editing.fromSessionId || !canScore(editing.kind) ? 'Who was there' : `Edit ${KIND_LABEL[editing.kind].toLowerCase()}`} line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} />
+    <SheetTitle title={editing.fromSessionId || !canScore(editing.kind) ? 'Who was there' : `Edit ${KIND_LABEL[editing.kind].toLowerCase()}`} line={`${loggedLabel(editing)} · ${dayWords(editing.day)} · ${duration(editing.minutes)}`} onClose={close} edge={scrolled} />
   ) : edit ? (
-    <SheetTitle title="Who was there" onClose={close} />
+    <SheetTitle title="Who was there" onClose={close} edge={scrolled} />
   ) : waiting ? (
-    <SheetTitle title="Log your tennis" onClose={close} />
+    <SheetTitle title="Log your tennis" onClose={close} edge={scrolled} />
   ) : fresh ? (
-    <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} edge={scrolled} />
   ) : done ? (
-    <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
+    <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} edge={scrolled} />
   ) : deciding ? (
-    <SheetTitle title="Log a session" onClose={close} />
+    <SheetTitle title="Log a session" onClose={close} edge={scrolled} />
   ) : choosing ? (
-    <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
+    <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} edge={scrolled} />
   ) : fromHit ? (
-    <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} edge={scrolled} />
   ) : (
-    <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
+    <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} edge={scrolled} />
   );
   // A tracker's numbers, yours alone.
   const numbers = fresh ? privateLine(fresh) : '';
