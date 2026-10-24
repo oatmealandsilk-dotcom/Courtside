@@ -15,6 +15,7 @@ import { shareOutside } from '@/lib/shareOutside';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * Start a group's last step: bring your people in. At the top, the group's
@@ -249,8 +250,8 @@ const styleDefinitions = StyleSheet.create({
   part: { gap: spacing.sm },
   invited: { color: colors.brand },
   pressed: { opacity: PRESS_DIM },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
-  linkCard: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.md, gap: spacing.md },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  linkCard: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, padding: spacing.md, gap: spacing.md },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   linkIcon: { width: 40, height: 40, borderRadius: 13, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, minWidth: 0, gap: 2 },

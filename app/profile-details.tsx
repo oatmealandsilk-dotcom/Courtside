@@ -44,6 +44,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -771,7 +772,7 @@ const styleDefinitions = StyleSheet.create({
   theirBody: { gap: spacing.xxl, paddingTop: spacing.xxl },
   gone: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 64 },
   locked: { alignItems: 'center', paddingTop: 56, paddingHorizontal: spacing.xl, gap: spacing.sm },
-  lockTile: { width: 56, height: 56, borderRadius: 16, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
+  lockTile: { width: 56, height: 56, borderRadius: corner(16), backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   lockedTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   lockedBody: { ...typography.small, lineHeight: 19, color: colors.textMuted, textAlign: 'center', maxWidth: 300 },
   lockedFollow: { marginTop: spacing.md },

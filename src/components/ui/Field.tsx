@@ -9,6 +9,7 @@ import { activeMention, applyMention } from '@/lib/mentions';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { TextScale } from '@/theme/textScale';
 import { TextBox } from '@/components/ui/TextBox';
+import { inputCorner } from '@/theme/look';
 
 interface Props {
   inputRef?: React.Ref<TextInput>;
@@ -218,8 +219,8 @@ const styleDefinitions = StyleSheet.create({
   hint: { ...typography.small, color: colors.textFaint },
   // A fixed height and no top/bottom padding: iPhone then centres the words and the grey example
   // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
-  softLine: { ...lift, borderWidth: 0, borderRadius: radius.pill, height: 52, paddingVertical: 0, fontSize: 16 },
-  softArea: { ...lift, borderWidth: 0, borderRadius: 20, paddingVertical: 14, fontSize: 16, lineHeight: 22 },
-  well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: 14 },
-  compact: { minHeight: 44, maxHeight: 120, borderRadius: 22, paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
+  softLine: { ...lift, borderWidth: 0, borderRadius: inputCorner(radius.pill), height: 52, paddingVertical: 0, fontSize: 16 },
+  softArea: { ...lift, borderWidth: 0, borderRadius: inputCorner(20), paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: inputCorner(14) },
+  compact: { minHeight: 44, maxHeight: 120, borderRadius: inputCorner(22), paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
 });

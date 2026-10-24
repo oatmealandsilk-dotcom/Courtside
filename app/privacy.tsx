@@ -11,6 +11,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
 import { colors, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
@@ -85,7 +86,7 @@ const styleDefinitions = StyleSheet.create({
   // Quiet, the way Settings reads: short labels, the value at the right,
   // flat grouped lists with a hairline edge instead of a raised shadow.
   sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.lg, paddingBottom: 6 },
-  card: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  card: { borderRadius: corner(16), backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, minHeight: 48 },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowLabel: { ...typography.body, fontSize: 15, color: colors.text, flex: 1 },

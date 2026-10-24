@@ -12,6 +12,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * "Log your hits automatically" at the top of Profile (owner, Oct 24: "I like
@@ -89,7 +90,7 @@ export function ConnectCard() {
 
 const styleDefinitions = StyleSheet.create({
   // The same card as Profile's "Make your first move" and the website's "Get CourtSide on your iPhone".
-  row: { marginTop: 16, borderRadius: 16, backgroundColor: colors.brandDim, flexDirection: 'row', alignItems: 'center' },
+  row: { marginTop: 16, borderRadius: corner(16), backgroundColor: colors.brandDim, flexDirection: 'row', alignItems: 'center' },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingLeft: 14 },
   rowTitle: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   rowMeta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },

@@ -27,6 +27,7 @@ import { colors, radius, spacing, typography, lift } from '@/theme';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -369,7 +370,7 @@ const styleDefinitions = StyleSheet.create({
   // Quiet, the way Settings reads: short labels, the value at the right,
   // flat grouped lists with a hairline edge instead of a raised shadow.
   sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: 6 },
-  card: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  card: { borderRadius: corner(16), backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'stretch', paddingLeft: spacing.lg },
   lead: { width: 22, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
   rowBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 48, paddingVertical: 10, paddingRight: spacing.md },
@@ -377,7 +378,7 @@ const styleDefinitions = StyleSheet.create({
   rowLabel: { ...typography.body, fontSize: 15, color: colors.text, flex: 1 },
   rowDetail: { ...typography.small, fontSize: 14, color: colors.textFaint, maxWidth: '55%' },
   backdrop: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingTop: spacing.lg, paddingBottom: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
+  sheet: { backgroundColor: colors.bg, borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24), paddingTop: spacing.lg, paddingBottom: spacing.xxl, maxWidth: 520, width: '100%', alignSelf: 'center', overflow: 'hidden' },
   sheetBody: { padding: spacing.lg, gap: spacing.lg },
   ticks: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingHorizontal: 4 },
   tick: { flexDirection: 'row', alignItems: 'center', gap: 7 },

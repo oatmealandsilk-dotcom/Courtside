@@ -13,6 +13,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * "Your first week" (Oct 20 sweep, R7: "'Finish setting up' covers only
@@ -194,7 +195,7 @@ function StepRow({ title, icon, done, fresh, note, onPress }: { title: string; i
 
 const styleDefinitions = StyleSheet.create({
   // The same card as "Make your first move" and "Finish setting up", holding a short list.
-  card: { marginTop: 16, paddingTop: 14, paddingBottom: 6, borderRadius: 16, backgroundColor: colors.brandDim, gap: 4 },
+  card: { marginTop: 16, paddingTop: 14, paddingBottom: 6, borderRadius: corner(16), backgroundColor: colors.brandDim, gap: 4 },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14 },
   title: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   sub: { fontSize: 12, color: colors.textMuted, lineHeight: 17 },

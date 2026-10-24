@@ -12,6 +12,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { REWARDS, dollars, nextReward, notCountedReason, stepFill, wontCount } from './affiliate';
+import { corner } from '@/theme/look';
 
 const shortDate = (iso: string) => {
   const at = new Date(iso);
@@ -131,7 +132,7 @@ function Earnings({ stats, userId }: { stats: AffiliateStats; userId: string }) 
   ];
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.hero, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered]}>
-      <CardWash look={look} radius={20} />
+      <CardWash look={look} radius={corner(20)} />
       <View style={styles.heroHead}>
         <Text style={[styles.heroTitle, { color: look.ink }]}>Your earnings</Text>
         <BrandMark size={22} color={look.figure} />
@@ -310,7 +311,7 @@ const styleDefinitions = StyleSheet.create({
   tabular: { fontVariant: ['tabular-nums'] },
 
   // The earnings box: the session box's shape (20 corners, its fade laid first).
-  hero: { borderRadius: 20, padding: 20, overflow: 'hidden' },
+  hero: { borderRadius: corner(20), padding: 20, overflow: 'hidden' },
   bordered: { borderWidth: 1 },
   heroHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   heroTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },
@@ -327,7 +328,7 @@ const styleDefinitions = StyleSheet.create({
   cellLabel: { ...font('400'), fontSize: 12, lineHeight: 16 },
 
   // A card on the sheet: the grouped list's (Archive, Change handle).
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.lg },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, padding: spacing.lg },
   cardHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   cardTitle: { ...typography.heading, color: colors.text },
   cardCount: { ...typography.smallStrong, color: colors.textMuted, fontVariant: ['tabular-nums'] },
@@ -367,7 +368,7 @@ const styleDefinitions = StyleSheet.create({
 
   section: { gap: spacing.sm },
   sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xs },
-  list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  list: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   person: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingLeft: spacing.lg },
   personPressed: { backgroundColor: colors.surfaceAlt },
   // Level with the name's line (the words carry the row's padding, so their hairline runs from the name).

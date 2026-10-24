@@ -13,6 +13,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 const DAY = 86400000;
 const WAIT_DAYS = 30;
@@ -165,7 +166,7 @@ function Rule({ icon, head, body, line }: { icon: keyof typeof Ionicons.glyphMap
 const styleDefinitions = StyleSheet.create({
   wait: { paddingVertical: 60, alignItems: 'center' },
   body: { gap: spacing.md },
-  banner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 16, backgroundColor: colors.surfaceAlt },
+  banner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(16), backgroundColor: colors.surfaceAlt },
   bannerText: { flex: 1, ...typography.small, color: colors.text, lineHeight: 19 },
   field: { flexDirection: 'row', alignItems: 'center', gap: 2, height: 52, paddingHorizontal: spacing.lg, borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   fieldLocked: { opacity: 0.55 },
@@ -178,7 +179,7 @@ const styleDefinitions = StyleSheet.create({
   good: { color: colors.success },
   bad: { color: colors.danger },
   // The rules as one quiet list, the way Settings reads.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.md },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.md },
   rule: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.md },
   ruleLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   ruleIcon: { marginTop: 1 },

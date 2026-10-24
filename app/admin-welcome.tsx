@@ -17,6 +17,7 @@ import { show as showToast } from '@/lib/toast';
 import { confirmUnfollow } from '@/lib/confirm';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Everyone who joined this week (Oct 20 sweep, R4: "Welcome every new
@@ -237,13 +238,13 @@ const styleDefinitions = StyleSheet.create({
   loading: { paddingVertical: spacing.xxl, alignItems: 'center' },
   numbers: { gap: spacing.sm, marginBottom: spacing.lg },
   numRow: { flexDirection: 'row', gap: spacing.sm },
-  num: { flex: 1, gap: 2, padding: spacing.md, borderRadius: 16, backgroundColor: colors.surface },
+  num: { flex: 1, gap: 2, padding: spacing.md, borderRadius: corner(16), backgroundColor: colors.surface },
   numValue: { ...typography.title, color: colors.text, fontVariant: ['tabular-nums'] },
   numVs: { ...typography.body, color: colors.textMuted },
   numLabel: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   numFoot: { ...typography.caption, letterSpacing: 0, color: colors.textFaint, marginTop: 2 },
   picks: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   words: { flex: 1, gap: 1 },

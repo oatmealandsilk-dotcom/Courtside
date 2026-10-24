@@ -18,6 +18,7 @@ import { afterReport } from '@/features/moderation/reportThanks';
 import { useApp } from '@/store/AppContext';
 import type { Tip } from '@/data/types';
 import { colors, font, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** A tip sent in the last few minutes is yours to see at the top, whatever its votes. */
 const FRESH_MS = 10 * 60 * 1000;
@@ -129,7 +130,7 @@ const styleDefinitions = StyleSheet.create({
   section: { gap: spacing.sm, paddingTop: spacing.xl },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm },
   // One list, the way Settings reads: a shade off the page, hairlines between rows.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', gap: spacing.sm, paddingVertical: spacing.md, paddingLeft: spacing.sm, paddingRight: spacing.lg },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rail: { width: 40, alignItems: 'center', gap: 1 },

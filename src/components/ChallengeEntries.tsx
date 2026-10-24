@@ -9,6 +9,7 @@ import type { Post } from '@/data/types';
 import { compactNumber } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Challenge entries three across, in their standing: the place in a small
@@ -38,7 +39,7 @@ export function ChallengeEntries({ entries, from = 1 }: { entries: Post[]; from?
 
 const styleDefinitions = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, minHeight: 40 },
-  tile: { borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  tile: { borderRadius: corner(14), overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   blank: { padding: spacing.sm, paddingTop: 36 },
   blankText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },
   place: { position: 'absolute', top: 7, left: 7, minWidth: 22, height: 22, paddingHorizontal: 6, borderRadius: 11, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },

@@ -6,6 +6,7 @@ import { GroupTile } from '@/features/groups/GroupTile';
 import { lookWords } from '@/features/groups/look';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * Start a group's live preview: the group's row exactly as people will meet
@@ -48,7 +49,7 @@ export function GroupPreview({ name, look, ask, listed, about, members = 1 }: {
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: spacing.md, gap: 8 },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, paddingHorizontal: spacing.md, paddingTop: 10, paddingBottom: spacing.md, gap: 8 },
   caption: { ...typography.caption, fontSize: 10, letterSpacing: 0.8, color: colors.textFaint },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   words: { flex: 1, minWidth: 0, gap: 1 },

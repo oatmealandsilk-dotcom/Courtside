@@ -4,6 +4,7 @@ import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-nat
 
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { WASH_SCALE } from '@/theme/look';
 
 interface Props {
   /** How tall the wash is before it has faded out entirely. */
@@ -15,6 +16,8 @@ interface Props {
   fade?: string;
   /** Draw another court's wash — the theme list shows each court as itself. */
   theme?: ThemeName;
+  /** A court's swatch (the theme list): drawn at full strength whatever the wash switch in theme/look.ts says. */
+  swatch?: boolean;
 }
 
 type Glow = readonly [r: number, g: number, b: number, alpha: number];
@@ -64,12 +67,15 @@ function LiveWash(props: Props) {
   return <WashDrawing {...props} theme={props.theme ?? current} fade={props.fade ?? colors.bg} />;
 }
 
-function WashDrawing({ height = 320, strength = 1, style, fade: to, theme }: Props & { theme: ThemeName; fade: string }) {
+function WashDrawing({ height = 320, strength: given = 1, style, fade: to, theme, swatch }: Props & { theme: ThemeName; fade: string }) {
   const [l, r] = WASHES[theme] ?? WASHES.default;
+  // The wash switch (theme/look.ts): a page's wash at its share of today's strength, or none at all.
+  const strength = swatch ? given : given * WASH_SCALE;
   // The court's name is part of every gradient's id: iOS keeps a gradient by
   // its id and would not repaint one whose colours changed under the same
   // name, which left the old court's glow on the new court's page.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
+  if (strength <= 0) return null;
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">

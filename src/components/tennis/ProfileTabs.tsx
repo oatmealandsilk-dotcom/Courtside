@@ -9,6 +9,7 @@ import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
 import { PROFILE_TABS, type ProfileTab } from '@/features/players/profileTab';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { trackCorner } from '@/theme/look';
 import { TextScale, oneLine } from '@/theme/textScale';
 
 /**
@@ -164,13 +165,13 @@ const styleDefinitions = StyleSheet.create({
   spot: { marginTop: spacing.lg, zIndex: 2 },
   // Behind the bar, only while it is pinned: the page's colour from the top of the page to a little under the bar, gutter to gutter.
   band: { position: 'absolute', top: -PIN_GAP, bottom: -BAND_BELOW, left: -BAND_SIDE, right: -BAND_SIDE, overflow: 'hidden', backgroundColor: colors.bg },
-  track: { flexDirection: 'row', gap: TAB_GAP, padding: TRACK_PAD, borderRadius: radius.pill, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  track: { flexDirection: 'row', gap: TAB_GAP, padding: TRACK_PAD, borderRadius: trackCorner(TRACK_PAD), backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   // On a dark page the bar sinks a shade below the boxes, so the chosen tab can sit a shade above them.
   trackDark: { backgroundColor: colors.bgElevated },
-  tab: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  tab: { flex: 1, minHeight: 38, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm, borderRadius: radius.chip, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
   tabOn: { ...lift, backgroundColor: colors.surface },
   // The raised pill on its own, under the words, so it can slide between tabs.
-  pill: { position: 'absolute', top: TRACK_PAD, bottom: TRACK_PAD, left: TRACK_PAD, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  pill: { position: 'absolute', top: TRACK_PAD, bottom: TRACK_PAD, left: TRACK_PAD, borderRadius: radius.chip, borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
   // Raised on a dark page by being lighter, with a faint lit edge (set where it is drawn); a shadow cannot show there.
   tabOnDark: { backgroundColor: colors.surfaceAlt },
   pressed: { opacity: PRESS_DIM },

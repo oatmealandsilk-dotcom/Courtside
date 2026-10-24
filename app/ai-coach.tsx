@@ -12,6 +12,7 @@ import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
+import { corner } from '@/theme/look';
 
 const AI_SECTIONS: ('ask' | 'plan')[] = ['ask', 'plan'];
 import { TipComposer } from '@/components/TipComposer';
@@ -206,7 +207,7 @@ const introDefinitions = StyleSheet.create({
   itemText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 22 },
   link: { ...typography.smallStrong, color: colors.brand },
   error: { ...typography.small, color: colors.danger, textAlign: 'center' },
-  card: { ...lift, alignItems: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, marginTop: spacing.lg },
+  card: { ...lift, alignItems: 'center', gap: spacing.md, padding: spacing.xl, borderRadius: corner(20), backgroundColor: colors.surface, marginTop: spacing.lg },
   mark: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.heading, color: colors.text, textAlign: 'center' },
   body: { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
@@ -575,17 +576,17 @@ const styleDefinitions = StyleSheet.create({
   lineWrap: { gap: spacing.sm },
   report: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm },
   reportText: { ...typography.caption, color: colors.textFaint },
-  bubble: { borderRadius: 18, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxWidth: '88%' },
+  bubble: { borderRadius: corner(18), paddingHorizontal: spacing.lg, paddingVertical: spacing.md, maxWidth: '88%' },
   mine: { alignSelf: 'flex-end', backgroundColor: colors.brandDim },
   theirs: { alignSelf: 'flex-start', backgroundColor: colors.surface },
   bubbleText: { ...typography.body, color: colors.text, lineHeight: 22 },
-  handoff: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, maxWidth: '88%' },
+  handoff: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: corner(18), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, maxWidth: '88%' },
   handoffName: { ...typography.smallStrong, color: colors.text },
   handoffLine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   error: { ...typography.small, color: colors.danger },
   footRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.md },
   fine: { flex: 1, ...typography.caption, color: colors.textFaint, lineHeight: 17 },
-  remind: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.xl },
+  remind: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface, marginBottom: spacing.xl },
   remindTitle: { ...typography.bodyStrong, color: colors.text },
   remindBody: { ...typography.caption, color: colors.textMuted },
   link: { ...typography.smallStrong, color: colors.brand },
@@ -593,7 +594,7 @@ const styleDefinitions = StyleSheet.create({
   writingTitle: { ...typography.heading, color: colors.text, marginTop: spacing.md },
   writingBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   // The week, on one quiet surface: no border, a shade off the page.
-  summaryCard: { gap: spacing.md, marginTop: spacing.lg, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  summaryCard: { gap: spacing.md, marginTop: spacing.lg, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   weekOf: { ...typography.small, color: colors.textMuted },
   headline: { ...typography.title, color: colors.text },
   summary: { ...typography.body, color: colors.text, lineHeight: 22 },
@@ -603,18 +604,18 @@ const styleDefinitions = StyleSheet.create({
   statLabel: { ...typography.small, color: colors.textMuted },
   statValue: { ...typography.title, color: colors.text },
   statHint: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
-  cautionCard: { gap: spacing.sm, marginTop: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: `${colors.warning}14` },
+  cautionCard: { gap: spacing.sm, marginTop: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: `${colors.warning}14` },
   cautionHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cautionTitle: { ...typography.smallStrong, color: colors.warning },
   caution: { ...typography.small, color: colors.text, lineHeight: 20 },
   week: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 2 },
-  dayCol: { width: 92, gap: 8, padding: spacing.md, borderRadius: 18, backgroundColor: colors.surface },
+  dayCol: { width: 92, gap: 8, padding: spacing.md, borderRadius: corner(18), backgroundColor: colors.surface },
   dayColOpen: { backgroundColor: colors.brandDim },
   dayColRest: { backgroundColor: colors.bgElevated },
   dayColLabel: { ...typography.smallStrong, color: colors.textMuted },
   dayColTitle: { ...typography.smallStrong, color: colors.text, lineHeight: 17, minHeight: 34 },
   dayColMinutes: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
-  dayCard: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  dayCard: { gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   dayHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   dayTitle: { ...typography.bodyStrong, color: colors.text, flex: 1 },
   dayMinutes: { ...typography.small, color: colors.textFaint },

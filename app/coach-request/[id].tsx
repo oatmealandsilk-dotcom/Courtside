@@ -15,6 +15,7 @@ import { dueText, isOpen, isOverdue, KIND_LABEL, statusLabel } from '@/features/
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * One booking, seen by both sides. The player sees their question, where it
@@ -167,7 +168,7 @@ const styleDefinitions = StyleSheet.create({
   pillTextDone: { color: colors.brand },
   due: { ...typography.small, color: colors.textMuted, marginTop: spacing.md },
   label: { ...typography.smallStrong, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.sm, paddingHorizontal: spacing.xs },
-  card: { gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  card: { gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   // The answer reads as the answer by a stripe of the court's colour down its edge, not a tinted box (which went olive on dark courts).
   answer: { borderLeftWidth: 3, borderLeftColor: colors.brand, borderTopLeftRadius: 6, borderBottomLeftRadius: 6 },
   body: { ...typography.body, color: colors.text, lineHeight: 23 },

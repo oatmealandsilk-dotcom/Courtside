@@ -36,6 +36,7 @@ import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -402,7 +403,7 @@ function SoftCard({ fill, style, children }: { fill: string; style?: object; chi
   const lift = cardLook(theme).filled ? 0.8 : 0;
   return (
     <View style={[styles.group, { backgroundColor: fill }, style]}>
-      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><ShirtWash radius={20} lift={lift} /></View>}
+      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><ShirtWash radius={corner(20)} lift={lift} /></View>}
       {children}
     </View>
   );
@@ -666,7 +667,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 
 const styleDefinitions = StyleSheet.create({
   // A card of rows (To do, a week of sessions): the Share card's cream and a lighter lay of its wash (SoftCard), no shadow, rows parted by a hairline.
-  group: { borderRadius: 20, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  group: { borderRadius: corner(20), overflow: 'hidden', paddingHorizontal: spacing.lg },
   notTennis: { alignSelf: 'flex-start', paddingLeft: 22 + spacing.md, paddingTop: 4, paddingBottom: spacing.sm },
   notTennisText: { ...typography.small, color: colors.textMuted },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },

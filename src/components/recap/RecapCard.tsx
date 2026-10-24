@@ -13,6 +13,7 @@ import { CardWash, type CardLook } from '@/components/session/SessionCard';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha, wordmarkFont } from '@/theme';
+import { corner } from '@/theme/look';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -253,7 +254,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
   );
   return (
     <View style={[styles.summary, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-      <CardWash look={look} radius={22} />
+      <CardWash look={look} radius={corner(22)} />
       {onOpen ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.sumMain, pressed && styles.pressed]}>
           {body}
@@ -273,7 +274,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: PRESS_DIM },
-  card: { ...lift, borderRadius: 24, backgroundColor: colors.surface, padding: spacing.xl, paddingBottom: spacing.lg },
+  card: { ...lift, borderRadius: corner(24), backgroundColor: colors.surface, padding: spacing.xl, paddingBottom: spacing.lg },
   // The Instagram picture's card: a little tighter, so what stood out and the lockup fit above Instagram's own buttons.
   cardStory: { paddingTop: 18, paddingBottom: 12 },
   top: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -306,7 +307,7 @@ const styleDefinitions = StyleSheet.create({
   statLine: { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border, paddingLeft: spacing.md },
   statValue: { ...font('600'), fontSize: 24, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
   statLabel: { ...typography.small, color: colors.textMuted },
-  highlights: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  highlights: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   highlight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 14 },
   highlightCompact: { paddingVertical: 9 },
   highlightLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -317,7 +318,7 @@ const styleDefinitions = StyleSheet.create({
   foot: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   site: { ...font('500'), fontSize: 11.5, color: colors.textMuted },
   // The summary: the Share card's cream (its fill given by the page), no shadow, the figure in green.
-  summary: { borderRadius: 22, marginTop: spacing.sm, overflow: 'hidden' },
+  summary: { borderRadius: corner(22), marginTop: spacing.sm, overflow: 'hidden' },
   sumMain: { paddingHorizontal: spacing.lg + 2, paddingTop: spacing.lg, paddingBottom: spacing.lg, gap: 6 },
   sumTop: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingRight: 36 },
   sumLabel: { ...typography.caption, fontSize: 11.5, letterSpacing: 1.1, flexShrink: 1 },

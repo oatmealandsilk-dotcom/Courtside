@@ -13,6 +13,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /*
  * "Get CourtSide on your iPhone" on the website (Oct 20 sweep, R3: "People
@@ -140,7 +141,7 @@ const FALL = Easing.bezier(0.4, 0, 1, 1);
 
 const styleDefinitions = StyleSheet.create({
   // The same card as Profile's "Make your first move" and "Finish setting up".
-  row: { marginTop: 16, borderRadius: 16, backgroundColor: colors.brandDim, flexDirection: 'row', alignItems: 'center' },
+  row: { marginTop: 16, borderRadius: corner(16), backgroundColor: colors.brandDim, flexDirection: 'row', alignItems: 'center' },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingLeft: 14 },
   rowTitle: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   rowMeta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },
@@ -149,7 +150,7 @@ const styleDefinitions = StyleSheet.create({
   dim: { backgroundColor: colors.overlay },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.lg, paddingHorizontal: spacing.lg, ...lift },
   inner: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md },
-  mark: { width: 52, height: 52, borderRadius: 16, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  mark: { width: 52, height: 52, borderRadius: corner(16), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.title, color: colors.text },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, marginTop: -spacing.xs },
   foot: { ...typography.small, color: colors.textMuted, textAlign: 'center' },

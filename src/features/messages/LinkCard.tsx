@@ -8,6 +8,7 @@ import { Tappable, useDoubleTap } from '@/components/Tappable';
 import { domainOf, openLink } from '@/lib/links';
 import { colors, font, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 import { DemoPhoto } from './DemoPhoto';
 import { kindOf, refreshLinkPreview, useLinkPreview, type LinkKind } from './linkPreview';
 
@@ -17,7 +18,7 @@ export const LINK_CARD_W = 252;
 const PORTRAIT_W = 220;
 
 /** Round corners like a bubble's; where it joins the message above or below, the corner on its sender's side is small. */
-const ROUND = 18;
+const ROUND = corner(18);
 const JOINED = 6;
 
 /** Each kind of page's picture, at the shape its pictures usually have. */

@@ -20,6 +20,7 @@ import { archivedStories } from '@/features/stories/stories';
 import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, font, radius, spacing, typography, lift } from '@/theme';
+import { corner } from '@/theme/look';
 
 type Tab = 'stories' | 'posts';
 /** Left to right. Instants first: they land here on their own, so that is where most things are. */
@@ -258,7 +259,7 @@ const styleDefinitions = StyleSheet.create({
   storyTile: { borderRadius: radius.sm, overflow: 'hidden', backgroundColor: colors.surfaceAlt, justifyContent: 'flex-end', padding: 8 },
   pressed: { opacity: PRESS_DIM },
   // One grouped list, a shade off the page, hairlines between.
-  list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  list: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   postRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   postBody: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },

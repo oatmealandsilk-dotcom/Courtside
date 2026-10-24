@@ -10,6 +10,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { brandBoxShadow } from '@/theme/fillMode';
+import { corner, trackCorner } from '@/theme/look';
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
@@ -282,9 +283,9 @@ const styleDefinitions = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chipsFill: { flexWrap: 'nowrap' },
   // The small switch's capsule: white on the soft shadow, like a stepper; only the chosen side is drawn inside it.
-  chipsTrack: { ...lift, flexWrap: 'nowrap', gap: 2, padding: 3, borderRadius: radius.pill, backgroundColor: colors.surface },
+  chipsTrack: { ...lift, flexWrap: 'nowrap', gap: 2, padding: 3, borderRadius: trackCorner(3), backgroundColor: colors.surface },
   // The soft pill: white on the page's shadow, with a ring on every pill (clear until chosen) so choosing never shifts the row.
-  pill: { ...lift, minHeight: 38, paddingHorizontal: 15, borderRadius: radius.pill, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  pill: { ...lift, minHeight: 38, paddingHorizontal: 15, borderRadius: radius.chip, borderWidth: 1.5, borderColor: 'transparent', backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   pillSmall: { minHeight: 30, minWidth: 46, paddingHorizontal: 10, backgroundColor: 'transparent', boxShadow: 'none' },
   pillFill: { flex: 1, paddingHorizontal: spacing.sm },
   pillOn: { backgroundColor: colors.brandDim, borderColor: colors.brand, boxShadow: 'none' },
@@ -298,7 +299,7 @@ const styleDefinitions = StyleSheet.create({
   // from their heading, and from the next part, as every other choice on the sheet.
   shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
-  tile: { ...lift, minHeight: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
+  tile: { ...lift, minHeight: 64, borderRadius: corner(18), backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
   tileFixed: { minWidth: 58, paddingHorizontal: 8 },
   tileFlex: { flex: 1 },

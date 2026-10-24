@@ -7,6 +7,7 @@ import { tileColors } from '@/features/groups/look';
 import { colors, font } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
+import { corner as lookCorner } from '@/theme/look';
 
 /*
  * A group's face: a soft tile in the group's colour with its emoji or its
@@ -30,7 +31,7 @@ export function groupInitials(name: string): string {
 
 export function GroupTile({ name, size = 48, look }: { name: string; size?: number; look?: GroupLook | null }) {
   const styles = useThemedStyles(styleDefinitions);
-  const corner = Math.round(size * 0.3);
+  const corner = lookCorner(Math.round(size * 0.3));
   const box = { width: size, height: size, borderRadius: corner };
   if (look?.photoUrl) {
     return (

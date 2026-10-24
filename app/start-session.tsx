@@ -30,6 +30,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, inkOn, lift, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Why this court was put in for you: where you are, where you played last, or a court you follow. */
 type Why = 'here' | 'recent' | 'yours' | 'picked';
@@ -387,7 +388,7 @@ const styleDefinitions = StyleSheet.create({
   pressed: { opacity: PRESS_DIM },
   // The court's card: its map across the top, its name under it, who will see you at its foot.
   // The feature card's 20 corners, on the app's own scale.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
   map: { backgroundColor: colors.bgElevated, overflow: 'hidden' },
   mapFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 34 },
   credit: { position: 'absolute', right: 10, top: 7, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
@@ -400,7 +401,7 @@ const styleDefinitions = StyleSheet.create({
   place: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: 14, paddingBottom: 14 },
   // Under the map the name sits up on the fade, as the map's caption.
   placeUnderMap: { paddingTop: 4 },
-  tile: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  tile: { width: 44, height: 44, borderRadius: corner(14), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   tileEmpty: { backgroundColor: colors.surfaceAlt },
   placeWords: { flex: 1, minWidth: 0, gap: 3 },
   name: { ...typography.title, lineHeight: 27, color: colors.text },

@@ -32,7 +32,7 @@ export function Chip({ label, selected = false, onPress, tint, ink, small = fals
         { backgroundColor: background, borderColor: selected ? 'transparent' : colors.border },
       ]}
     >
-      {selected && !tint ? <BrandWash /> : null}
+      {selected && !tint ? <BrandWash radius={radius.chip} /> : null}
       {selected && icon ? <Ionicons name={icon} size={small ? 12 : 15} color={color} /> : null}
       <Text maxFontSizeMultiplier={TextScale.TITLE} style={[small ? styles.textSmall : styles.text, { color }]} numberOfLines={1}>
         {label}
@@ -60,7 +60,7 @@ const styleDefinitions = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 7,
-    borderRadius: radius.pill,
+    borderRadius: radius.chip,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',

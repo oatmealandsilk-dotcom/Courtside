@@ -14,6 +14,7 @@ import { localDay } from '@/features/practice/stats';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** "Alder Park" from "Alder Park Tennis Courts": the name a crown is worn in. */
 export function courtShortName(name: string): string {
@@ -260,7 +261,7 @@ const styleDefinitions = StyleSheet.create({
   // The fine print, opened in place under the title.
   note: { marginTop: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 10, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   noteText: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   // Your line alone, under "No King yet."
   cardSolo: { borderRadius: radius.lg },
   pressed: { opacity: PRESS_DIM },

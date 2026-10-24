@@ -28,6 +28,7 @@ import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typograp
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import type { CourtView } from './view';
+import { corner } from '@/theme/look';
 
 /*
  * A court's page (owner, Oct 10: "Do b."), the place card: the court the
@@ -348,7 +349,7 @@ const styleDefinitions = StyleSheet.create({
   gutter: { paddingHorizontal: spacing.lg },
   // The map.
   hero: { width: '100%', backgroundColor: colors.bgElevated },
-  heroRounded: { borderRadius: 20, overflow: 'hidden' },
+  heroRounded: { borderRadius: corner(20), overflow: 'hidden' },
   heroMap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden' },
   heroTopFade: { position: 'absolute', left: 0, right: 0, top: 0 },
   mapChip: { position: 'absolute', right: spacing.lg, borderRadius: radius.pill, boxShadow: '0px 2px 10px rgba(0, 0, 0, 0.14)' },
@@ -361,7 +362,7 @@ const styleDefinitions = StyleSheet.create({
   pinBadge: { position: 'absolute', top: 3, left: 3, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   // The sheet over the map: the page's own colour, all the way down.
   sheet: {
-    flexGrow: 1, marginTop: -SHEET_OVER, paddingTop: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.bg,
+    flexGrow: 1, marginTop: -SHEET_OVER, paddingTop: 20, borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24), backgroundColor: colors.bg,
     // It floats over the map, so it keeps an overlay's plain shadow, cast upward.
     boxShadow: '0px -4px 16px rgba(0, 0, 0, 0.07)',
   },

@@ -82,6 +82,7 @@ import { colors, radius, typography, spacing, font, lift, wordmarkFont } from '@
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -2404,7 +2405,7 @@ const styleDefinitions = StyleSheet.create({
   holdWord: { ...typography.display, fontSize: 34, ...wordmarkFont('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
-  boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: 16, backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: corner(16), backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   boneRow: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
   boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
@@ -2501,7 +2502,7 @@ const styleDefinitions = StyleSheet.create({
   // The theme's own colours, so the page belongs to whichever look is on.
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   // Centred in its page on every screen size (it sat to the left on a wide computer window).
-  endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },

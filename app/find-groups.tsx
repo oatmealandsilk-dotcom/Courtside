@@ -17,6 +17,7 @@ import { MAX_GROUPS } from '@/store/feedGroups';
 import { buttonShape, colors, font, lift, radius, readsOn, spacing, typography } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /*
  * The "+" on the Feed's top row: a window over the feed, not a new page.
@@ -423,7 +424,7 @@ const styleDefinitions = StyleSheet.create({
   slots: { flexDirection: 'row', gap: spacing.md },
   slot: { flex: 1, minWidth: 0, alignItems: 'flex-start', gap: 4 },
   slotName: { ...typography.smallStrong, color: colors.text, marginTop: 4 },
-  free: { width: SLOT_TILE, height: SLOT_TILE, borderRadius: 17, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  free: { width: SLOT_TILE, height: SLOT_TILE, borderRadius: corner(17), borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   freeQuiet: { borderColor: colors.border },
   dot: { position: 'absolute', top: -3, right: -3, width: 12, height: 12, borderRadius: 6, backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg },
 

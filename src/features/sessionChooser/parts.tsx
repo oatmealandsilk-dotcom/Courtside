@@ -18,6 +18,7 @@ import { duration } from '@/lib/format';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /*
  * The pieces the Session sheet is built from (+ → Session, app/new-session.tsx),
@@ -64,7 +65,7 @@ export function StartHero({ court, onPress }: { court: { name: string; why: stri
       onPress={onPress}
       style={({ pressed }) => [styles.hero, { backgroundColor: look.fill, borderColor: look.border }, pressed && styles.pressedCard]}
     >
-      <CardWash look={look} radius={24} />
+      <CardWash look={look} radius={corner(24)} />
       <View style={styles.heroTop}>
         <LiveDot size={8} color={look.figure} />
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.eyebrow, { color: look.eyebrow }]}>START A SESSION</Text>
@@ -228,7 +229,7 @@ export function WeekStrip({ minutes, streak, days }: { minutes: number; streak: 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: PRESS_DIM },
   pressedCard: { transform: [{ scale: PRESS_SHRINK }] },
-  hero: { ...lift, borderRadius: 24, borderWidth: 1, padding: spacing.lg, paddingBottom: 14, gap: 10, overflow: 'hidden' },
+  hero: { ...lift, borderRadius: corner(24), borderWidth: 1, padding: spacing.lg, paddingBottom: 14, gap: 10, overflow: 'hidden' },
   heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   eyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.9 },
   heroMiddle: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -252,7 +253,7 @@ const styleDefinitions = StyleSheet.create({
   logIt: { minHeight: 36, paddingHorizontal: 16, borderRadius: radius.pill, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   logItText: { ...font('600'), fontSize: 14, color: colors.brandInk },
 
-  byHand: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  byHand: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   byHandIcon: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
   byHandTitle: { ...typography.bodyStrong, color: colors.text },
   byHandNote: { ...typography.small, color: colors.textMuted },

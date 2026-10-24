@@ -13,7 +13,7 @@ export function ThemeTile({ name }: { name: ThemeName }) {
   const p = themes[name];
   return (
     <View style={[tile.box, { backgroundColor: p.bg, borderColor: p.borderStrong }]}>
-      <Wash theme={name} height={26} strength={0.9} fade={p.bg} />
+      <Wash theme={name} height={26} strength={0.9} fade={p.bg} swatch />
     </View>
   );
 }

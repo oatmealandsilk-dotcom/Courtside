@@ -10,6 +10,7 @@ import { formatDistance, isTennisActivity, workoutIcon } from '@/features/activi
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** A row's top and bottom padding, and the height of its first line (the big number, and the button beside it). */
 const ROW_PAD = 14;
@@ -69,7 +70,7 @@ export function WorkoutCard({ children }: { children: React.ReactNode }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   row: { paddingVertical: ROW_PAD },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowMain: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
