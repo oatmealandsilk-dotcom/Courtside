@@ -259,7 +259,7 @@ const styleDefinitions = StyleSheet.create({
   faceOver: { marginLeft: -6 },
   // F: type only, thin rules between.
   typeRow: { paddingVertical: 2 },
-  typeItem: { width: 156, paddingRight: spacing.md, gap: 4 },
+  typeItem: { width: 184, paddingRight: spacing.md, gap: 4 },
   typeRule: { paddingLeft: spacing.md, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.borderStrong },
   typeName: { ...typography.title, fontSize: 19, lineHeight: 23, color: colors.text },
   // Held: the looks' own shapes in the page's quiet tone.
