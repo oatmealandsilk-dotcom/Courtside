@@ -170,6 +170,8 @@ const setReadsWorkouts = (uid: string, p: ProviderId, on: boolean) =>
  * while nothing has come from that tracker yet.
  */
 const LOOK_BACK_DAYS = 30;
+/** When connecting started looking back LOOK_BACK_DAYS (this deploy): older connections get one catch-up look in /sync. */
+const FIRST_LOOK_FROM = '2026-10-24T23:00:00Z';
 /**
  * A sync problem, filed with the app's crash reports (app_errors, screen
  * "trackers"), so a check of those finds it without the function's log.
@@ -465,9 +467,11 @@ async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<st
   }
   const fresh: string[] = [];
   let filed = 0;
+  // A failing record is said once per sync, and at most every 6 hours (crash reports share a rate limit).
+  let reported = false;
   for (const s of found.sessions) {
     const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: true });
-    if (error) { console.error(`[trackers] ${p} record`, error.message); await report(uid, `[trackers] ${p} record: ${error.message}`); continue; }
+    if (error) { console.error(`[trackers] ${p} record`, error.message); if (!reported) { reported = true; await report(uid, `[trackers] ${p} record: ${error.message}`, { tag: `[trackers] ${p} record`, hours: 6 }); } continue; }
     if (data?.id) filed += 1;
     if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
   }
@@ -641,13 +645,19 @@ Deno.serve(async (req) => {
   if (path === '/sync') {
     if (!(await tokenRow(uid, p))) return json({ error: `${NAME[p]} is not connected.` }, 400);
     let days = typeof posted.days === 'number' && posted.days > 0 ? Math.min(posted.days, LOOK_BACK_DAYS) : 1.5;
-    // Nothing ever kept from this tracker (a player who connected before the
-    // 30-day first look, Oct 24): look back the whole 30 days, until something is.
+    // A player who connected before the 30-day first look (this change, Oct 24) and has nothing
+    // kept from this tracker: one look back over the whole 30 days. Once only: the "nothing kept"
+    // note marks that it ran, and anything kept ends it. A newer connection already looked 30 days.
     if (days < LOOK_BACK_DAYS) {
-      const { count } = await admin.from('detected_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('source', p);
-      if (count === 0) days = LOOK_BACK_DAYS;
+      const [{ count }, { data: hc }, { count: looked }] = await Promise.all([
+        admin.from('detected_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('source', p),
+        admin.from('health_connections').select('connected_at').match({ user_id: uid, provider: p }).maybeSingle(),
+        admin.from('app_errors').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('screen', 'trackers').like('message', `[trackers] ${p} nothing kept%`),
+      ]);
+      const before = !hc?.connected_at || Date.parse(hc.connected_at as string) < Date.parse(FIRST_LOOK_FROM);
+      if (count === 0 && before && (looked ?? 0) === 0) days = LOOK_BACK_DAYS;
     }
-    try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); await report(uid, `[trackers] ${p} sync: ${String(e)}`); return json({ error: 'sync failed' }, 500); }
+    try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); await report(uid, `[trackers] ${p} sync: ${String(e)}`, { tag: `[trackers] ${p} sync:`, hours: 6 }); return json({ error: 'sync failed' }, 500); }
   }
 
   if (path === '/disconnect') {
