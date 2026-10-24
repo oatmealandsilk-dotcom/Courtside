@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -8,7 +8,7 @@ import { CourtSearch } from '@/components/CourtSearch';
 import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitAudience, HitRequest, ID } from '@/data/types';
-import { opensAtFor } from '@/features/hits/audience';
+import { EVERYONE_FRIENDS_LINE, opensAtFor } from '@/features/hits/audience';
 import { markJustPosted } from '@/features/hits/hitTips';
 import { AudienceMenu, AudienceSettingRow, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -159,7 +159,9 @@ export default function NewHit() {
     ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it.`
     : audience === 'invite_first'
       ? (opensNow ? 'It starts within 3 hours, so it opens to everyone now.' : `If a spot’s left ${opensText}, it opens to everyone.`)
-      : asked.length ? `${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : 'Whoever joins gets a chat with you.';
+      : forFriends
+        ? `${EVERYONE_FRIENDS_LINE}${asked.length ? ` ${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : ''}`
+        : asked.length ? `${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : 'Whoever joins gets a chat with you.';
   const summary = [FORMAT_LABEL[format], `${dayWord} at ${timeLabel(hour, half)}`, where?.name].filter(Boolean).join(' · ');
 
   const post = async () => {
@@ -225,7 +227,7 @@ export default function NewHit() {
   const [scrolled, setScrolled] = useState(false);
   // The small menu the "Who sees it" row opens.
   const [menuOpen, setMenuOpen] = useState(false);
-  const openMenu = () => setMenuOpen(true);
+  const openMenu = () => { Keyboard.dismiss(); setMenuOpen(true); };
 
   return (
     <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
