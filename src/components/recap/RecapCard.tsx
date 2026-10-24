@@ -254,7 +254,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
   );
   return (
     <View style={[styles.summary, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-      <CardWash look={look} radius={22} />
+      <CardWash look={look} radius={corner(22)} />
       {onOpen ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.sumMain, pressed && styles.pressed]}>
           {body}

@@ -399,7 +399,7 @@ function SoftCard({ fill, style, children }: { fill: string; style?: object; chi
   const lift = cardLook(theme).filled ? 0.8 : 0;
   return (
     <View style={[styles.group, { backgroundColor: fill }, style]}>
-      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><ShirtWash radius={20} lift={lift} /></View>}
+      {pageIsDark() ? null : <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.softWash]}><ShirtWash radius={corner(20)} lift={lift} /></View>}
       {children}
     </View>
   );

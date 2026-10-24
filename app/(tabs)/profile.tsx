@@ -458,7 +458,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
    <View style={[styles.bannerBlank, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-     <CardWash look={look} radius={16} />
+     <CardWash look={look} radius={corner(16)} />
      <Blank w={120} h={17} on={ink} />
      <View style={styles.bannerBlankHero}><Blank w={64} h={36} on={ink} /></View>
      <Blank w={140} h={14} on={ink} />

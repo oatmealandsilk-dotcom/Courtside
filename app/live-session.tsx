@@ -133,7 +133,7 @@ export default function LiveSessionPage() {
           accessibilityRole="timer"
           accessibilityLabel={`${KIND_LABEL[s.kind]}, started ${startClock(s)}. ${spokenClock(ms)}${state === 'paused' ? ', paused' : state === 'finished' ? ', finished' : ''}`}
         >
-          <CardWash look={look} radius={28} />
+          <CardWash look={look} radius={corner(28)} />
           <CourtLines color={look.lines} />
           <View style={styles.boxTop}>
             <Text style={[styles.boxEyebrow, { color: look.eyebrow }]} numberOfLines={1}>{`${KIND_LABEL[s.kind]} · started ${startClock(s)}`.toUpperCase()}</Text>

@@ -132,7 +132,7 @@ function Earnings({ stats, userId }: { stats: AffiliateStats; userId: string }) 
   ];
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.hero, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered]}>
-      <CardWash look={look} radius={20} />
+      <CardWash look={look} radius={corner(20)} />
       <View style={styles.heroHead}>
         <Text style={[styles.heroTitle, { color: look.ink }]}>Your earnings</Text>
         <BrandMark size={22} color={look.figure} />

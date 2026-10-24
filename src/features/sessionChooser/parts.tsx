@@ -65,7 +65,7 @@ export function StartHero({ court, onPress }: { court: { name: string; why: stri
       onPress={onPress}
       style={({ pressed }) => [styles.hero, { backgroundColor: look.fill, borderColor: look.border }, pressed && styles.pressedCard]}
     >
-      <CardWash look={look} radius={24} />
+      <CardWash look={look} radius={corner(24)} />
       <View style={styles.heroTop}>
         <LiveDot size={8} color={look.figure} />
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.eyebrow, { color: look.eyebrow }]}>START A SESSION</Text>
