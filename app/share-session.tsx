@@ -28,6 +28,7 @@ import { useApp } from '@/store/AppContext';
 import { ThemeScope, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * Share a session to Instagram, the way Strava does: four pictures to swipe
@@ -557,7 +558,7 @@ const styleDefinitions = StyleSheet.create({
   top: { flex: 1, justifyContent: 'center', gap: spacing.md, minHeight: 0 },
   bottom: { gap: spacing.lg, paddingTop: spacing.md },
   pageSlot: { alignItems: 'center', justifyContent: 'center' },
-  frame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 8px 28px rgba(0, 0, 0, 0.22)' },
+  frame: { borderRadius: corner(18), overflow: 'hidden', boxShadow: '0px 8px 28px rgba(0, 0, 0, 0.22)' },
   // "Change photo": a small chip on the picture, in a 44-point corner that takes the tap.
   photoButton: { position: 'absolute', top: 2, right: 2, minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' },
   photoChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.overlay },

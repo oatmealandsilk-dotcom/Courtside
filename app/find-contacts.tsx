@@ -17,6 +17,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
+import { corner } from '@/theme/look';
 
 type Found = { match: ContactMatch; contactName?: string };
 type Phase = 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
@@ -184,7 +185,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text, textAlign: 'center' },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.sm },
   results: { gap: 4 },
-  nudge: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: 16, backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
+  nudge: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: corner(16), backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
   nudgeText: { ...typography.smallStrong, color: colors.text, flex: 1 },
   section: { ...typography.smallStrong, color: colors.textMuted, marginBottom: 4 },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.sm },

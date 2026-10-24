@@ -22,6 +22,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 const first = (u?: User) => u?.name.trim().split(/\s+/)[0] ?? 'They';
 
@@ -601,7 +602,7 @@ const styleDefinitions = StyleSheet.create({
   personName: { ...typography.title, color: colors.text, marginTop: spacing.xs },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   gap: { marginTop: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 11, paddingHorizontal: spacing.lg, minHeight: 50 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

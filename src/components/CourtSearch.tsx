@@ -14,6 +14,7 @@ import { labelOf, score } from '@/features/places/courtName';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /** Where a hit is played: a court from the list carries the map's id for it, so its card opens that court's page. */
 export interface ChosenPlace { id?: string; name: string; lat?: number; lng?: number }
@@ -149,7 +150,7 @@ const styleDefinitions = StyleSheet.create({
   search: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: spacing.lg, minHeight: 50, borderRadius: radius.pill, backgroundColor: colors.surface },
   // Sized by its padding, not a fixed height (that drew the words low and cut off on an iPhone).
   searchInput: { flex: 1, minWidth: 0, fontSize: 16, color: colors.text, minHeight: 50, paddingVertical: 12, outlineStyle: 'none' } as object,
-  list: { borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, overflow: 'hidden' },
+  list: { borderRadius: corner(16), backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, overflow: 'hidden' },
   listHead: { ...typography.caption, color: colors.textFaint, letterSpacing: 0.4, paddingTop: 10, paddingBottom: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 10 },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -161,7 +162,7 @@ const styleDefinitions = StyleSheet.create({
   rowNameMatch: { ...font('600'), color: colors.text },
   rowMeta: { ...typography.small, color: colors.textFaint },
   none: { ...typography.small, color: colors.textMuted, paddingVertical: 12 },
-  chosen: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, paddingRight: spacing.lg, borderRadius: 18, backgroundColor: colors.surface },
+  chosen: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, paddingRight: spacing.lg, borderRadius: corner(18), backgroundColor: colors.surface },
   chosenName: { ...typography.bodyStrong, color: colors.text },
   change: { ...typography.smallStrong, color: colors.brand },
 });

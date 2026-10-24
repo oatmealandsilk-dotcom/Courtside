@@ -10,6 +10,7 @@ import { mixHex } from '@/features/activity/zones';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /*
  * The pieces the Tennis profile page is built from (Oct 5): a section's head,
@@ -339,7 +340,7 @@ const styleDefinitions = StyleSheet.create({
   onlyYou: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   onlyYouText: { ...font('600'), fontSize: 11, lineHeight: 14, color: colors.textMuted },
   // The house's grouped box (Your sessions, Log a session): white on the page, radius 20, the soft lift.
-  box: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
+  box: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   boxPadded: { paddingVertical: spacing.lg },
   next: { gap: 8, paddingTop: 12, paddingBottom: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, marginTop: 6 },
   nextRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -370,7 +371,7 @@ const styleDefinitions = StyleSheet.create({
   summaryTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   summaryFill: { height: 4, borderRadius: 2 },
   empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
-  emptyIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  emptyIcon: { width: 44, height: 44, borderRadius: corner(14), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
   // The white outline button (the Share page's): the card's own white, a firm hairline, the page's ink.
   outline: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 14, borderRadius: 999, borderWidth: 1, borderColor: colors.borderStrong, backgroundColor: colors.surface },

@@ -17,6 +17,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 export interface PickedMedia {
   uri?: string;
@@ -412,10 +413,10 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           nothing black around it. The media fills it edge to edge. */
       <Pressable accessibilityRole="button" accessibilityLabel="Open a larger preview" onPress={() => setExpanded(true)}
         style={orientation === 'landscape'
-          ? { width: '100%', aspectRatio: 16 / 9, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
+          ? { width: '100%', aspectRatio: 16 / 9, borderRadius: corner(16), overflow: 'hidden', backgroundColor: colors.surfaceAlt }
           : portraitRatio > 0.6
-            ? { width: '100%', aspectRatio: portraitRatio, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }
-            : { height: clipHeight, aspectRatio: portraitRatio, alignSelf: 'center', borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
+            ? { width: '100%', aspectRatio: portraitRatio, borderRadius: corner(16), overflow: 'hidden', backgroundColor: colors.surfaceAlt }
+            : { height: clipHeight, aspectRatio: portraitRatio, alignSelf: 'center', borderRadius: corner(16), overflow: 'hidden', backgroundColor: colors.surfaceAlt }}>
         {value.kind === 'video' && value.uri
           // Holds still while the Cover page is up over it.
           ? <View style={cropLayer(trim?.crop)}><ClipVideo uri={value.uri} poster={value.thumbnailUrl} active={!coverOpen} muted fit="cover" trimStart={trim?.trimStart} trimEnd={trim?.trimEnd} speed={trim?.speed} volume={trim?.volume} /></View>
@@ -480,7 +481,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
 
   return <View style={{ gap: 10 }}>
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? 'Choose a photo or video'} onPress={choose}
-      style={{ padding: 20, gap: 8, borderRadius: 18, backgroundColor: colors.surface }}>
+      style={{ padding: 20, gap: 8, borderRadius: corner(18), backgroundColor: colors.surface }}>
       {value?.uri && (
         <Pressable
           accessibilityRole="button"
@@ -488,7 +489,7 @@ export function MediaPicker({ value, onChange, compact, selection = 'all', label
           onPress={() => setExpanded(true)}
           style={{ alignItems: 'center' }}
         >
-          <View style={{ width: 240, aspectRatio: 9 / 16, borderRadius: 14, overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ width: 240, aspectRatio: 9 / 16, borderRadius: corner(14), overflow: 'hidden', backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' }}>
             {/* A photo shows itself; a video shows its cover, because playing
                 one in place needs expo-video, which this project does not carry. */}
             {(value.kind === 'photo' ? value.uri : value.thumbnailUrl) ? (

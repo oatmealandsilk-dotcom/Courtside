@@ -16,6 +16,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** What the page keeps for everything but the picture: the title and the buttons. */
 const CHROME_H = 250;
@@ -118,5 +119,5 @@ const styleDefinitions = StyleSheet.create({
   body: { flex: 1 },
   top: { flex: 1, minHeight: 0, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.md },
   bottom: { paddingTop: spacing.md },
-  frame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 8px 28px rgba(0, 0, 0, 0.28)' },
+  frame: { borderRadius: corner(18), overflow: 'hidden', boxShadow: '0px 8px 28px rgba(0, 0, 0, 0.28)' },
 });

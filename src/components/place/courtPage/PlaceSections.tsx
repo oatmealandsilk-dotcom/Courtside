@@ -21,6 +21,7 @@ import { colors, font, lift, radius, spacing, surfaceColorFor, typography, withA
 
 import { ASK_ABOUT, PlayersSayRows, SectionHead } from './parts';
 import type { CourtView } from './view';
+import { corner } from '@/theme/look';
 
 /*
  * The court page's sections (see PlaceCard). Every section opens the same
@@ -270,7 +271,7 @@ const styleDefinitions = StyleSheet.create({
   moreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, height: 42, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   moreText: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   // A section's card: the same corners, fill and lift as a hit's card, so the two read as one family.
-  card: { ...lift, backgroundColor: colors.surface, borderRadius: 20, overflow: 'hidden' },
+  card: { ...lift, backgroundColor: colors.surface, borderRadius: corner(20), overflow: 'hidden' },
   cardTitle: { ...typography.bodyStrong, color: colors.text },
   cardBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   failed: { padding: spacing.lg, gap: spacing.md, alignItems: 'flex-start' },

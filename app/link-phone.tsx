@@ -13,6 +13,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Linking your phone number, so friends who have it in their contacts can
@@ -129,7 +130,7 @@ const styleDefinitions = StyleSheet.create({
   code: { letterSpacing: 6, ...font('600') },
   note: { ...typography.small, color: colors.textFaint, marginTop: -4 },
   error: { ...typography.small, color: colors.danger },
-  card: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  card: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   head: { ...typography.bodyStrong, color: colors.text },
   sub: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginTop: 2 },
 });

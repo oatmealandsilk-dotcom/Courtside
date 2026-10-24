@@ -12,6 +12,7 @@ import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * Invites to groups waiting for your answer (migration 181), as one
@@ -138,7 +139,7 @@ export function GroupInvitesSection({ onOpen }: {
 const styleDefinitions = StyleSheet.create({
   part: { gap: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, gap: spacing.sm },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   group: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

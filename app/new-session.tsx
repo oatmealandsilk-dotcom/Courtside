@@ -12,6 +12,7 @@ import { ByHandRow, PartHead, StartHero, WaitingRow, WeekStrip } from '@/feature
 import { goLogByHand, goLogTracker, goStart, useSessionChoices } from '@/features/sessionChooser/useSessionChoices';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, withAlpha } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * The Session sheet: what + → Session opens (Oct 16, owner: "once you click
@@ -110,5 +111,5 @@ const styleDefinitions = StyleSheet.create({
   part: { gap: 10 },
   // Short, so it never washes a Log it into looking switched off.
   moreFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 24 },
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.lg },
 });

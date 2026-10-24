@@ -27,6 +27,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * A "Looking for a hit" post: who, when, where, what level and format, and
@@ -311,7 +312,7 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headWords: { flex: 1, minWidth: 0 },
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },

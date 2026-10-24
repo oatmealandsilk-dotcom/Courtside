@@ -16,6 +16,7 @@ import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { lightColors as brand, fontFamily, wordmarkFont, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 type Slide = { key: string; tint: string; big?: string; title: string; sub?: string; extra?: React.ReactNode; /** Replaces the number, title and line for a slide with its own layout. */ content?: React.ReactNode };
 const SLIDE_MS = 5200;
@@ -225,14 +226,14 @@ const styles = StyleSheet.create({
   quoteLong: { fontSize: 25, lineHeight: 31, letterSpacing: -0.2 },
   likeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, alignSelf: 'flex-start', paddingHorizontal: 16, height: 42, borderRadius: 21, backgroundColor: 'rgba(255,255,255,0.14)' },
   likeRowText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 17, color: 'white' },
-  print: { marginTop: 8, alignSelf: 'flex-start', padding: 7, borderRadius: 22, backgroundColor: 'white', transform: [{ rotate: '-3deg' }], boxShadow: '0px 18px 40px rgba(0, 0, 0, 0.45)' },
-  printImage: { width: 220, height: 290, borderRadius: 16, backgroundColor: 'rgba(0,0,0,0.2)' },
+  print: { marginTop: 8, alignSelf: 'flex-start', padding: 7, borderRadius: corner(22), backgroundColor: 'white', transform: [{ rotate: '-3deg' }], boxShadow: '0px 18px 40px rgba(0, 0, 0, 0.45)' },
+  printImage: { width: 220, height: 290, borderRadius: corner(16), backgroundColor: 'rgba(0,0,0,0.2)' },
   likePill: { position: 'absolute', right: -14, bottom: 22, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, height: 38, borderRadius: 19, backgroundColor: brand.clay, boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.35)' },
   likePillText: { fontFamily: fontFamily.bold, fontWeight: '700', fontSize: 17, color: 'white', fontVariant: ['tabular-nums'] },
   printCaption: { fontFamily: fontFamily.medium, fontWeight: '500', fontSize: 17, lineHeight: 24, color: 'rgba(255,255,255,0.8)', marginTop: 10 },
   people: { flexDirection: 'row', gap: 12, marginBottom: 20 },
   finale: { flex: 1, alignItems: 'center', justifyContent: 'flex-end', gap: 14, paddingHorizontal: 24 },
-  cardFrame: { borderRadius: 18, overflow: 'hidden', boxShadow: '0px 10px 36px rgba(0, 0, 0, 0.45)' },
+  cardFrame: { borderRadius: corner(18), overflow: 'hidden', boxShadow: '0px 10px 36px rgba(0, 0, 0, 0.45)' },
   shareButton: { flexDirection: 'row', alignItems: 'center', gap: 8, height: 48, paddingHorizontal: 26, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: 'white', marginTop: 6 },
   shareText: { fontFamily: fontFamily.semibold, fontWeight: '600', fontSize: 16, color: brand.text },
   note: { fontFamily: fontFamily.regular, fontSize: 13, color: 'rgba(255,255,255,0.7)', textAlign: 'center' },

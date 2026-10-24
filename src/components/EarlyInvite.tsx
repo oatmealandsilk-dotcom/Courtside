@@ -16,6 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * "You're early in Columbus": Find Players with nobody sharing a spot
@@ -96,9 +97,9 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
 
 const styleDefinitions = StyleSheet.create({
   // The prompt card, as "Looking for someone to play?" below it: surface, 20px corners, the soft lift, the wash inside it.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.lg, gap: spacing.sm },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, padding: spacing.lg, gap: spacing.sm },
   // The wash is clipped to the card's corners by a layer of its own, so the card's lift is not clipped with it.
-  washClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 20, overflow: 'hidden' },
+  washClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: corner(20), overflow: 'hidden' },
   wash: { position: 'absolute', left: 0, right: 0, top: 0 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   // The empty state's tile: the icon on Dim Green, as "Looking for someone to play?" and the first-move page hold theirs.

@@ -16,6 +16,7 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 import type { CardPerson } from './SessionCard';
 import { SessionStrip } from './SessionStrip';
 import { ZoneBar } from './ZoneBar';
+import { corner } from '@/theme/look';
 
 /** The preview's width at most: the feed's post, scaled down so the rest of the composer still shows under it. */
 const PREVIEW_W = 300;
@@ -120,7 +121,7 @@ const PAD = 12;
 
 const styleDefinitions = StyleSheet.create({
   // A rounded frame around the post, on the page's own ground, so it reads as "this is your post".
-  frame: { alignSelf: 'center', padding: PAD, gap: 10, borderRadius: 22, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
+  frame: { alignSelf: 'center', padding: PAD, gap: 10, borderRadius: corner(22), borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   whoWords: { flex: 1, minWidth: 0 },
   name: { ...font('600'), fontSize: 14, color: colors.text },

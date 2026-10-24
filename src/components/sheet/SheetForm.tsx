@@ -10,6 +10,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { brandBoxShadow } from '@/theme/fillMode';
+import { corner } from '@/theme/look';
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
@@ -298,7 +299,7 @@ const styleDefinitions = StyleSheet.create({
   // from their heading, and from the next part, as every other choice on the sheet.
   shadowRoom: { marginVertical: -6 },
   tileRow: { flexDirection: 'row', gap: spacing.sm },
-  tile: { ...lift, minHeight: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
+  tile: { ...lift, minHeight: 64, borderRadius: corner(18), backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 1 },
   // A day's tile: 58 wide, a little wider only for a longer word on top ("Yesterday").
   tileFixed: { minWidth: 58, paddingHorizontal: 8 },
   tileFlex: { flex: 1 },

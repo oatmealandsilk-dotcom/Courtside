@@ -36,6 +36,7 @@ import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -655,7 +656,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 
 const styleDefinitions = StyleSheet.create({
   // A card of rows (To do, a week of sessions): the Share card's cream and a lighter lay of its wash (SoftCard), no shadow, rows parted by a hairline.
-  group: { borderRadius: 20, overflow: 'hidden', paddingHorizontal: spacing.lg },
+  group: { borderRadius: corner(20), overflow: 'hidden', paddingHorizontal: spacing.lg },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
   weekName: { flex: 1 },

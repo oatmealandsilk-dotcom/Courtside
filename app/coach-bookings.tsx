@@ -10,6 +10,7 @@ import { dueText, isOpen, isOverdue, statusLabel } from '@/features/coaching/boo
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * A coach's bookings: the open ones first, soonest due at the top, then the
@@ -73,7 +74,7 @@ export function BookingsPanel() {
 
 const styleDefinitions = StyleSheet.create({
   earned: { ...typography.small, color: colors.textMuted, marginTop: spacing.md },
-  group: { ...lift, marginTop: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, marginTop: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   words: { flex: 1, gap: 3, minWidth: 0 },

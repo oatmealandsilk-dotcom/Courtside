@@ -14,6 +14,7 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 const CHOICES: CourtNow[] = ['free', 'wait', 'full', 'wet', 'locked'];
 const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
@@ -127,7 +128,7 @@ export default function CourtNowSheet() {
 const styleDefinitions = StyleSheet.create({
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // Five lifted tiles, the sheet's own: the picked one filled with ink, the way its chips are.
-  choice: { ...lift, flexGrow: 1, flexBasis: '30%', minWidth: 92, height: 64, borderRadius: 18, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  choice: { ...lift, flexGrow: 1, flexBasis: '30%', minWidth: 92, height: 64, borderRadius: corner(18), backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
   choiceOn: { backgroundColor: colors.text },
   choiceText: { ...typography.smallStrong, color: colors.text },
   choiceTextOn: { color: colors.bg },

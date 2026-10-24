@@ -25,6 +25,7 @@ import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { StatsGrid, type StatNumber } from './StatsGrid';
 import { ZoneRows } from './ZoneRows';
+import { corner } from '@/theme/look';
 
 
 /** "6:12" and "pm". */
@@ -325,7 +326,7 @@ const styleDefinitions = StyleSheet.create({
   column: { gap: 3 },
   label: { ...font('600'), fontSize: 11, letterSpacing: 0.66, color: colors.textMuted },
   // A calm filled tile, no outline: the dashed edge read as unfinished (Oct 6, owner). 17 = the old 16 plus its 1pt border, so nothing moves.
-  only: { borderRadius: 18, backgroundColor: colors.bgElevated, padding: 17, gap: 12, marginTop: 4 },
+  only: { borderRadius: corner(18), backgroundColor: colors.bgElevated, padding: 17, gap: 12, marginTop: 4 },
   onlyHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   onlyRow: { flexDirection: 'row', gap: 26 },
   clock: { flexDirection: 'row', alignItems: 'flex-end' },

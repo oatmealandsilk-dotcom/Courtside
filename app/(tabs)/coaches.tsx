@@ -28,6 +28,7 @@ import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
 import { useShownAt } from '@/features/navigation/shownAt';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -308,7 +309,7 @@ const styleDefinitions = StyleSheet.create({
   sectionFirst: { paddingTop: spacing.sm },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
   sectionCount: { ...typography.small, color: colors.textFaint },
-  group: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   sectionTitle: { ...typography.heading, color: colors.text },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },
   noneTitle: { ...typography.heading, color: colors.text },
@@ -317,7 +318,7 @@ const styleDefinitions = StyleSheet.create({
   // Room above and below so the cards' shadows are not cut off by the scroller.
   rail: { flexGrow: 0, marginHorizontal: -spacing.lg, marginVertical: -spacing.md },
   railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md + spacing.xs, paddingBottom: spacing.lg + spacing.xs },
-  coachCard: { ...lift, width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  coachCard: { ...lift, width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   coachWords: { gap: 3 },
   coachName: { ...typography.bodyStrong, color: colors.text },
   coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -327,16 +328,16 @@ const styleDefinitions = StyleSheet.create({
   rating: { ...typography.smallStrong, color: colors.text },
   priceCol: { alignItems: 'flex-end', gap: 2 },
   price: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, ...lift, borderRadius: 20, backgroundColor: colors.surface },
+  foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, marginTop: spacing.xl, ...lift, borderRadius: corner(20), backgroundColor: colors.surface },
   footTitle: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
-  studio: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  studio: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   studioMark: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   studioProgress: { flexDirection: 'row', gap: 3, marginTop: 4, maxWidth: 140 },
   studioBit: { flex: 1, height: 3, borderRadius: 2, backgroundColor: colors.surfaceAlt },
   studioBitOn: { backgroundColor: colors.brand },
   studioCount: { minWidth: 24, height: 24, paddingHorizontal: 7, borderRadius: 12, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   studioCountText: { ...typography.caption, letterSpacing: 0, color: colors.brandInk, fontVariant: ['tabular-nums'] },
-  ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: 20, backgroundColor: colors.surface },
+  ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });
 

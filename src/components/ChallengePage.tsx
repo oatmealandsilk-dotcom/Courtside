@@ -12,6 +12,7 @@ import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Enters the challenge: the Create box opens straight onto your videos (a
@@ -97,7 +98,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tag: { ...font('600'), color: colors.text },
-  empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, borderRadius: 20, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
+  empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, borderRadius: corner(20), borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
   emptyText: { ...typography.small, color: colors.textMuted, flex: 1 },
   actions: { flexDirection: 'row', gap: spacing.sm },
   primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },

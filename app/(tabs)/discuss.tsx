@@ -72,6 +72,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { corner } from '@/theme/look';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -1071,15 +1072,15 @@ const styleDefinitions = StyleSheet.create({
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   furtherText: { ...typography.smallStrong, color: colors.textMuted },
   // A court found by the search: the same tile as Search's court rows, in the players' row frame.
-  courtTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  courtTile: { width: 52, height: 52, borderRadius: corner(14), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   // A place found by the search: the court tile's frame, in the quiet surface colour, so places and courts read apart.
-  placeTile: { width: 52, height: 52, borderRadius: 14, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  placeTile: { width: 52, height: 52, borderRadius: corner(14), backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   courtNameMatch: { ...font('700'), color: colors.text },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },
   sortCount: { ...typography.small, color: colors.textFaint },
   sortButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
   sortButtonText: { ...typography.smallStrong, color: colors.textMuted },
-  sortMenu: { ...lift, position: 'absolute', top: 36, right: 0, width: 240, borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', zIndex: 10 },
+  sortMenu: { ...lift, position: 'absolute', top: 36, right: 0, width: 240, borderRadius: corner(16), backgroundColor: colors.surface, overflow: 'hidden', zIndex: 10 },
   sortItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 11 },
   sortItemLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   sortItemTitle: { ...typography.smallStrong, color: colors.text },

@@ -5,6 +5,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 
 
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Tips and the AI coach box stop here; a coach's answer to a booking passes its own, longer limit. */
 const MAX = 500;
@@ -85,7 +86,7 @@ export function TipComposer({ onSubmit, onSent, initial = '', placeholder = 'You
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
-  box: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  box: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   input: { ...typography.body, color: colors.text, minHeight: 72, maxHeight: 180, paddingTop: 0, paddingBottom: 0, textAlignVertical: 'top' },
   foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: spacing.xs },
   left: { ...typography.caption, color: colors.textFaint },

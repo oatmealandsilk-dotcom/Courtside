@@ -12,6 +12,7 @@ import { StreakFlame } from '@/components/StreakFlame';
 import type { SessionDetail } from '@/data/types';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, withAlpha } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * The welcome's three moments of the app, drawn from the app's own pieces
@@ -195,14 +196,14 @@ const stylesStatic = StyleSheet.create({
 
 const styleDefinitions = StyleSheet.create({
   // The map.
-  map: { width: MOMENT_W, height: MOMENT_H, borderRadius: 28, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  map: { width: MOMENT_W, height: MOMENT_H, borderRadius: corner(28), overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   court: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 2px 6px rgba(42, 36, 24, 0.12)' },
   you: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: colors.info, borderWidth: 2, borderColor: colors.surface },
   youHalo: { position: 'absolute', width: 28, height: 28, borderRadius: 14 },
   pin: { position: 'absolute', width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   chip: {
     position: 'absolute', left: 14, right: 14, bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 12, paddingHorizontal: 12, borderRadius: 20, backgroundColor: colors.surface, boxShadow: '0px 8px 24px rgba(42, 36, 24, 0.12)',
+    paddingVertical: 12, paddingHorizontal: 12, borderRadius: corner(20), backgroundColor: colors.surface, boxShadow: '0px 8px 24px rgba(42, 36, 24, 0.12)',
   },
   chipWords: { flex: 1, gap: 3 },
   chipName: { ...font('600'), fontSize: 14, lineHeight: 18, color: colors.text },
@@ -211,7 +212,7 @@ const styleDefinitions = StyleSheet.create({
   openDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },
   // Your people.
   people: { width: MOMENT_W, height: MOMENT_H, justifyContent: 'center', gap: 12 },
-  card: { ...lift, borderRadius: 22, backgroundColor: colors.surface, padding: 16, gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  card: { ...lift, borderRadius: corner(22), backgroundColor: colors.surface, padding: 16, gap: 10, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   eyebrow: { ...font('600'), fontSize: 11, letterSpacing: 0.9, color: colors.textFaint },
   question: { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.2, color: colors.text },
   answers: { flexDirection: 'row', alignItems: 'center', gap: 8 },

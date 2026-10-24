@@ -54,6 +54,7 @@ import * as haptics from '@/lib/haptics';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -475,14 +476,14 @@ const styleDefinitions = StyleSheet.create({
  // The messages tip, at the top of the page, lined up on the right with the cards under it.
  inboxTip:{alignItems:'flex-end',paddingTop:2},
  // The ☰ menu: a small card on the overlay's shadow (it floats over the page), rows 48 tall.
- menu:{position:'absolute',minWidth:220,borderRadius:16,backgroundColor:colors.surface,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.border,overflow:'hidden',boxShadow:'0px 6px 16px rgba(0, 0, 0, 0.18)'},
+ menu:{position:'absolute',minWidth:220,borderRadius: corner(16),backgroundColor:colors.surface,borderWidth:StyleSheet.hairlineWidth,borderColor:colors.border,overflow:'hidden',boxShadow:'0px 6px 16px rgba(0, 0, 0, 0.18)'},
  menuRow:{flexDirection:'row',alignItems:'center',gap:12,minHeight:48,paddingHorizontal:16},
  menuText:{...typography.body,color:colors.text,flex:1},
  menuTag:{paddingHorizontal:7,paddingVertical:3,borderRadius:6,backgroundColor:colors.brandDim},
  menuTagText:{...typography.caption,letterSpacing:0.2,color:colors.brand},
  menuDot:{position:'absolute',top:5,right:3,width:9,height:9,borderRadius:5,backgroundColor:colors.brand,borderWidth:1.5,borderColor:colors.bg},rowDot:{width:8,height:8,borderRadius:4,backgroundColor:colors.brand},
  // The banner's shape while the account loads.
- bannerBlank:{padding:16,borderRadius:16,gap:10,overflow:'hidden'},
+ bannerBlank:{padding:16,borderRadius: corner(16),gap:10,overflow:'hidden'},
  bannerBlankHero:{paddingVertical:2},
  bannerBlankStrip:{flexDirection:'row',marginTop:6},
  setup:{marginTop:16,marginHorizontal:0,padding:14,borderRadius:16,backgroundColor:colors.brandDim,flexDirection:'row',alignItems:'center',gap:12},setupTitle:{...typography.smallStrong,fontSize:14,color:colors.text},identity:{gap:12,paddingTop:16,paddingBottom:20,alignItems:'stretch'},identityRow:{flexDirection:'row',alignItems:'center',gap:16},identityWords:{flex:1,gap:6,minWidth:0},meta:{fontSize:12,color:colors.textMuted,lineHeight:19},nameRow:{flexDirection:'row',gap:10,alignItems:'center',flexWrap:'wrap'},nameLine:{flexDirection:'row',alignItems:'center',gap:6,minWidth:0},name:{...typography.title,fontSize:22,color:colors.text,flexShrink:1},bio:{...typography.body,lineHeight:22,color:colors.text},followRow:{flexDirection:'row',alignItems:'center',gap:10},follow:{flexDirection:'row',alignItems:'baseline'},followCount:{...typography.bodyStrong,color:colors.text},followDot:{color:colors.textFaint,fontSize:14},tabCount:{...typography.smallStrong,fontSize:12,color:colors.textFaint},buttons:{flexDirection:'row',gap:8,alignSelf:'stretch',marginTop:6},settings:{borderWidth:1,borderColor:colors.border,borderRadius:10,padding:10,justifyContent:'center'},streak:{flexDirection:'row',alignItems:'center',gap:3,paddingHorizontal:8,paddingVertical:2,borderRadius:999,backgroundColor:colors.bgElevated},streakText:{...typography.caption,letterSpacing:0,fontWeight:'600',color:colors.clay},

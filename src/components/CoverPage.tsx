@@ -14,6 +14,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import type { MediaCrop } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 /**
  * Choosing a clip's cover, on its own calm page the way Instagram does it:
@@ -158,7 +159,7 @@ const styleDefinitions = StyleSheet.create({
   close: { paddingVertical: spacing.xs },
   title: { ...typography.title, color: colors.text },
   stage: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
-  picture: { borderRadius: 16, overflow: 'hidden', backgroundColor: '#000' },
+  picture: { borderRadius: corner(16), overflow: 'hidden', backgroundColor: '#000' },
   bottom: { paddingTop: 20, paddingHorizontal: spacing.lg },
   // The strip's own empty bar while the clip's length is read.
   stripWaiting: { height: 56, marginVertical: 4, borderRadius: 8, backgroundColor: colors.surfaceAlt },

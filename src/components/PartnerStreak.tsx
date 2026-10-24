@@ -12,6 +12,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /*
  * Weekly streaks with hitting partners (sweep R12, Oct 20, owner: yes).
@@ -235,7 +236,7 @@ function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: 'transparent' },
+  card: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: 16, borderRadius: corner(20), backgroundColor: colors.surface, borderWidth: 1, borderColor: 'transparent' },
   // The space under the card, inside the fold, so it opens and closes with it.
   cardGap: { paddingBottom: spacing.md },
   cardOn: { borderColor: colors.brand },

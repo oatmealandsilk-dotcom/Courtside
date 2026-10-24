@@ -44,6 +44,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { show as showToast } from '@/lib/toast';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -284,7 +285,7 @@ const styleDefinitions = StyleSheet.create({
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt },
   // A soft rounded box to write in, the way messaging apps do it.
-  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: corner(20), backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   // No browser focus ring either: the cursor is the only sign the box is live.
   replyInput: { minHeight: 44, paddingVertical: 0, color: colors.text, fontSize: 16, lineHeight: 22, textAlignVertical: 'top', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },

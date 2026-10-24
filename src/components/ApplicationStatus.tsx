@@ -13,6 +13,7 @@ import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 type Status = CoachApplication['status'];
 
@@ -137,7 +138,7 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.sm },
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 23 },
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, padding: spacing.lg, gap: spacing.lg },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, padding: spacing.lg, gap: spacing.lg },
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   whoWords: { flex: 1, minWidth: 0, gap: 2 },
   whoName: { ...typography.bodyStrong, color: colors.text },
@@ -162,7 +163,7 @@ const styleDefinitions = StyleSheet.create({
   stepTitleLater: { color: colors.textMuted, ...font('500') },
   nowTag: { ...typography.caption, ...font('700'), letterSpacing: 0.3, color: colors.brand },
   stepNote: { ...typography.small, color: colors.textFaint, lineHeight: 18 },
-  meanwhile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  meanwhile: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   meanwhileMark: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bgElevated, alignItems: 'center', justifyContent: 'center' },
   meanwhileTitle: { ...typography.bodyStrong, color: colors.text },
   actions: { marginTop: spacing.sm },

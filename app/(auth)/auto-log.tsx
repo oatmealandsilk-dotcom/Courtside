@@ -15,6 +15,7 @@ import { useGateSpace } from '@/lib/useGateSpace';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
@@ -115,7 +116,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   // The same card as the first-move page's.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', padding: spacing.lg },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', padding: spacing.lg },
   waiting: { height: 120, alignItems: 'center', justifyContent: 'center' },
   cardHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

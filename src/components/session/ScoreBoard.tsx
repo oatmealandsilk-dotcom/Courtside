@@ -10,6 +10,7 @@ import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { DrawnTick } from './DrawnTick';
+import { corner } from '@/theme/look';
 
 /*
  * The ScoreBoard, "Court card" look (T1, Oct 22, owner: "T1 or t2 is good").
@@ -339,7 +340,7 @@ export function ScoreSticker(props: Omit<ScoreBoardProps, 'frame' | 'wordmark'>)
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 16, overflow: 'hidden', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
+  card: { borderRadius: corner(16), overflow: 'hidden', paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12 },
   // No card: the wash bleeds 12px past the text column, so the names line up with the words above.
   open: { borderRadius: 12, overflow: 'hidden', marginHorizontal: -12, paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12 },
   eyebrow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },

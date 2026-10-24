@@ -13,6 +13,7 @@ import { useApp } from '@/store/AppContext';
 import { confirm } from '@/lib/confirm';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 type Payments = { stripe: boolean; live: boolean; webhook: boolean; feePercent: number } | 'off' | null;
 
@@ -153,12 +154,12 @@ function Detail({ label, value }: { label: string; value?: string }) {
 }
 
 const styleDefinitions = StyleSheet.create({
-  status: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  status: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface, marginBottom: spacing.lg },
   statusTitle: { ...typography.bodyStrong, color: colors.text },
   meta: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   wait: { paddingVertical: 48, alignItems: 'center' },
   error: { ...typography.small, color: colors.danger, marginTop: spacing.md },
-  group: { marginTop: spacing.lg, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { marginTop: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   name: { ...typography.body, ...font('600'), color: colors.text },

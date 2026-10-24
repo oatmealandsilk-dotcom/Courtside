@@ -12,6 +12,7 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** Names listed under the box: enough to find someone, few enough to keep the sheet short. */
 const LISTED = 5;
@@ -309,7 +310,7 @@ const styleDefinitions = StyleSheet.create({
   quickChip: { flexDirection: 'row', alignItems: 'center', gap: 3, paddingLeft: 8, paddingRight: 12, paddingVertical: 6, borderRadius: radius.pill, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.brand },
   quickName: { ...typography.smallStrong, color: colors.brand },
   // The names: a white card on the sheet, rows parted by a hairline, the grouped lists' look.
-  list: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.md },
+  list: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden', paddingHorizontal: spacing.md },
   // Each row reaches the card's edges, so a finger or the mouse lights the whole of it.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingVertical: 9, marginHorizontal: -spacing.md, paddingHorizontal: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

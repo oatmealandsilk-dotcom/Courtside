@@ -18,6 +18,7 @@ import {
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
+import { corner } from '@/theme/look';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
@@ -188,10 +189,10 @@ function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLo
 }
 
 const styles = StyleSheet.create({
-  card: { borderRadius: 20, padding: 20, overflow: 'hidden' },
+  card: { borderRadius: corner(20), padding: 20, overflow: 'hidden' },
   // The session box's edge: a 1-point line on a dark page, none on a light one.
   bordered: { borderWidth: 1 },
-  banner: { borderRadius: 16, paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
+  banner: { borderRadius: corner(16), paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   bannerTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },

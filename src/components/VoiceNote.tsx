@@ -8,6 +8,7 @@ import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * A voice note in a chat: play and pause, a line that fills as it plays, and
@@ -70,7 +71,7 @@ function Playing({ url, ms, mine, onDone }: { url: string; ms: number; mine: boo
 }
 
 const styleDefinitions = StyleSheet.create({
-  note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 20, minWidth: 200 },
+  note: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 14, paddingVertical: 10, borderRadius: corner(20), minWidth: 200 },
   mine: { backgroundColor: colors.bubbleMine },
   // Theirs in their bubbles' own colour, so a voice note reads as one of their messages.
   theirs: { backgroundColor: colors.bubble },

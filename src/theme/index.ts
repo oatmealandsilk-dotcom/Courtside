@@ -1,4 +1,7 @@
 import { Platform } from 'react-native';
+
+import { chipCorner, corner } from './look';
+
 /** CourtSide: warm neutrals and muted court-green accents. */
 export const lightColors = {
   bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#FFFEFA', surfaceAlt: '#E9E6DA',
@@ -131,12 +134,15 @@ export const spacing = {
   xxxl: 48,
 } as const;
 
+/** Corners follow the roundness switch in theme/look.ts (today's values at 'now'). */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 24,
+  sm: corner(8),
+  md: corner(12),
+  lg: corner(16),
+  xl: corner(24),
   pill: 999,
+  /** A chip: a pill today. */
+  chip: chipCorner,
 } as const;
 
 /**
@@ -207,10 +213,10 @@ export const typography = {
  */
 export const buttonShape = {
   /** A full-size button (sign-in, a sheet's Submit, a page's main action). */
-  radius: 18,
+  radius: corner(18),
   height: 44,
   /** A compact one in a row of actions (Follow, Edit profile, Share, a card's actions). */
-  smallRadius: 12,
+  smallRadius: corner(12),
   smallHeight: 34,
   /** Your own profile's Edit profile and Share: a touch taller than other compact rows (owner, Oct 24: "just a tiny bit taller"). */
   profileHeight: 38,

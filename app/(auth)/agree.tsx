@@ -16,6 +16,7 @@ import { StatusShade } from '@/components/StatusShade';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography, font, lift } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /**
  * The short version of the terms. Each rule is a plain headline and the
@@ -118,7 +119,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   // One quiet list, the way Settings reads: a shade off the page, hairlines between.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, paddingHorizontal: spacing.lg },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, paddingHorizontal: spacing.lg },
   rule: { gap: 4, paddingVertical: spacing.lg },
   ruleLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   ruleHead: { ...typography.bodyStrong, color: colors.text },

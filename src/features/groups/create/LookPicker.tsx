@@ -11,6 +11,7 @@ import { useGroupPhotoPick } from '@/features/groups/create/useGroupPhotoPick';
 import * as haptics from '@/lib/haptics';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * A group's face, chosen the way a WhatsApp group or a Strava club gets one:
@@ -123,18 +124,18 @@ const styleDefinitions = StyleSheet.create({
   swatch: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   cell: {
-    ...lift, width: CELL, height: CELL, borderRadius: 14, backgroundColor: colors.surface,
+    ...lift, width: CELL, height: CELL, borderRadius: corner(14), backgroundColor: colors.surface,
     alignItems: 'center', justifyContent: 'center', borderWidth: 1.5, borderColor: colors.surface,
   },
   cellOn: { boxShadow: 'none' },
   emoji: { fontSize: 22, lineHeight: 28, textAlign: 'center' },
   letters: { ...font('700'), fontSize: 14, letterSpacing: -0.1 },
-  card: { ...lift, borderRadius: 18, backgroundColor: colors.surface },
+  card: { ...lift, borderRadius: corner(18), backgroundColor: colors.surface },
   upload: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: 56, paddingHorizontal: spacing.md },
   uploadIcon: { width: 34, height: 34, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   uploadText: { ...typography.body, ...font('600'), color: colors.text, flex: 1 },
   photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md },
-  photoThumb: { width: 56, height: 56, borderRadius: 17 },
+  photoThumb: { width: 56, height: 56, borderRadius: corner(17) },
   words: { flex: 1, minWidth: 0, gap: 2 },
   photoTitle: { ...typography.body, ...font('600'), color: colors.text },
   photoLine: { ...typography.small, color: colors.textMuted },

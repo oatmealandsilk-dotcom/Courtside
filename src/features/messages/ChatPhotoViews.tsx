@@ -21,6 +21,7 @@ import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { corner } from '@/theme/look';
 
 /** How wide photos sit in a chat: the same reach as a shared card. */
 export const PHOTO_W = 236;
@@ -436,10 +437,10 @@ const styleDefinitions = StyleSheet.create({
   stripTileOn: { opacity: 1, borderColor: 'white' },
   tray: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 2 },
   trayTile: { width: 66, height: 66 },
-  trayImage: { width: 66, height: 66, borderRadius: 14, backgroundColor: colors.surfaceAlt },
+  trayImage: { width: 66, height: 66, borderRadius: corner(14), backgroundColor: colors.surfaceAlt },
   trayRemove: {
     position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11,
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center',
   },
-  trayAdd: { width: 66, height: 66, borderRadius: 14, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
+  trayAdd: { width: 66, height: 66, borderRadius: corner(14), borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },
 });

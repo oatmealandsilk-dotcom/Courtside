@@ -29,6 +29,7 @@ import type { Answer } from '@/data/types';
 import { listedAnswers } from '@/features/hiddenWords/hiddenWords';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers,currentUserId,actions}=useApp();
@@ -218,7 +219,7 @@ const styleDefinitions = StyleSheet.create({
   // The reply's words, media and buttons: the card's own spacing, inside the fold.
   answerBodyFold: { gap: 12 },
   // The same soft rounded box as the thread's own reply box.
-  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  composer: { gap: 6, paddingTop: 12, paddingBottom: 8, paddingHorizontal: 14, borderRadius: corner(20), backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   // No browser focus ring either: the cursor is the only sign the box is live.
   replyInput: { minHeight: 40, paddingVertical: 0, color: colors.text, fontSize: 16, lineHeight: 22, textAlignVertical: 'top', ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   inlineActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 16 },

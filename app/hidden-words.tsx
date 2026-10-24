@@ -14,6 +14,7 @@ import { show as showToast } from '@/lib/toast';
 import { ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, buttonShape } from '@/theme';
+import { corner } from '@/theme/look';
 
 /**
  * Settings → Hidden words (migration 117), the way Instagram has it: hide
@@ -204,7 +205,7 @@ const styleDefinitions = StyleSheet.create({
   wait: { paddingTop: spacing.xl * 2, alignItems: 'center' },
   intro: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.sm },
   sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.lg, paddingBottom: 6 },
-  card: { borderRadius: 16, backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  card: { borderRadius: corner(16), backgroundColor: colors.surface, overflow: 'hidden', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   cardGap: { marginTop: spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, minHeight: 48 },
   rowBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },

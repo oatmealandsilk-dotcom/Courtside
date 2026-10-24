@@ -60,7 +60,7 @@ const styleDefinitions = StyleSheet.create({
   chip: {
     paddingHorizontal: spacing.md,
     paddingVertical: 7,
-    borderRadius: radius.pill,
+    borderRadius: radius.chip,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',

@@ -16,6 +16,7 @@ import { SessionCard, type CardPerson } from './SessionCard';
 import { CountUp } from './CountUp';
 import { DrawnTick } from './DrawnTick';
 import { PostPreview, type PreviewMedia } from './PostPreview';
+import { corner } from '@/theme/look';
 
 /** The composer's card: the feed's 358-wide card at about two thirds. */
 export const CARD_W = 236;
@@ -228,7 +229,7 @@ const styleDefinitions = StyleSheet.create({
   top: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   waitCard: { alignItems: 'center', justifyContent: 'center' },
   tiles: { gap: 10 },
-  tile: { ...lift, borderRadius: 16, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 8 },
+  tile: { ...lift, borderRadius: corner(16), borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 8 },
   tileLabel: { ...font('600'), fontSize: 13, color: colors.text },
   off: { opacity: 0.45 },
   pressed: { opacity: PRESS_DIM },

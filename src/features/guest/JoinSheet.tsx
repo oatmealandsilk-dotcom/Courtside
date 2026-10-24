@@ -12,6 +12,7 @@ import { rememberShareTarget } from '@/features/invite/referral';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
 import { noteAppTap } from './campaign';
+import { corner } from '@/theme/look';
 
 /**
  * The one sign-up ask in guest mode (Oct 17, owner: "it's just when you
@@ -98,7 +99,7 @@ const styleDefinitions = StyleSheet.create({
   dim: { backgroundColor: colors.overlay },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.md, paddingHorizontal: spacing.lg, ...lift },
   inner: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md },
-  mark: { width: 52, height: 52, borderRadius: 16, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  mark: { width: 52, height: 52, borderRadius: corner(16), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.title, color: colors.text },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, marginTop: -spacing.xs },
   quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingVertical: spacing.xs },

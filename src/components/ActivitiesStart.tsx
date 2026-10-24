@@ -25,6 +25,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { corner } from '@/theme/look';
 
 /** People offered to follow on the page. */
 const PICKS = 3;
@@ -190,7 +191,7 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: 4, paddingHorizontal: spacing.xs },
   title: { ...typography.title, color: colors.text },
   lead: { ...typography.small, color: colors.textMuted },
-  card: { ...lift, borderRadius: 18, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(18), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 12, minHeight: 56 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },

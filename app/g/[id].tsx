@@ -21,6 +21,7 @@ import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { corner } from '@/theme/look';
 
 /*
  * One group's page, and where its invite link (/g/<id>) lands, in the app or
@@ -289,7 +290,7 @@ const styleDefinitions = StyleSheet.create({
   note: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.
-  card: { ...lift, borderRadius: 20, backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 10, paddingHorizontal: spacing.lg, minHeight: 60 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },
@@ -311,6 +312,6 @@ const styleDefinitions = StyleSheet.create({
   edit: { paddingHorizontal: 12, height: buttonShape.smallHeight, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   editText: { ...typography.smallStrong, color: colors.brand },
   // Leave: one plain red row at the end, the way a chat group's info page closes.
-  leave: { ...lift, marginTop: spacing.xl, height: 50, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  leave: { ...lift, marginTop: spacing.xl, height: 50, borderRadius: corner(20), alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   leaveText: { ...typography.bodyStrong, color: colors.danger },
 });
