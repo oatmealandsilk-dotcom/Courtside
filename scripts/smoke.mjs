@@ -1450,8 +1450,11 @@ const STEPS = [
       await page.gone({ text: 'It comes off your streak and totals, and won’t come back.' });
       // Its own Post it, in the same row as its Not tennis? link.
       await page.tap({ css: 'div:has(> [aria-label^="Not tennis? Remove: "]) [aria-label^="Post it: "]' });
+      await page.waitFor({ text: 'Logged privately · only you see it' });
+      // At the foot of the page, under the buttons until scrolled to.
+      await page.reveal({ label: 'Not tennis? Remove this session' });
     },
-    expect: [{ text: 'Logged privately · only you see it' }, { text: 'Keep private' }, { label: 'Not tennis? Remove this session' }, { text: 'Post session' }],
+    expect: [{ text: 'Keep private' }, { text: 'Post session' }],
     after: async (page) => {
       await page.tap({ text: 'Keep private' });
       await page.gone({ text: 'Logged privately · only you see it' });

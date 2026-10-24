@@ -1535,7 +1535,8 @@ function Compose() {
               // Logged for you (migration 185): only you see it until it is posted. What it was can still change.
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
                 <Text style={styles.autoNote}>Logged privately · only you see it</Text>
-                <Chips value={autoKind} onChange={(k) => { if (k) changeAutoKind(k, k === 'match' ? liveLog?.won : undefined); }} options={autoKind === 'drills' ? WITH_DRILLS : KINDS} />
+                {/* Tennis only: Practice or Match (not Fitness; a session that wasn't tennis is removed below). */}
+                <Chips value={autoKind} onChange={(k) => { if (k) changeAutoKind(k, k === 'match' ? liveLog?.won : undefined); }} options={autoKind === 'drills' ? WITH_DRILLS.slice(0, 3) : KINDS.slice(0, 2)} />
                 {autoKind === 'match' && !liveLog?.sets?.length ? (
                   <Chips brand clearable value={liveLog?.won === undefined ? undefined : liveLog.won ? 'won' : 'lost'} onChange={(v) => changeAutoKind('match', v ? v === 'won' : undefined)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
                 ) : null}
