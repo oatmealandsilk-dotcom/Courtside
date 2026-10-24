@@ -25,9 +25,11 @@ import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { FIND_PLAYERS_LOOK } from '@/features/players/findPlayersLook';
 import { CourtsNearHeld, CourtsNearLook } from '@/components/place/CourtsNearLooks';
+import { CourtsPictured, CourtsPicturedHeld } from '@/components/place/CourtsNearPictures';
 
-/** Looks C to F draw the strip in CourtsNearLooks. */
+/** Looks C to F draw the strip in CourtsNearLooks; G to I in CourtsNearPictures. */
 const NEW_LOOK = FIND_PLAYERS_LOOK === 'C' || FIND_PLAYERS_LOOK === 'D' || FIND_PLAYERS_LOOK === 'E' || FIND_PLAYERS_LOOK === 'F' ? FIND_PLAYERS_LOOK : null;
+const PICTURE_LOOK = FIND_PLAYERS_LOOK === 'G' || FIND_PLAYERS_LOOK === 'H' || FIND_PLAYERS_LOOK === 'I' ? FIND_PLAYERS_LOOK : null;
 
 const CARD = 168;
 const MOST = 8;
@@ -135,7 +137,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
   const [heldShown, setHeldShown] = useState(holding);
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
   if (!rows.length && (holding || heldShown)) {
-    const held = NEW_LOOK ? <CourtsNearHeld look={NEW_LOOK} /> : FIND_PLAYERS_LOOK === 'B' ? (
+    const held = PICTURE_LOOK ? <CourtsPicturedHeld look={PICTURE_LOOK} /> : NEW_LOOK ? <CourtsNearHeld look={NEW_LOOK} /> : FIND_PLAYERS_LOOK === 'B' ? (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
@@ -175,8 +177,8 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
     );
   }
   if (!center || !rows.length) return null;
-  if (NEW_LOOK) {
-    const look = <CourtsNearLook look={NEW_LOOK} rows={rows} badges={badges} />;
+  if (NEW_LOOK || PICTURE_LOOK) {
+    const look = PICTURE_LOOK ? <CourtsPictured look={PICTURE_LOOK} rows={rows} badges={badges} /> : <CourtsNearLook look={NEW_LOOK!} rows={rows} badges={badges} />;
     return revealOrder === undefined ? look : <FirstReveal order={revealOrder}>{look}</FirstReveal>;
   }
   if (FIND_PLAYERS_LOOK === 'B') {

@@ -17,37 +17,23 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { surfaceOf, tintOf } from '@/components/place/AerialCourt';
 
 /** What each court card already knows: the soonest open hit you may see there, and its posts. */
 export type CourtBadge = { hit: string | null; posts: string | null };
 
-/** The surface, as the map data names it, in three families; anything else is unknown. */
-function surfaceOf(c: Court): 'hard' | 'clay' | 'grass' | null {
-  const s = (c.surface ?? '').toLowerCase();
-  if (!s) return null;
-  if (s.includes('clay')) return 'clay';
-  if (s.includes('grass') || s.includes('turf')) return 'grass';
-  if (/hard|acrylic|asphalt|concrete|tartan|carpet|plexi|decoturf/.test(s)) return 'hard';
-  return null;
-}
-
-const tintOf = (c: Court) => {
-  const s = surfaceOf(c);
-  return s === 'hard' ? colors.hard : s === 'clay' ? colors.clay : s === 'grass' ? colors.grass : colors.court;
-};
-
 /** "2 hard courts · lights", "Clay court": the court itself, when nothing is on there. */
-function courtLine(c: Court): string {
+export function courtLine(c: Court): string {
   const s = surfaceOf(c);
   const n = Math.max(1, c.count);
   const what = n > 1 ? `${n} ${s ? `${s} ` : ''}courts` : s ? `${s[0].toUpperCase()}${s.slice(1)} court` : '1 court';
   return [what, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
 }
 
-const distance = (c: Court, miles: number) => [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null].filter(Boolean).join(' · ');
-const open = (c: Court) => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng });
+export const distance = (c: Court, miles: number) => [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null].filter(Boolean).join(' · ');
+export const open = (c: Court) => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng });
 
-function Head({ link }: { link: boolean }) {
+export function Head({ link }: { link: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.head}>
@@ -68,7 +54,7 @@ function Head({ link }: { link: boolean }) {
  * - E what's on: each card leads with what is happening there (latest report, players on court, an open hit, who plays there).
  * - F type only: the names in larger type, distance under, thin rules between, no boxes.
  */
-export function CourtsNearLook({ look, rows, badges }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B'>; rows: CourtRow[]; badges: Map<string, CourtBadge> }) {
+export function CourtsNearLook({ look, rows, badges }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I'>; rows: CourtRow[]; badges: Map<string, CourtBadge> }) {
   const styles = useThemedStyles(styleDefinitions);
   if (look === 'C') {
     return (
@@ -200,7 +186,7 @@ function WhatsOn({ rows, badges }: { rows: CourtRow[]; badges: Map<string, Court
 }
 
 /** Two lines of name and one of distance, unseen, so a strip of short names is the same height as one of long ones. */
-function Room() {
+export function Room() {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.room} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
@@ -211,7 +197,7 @@ function Room() {
 }
 
 /** The strip holding its place while the courts load, in each look's own shape. */
-export function CourtsNearHeld({ look }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B'> }) {
+export function CourtsNearHeld({ look }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I'> }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">

@@ -14,6 +14,11 @@
  * - 'E' what's on: each card leads with the latest report, players on
  *   court, an open hit or who plays there; else the court itself.
  * - 'F' type only: names in larger type, distance under, thin rules.
+ * After C to F (owner: "Not aesthetic"), three drawn as pictures, in
+ * components/place/CourtsNearPictures.tsx (the courts from above, AerialCourt):
+ * - 'G' postcard: landscape cards, the courts from above on the page's ground.
+ * - 'H' court card: portrait cards in the court's colour, lines turned and cut.
+ * - 'I' big tile: the nearest court large, the next two as links under it.
  */
-export type FindPlayersLook = 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
+export type FindPlayersLook = 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
 export const FIND_PLAYERS_LOOK = 'now' as FindPlayersLook;
