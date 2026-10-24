@@ -49,3 +49,5 @@ export function corner(now: number): number {
 export const chipCorner = scale ? scale.chip : 999;
 /** A pill- or rounded text field's corner: as given today, the input size when less round. */
 export const inputCorner = (now: number) => (scale ? Math.min(now, scale.input) : now);
+/** The bar a row of chips or a segmented switch sits in: a pill today, the chip's corner plus its padding when less round. */
+export const trackCorner = (pad: number) => (scale ? scale.chip + pad : 999);
