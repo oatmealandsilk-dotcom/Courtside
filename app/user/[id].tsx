@@ -31,7 +31,7 @@ import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { PartnerStreakCard } from '@/components/PartnerStreak';
 import { useApp } from '@/store/AppContext';
-import { colors, radius, spacing, typography, font } from '@/theme';
+import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
 import { afterReport } from '@/features/moderation/reportThanks';
@@ -217,7 +217,7 @@ function UserProfile() {
             </View>
           </View>
         ) : (
-          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" /></View></View>
+          <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" style={{ minHeight: buttonShape.profileHeight }} /></View></View>
         )}
         {coach && !blocked && !locked ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />

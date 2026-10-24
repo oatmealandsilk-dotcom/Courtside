@@ -32,7 +32,7 @@ import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
-import { colors, spacing, typography, font, lift, withAlpha } from '@/theme';
+import { buttonShape, colors, spacing, typography, font, lift, withAlpha } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { TipBubble } from '@/components/TipBubble';
@@ -49,6 +49,9 @@ import { useModalOpenWhile } from '@/lib/modalOpen';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
+
+/** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
+const tallButton = { minHeight: buttonShape.profileHeight };
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
@@ -215,7 +218,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          </Pressable>
        </React.Fragment>)}
      </View>
-     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm"/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full size="sm"/></View></View>
+     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" style={tallButton}/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full size="sm" style={tallButton}/></View></View>
      {!!shareError && <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{shareError}</Text>}
    </View>
    {/* Your tennis, as the player card's banner: the whole of it opens the Tennis profile, your tennis hub. */}
@@ -333,7 +336,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
        </View>
      </View>
      <View style={styles.followRow}><Blank w={64} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followDot}>·</Text><Blank w={64} /></View>
-     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" disabled onPress={() => undefined} full size="sm"/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full size="sm"/></View></View>
+     <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" disabled onPress={() => undefined} full size="sm" style={tallButton}/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" disabled onPress={() => undefined} full size="sm" style={tallButton}/></View></View>
    </View>
    {/* The Tennis profile banner's shape: its heading, the rating, the line under it and three numbers. */}
    <View style={[styles.bannerBlank, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>

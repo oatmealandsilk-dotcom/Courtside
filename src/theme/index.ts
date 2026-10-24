@@ -212,6 +212,8 @@ export const buttonShape = {
   /** A compact one in a row of actions (Follow, Edit profile, Share, a card's actions). */
   smallRadius: 12,
   smallHeight: 34,
+  /** Your own profile's Edit profile and Share: a touch taller than other compact rows (owner, Oct 24: "just a tiny bit taller"). */
+  profileHeight: 38,
   /** Added to a compact button's every side, so the finger still gets 44pt. */
   smallSlop: 5,
   label: 15,
