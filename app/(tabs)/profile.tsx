@@ -50,6 +50,7 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { useModalOpenWhile } from '@/lib/modalOpen';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import * as haptics from '@/lib/haptics';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
@@ -309,7 +310,22 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
   const [up, setUp] = useState(false);
   const last = useRef<{ top: number; right: number } | null>(null);
   if (at) last.current = at;
-  const open = () => anchor.current?.measureInWindow((x, y, w, h) => { setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }); setUp(true); });
+  // Where the ☰ is, known before the tap (Oct 24, owner: "might be too slow"), so the card is up in the
+  // tap's own frame; measured again as it opens, in case the page moved.
+  const spot = useRef<{ top: number; right: number } | null>(null);
+  const measure = (then?: (p: { top: number; right: number }) => void) => anchor.current?.measureInWindow((x, y, w, h) => {
+    if (!w && !h) return;
+    const p = { top: y + h + 6, right: Math.max(8, width - (x + w)) };
+    // Kept only from a measure taken on screen: while Profile waits beside the page on show (the tabs
+    // side by side), the button reads as off to the side.
+    if (x >= 0 && x + w <= width + 1) spot.current = p;
+    then?.(p);
+  });
+  const open = () => {
+    haptics.tap();
+    if (spot.current) { setAt(spot.current); setUp(true); measure((p) => setAt((was) => (was && (was.top !== p.top || was.right !== p.right) ? p : was))); return; }
+    measure((p) => { setAt(p); setUp(true); });
+  };
   const close = () => setAt(null);
   const gone = useCallback(() => setUp(false), []);
   const go = (path: '/groups' | '/theme' | '/settings') => { close(); router.push(path); };
@@ -317,7 +333,7 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
   useModalOpenWhile(up);
   const place = at ?? last.current;
   return <>
-    <View ref={anchor} collapsable={false}>
+    <View ref={anchor} collapsable={false} onLayout={() => measure()}>
       <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups, theme and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}${themeNew ? '. New: themes' : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
         <Ionicons name="menu-outline" size={30} color={colors.text}/>
         {groupsAsking || invites || themeNew ? <View style={styles.menuDot} /> : null}
@@ -348,11 +364,17 @@ function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: numb
   </>;
 }
 /** How far the card has grown at its smallest: from the ☰'s corner, never from nothing. */
-const MENU_FROM = 0.6;
-/** Opening: a spring quick enough to feel like the button's, damped to the faintest overshoot. */
-const MENU_SPRING = { damping: 22, stiffness: 340, mass: 0.8 };
-/** Closing: quicker than the open, easing in, so it is out of the way at once. */
-const MENU_CLOSE_MS = 150;
+const MENU_FROM = 0.55;
+/**
+ * Opening: a quick spring that lands in about a fifth of a second with a small pop past full size
+ * (about 2%) and back, the way the phone's own menus open (Oct 24, owner: "has to be more satisfying
+ * … might be too slow"; it was a softer spring that took twice as long to settle).
+ */
+const MENU_SPRING = { damping: 25, stiffness: 520, mass: 0.6 };
+/** Closing: quicker than the open, a short shrink and fade, so it is out of the way at once. */
+const MENU_CLOSE_MS = 120;
+/** How far it shrinks as it closes: a little, not all the way back into the button (it is fading). */
+const MENU_TO = 0.88;
 /** The card's plain open look, said once it has settled (see MenuCard). */
 const MENU_REST = { opacity: 1, transform: [{ scale: 1 }, { translateY: 0 }] };
 /**
@@ -370,22 +392,32 @@ const MENU_REST = { opacity: 1, transform: [{ scale: 1 }, { translateY: 0 }] };
 function MenuCard({ open, onGone, style, children }: { open: boolean; onGone: () => void; style: StyleProp<ViewStyle>; children: React.ReactNode }) {
   const still = useReducedMotion();
   const p = useSharedValue(0);
+  // 1 while it closes: the close shrinks less and fades straight away (see MENU_TO).
+  const closing = useSharedValue(0);
   const [rested, setRested] = useState(false);
   useEffect(() => {
     if (open) {
+      closing.value = 0;
       p.value = still ? withTiming(1, { duration: 160 }, (done) => { if (done) runOnJS(setRested)(true); })
         : withSpring(1, MENU_SPRING, (done) => { if (done) runOnJS(setRested)(true); });
       return undefined;
     }
+    closing.value = 1;
     p.value = withTiming(0, { duration: still ? 120 : MENU_CLOSE_MS, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(onGone)(); });
     const t = setTimeout(onGone, MENU_CLOSE_MS + 250);
     return () => clearTimeout(t);
-  }, [open, still, p, onGone]);
-  const look = useAnimatedStyle(() => ({
-    // Seen within the first third of the spring, so the growth reads as the card arriving, not a ghost.
-    opacity: Math.min(1, Math.max(0, p.value * 3)),
-    transform: [{ scale: still ? 1 : MENU_FROM + (1 - MENU_FROM) * p.value }, { translateY: still ? 0 : -8 * (1 - Math.min(1, p.value)) }],
-  }));
+  }, [open, still, p, closing, onGone]);
+  const look = useAnimatedStyle(() => {
+    const shut = closing.value === 1;
+    // Opening, seen within the first quarter of the spring, so the growth reads as the card arriving, not a ghost;
+    // closing, it fades as it shrinks.
+    const opacity = shut ? Math.max(0, p.value) : Math.min(1, Math.max(0, p.value * 4));
+    const from = shut ? MENU_TO : MENU_FROM;
+    return {
+      opacity,
+      transform: [{ scale: still ? 1 : from + (1 - from) * p.value }, { translateY: still || shut ? 0 : -8 * (1 - Math.min(1, p.value)) }],
+    };
+  });
   const resting = Platform.OS !== 'web' && rested;
   return (
     <Reanimated.View accessibilityRole="menu" pointerEvents={open ? 'auto' : 'none'} style={[style, { transformOrigin: 'top right' } as ViewStyle, look, resting && MENU_REST]}>

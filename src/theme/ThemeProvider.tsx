@@ -2,6 +2,8 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, 
 import { Image, Platform, StyleSheet, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
+import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { NEW_SPLASH } from '@/lib/splashLook';
 import { catchUpNow, installCatchUp, noteLive, tapped } from './catchUp';
 
 type Palette = Record<keyof typeof lightColors, string>;
@@ -369,10 +371,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeSourceContext.Provider value={rootSource}>
-      <View style={{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }}>
+      <View style={[{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }, loaded ? null : launchGround]}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
-            screen: the logo never drops out between the phone's picture and the app's (Oct 4). */}
-        {loaded ? children : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
+            screen: the logo never drops out between the phone's picture and the app's (Oct 4).
+            Splash C (Oct 24): the same drawn mark and line as the font gate and the splash before it. */}
+        {loaded ? children : NEW_SPLASH
+          ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
+          : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
       </View>
     </ThemeSourceContext.Provider>
   );

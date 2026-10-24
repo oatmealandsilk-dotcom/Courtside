@@ -370,7 +370,8 @@ function Waiting({ user }: { user: User }) {
   return (
     <View>
       {/* One for each row, as the mock counts them; each row says its own number ("4 workouts to log"). */}
-      <SectionHead title="Waiting on you" count={(ask ? 1 : 0) + (w ? 1 : 0)} />
+      {/* "To do" (Oct 24, owner: "Rename to todo"), the name Your sessions already uses for the same list. */}
+      <SectionHead title="To do" count={(ask ? 1 : 0) + (w ? 1 : 0)} />
       <Box>
         {ask && tagger ? (
           <Row first
@@ -461,11 +462,31 @@ function Health() {
   const { healthHistory, integrations } = useApp();
   const latest = healthHistory[0];
   if (!latest) {
+    // Nothing to show yet. A tracker already linked says so, instead of offering to connect one
+    // (Oct 24: a player with Fitbit linked was told to connect a tracker, then told it was connected).
+    // Recovery and sleep come from WHOOP and Apple Health; Fitbit, Oura and Polar bring sessions only.
+    const wearable = integrations.find((i) => i.connected && i.category === 'wearable');
+    const other = integrations.find((i) => i.connected && i.category === 'activity' && i.readsWorkouts);
+    const appleElsewhere = wearable?.provider === 'apple-health' && Platform.OS !== 'ios';
     return (
       <View>
         <SectionHead title="Recovery and sleep" onlyYou />
         <Box>
-          <AddRow icon="pulse-outline" title="Connect a tracker" sub="Recovery, sleep and food from WHOOP, Apple Watch, Fitbit, Oura or Polar." onPress={() => router.push('/health')} />
+          {wearable || other ? (
+            <Row first
+              lead={<Tile icon="pulse-outline" />}
+              title={`${(wearable ?? other)!.label} connected`}
+              sub={wearable
+                ? (appleElsewhere ? 'Read on your iPhone: open CourtSide there to bring it in.' : 'Recovery and sleep show here after its next sync.')
+                : 'It brings in your sessions. Recovery and sleep come from WHOOP or Apple Watch.'}
+              subLines={2}
+              chevron
+              accessibilityRole="link"
+              onPress={() => router.push('/health')}
+            />
+          ) : (
+            <AddRow icon="pulse-outline" title="Connect a tracker" sub="Recovery, sleep and food from WHOOP or Apple Watch." onPress={() => router.push('/health')} />
+          )}
         </Box>
       </View>
     );

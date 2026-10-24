@@ -26,7 +26,7 @@ type IconName = keyof typeof Ionicons.glyphMap;
  * A section's title at 22, one muted line under it, and on the right either
  * a link or, on the first section of a tab only you see, the "Only you"
  * label (Oct 5, option A: it replaced a lock after every private heading).
- * `count` is a small number after the title ("Waiting on you 2").
+ * `count` is a small number after the title ("To do 2").
  */
 export function SectionHead({ title, onlyYou = false, count, line, link }: {
   title: string;

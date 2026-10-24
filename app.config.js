@@ -44,7 +44,7 @@ module.exports = {
     // Oct 22: "Do thin large for logo": the same mark with thinner strokes at 68% of the tile,
     // flat green on cream (no gradient or glow). icon-refined*.png stay in assets/.
     icon: green ? './assets/icon.png' : './assets/icon-thin.png',
-    splash: { image: './assets/splash.png', resizeMode: 'contain', backgroundColor: '#F8F7F2' },
+    splash: { image: './assets/splash-c.png', resizeMode: 'cover', backgroundColor: '#F6EFE4' },
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
@@ -124,7 +124,16 @@ module.exports = {
       // (installed) paints the root the backgroundColor above; this keeps the launch picture full screen.
       // Android (Oct 4) only ever shows a round logo in the middle of the colour, never a
       // full-screen picture, so it gets the mark on its own, cream around it, as on the icon.
-      ['expo-splash-screen', { image: './assets/splash.png', backgroundColor: '#F8F7F2', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/android-icon-foreground.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F8F7F2' } }],
+      // Oct 24, splash C (next store build, after 18): logo only, as Instagram, WhatsApp and Threads open:
+      // the icon's thin mark in its green, centred, 22% of the screen wide, on the icon's own cream (so
+      // the zoom from the icon has no colour step), "GROWING THE GAME" small at the foot. Made, with the
+      // app's drawn copy of it, by scripts/make-splash-c.py; the app draws that copy only on builds newer
+      // than 18 (src/lib/splashLook.ts), so phones on 18 keep matching splash.png. Android: the mark
+      // alone (its launch screen is an icon), 90 points wide on the same cream.
+      ['expo-splash-screen', { image: './assets/splash-c.png', backgroundColor: '#F6EFE4', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F6EFE4' } }],
+      // Dark status-bar icons on the cream launch screen (Info.plist UIStatusBarStyleDarkContent), so they do not
+      // flip from white to dark when the app takes over; once the app runs, ThemedStatusBar sets them per theme.
+      ['expo-status-bar', { style: 'dark' }],
       'expo-router',
       // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
       // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.

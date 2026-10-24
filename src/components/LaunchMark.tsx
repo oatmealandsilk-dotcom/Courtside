@@ -5,6 +5,8 @@ import Svg, { G, Path, Rect } from 'react-native-svg';
 import { font, wordmarkFont } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
+import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS } from '@/components/launchPictureC';
+import { NEW_SPLASH } from '@/lib/splashLook';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
@@ -200,8 +202,110 @@ function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
   );
 }
 
-/** The launch screen's logo, name and line, drawn in the given colours (see above for each phone). */
-export const LaunchMark = Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark;
+/*
+ * Splash C (Oct 24): the logo-only look, as Instagram, WhatsApp and Threads open: the icon's thin mark
+ * in the icon's green on the icon's own cream, and "GROWING THE GAME" small and quiet at the foot.
+ * Always in those colours (the launch picture's own, whatever the theme): the curtain's fade into the
+ * app carries you into your theme, as before. Shapes from launchPictureC.ts (scripts/make-splash-c.py,
+ * written with assets/splash-c.png from the same outlines). Drawn only where the launch picture is the
+ * new one (NEW_SPLASH, src/lib/splashLook.ts); older iPhone builds keep the look above.
+ */
+const C = SPLASH_C_COLORS;
+const LINE_C_TEXT = { size: LINE_C.size, tracking: LINE_C.tracking, baseline: LINE_C.baseline, centre: PICTURE_C.width / 2 };
+
+/** iPhone: the picture's mark and line, where the picture (drawn to cover the screen) has them. */
+function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
+  const { width: W, height: H } = useWindowDimensions();
+  const s = Math.max(W / PICTURE_C.width, H / PICTURE_C.height);
+  const ox = (W - PICTURE_C.width * s) / 2;
+  const oy = (H - PICTURE_C.height * s) / 2;
+  const tagline = useDrawnBaseline(LINE_C.size * s);
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <PictureBox view={MARK_C.view} s={s} ox={ox} oy={oy} label="CourtSide">
+        <Path d={MARK_C.d} fill={C.green} fillRule="evenodd" />
+      </PictureBox>
+      {line === PICTURE_LINE ? (
+        <PictureBox view={LINE_C.view} s={s} ox={ox} oy={oy} label={line}>
+          <Path d={LINE_C.d} fill={C.line} />
+        </PictureBox>
+      ) : (
+        <Text allowFontScaling={false} onTextLayout={tagline.onTextLayout} style={[styles.lineC, typeAt(LINE_C_TEXT, s, oy, tagline.at), { color: C.line }]}>{line}</Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Android and the website: the mark in the middle of the screen at `markWidth` points, and the line
+ * at the same scale, as far up from the foot as the picture has it. Android's launch icon
+ * (assets/splash-c-android.png) is the mark alone, so there the line fades in once it has gone, as
+ * the old name and line did; on the website it is simply there, as on its loader (public/index.html).
+ */
+function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { markWidth: number; line?: string; fadeLine: boolean }) {
+  const s = markWidth / MARK_C.width;
+  const [mx, my, mw, mh] = MARK_C.view;
+  const [lx, ly, lw, lh] = LINE_C.view;
+  const words = useRef(new Animated.Value(fadeLine ? wordsShown() : 1)).current;
+  useEffect(() => {
+    if (!fadeLine) return undefined;
+    return whenLaunchHidden(() => {
+      const from = wordsShown();
+      if (from >= 1) { words.setValue(1); return; }
+      const wait = Math.max(0, launchHiddenAt() + WORDS_DELAY_MS - Date.now());
+      Animated.timing(words, { toValue: 1, duration: Math.round((1 - from) * WORDS_MS), delay: wait, easing: Easing.linear, useNativeDriver: Platform.OS !== 'web' }).start();
+    });
+  }, [words, fadeLine]);
+  const lineBottom = (PICTURE_C.height - ly - lh) * s;
+  return (
+    // Centred by layout (the middle of the whole screen, as the launch icon and the loader are), not by sums.
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
+      <View accessible accessibilityRole="image" accessibilityLabel="CourtSide" style={{ width: mw * s, height: mh * s }}>
+        <Svg width={mw * s} height={mh * s} viewBox={`${mx} ${my} ${mw} ${mh}`}>
+          <Path d={MARK_C.d} fill={C.green} fillRule="evenodd" />
+        </Svg>
+      </View>
+      {line === PICTURE_LINE ? (
+        <Animated.View style={[styles.centre, { position: 'absolute', left: 0, right: 0, bottom: lineBottom, opacity: words }]}>
+          <View accessible accessibilityRole="image" accessibilityLabel={line} style={{ width: lw * s, height: lh * s }}>
+            <Svg width={lw * s} height={lh * s} viewBox={`${lx} ${ly} ${lw} ${lh}`}>
+              <Path d={LINE_C.d} fill={C.line} />
+            </Svg>
+          </View>
+        </Animated.View>
+      ) : (
+        <Animated.Text allowFontScaling={false} style={[styles.lineC, { bottom: lineBottom, left: 0, right: 0, fontSize: LINE_C.size * s, letterSpacing: LINE_C.tracking * LINE_C.size * s, color: C.line, opacity: words }]}>{line}</Animated.Text>
+      )}
+    </View>
+  );
+}
+
+/** Android: the mark as big as its launch icon shows it (ANDROID_C), the line fading in after. */
+function AndroidLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
+  return <CentredLaunchMarkC markWidth={(ANDROID_C.markPx / ANDROID_C.iconPx) * ANDROID_C.iconPt} line={line} fadeLine />;
+}
+
+/** The website: 22% of the width, at most 96 points (a wide window), as its loader draws it. */
+function WebLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
+  const { width: W } = useWindowDimensions();
+  return <CentredLaunchMarkC markWidth={Math.min(0.22 * W, 96)} line={line} fadeLine={false} />;
+}
+
+function PhoneLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
+  return <PictureLaunchMarkC line={line} />;
+}
+
+/**
+ * The launch screen's logo and line. Today's look (old mark, name and line, in the given colours)
+ * until the installed build's own launch picture is the new one; then splash C, in its own colours
+ * (the given ones are not used). See NEW_SPLASH.
+ */
+export const LaunchMark: (props: { ink: string; faint: string; line?: string }) => React.JSX.Element = NEW_SPLASH
+  ? (Platform.OS === 'web' ? WebLaunchMarkC : Platform.OS === 'android' ? AndroidLaunchMarkC : PhoneLaunchMarkC)
+  : (Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark);
+
+/** Splash C is drawn on the icon's cream (whatever the theme); today's look keeps the screen's own colour. */
+export const launchGround = NEW_SPLASH ? { backgroundColor: C.cream } : null;
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
@@ -209,4 +313,5 @@ const styles = StyleSheet.create({
   androidName: { position: 'absolute', top: '50%', left: 0, right: 0, textAlign: 'center', fontSize: 30, lineHeight: 36, letterSpacing: -0.9, ...wordmarkFont('700') },
   androidLine: { position: 'absolute', bottom: '10.5%', left: 0, right: 0, textAlign: 'center', fontSize: 11.5, letterSpacing: 1, textTransform: 'uppercase', ...font('700') },
   line: { position: 'absolute', textAlign: 'center', ...font('700'), textTransform: 'uppercase' },
+  lineC: { position: 'absolute', textAlign: 'center', ...font('600'), textTransform: 'uppercase' },
 });
