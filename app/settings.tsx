@@ -171,13 +171,6 @@ export default function Settings() {
           detail: `From ${alertSourceWords}`,
           toggle: { value: prefs.pushActivity, onChange: (v: boolean) => actions.setPref('pushActivity', v) },
         }] : []),
-        // Oct 24 (migration 185): your tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows.
-        ...(activityAlerts && autoLogLive ? [{
-          icon: 'checkmark-done-outline' as const,
-          label: 'Log tennis automatically',
-          detail: 'Private until you post it · keeps your streak',
-          toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
-        }] : []),
         // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
         { icon: 'stats-chart-outline' as const, label: 'Weekly recap', detail: 'Mondays at 8am: your week on court', toggle: { value: prefs.pushRecap, onChange: (v: boolean) => actions.setPref('pushRecap', v) } },
         // "Sam just joined CourtSide near you" (migration 146): only adults hear it (the server's rule), and
@@ -215,6 +208,14 @@ export default function Settings() {
       title: 'Your tennis',
       rows: [
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
+        // Oct 24 (migration 185): your tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows.
+        // Here, not under Notifications, so a browser (which has no Notifications section) can switch it off too.
+        ...(activityAlerts && autoLogLive ? [{
+          icon: 'checkmark-done-outline' as const,
+          label: 'Log tennis automatically',
+          detail: 'Private until you post it · keeps your streak',
+          toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
+        }] : []),
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : 'Off. Turn on to see who is near you'), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
       ],

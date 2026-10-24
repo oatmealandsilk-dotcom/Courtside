@@ -3774,12 +3774,13 @@ export const remote = {
   },
   /**
    * Your own sessions by id: the ones the server logged for you (migration
-   * 185) since the app last read your log. Empty when none could be read.
+   * 185) since the app last read your log. Null when the read failed (asked
+   * again later), empty when none of them is there any more.
    */
-  async fetchSessionsByIds(ids: ID[]): Promise<PracticeSession[]> {
+  async fetchSessionsByIds(ids: ID[]): Promise<PracticeSession[] | null> {
     if (!ids.length) return [];
     const { data, error } = await need().from('practice_sessions').select('*').in('id', ids.slice(0, 100));
-    if (error || !data) return [];
+    if (error || !data) return null;
     return (data as SessionRow[]).map(toSession);
   },
   /**

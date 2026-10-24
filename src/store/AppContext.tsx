@@ -3859,8 +3859,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Sessions the server logged for you (migration 185) since your log was
   // read: a tracker session shows as logged, with a session this phone does
   // not hold yet. Read by id and added, so the streak, the hours and the
-  // composer see them at once (never logged a second time). Each asked once.
+  // composer see them at once (never logged a second time). Each asked once
+  // while it is there; a read that failed (a network blip) is asked again the
+  // next time your activities are read.
   const askedLogs = useRef(new Set<ID>());
+  const logsFailed = useRef(false);
+  const [logsRetry, setLogsRetry] = useState(0);
   useEffect(() => {
     const me = state.currentUserId;
     if (!live(me) || !state.remoteLoaded) return;
@@ -3870,15 +3874,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       .map((a) => a.sessionId!))];
     if (!missing.length) return;
     for (const id of missing) askedLogs.current.add(id);
+    const askAgain = () => { for (const id of missing) askedLogs.current.delete(id); logsFailed.current = true; };
     void remote.fetchSessionsByIds(missing).then((got) => {
+      if (got === null) { askAgain(); return; }
       if (!got.length || stateRef.current.currentUserId !== me) return;
       setState((prev) => {
         const have = new Set(prev.sessions.map((x) => x.id));
         const add = got.filter((x) => x.userId === me && !have.has(x.id));
         return add.length ? { ...prev, sessions: [...add, ...prev.sessions] } : prev;
       });
-    }).catch(() => undefined);
-  }, [state.currentUserId, state.remoteLoaded, state.detectedActivities, state.sessions]);
+    }).catch(askAgain);
+  }, [state.currentUserId, state.remoteLoaded, state.detectedActivities, state.sessions, logsRetry]);
 
   // What the map's two kinds of load last brought (migration 63 answers for
   // one part of the map at a time): round where you are, which Find Players,
@@ -9080,6 +9086,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     const list = await remote.fetchActivities(me!);
     if (list && stateRef.current.currentUserId === me) setState((prev) => (sameRows(prev.detectedActivities, list) ? prev : { ...prev, detectedActivities: list }));
+    // A session the server logged for you that could not be read last time: asked again now.
+    if (logsFailed.current) { logsFailed.current = false; setLogsRetry((n) => n + 1); }
   }, []);
 
   // Read on its own and handed back, never added to your sessions list: an

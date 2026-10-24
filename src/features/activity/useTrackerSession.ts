@@ -90,6 +90,16 @@ export function useTrackerSession(activityId: ID | undefined) {
   // Logged for you by the server (migration 185) and its session still on its
   // way to this phone (AppContext reads it by id): wait for it, never log twice.
   const adopting = !!activity && !logged && live?.status === 'logged' && !!live.sessionId && isSupabaseConfigured && !gaveUp;
+  // Still not here after ten seconds (a network blip): asked for once more.
+  // Saving meanwhile is safe: the server lets your own log take the place of
+  // an auto log nobody posted or tagged (migration 185), never "Already logged.".
+  const stillAdopting = !!activity && !logged && live?.status === 'logged' && !!live.sessionId && isSupabaseConfigured && gaveUp;
+  const askedAgain = useRef(false);
+  useEffect(() => {
+    if (!stillAdopting || askedAgain.current) return;
+    askedAgain.current = true;
+    void actions.refreshActivities().catch(() => undefined);
+  }, [stillAdopting, actions]);
 
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
   const saving = useRef(false);
