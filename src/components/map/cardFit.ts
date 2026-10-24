@@ -2,8 +2,8 @@ import type { LatLng } from '@/features/players/positions';
 
 /** The still card shows the whole metro (Oct 3): wide enough that nearby players are on it, so the courts spread out. One step wider on Oct 6 (owner: "zoom out a bit"), about 10 miles round the city instead of 5. */
 export const CARD_ZOOM = 9.7;
-/** The card's height on the Find Players tab (the same on the phone and in a browser). */
-export const CARD_HEIGHT = 330;
+/** The card's height on the Find Players tab (the same on the phone and in a browser). 342 since Oct 24: the 12 points the tighter Find Players / Discussions tabs gave back (owner: "make the map bigger to fill out the space"). */
+export const CARD_HEIGHT = 342;
 /** A face whose middle is closer to the card's edge than this is mostly cut off: not counted as on the card. */
 const EDGE = 8;
 

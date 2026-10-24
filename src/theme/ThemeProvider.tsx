@@ -176,27 +176,35 @@ export const themes: Record<ThemeName, Palette> = {
 // tournaments: those names are trademarks (Apple's rule 5.2.1). The ids stay as they were,
 // so a theme someone already picked survives the rename.
 export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
+  // Clean first: it is what a new player gets (Oct 24, owner: "clean should be the default color, not courtside … at the top in theme setting").
+  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
   { name: 'default', label: 'CourtSide', blurb: 'Warm neutrals, club green' },
   { name: 'night', label: 'Night', blurb: 'Dark, for late sessions' },
   { name: 'ao', label: 'Melbourne', blurb: 'Blue hard court' },
   { name: 'roland-garros', label: 'Paris', blurb: 'Crushed brick clay' },
   { name: 'wimbledon', label: 'London', blurb: 'Grass green and purple' },
   { name: 'us-open', label: 'New York', blurb: 'Flushing night session' },
-  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
 ];
+
+/**
+ * The court the app wears until someone picks one (Oct 24, owner: "clean should be the default
+ * color, not courtside"). Someone who picked CourtSide keeps it: their pick is saved. Style
+ * sheets are still written in the CourtSide palette (lightColors) and remapped by slot.
+ */
+export const DEFAULT_THEME: ThemeName = 'clean';
 
 const STORAGE_KEY = 'courtside-theme';
 const LEGACY_NIGHT_KEY = 'courtside-night-mode';
 
 function readStored(): ThemeName {
   try {
-    if (Platform.OS !== 'web') return 'default';
+    if (Platform.OS !== 'web') return DEFAULT_THEME;
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved && saved in themes) return saved as ThemeName;
     // Anyone who had night mode on before keeps it.
-    return localStorage.getItem(LEGACY_NIGHT_KEY) === 'true' ? 'night' : 'default';
+    return localStorage.getItem(LEGACY_NIGHT_KEY) === 'true' ? 'night' : DEFAULT_THEME;
   } catch {
-    return 'default';
+    return DEFAULT_THEME;
   }
 }
 
@@ -310,7 +318,7 @@ function setTheme(name: ThemeName) {
 }
 
 // Kept so existing callers of the old night-mode switch keep working.
-const setNight = (value: boolean) => setTheme(value ? 'night' : 'default');
+const setNight = (value: boolean) => setTheme(value ? 'night' : DEFAULT_THEME);
 
 /** Straight to a court with nothing held back: the saved court read at launch. */
 function applyNow(name: ThemeName) {
