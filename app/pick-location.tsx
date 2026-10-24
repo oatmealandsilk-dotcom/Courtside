@@ -18,6 +18,7 @@ import { homeFor, placeFor, type LatLng } from '@/features/players/positions';
 import { plain, startsWord } from '@/features/search/words';
 import { useApp } from '@/store/AppContext';
 import { colors, font, radius, spacing, typography } from '@/theme';
+import { inputCorner } from '@/theme/look';
 
 /** Every search's answer from the world's place search, kept for the session: going back a letter is instant. */
 const answered = new Map<string, PlaceHit[]>();
@@ -349,7 +350,7 @@ export default function PickLocation() {
 
 const styleDefinitions = StyleSheet.create({
   // Sized by the text box's padding, not a fixed height with none (that drew "Search" low and cut off on an iPhone).
-  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 46, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
+  search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 46, paddingHorizontal: 14, borderRadius: inputCorner(radius.pill), backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, marginBottom: spacing.sm },
   input: { flex: 1, ...typography.body, fontSize: 16, color: colors.text, minHeight: 44, paddingVertical: 10 },
   list: { paddingBottom: spacing.xxl },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 11, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

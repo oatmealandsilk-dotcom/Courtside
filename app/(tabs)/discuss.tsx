@@ -72,7 +72,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { corner } from '@/theme/look';
+import { corner, inputCorner } from '@/theme/look';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -1104,7 +1104,7 @@ const styleDefinitions = StyleSheet.create({
   searchClear: { position: 'absolute', right: 14 },
   searchCancel: { fontSize: 16, ...font('600'), color: colors.brand },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
-  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingLeft: 42, paddingRight: spacing.lg, minHeight: 46, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: inputCorner(radius.pill), paddingLeft: 42, paddingRight: spacing.lg, minHeight: 46, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   // The map card while a search is up: kept, out of the layout. In a browser `display: none` keeps it.
   // On a phone it would not: the phone takes a view with display none off the screen entirely, its map's
   // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
