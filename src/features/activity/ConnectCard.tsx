@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -30,19 +30,29 @@ import { TextScale } from '@/theme/textScale';
  *
  * Decided as Profile comes on show: an offer that only becomes known while
  * the page is up waits for the next visit, so the card never drops in over a
- * page already being read.
+ * page already being read. What it depends on is asked as the tabs open
+ * (warmConnectOffer), so it is known long before; GRACE_MS covers a first
+ * answer still on its way as the page slides in.
  */
+const GRACE_MS = 250;
+
 export function ConnectCard() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUserId } = useApp();
-  const { auto, source, offer, close } = useConnectRow('profile');
+  const { auto, source, offer, close, known } = useConnectRow('profile');
   const here = Platform.OS !== 'web' || isDemo(currentUserId);
   const onShow = useShownAt('/profile');
-  // Kept in step while the page is out of sight; held while it is on show.
-  const [settled, setSettled] = useState(offer);
-  useEffect(() => { if (!onShow) setSettled(offer); }, [onShow, offer]);
+  // Kept in step while the page is out of sight; held once decided while it is on show
+  // (null: not decided yet, nothing heard).
+  const [decided, setDecided] = useState<boolean | null>(known ? offer : null);
+  const cameAt = useRef(Date.now());
+  useEffect(() => { if (onShow) cameAt.current = Date.now(); }, [onShow]);
+  useEffect(() => {
+    if (!onShow) { setDecided(known ? offer : null); return; }
+    if (decided === null && known) setDecided(offer && Date.now() - cameAt.current < GRACE_MS);
+  }, [onShow, known, offer, decided]);
   const [busy, setBusy] = useState(false);
-  if (!here || !settled || !offer || !source) return null;
+  if (!here || !decided || !offer || !source) return null;
   const both = auto.apple && auto.whoop;
   const names = both ? 'Apple Health or WHOOP' : source === 'whoop' ? 'WHOOP' : 'Apple Health';
   const connect = async () => {

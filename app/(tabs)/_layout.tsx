@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { View } from 'react-native';
 import { Redirect, Tabs, usePathname } from 'expo-router';
 
 import { TabsPager } from '@/components/TabsPager';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useApp } from '@/store/AppContext';
+import { warmConnectOffer } from '@/features/activity/autoLog';
 
 /**
  * On the phone the four tabs are one sliding row (see TabsPager). The Tabs
@@ -16,6 +17,8 @@ export default function TabsLayout() {
   useTheme();
   const pathname = usePathname();
   const { ready, currentUserId } = useApp();
+  // Profile's "Log your hits automatically" card, decided before Profile is first opened.
+  useEffect(() => { if (currentUserId) warmConnectOffer(currentUserId); }, [currentUserId]);
   // Both built once (the row only when the address changes): this layout hears every change in the
   // app, for the two values above, and each one redrew the row and the hidden navigator with it
   // (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").

@@ -96,6 +96,19 @@ export interface ConnectRow {
   offer: boolean;
   /** The row's ×. */
   close: () => void;
+  /** Everything `offer` depends on has been heard (switches, connections, this phone's ×), so it is the final word. */
+  known: boolean;
+}
+
+/**
+ * Asked as the tabs first open (app/(tabs)/_layout), so Profile's card is
+ * already decided when Profile is first shown, instead of hearing it a beat
+ * after and staying away for that visit (see ConnectCard).
+ */
+export function warmConnectOffer(userId: string) {
+  readClosed('profile', userId);
+  readClosed('activities', userId);
+  void tennisFlags(userId);
 }
 
 export function useConnectRow(place: ConnectPlace = 'activities'): ConnectRow {
@@ -111,5 +124,6 @@ export function useConnectRow(place: ConnectPlace = 'activities'): ConnectRow {
     emitRows();
   }, [place, currentUserId]);
   const source: AutoLogSource | null = auto.apple ? 'apple-health' : auto.whoop ? 'whoop' : null;
-  return { auto, source, offer: auto.ready && !auto.connected && !!source && !closed, close };
+  const closedKnown = useSyncExternalStore(subscribeRows, () => !!currentUserId && closedRows.has(`${place}:${currentUserId}`), () => false);
+  return { auto, source, offer: auto.ready && !auto.connected && !!source && !closed, close, known: auto.ready && closedKnown };
 }

@@ -1214,7 +1214,7 @@ const STEPS = [
     title: 'Settings',
     async run(page) {
       // The ☰ button opens a small menu (Groups, Settings) since the Tennis profile redesign.
-      await page.tap({ label: /^Menu: groups and settings/ });
+      await page.tap({ label: /^Menu: groups, theme and settings/ });
       await page.tap({ label: 'Settings' });
     },
     expect: [{ label: 'Account center' }, { label: 'Privacy center' }],
