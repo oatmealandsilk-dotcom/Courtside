@@ -42,7 +42,7 @@ function CourtMark({ tint }: { tint: string }) {
  * original again: "Generate some more"), same size, shape, colours and type:
  * - J real court icon: the tile holds a tiny court from above in its surface's colour.
  * - K quieter tile: the tile is just the court's colour; what's on sits bottom right.
- * - L status first: what's on (in the accent) takes the distance's line; distance beside the name.
+ * - L status first: what's on (in the accent) takes the distance's line; the distance small in the top corner, by the name.
  * - M lighter card: no fill, a hairline border, more room, a slightly larger name.
  */
 export function CourtsCards({ look, rows, badges }: { look: CardLook; rows: CourtRow[]; badges: Map<string, CourtBadge> }) {
@@ -76,23 +76,20 @@ export function CourtsCards({ look, rows, badges }: { look: CardLook; rows: Cour
             >
               <View style={[styles.top, look === 'K' && styles.topK]}>
                 {tile}
-                {look === 'L' || look === 'K' ? null : pill}
+                {look === 'L' ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.miles} numberOfLines={1}>{formatMiles(miles)}</Text> : look === 'K' ? null : pill}
               </View>
               <View>
                 <Room tight={look === 'K'} />
                 {look === 'L' ? (
                   <View style={styles.over}>
-                    <View style={styles.nameRow}>
-                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameL]} numberOfLines={2}>{labelOf(c)}</Text>
-                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.miles} numberOfLines={1}>{formatMiles(miles)}</Text>
-                    </View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={now ? styles.now : styles.meta} numberOfLines={1}>{now ?? ([count ?? '1 court', c.lit ? 'lights' : null].filter(Boolean).join(' · '))}</Text>
                   </View>
                 ) : look === 'K' ? (
                   <View style={[styles.over, styles.overK]}>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
                     <View style={styles.metaRow}>
-                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.metaGrow]} numberOfLines={1}>{pill ? [formatMiles(miles), count].filter(Boolean).join(' · ') : meta}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.metaGrow]} numberOfLines={1}>{pill ? formatMiles(miles) : meta}</Text>
                       {pill}
                     </View>
                   </View>
@@ -146,9 +143,8 @@ const styleDefinitions = StyleSheet.create({
   swatch: { width: 36, height: 36, borderRadius: 11, opacity: 0.85 },
   name: { ...typography.bodyStrong, color: colors.text, lineHeight: 20 },
   nameM: { fontSize: 16, lineHeight: 20, letterSpacing: -0.2 },
-  nameL: { flex: 1, minWidth: 0 },
-  nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
-  miles: { ...typography.caption, letterSpacing: 0, fontSize: 12, lineHeight: 20, color: colors.textFaint },
+  // L: the distance small in the top row's far corner, so the name keeps the card's whole width.
+  miles: { ...typography.caption, letterSpacing: 0, fontSize: 12, color: colors.textFaint, marginLeft: 'auto', alignSelf: 'flex-start' },
   meta: { ...typography.small, color: colors.textMuted },
   now: { ...typography.smallStrong, color: colors.brand },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
