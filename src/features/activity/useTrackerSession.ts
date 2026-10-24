@@ -87,6 +87,9 @@ export function useTrackerSession(activityId: ID | undefined) {
   const gone = !!activityId && !waiting && !live;
   // Its entry in your log, once it has one.
   const logged = activity ? sessions.find((s) => s.activityId === activity.id || (!!live?.sessionId && s.id === live.sessionId)) : undefined;
+  // Logged for you by the server (migration 185) and its session still on its
+  // way to this phone (AppContext reads it by id): wait for it, never log twice.
+  const adopting = !!activity && !logged && live?.status === 'logged' && !!live.sessionId && isSupabaseConfigured && !gaveUp;
 
   const firstOf = (id: ID) => users.find((u) => u.id === id)?.name.trim().split(/\s+/)[0] ?? 'They';
   const saving = useRef(false);
@@ -94,6 +97,7 @@ export function useTrackerSession(activityId: ID | undefined) {
   const save = async (input: LogInput): Promise<ID> => {
     if (!activity) throw new Error('That session is no longer here.');
     if (logged) return logged.id;
+    if (adopting) throw new Error('Already logged.');
     if (saving.current) throw new Error('Saving…');
     saving.current = true;
     try {
@@ -134,7 +138,7 @@ export function useTrackerSession(activityId: ID | undefined) {
     }
     : { now: 0, before: 0 });
 
-  return { activity, live, waiting, gone, logged, flags, postable, save, streakWith, askedNames: (players: SessionPlayer[]) => andList(players.map((p) => firstOf(p.id))) };
+  return { activity, live, waiting: waiting || adopting, gone, logged, flags, postable, save, streakWith, askedNames: (players: SessionPlayer[]) => andList(players.map((p) => firstOf(p.id))) };
 }
 
 /**

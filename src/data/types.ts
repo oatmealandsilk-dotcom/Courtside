@@ -176,6 +176,12 @@ export interface PracticeSession {
   /** The tracker session this was logged from (migration 58). */
   activityId?: ID;
   /**
+   * Logged for you by the server, privately, from a tracker's tennis session
+   * of 20 minutes or more (migration 185, Oct 24): kind 'practice', its
+   * length, no place or score yet. "Not tennis? Remove" takes it away for good.
+   */
+  autoLogged?: boolean;
+  /**
    * What a fitness session logged from a workout was, as its short name
    * ('run', 'strength'; see features/activity/workouts.ts), so it can still
    * say "Run" after the workout's own record goes at 30 days (migration 107,
@@ -382,6 +388,11 @@ export interface DetectedActivity {
    */
   zones?: number[];
   status: 'new' | 'logged' | 'dismissed' | 'duplicate' | 'withdrawn';
+  /**
+   * The tracker only said "Sport" (Fitbit), so it may well be tennis: asks
+   * "Was this tennis?" and is never logged by itself (migration 185).
+   */
+  unsure?: boolean;
   duplicateOf?: ID;
   sessionId?: ID;
   createdAt: string;

@@ -555,7 +555,7 @@ export interface RemoteData {
   noProfileRow?: true;
 }
 
-interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; set_tiebreaks?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null }
+interface SessionRow { id: string; user_id: string; day: string; minutes: number; kind: PracticeSession['kind']; won: boolean | null; opponent: string | null; note: string | null; created_at: string; activity_id?: string | null; from_session_id?: string | null; sets?: unknown; set_tiebreaks?: unknown; workout?: string | null; court_id?: string | null; kcal?: number | null; avg_hr?: number | null; auto_logged?: boolean | null }
 const toSession = (r: SessionRow): PracticeSession => {
   // A tennis session's score (migration 91 for a match, 136 for a practice or drills; absent before they run), kept only when it is a good one,
   // with its tiebreak points put back on (migration 158; absent before it runs).
@@ -563,6 +563,8 @@ const toSession = (r: SessionRow): PracticeSession => {
   return {
     id: r.id, userId: r.user_id, day: r.day, minutes: r.minutes, kind: r.kind, won: r.won ?? undefined, opponent: r.opponent ?? undefined, note: r.note ?? undefined,
     activityId: r.activity_id ?? undefined, fromSessionId: r.from_session_id ?? undefined, ...(sets ? { sets } : {}),
+    // Logged for you by the server (migration 185; absent before it runs).
+    ...(r.auto_logged ? { autoLogged: true } : {}),
     // What a fitness session logged from a workout was (migration 107; absent before it runs).
     ...(r.kind === 'fitness' && r.workout ? { workout: r.workout } : {}),
     // Where it was played (migration 130; absent before it runs).
@@ -604,6 +606,8 @@ interface ActivityRow {
   /** A workout's distance in metres (migration 107; absent before it runs). */
   distance_m?: number | null;
   external_id?: string | null;
+  /** The tracker only said "Sport" (migration 185; absent before it runs). */
+  unsure?: boolean | null;
 }
 const toActivity = (r: ActivityRow): DetectedActivity => ({
   id: r.id, userId: r.user_id, source: r.source, sport: r.sport || 'tennis', startedAt: r.started_at, endedAt: r.ended_at, tzOffsetMin: r.tz_offset_min ?? undefined, minutes: r.minutes,
@@ -614,6 +618,7 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
   zones: r.hr_zones ?? undefined,
   ...(r.distance_m ? { distanceM: r.distance_m } : {}),
   ...(r.external_id ? { externalId: r.external_id } : {}),
+  ...(r.unsure ? { unsure: true } : {}),
 });
 /**
  * Your tracker sessions that ended in the last `days` (two weeks unless
@@ -672,6 +677,8 @@ export interface UserState {
   pushHitNudges?: boolean;
   /** "Partner streak reminders" (migration 180). Undefined on a database without it: the switch is not shown. */
   pushPartnerStreak?: boolean;
+  /** "Log tennis automatically" (migration 185). Undefined on a database without it: the switch is not shown. */
+  autoLog?: boolean;
   /** "Questions you could answer" (migration 170). Undefined on a database without it: the switch is not shown. */
   pushQuestions?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
@@ -782,7 +789,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -849,6 +856,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushStreak: typeof r.push_streak === 'boolean' ? r.push_streak : undefined,
   pushHitNudges: typeof r.push_hit_nudges === 'boolean' ? r.push_hit_nudges : undefined,
   pushPartnerStreak: typeof r.push_partner_streak === 'boolean' ? r.push_partner_streak : undefined,
+  autoLog: typeof r.auto_log === 'boolean' ? r.auto_log : undefined,
   pushQuestions: typeof r.push_questions === 'boolean' ? r.push_questions : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
@@ -1691,6 +1699,8 @@ let userStateLacksAlertSwitches = false;
 let userStateLacksPushHitNudges = false;
 /** Set once a settings save finds no push_partner_streak column (a database before migration 180). */
 let userStateLacksPushPartnerStreak = false;
+/** Set once a settings save finds no auto_log column (a database before migration 185). */
+let userStateLacksAutoLog = false;
 /** Set once a settings save finds no push_questions column (a database before migration 170). */
 let userStateLacksPushQuestions = false;
 
@@ -2037,12 +2047,15 @@ export const remote = {
       ...(s.pushHitNudges !== undefined && !userStateLacksPushHitNudges ? { push_hit_nudges: s.pushHitNudges } : {}),
       // "Partner streak reminders" (migration 180).
       ...(s.pushPartnerStreak !== undefined && !userStateLacksPushPartnerStreak ? { push_partner_streak: s.pushPartnerStreak } : {}),
+      // "Log tennis automatically" (migration 185).
+      ...(s.autoLog !== undefined && !userStateLacksAutoLog ? { auto_log: s.autoLog } : {}),
       // "Questions you could answer" (migration 170).
       ...(s.pushQuestions !== undefined && !userStateLacksPushQuestions ? { push_questions: s.pushQuestions } : {}),
     });
     let { error } = await send();
-    for (let tries = 0; error && tries < 5; tries += 1) {
+    for (let tries = 0; error && tries < 12; tries += 1) {
       if (/push_partner_streak/.test(error.message) && !userStateLacksPushPartnerStreak) userStateLacksPushPartnerStreak = true;
+      else if (/auto_log/.test(error.message) && !userStateLacksAutoLog) userStateLacksAutoLog = true;
       else if (/push_hit_nudges/.test(error.message) && !userStateLacksPushHitNudges) userStateLacksPushHitNudges = true;
       else if (/push_questions/.test(error.message) && !userStateLacksPushQuestions) userStateLacksPushQuestions = true;
       else if (/push_joined|push_streak/.test(error.message) && !userStateLacksAlertSwitches) userStateLacksAlertSwitches = true;
@@ -3758,6 +3771,34 @@ export const remote = {
   async deleteSession(id: ID) {
     const { error } = await need().from('practice_sessions').delete().eq('id', id);
     if (error) fail('session delete')(error);
+  },
+  /**
+   * Your own sessions by id: the ones the server logged for you (migration
+   * 185) since the app last read your log. Empty when none could be read.
+   */
+  async fetchSessionsByIds(ids: ID[]): Promise<PracticeSession[]> {
+    if (!ids.length) return [];
+    const { data, error } = await need().from('practice_sessions').select('*').in('id', ids.slice(0, 100));
+    if (error || !data) return [];
+    return (data as SessionRow[]).map(toSession);
+  },
+  /**
+   * "Not tennis? Remove" (migration 185): the session the server logged for
+   * you from tracker session `activityId` goes, and the tracker session is
+   * hidden for good. Throws a plain sentence.
+   */
+  async removeAutoLog(activityId: ID) {
+    const { error } = await need().rpc('remove_auto_log', { a: activityId });
+    if (error) { fail('remove auto log')(error); throw new Error('That didn’t remove. Try again.'); }
+  },
+  /**
+   * What a session was (practice, match, drills) and a match's result,
+   * changed on one the server logged as practice for you (migration 185).
+   * Your own rows (migration 39). Throws a plain sentence.
+   */
+  async updateSessionKind(id: ID, kind: PracticeSession['kind'], won: boolean | null) {
+    const { error } = await need().from('practice_sessions').update({ kind, won: kind === 'match' ? won : null }).eq('id', id);
+    if (error) { fail('session kind')(error); throw new Error('That didn’t save. Try again.'); }
   },
   /**
    * A session's score, set, changed or cleared on a session already in your

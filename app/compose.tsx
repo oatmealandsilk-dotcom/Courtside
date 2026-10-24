@@ -240,6 +240,13 @@ function Compose() {
     setOpened({ type: 'tracker', activity, session: sessions.find((x) => x.activityId === activity.id) });
     setAttached(true);
   }, [tracker.activity?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Logged for you by the server (migration 185) while its session was still
+  // on its way to this phone: taken the moment it lands, so this is "Post it".
+  const lateLog = opened?.type === 'tracker' && !opened.session ? tracker.logged : undefined;
+  useEffect(() => {
+    if (!lateLog) return;
+    setOpened((o) => (o?.type === 'tracker' && !o.session ? { ...o, session: lateLog } : o));
+  }, [lateLog?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // The log entry being posted, as your log has it now: a score added from here ("Add score", Oct 6)
   // goes on the card straight away. Only its score and result follow; which session it is stays held.
   const heldLog = opened?.session;
@@ -248,12 +255,13 @@ function Compose() {
     if (!liveLog) return;
     setOpened((o) => {
       if (!o?.session || o.session.id !== liveLog.id) return o;
-      if (scoreText(o.session.sets) === scoreText(liveLog.sets) && o.session.won === liveLog.won) return o;
+      if (scoreText(o.session.sets) === scoreText(liveLog.sets) && o.session.won === liveLog.won && o.session.kind === liveLog.kind) return o;
       const { sets: _s, won: _w, ...rest } = o.session;
-      const session: PracticeSession = { ...rest, ...(liveLog.won !== undefined ? { won: liveLog.won } : {}), ...(liveLog.sets?.length ? { sets: liveLog.sets } : {}) };
+      // What it was too, changed from here on a session the server logged for you (migration 185).
+      const session: PracticeSession = { ...rest, kind: liveLog.kind, ...(liveLog.won !== undefined ? { won: liveLog.won } : {}), ...(liveLog.sets?.length ? { sets: liveLog.sets } : {}) };
       return o.type === 'tracker' ? { ...o, session } : { type: 'logged', session };
     });
-  }, [liveLog?.id, scoreText(liveLog?.sets), liveLog?.won]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [liveLog?.id, scoreText(liveLog?.sets), liveLog?.won, liveLog?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
   // A tennis session of yours with no score yet: a quiet "Add score" by its card (Oct 6), as on Share.
   const addScoreTo = liveLog && liveLog.userId === currentUserId && canScore(liveLog.kind) && !liveLog.fromSessionId && !liveLog.sets?.length ? liveLog.id : undefined;
   // "Share health data" starts on for someone known to be an adult, off for
@@ -533,6 +541,31 @@ function Compose() {
   };
   // Logged before this page opened: what it was is already said.
   const openedLog = opened?.type === 'tracker' ? opened.session : undefined;
+  // Logged for you by the server, privately, and not posted yet (migration
+  // 185, owner Oct 24): what it was (it starts as Practice), a match's result
+  // and the score can still change here; Keep private just closes; Not
+  // tennis? Remove takes it away for good.
+  const autoOpen = !!openedLog?.autoLogged && opened?.type === 'tracker' && isTennisActivity(opened.activity) && !openedPosted;
+  const autoKind = liveLog?.kind ?? openedLog?.kind ?? 'practice';
+  const [autoError, setAutoError] = useState('');
+  const changeAutoKind = (k: PracticeSession['kind'], result?: boolean) => {
+    if (!liveLog) return;
+    setAutoError('');
+    void actions.setSessionKind(liveLog.id, k, result).catch((e: unknown) => setAutoError(e instanceof Error ? e.message : 'That didn’t save. Try again.'));
+  };
+  const removeIt = () => {
+    if (opened?.type !== 'tracker') return;
+    const id = opened.activity.id;
+    confirm({
+      title: 'Remove this session?',
+      message: 'It comes off your log and your streak, and won’t come back.',
+      confirmLabel: 'Remove',
+      destructive: true,
+      onConfirm: () => {
+        void actions.removeAutoLog(id).then(goBackNow).catch((e: unknown) => setAutoError(e instanceof Error ? e.message : 'That didn’t remove. Try again.'));
+      },
+    });
+  };
   // A workout other than tennis (a run, a lift: Oct 5) logs as fitness, with
   // what it was kept on the log; it has no Practice/Match/Drills choice, no
   // result and nobody to tag. Tennis is exactly as it was.
@@ -1488,7 +1521,18 @@ function Compose() {
                 <Field bare accessibilityLabel="Caption" value={body} onChangeText={setBody} placeholder={`${logHint} — how did it go?`} multiline minHeight={44} mentions maxLength={POST_MAX} />
               </View>
             </View>
-            {openedLog || workoutLog ? (
+            {autoOpen ? (
+              // Logged for you (migration 185): only you see it until it is posted. What it was can still change.
+              <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
+                <Text style={styles.autoNote}>Logged privately · only you see it</Text>
+                <Chips value={autoKind} onChange={(k) => { if (k) changeAutoKind(k, k === 'match' ? liveLog?.won : undefined); }} options={autoKind === 'drills' ? WITH_DRILLS : KINDS} />
+                {autoKind === 'match' && !liveLog?.sets?.length ? (
+                  <Chips brand clearable value={liveLog?.won === undefined ? undefined : liveLog.won ? 'won' : 'lost'} onChange={(v) => changeAutoKind('match', v ? v === 'won' : undefined)} options={[{ value: 'won', label: 'Won' }, { value: 'lost', label: 'Lost' }]} />
+                ) : null}
+                {addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScore} /> : null}
+                {autoError ? <Text style={styles.twiceNote}>{autoError}</Text> : null}
+              </Reanimated.View>
+            ) : openedLog || workoutLog ? (
               // Logged already ("Post it"): what it was is said; a tennis session with no score can still get one.
               addScoreTo ? <AddScore sessionId={addScoreTo} style={styles.addScore} /> : null
             ) : (
@@ -1570,6 +1614,10 @@ function Compose() {
               <Pressable accessibilityRole="button" accessibilityLabel="Discard session" hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.hideItText}>Discard session</Text>
               </Pressable>
+            ) : autoOpen ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="Not tennis? Remove this session" hitSlop={8} onPress={removeIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: PRESS_DIM }]}>
+                <Text style={styles.hideItText}>Not tennis? Remove</Text>
+              </Pressable>
             ) : opened?.type === 'tracker' && !openedLog && opened.activity.status === 'new' ? (
               <Pressable accessibilityRole="button" accessibilityLabel={workoutLog ? 'Hide this workout' : 'Not tennis? Hide this session'} hitSlop={8} onPress={hideIt} style={({ pressed }) => [styles.hideIt, pressed && { opacity: PRESS_DIM }]}>
                 <Text style={styles.hideItText}>{workoutLog ? 'Hide this workout' : 'Not tennis? Hide it'}</Text>
@@ -1579,15 +1627,16 @@ function Compose() {
           </Screen>
           {keysUp ? null : (
             <LogDock
-              canJustLog={!openedLog}
+              canJustLog={!openedLog || autoOpen}
               busy={busy}
               ticked={ticked}
               error={logError}
-              onJustLog={justLog}
+              // Logged for you already: Keep private just closes (asked first when something was written or added).
+              onJustLog={autoOpen ? leaveLog : justLog}
               onShare={submit}
               shareDisabled={!(opened || liveOnly) || !postsChecked}
               label="Post session"
-              quietLabel="Save privately"
+              quietLabel={autoOpen ? 'Keep private' : 'Save privately'}
               streak={savedStreak ?? streakPreview}
             />
           )}
@@ -1884,6 +1933,7 @@ const styleDefinitions = StyleSheet.create({
   manualStats: { marginTop: spacing.lg },
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
   twiceNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.md },
+  autoNote: { ...typography.small, color: colors.textMuted, marginBottom: spacing.sm },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

@@ -379,9 +379,11 @@ export interface Prefs {
   pushHitNudges: boolean;
   /** Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). */
   pushPartnerStreak: boolean;
+  /** Oct 24 (migration 185): a tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows. On unless switched off. */
+  autoLog: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true, autoLog: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
@@ -526,6 +528,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   hitNudgeAlertsLive: boolean;
   /** The database has the "Partner streak reminders" switch (migration 180); before that it would do nothing, so it is not shown. */
   partnerStreakAlertsLive: boolean;
+  /** The database logs tennis by itself (migration 185); before that the "Log tennis automatically" switch would do nothing, so it is not shown. */
+  autoLogLive: boolean;
   /**
    * Your weekly streaks with hitting partners (sweep R12, migration 180):
    * null until asked (loadPartnerStreaks), or when the database has none yet.
@@ -594,6 +598,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushQuestions: got.pushQuestions ?? s.prefs.pushQuestions,
     pushHitNudges: got.pushHitNudges ?? s.prefs.pushHitNudges,
     pushPartnerStreak: got.pushPartnerStreak ?? s.prefs.pushPartnerStreak,
+    autoLog: got.autoLog ?? s.prefs.autoLog,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
   const cardsChanged = JSON.stringify(s.paymentMethods) !== JSON.stringify(was.p);
@@ -805,6 +810,18 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    */
   friendsOnStreak: () => Promise<FriendStreak[]>;
   deleteSession: (id: ID) => void;
+  /**
+   * "Not tennis? Remove" (migration 185): the session the server logged for
+   * you from tracker session `activityId` goes, and that session is hidden for
+   * good (never back in To do). Throws a plain sentence.
+   */
+  removeAutoLog: (activityId: ID) => Promise<void>;
+  /**
+   * What a session the server logged as practice for you really was (Practice,
+   * Match, Drills) and a match's result, before you post it (migration 185).
+   * Throws a plain sentence.
+   */
+  setSessionKind: (sessionId: ID, kind: PracticeSession['kind'], won?: boolean) => Promise<void>;
   /** Post a "Looking for a hit". Throws a plain sentence if it cannot be posted. */
   /**
    * Post a "Looking for a hit". Throws a plain sentence if it cannot be posted.
@@ -1860,6 +1877,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
       pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+      autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       constraints: self?.profile.constraints,
     },
     tips: s.tips, coachApplications: s.coachApplications, coaches: s.coaches, coachReviews: s.coachReviews, coachResults: s.coachResults,
@@ -1993,6 +2011,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           pushQuestions: data.userState.pushQuestions ?? prev.prefs.pushQuestions,
           pushHitNudges: data.userState.pushHitNudges ?? prev.prefs.pushHitNudges,
           pushPartnerStreak: data.userState.pushPartnerStreak ?? prev.prefs.pushPartnerStreak,
+          autoLog: data.userState.autoLog ?? prev.prefs.autoLog,
         }
         : prev.prefs,
       // The settings row carries contacts_findable only once migration 89 has run (with no row yet, the load asks on its own).
@@ -2001,6 +2020,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       questionAlertsLive: data.userState?.pushQuestions !== undefined ? true : prev.questionAlertsLive,
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
       partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
+      autoLogLive: data.userState?.autoLog !== undefined ? true : prev.autoLogLive,
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2279,8 +2299,20 @@ function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: 
   const a = newestFirst[0];
   if (!a) return;
   const href = `/compose?activity=${a.id}`;
+  // Logged for you by the server (migration 185): only you see it until you post it.
+  if (a.status === 'logged' && isTennisActivity(a)) {
+    showToast({
+      title: 'Tennis logged',
+      body: [duration(a.minutes), 'only you can see it'].join(' · '),
+      glyph: 'session',
+      href,
+      action: { label: 'Post it', onPress: () => router.push(href as never) },
+      ...(holdMs ? { holdMs } : {}),
+    });
+    return;
+  }
   showToast({
-    title: isTennisActivity(a) ? 'Tennis detected' : 'Activity detected',
+    title: a.unsure ? 'Was this tennis?' : isTennisActivity(a) ? 'Tennis detected' : 'Activity detected',
     body: isTennisActivity(a)
       ? [duration(a.minutes), a.maxHr ? `${a.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: a })].filter(Boolean).join(' · ')
       : workoutLine(a),
@@ -2327,6 +2359,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     questionAlertsLive: !isSupabaseConfigured,
     hitNudgeAlertsLive: !isSupabaseConfigured,
     partnerStreakAlertsLive: !isSupabaseConfigured,
+    autoLogLive: !isSupabaseConfigured,
     partnerStreaks: null,
     hiddenWords: null,
     reviewRequests: null,
@@ -2790,6 +2823,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
         pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
         pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+        autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       }).finally(settled);
     }, 400);
     // Never sent (a newer change took its place, or the account changed): nothing of it is on its way up.
@@ -3763,13 +3797,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const deleteSession = useCallback((id: ID) => {
     const me = stateRef.current.currentUserId;
+    const gone = stateRef.current.sessions.find((x) => x.id === id);
+    const autoLogged = gone?.autoLogged && gone.activityId ? gone.activityId : null;
     setState((prev) => ({
       ...prev,
       sessions: prev.sessions.filter((x) => x.id !== id),
       // A tracker's post goes back to "Tennis"; one logged by hand keeps what it said (migration 65).
       posts: me ? postsFollowLog(prev.posts, me, null, null, id) : prev.posts,
       // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
-      detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged' ? { ...a, status: 'new', sessionId: undefined } : a)),
+      // One the server logged for you is hidden for good instead: taking it away means "not tennis" (migration 185).
+      detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged'
+        ? { ...a, status: autoLogged ? 'dismissed' : 'new', sessionId: undefined } : a)),
+      notifications: autoLogged ? prev.notifications.filter((n) => !(n.kind === 'activity' && n.targetId === autoLogged)) : prev.notifications,
       // Its tags go with it (the database deletes them too, migration 62); a copy of someone else's session only loses its link.
       sessionTags: prev.sessionTags
         .filter((t) => !(t.sessionId === id && t.taggerId === me))
@@ -3777,6 +3816,69 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     if (live(me)) void remote.deleteSession(id);
   }, []);
+
+  const removeAutoLog = useCallback(async (activityId: ID) => {
+    const me = stateRef.current.currentUserId;
+    const before = stateRef.current;
+    const gone = before.sessions.find((x) => x.activityId === activityId && x.autoLogged);
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      sessions: gone ? prev.sessions.filter((x) => x.id !== gone.id) : prev.sessions,
+      detectedActivities: prev.detectedActivities.map((a) => (a.id === activityId && a.status !== 'withdrawn' ? { ...a, status: 'dismissed', sessionId: undefined } : a)),
+      notifications: prev.notifications.filter((n) => !(n.kind === 'activity' && n.targetId === activityId)),
+    }));
+    if (!live(me, activityId)) return;
+    try { await remote.removeAutoLog(activityId); } catch (e) {
+      setState((prev) => ({
+        ...prev,
+        sessions: gone && !prev.sessions.some((x) => x.id === gone.id) ? [gone, ...prev.sessions] : prev.sessions,
+        detectedActivities: prev.detectedActivities.map((a) => (a.id === activityId ? before.detectedActivities.find((b) => b.id === a.id) ?? a : a)),
+        notifications: [...before.notifications.filter((n) => n.kind === 'activity' && n.targetId === activityId && !prev.notifications.some((x) => x.id === n.id)), ...prev.notifications],
+      }));
+      throw e;
+    }
+  }, []);
+
+  const setSessionKind = useCallback(async (sessionId: ID, kind: PracticeSession['kind'], won?: boolean) => {
+    const me = requireUser();
+    const had = stateRef.current.sessions.find((x) => x.id === sessionId && x.userId === me);
+    if (!had) throw new Error('That session is no longer here.');
+    const result = kind === 'match' ? won : undefined;
+    if (had.kind === kind && had.won === result) return;
+    // A score stays on any tennis kind (migration 136); a match's result follows it when one side took more sets.
+    const next: PracticeSession = { ...had, kind, won: kind === 'match' ? setsWinner(had.sets) ?? result : undefined };
+    setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === sessionId ? next : x)) }));
+    if (!live(me, sessionId)) return;
+    try { await remote.updateSessionKind(sessionId, kind, next.won ?? null); } catch (e) {
+      setState((prev) => ({ ...prev, sessions: prev.sessions.map((x) => (x.id === sessionId ? had : x)) }));
+      throw e;
+    }
+  }, [requireUser]);
+
+  // Sessions the server logged for you (migration 185) since your log was
+  // read: a tracker session shows as logged, with a session this phone does
+  // not hold yet. Read by id and added, so the streak, the hours and the
+  // composer see them at once (never logged a second time). Each asked once.
+  const askedLogs = useRef(new Set<ID>());
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!live(me) || !state.remoteLoaded) return;
+    const held = new Set(state.sessions.map((x) => x.id));
+    const missing = [...new Set(state.detectedActivities
+      .filter((a) => a.userId === me && a.status === 'logged' && !!a.sessionId && !held.has(a.sessionId) && !askedLogs.current.has(a.sessionId))
+      .map((a) => a.sessionId!))];
+    if (!missing.length) return;
+    for (const id of missing) askedLogs.current.add(id);
+    void remote.fetchSessionsByIds(missing).then((got) => {
+      if (!got.length || stateRef.current.currentUserId !== me) return;
+      setState((prev) => {
+        const have = new Set(prev.sessions.map((x) => x.id));
+        const add = got.filter((x) => x.userId === me && !have.has(x.id));
+        return add.length ? { ...prev, sessions: [...add, ...prev.sessions] } : prev;
+      });
+    }).catch(() => undefined);
+  }, [state.currentUserId, state.remoteLoaded, state.detectedActivities, state.sessions]);
 
   // What the map's two kinds of load last brought (migration 63 answers for
   // one part of the map at a time): round where you are, which Find Players,
@@ -9300,6 +9402,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      removeAutoLog,
+      setSessionKind,
       loadLastSeen,
       postHit,
       openHitNow,
@@ -9543,6 +9647,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       logSession,
       deleteSession,
+      removeAutoLog,
+      setSessionKind,
       loadLastSeen,
       postHit,
       openHitNow,
