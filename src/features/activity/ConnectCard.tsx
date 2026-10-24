@@ -43,9 +43,10 @@ export function ConnectCard() {
   const here = Platform.OS !== 'web' || isDemo(currentUserId);
   const onShow = useShownAt('/profile');
   // Kept in step while the page is out of sight; held once decided while it is on show
-  // (null: not decided yet, nothing heard).
-  const [decided, setDecided] = useState<boolean | null>(known ? offer : null);
-  const cameAt = useRef(Date.now());
+  // (null: not decided yet, nothing heard). Built while the page is already on show (a card above
+  // it was just closed): it waits for the next visit, so it never drops in where the closed one was.
+  const [decided, setDecided] = useState<boolean | null>(() => (known && !onShow ? offer : null));
+  const cameAt = useRef(onShow ? -Infinity : Date.now());
   useEffect(() => { if (onShow) cameAt.current = Date.now(); }, [onShow]);
   useEffect(() => {
     if (!onShow) { setDecided(known ? offer : null); return; }

@@ -254,10 +254,10 @@ function watch(fresh = false) {
   unwatch?.();
   const stops: (() => void)[] = [];
   if (Platform.OS === 'android') {
-    // As goBack: not from the Theme page itself (Settings, under it, changed with the tap), so that
-    // Back's slide never waits on the tab's redraw nor lands it during the fade.
+    // As goBack: the tab Back uncovers is on the picked court as it shows, from the Theme page too
+    // (Profile is under it since Oct 24). A tab already caught up costs nothing.
     const sub = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (!nav?.pageOnShow('theme')) catchUpNow('active');
+      catchUpNow('active');
       return false;
     });
     stops.push(() => sub.remove());
@@ -292,10 +292,10 @@ export function installCatchUp(): () => void {
   });
   stops.push(() => app.remove());
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    // The browser's own Back, from Settings: the tab it uncovers. The app's Back (goBack) has let go of
-    // that already and goes through here too: skipped. (Settings under the Theme page changed with the tap.)
+    // The browser's own Back: the tab it uncovers (Profile, under the Theme page). The app's Back
+    // (goBack) has let go of that already and goes through here too: skipped.
     const back = () => {
-      if (now() - ownBack < 1000 || nav?.pageOnShow('theme')) return;
+      if (now() - ownBack < 1000) return;
       catchUpNow('active');
     };
     window.addEventListener('popstate', back);

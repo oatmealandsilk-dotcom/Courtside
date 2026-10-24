@@ -12,6 +12,8 @@ import { FADE_MS, FadeCopy, FadeFill, FadeSpot, FadeText, useThemeFade, type Fad
 import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { learned } from '@/features/tips/tips';
+import { catchUpNow } from '@/theme/catchUp';
+import { useNavigation } from 'expo-router';
 
 const LEAD = 'Applies everywhere straight away. Pick the court you would rather be on.';
 
@@ -28,8 +30,12 @@ export default function ThemePage() {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, setTheme } = useTheme();
   const { store, begin } = useThemeFade();
-  // Found the themes: Profile's "Make CourtSide yours" tip has done its job, however this page was reached.
+  // Found the themes: the dot on Profile's ☰ has done its job, however this page was reached.
   useEffect(() => { learned('theme'); }, []);
+  // An iPhone's edge swipe back shows Profile under the finger from its first pixel: Profile is let go
+  // onto the picked court as the swipe starts, not mid-drag (the app's own Back does this in goBack).
+  const navigation = useNavigation();
+  useEffect(() => navigation.addListener('transitionStart' as never, ((e: { data?: { closing?: boolean } }) => { if (e?.data?.closing) catchUpNow('active'); }) as never), [navigation]);
   // The check pops in only on a pick, not when the page opens.
   const opened = useRef(false);
   useEffect(() => { opened.current = true; }, []);

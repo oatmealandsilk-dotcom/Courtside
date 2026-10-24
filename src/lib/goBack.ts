@@ -145,11 +145,11 @@ export function goHome() {
  * Home unless the page names another.
  */
 export function goBack(fallback: Href = HOME) {
-  // A theme just picked: the tab this may uncover is on it as it shows (catchUp). Not from the Theme
-  // page itself: Settings, under it, changed with the tap, so that Back stays instant.
+  // A theme just picked: the tab this may uncover is on it as it shows (catchUp), from the Theme page
+  // too, since Profile is under it (Oct 24: Theme lives in Profile's ☰). A tab already caught up costs nothing.
   noteOwnBack();
   if (!router.canGoBack()) catchUpNow('all');
-  else if (!pageOnShow('theme')) catchUpNow('active');
+  else catchUpNow('active');
   if (router.canGoBack()) router.back();
   // '/' is the splash screen's address too (see HOME): Home is meant.
   else router.replace(fallback === '/' ? HOME : fallback);

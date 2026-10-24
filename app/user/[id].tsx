@@ -32,6 +32,7 @@ import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { PartnerStreakCard } from '@/components/PartnerStreak';
 import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
+import { TextScale, oneLine } from '@/theme/textScale';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
 import { afterReport } from '@/features/moderation/reportThanks';
@@ -250,7 +251,7 @@ function UserProfile() {
           <View style={styles.tabs} onLayout={(e) => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>
             {TABS.map((t) => (
               <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}>
-                <Text style={{ color: tab === t ? colors.brand : colors.textMuted, ...font(tab === t ? '700' : '400') }}>{t}<Text style={[styles.tabCount, tab === t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text>
+                <Text {...oneLine(TextScale.TITLE)} style={{ color: tab === t ? colors.brand : colors.textMuted, ...font(tab === t ? '700' : '400') }}>{t}<Text style={[styles.tabCount, tab === t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text>
               </Pressable>
             ))}
             {tabWidth > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabLine, { width: tabWidth }, underline.style]} /> : null}

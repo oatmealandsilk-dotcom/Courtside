@@ -227,8 +227,9 @@ const DARK_THEMES: ReadonlySet<ThemeName> = new Set<ThemeName>(['night', 'us-ope
  * Recolouring the whole app at once is ~5,800 components (every tab stays
  * mounted, the map and the feed included): a stall of a sixth of a second on
  * a phone, which the old grey veil was there to hide. Now a tap recolours only
- * what can be seen: the Theme page, Settings under it, the app's frame and the
- * status bar, in one small redraw. The four tabs sit behind a ThemeGate each
+ * what can be seen: the Theme page, the app's frame and the status bar, in one
+ * small redraw (Profile, under the Theme page since Oct 24, is let go first, and
+ * at once on any way back: goBack, catchUp's Back handlers, app/theme.tsx). The four tabs sit behind a ThemeGate each
  * (src/features/navigation/tabFocus.tsx) and catch up out of sight once the
  * change has played, one tab per redraw, as background work (catchUp.ts).
  *
