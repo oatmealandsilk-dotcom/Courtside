@@ -1213,7 +1213,7 @@ const STEPS = [
     name: 'settings',
     title: 'Settings',
     async run(page) {
-      // The ☰ button opens a small menu (Groups, Settings) since the Tennis profile redesign.
+      // The ☰ button opens a small menu (Groups, Theme, Settings) since the Tennis profile redesign.
       await page.tap({ label: /^Menu: groups, theme and settings/ });
       await page.tap({ label: 'Settings' });
     },
@@ -1221,11 +1221,15 @@ const STEPS = [
   },
   {
     // Oct 16, owner: "changing themes in settings has a slight delay in animation, lets make it instant".
-    // Settings → Theme, tap Paris: its check moves and the page turns Paris's clay-dust colour. How long
-    // each took is written down (--verbose), not judged: a busy test machine is slow, the app is not.
+    // Profile → ☰ → Theme (Theme left Settings on Oct 24), tap Paris: its check moves and the page turns
+    // Paris's clay-dust colour. How long each took is written down (--verbose), not judged: a busy test
+    // machine is slow, the app is not.
     name: 'theme-pick',
     title: 'Theme: pick Paris',
     async run(page) {
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ text: 'Edit profile' });
+      await page.tap({ label: /^Menu: groups, theme and settings/ });
       await page.tap({ label: /^Theme, / });
       await page.waitForStill({ label: 'Paris theme' });
       await page.call(watchThemeChange, 'Paris theme', PARIS_BG);
@@ -1245,10 +1249,8 @@ const STEPS = [
       await page.waitUntil(() => page.call(() => window.__themeTiming?.page != null), 10000, 'the CourtSide page colour back');
       await themeFadeDone(page);
       await page.tap({ label: 'Go back' });
-      await page.waitFor({ label: 'Account center' });
-      await page.tap({ label: 'Go back' });
       await page.waitFor({ text: 'Edit profile' });
-      // The tabs caught up with the change out of sight: Profile, under Settings, is back on the default court.
+      // The tabs caught up with the change out of sight: Profile, under the Theme page, is back on the default court.
       const profileBg = await profilePageColour(page);
       if (profileBg !== DEFAULT_BG) throw new Error(`Profile is still drawn in another court after the theme change (${profileBg}, want ${DEFAULT_BG})`);
     },

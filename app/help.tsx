@@ -57,7 +57,7 @@ function topicsFor({ aiCoachOn, paidBooking, instantsOn }: { aiCoachOn: boolean;
   },
   {
     title: 'How do I change the look?',
-    body: 'Settings → Theme. Pick a city court (Melbourne, Paris, London or New York), Night, or Clean; it applies everywhere straight away.',
+    body: 'Profile → ☰ → Theme. Pick a city court (Melbourne, Paris, London or New York), Night, or Clean; it applies everywhere straight away.',
   },
   ];
 }

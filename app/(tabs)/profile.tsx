@@ -3,9 +3,9 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
 import { themeList, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { ThemeTile } from '@/components/ThemeTile';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { onSkippedSaved, readSkipped, type SetupStep } from '@/features/onboarding/setupProgress';
-import { Image, Modal, Pressable, Share, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Image, Modal, Platform, Pressable, Share, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import { GuestJoinCard } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
@@ -18,7 +18,7 @@ import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats } from '@/features/activity/format';
-import Reanimated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { Tappable } from '@/components/Tappable';
 import { reportSection, requestSection, subscribeSectionRequest, swipeDestination } from '@/features/navigation/swipeOrder';
@@ -38,7 +38,7 @@ import { buttonShape, colors, spacing, typography, font, lift, withAlpha } from 
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { wrappedYear } from '@/features/wrapped/yearInTennis';
 import { TipBubble } from '@/components/TipBubble';
-import { forNewPlayer, tipWaiting, useTip } from '@/features/tips/tips';
+import { forNewPlayer, useTip, useTipWaiting } from '@/features/tips/tips';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { useFirstMoveDone } from '@/features/onboarding/firstMoveDone';
 import { useFirstWeek } from '@/features/onboarding/FirstWeek';
@@ -48,6 +48,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { studioLine } from '@/features/coaching/studioSummary';
 import { useModalOpenWhile } from '@/lib/modalOpen';
+import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
@@ -57,10 +58,6 @@ const tallButton = { minHeight: buttonShape.profileHeight };
 
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
-/** The theme tip's pointer: under the middle of the menu button (38), less half the pointer. */
-const MENU_POINTER = 19 - 6;
-/** How long an account has been here before the theme tip: past the first days, once the app is familiar. */
-const THEME_TIP_DAYS = 3;
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
@@ -85,9 +82,6 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const tourOpen = useTourOpen();
  const { isPhone } = useResponsive();
  const inboxTipEligible = isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt);
- // "Make CourtSide yours" (owner, Oct 24): once, after the first few days, while the app still wears its own court.
- const joinedAt = user?.joinedAt ? Date.parse(user.joinedAt) : NaN;
- const themeTipEligible = isPhone && !tourOpen && previewSection === undefined && Number.isFinite(joinedAt) && Date.now() - joinedAt >= THEME_TIP_DAYS * 86_400_000;
  // The section lives here, not in the address (see discuss.tsx for why).
  const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
@@ -192,7 +186,6 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* At the top of the page, in its flow, its pointer under the paper plane in the header: it lines up with the cards
        and covers nothing (the first-move card included), and the page eases back up once it is closed. */}
    <InboxTip eligible={inboxTipEligible} live={live} style={styles.inboxTip} />
-   <ThemeTip eligible={themeTipEligible} live={live} style={styles.inboxTip} />
    {firstWeek.card}
    {!hasMoved && !firstWeek.showing && !firstWeek.deciding && <Pressable accessibilityRole="link" accessibilityLabel="Make your first move" onPress={() => router.push({ pathname: '/first-move', params: { from: 'profile' } })} style={styles.setup}>
      <Ionicons name="videocam-outline" size={20} color={colors.brand}/>
@@ -278,66 +271,119 @@ function InboxTip({ eligible, live, style }: { eligible: boolean; live: boolean;
  return live ? <TipBubble tip="messages" shown={inboxTip.shown} onClose={inboxTip.close} pointer="up" pointerRight={INBOX_POINTER} inline on="page" style={style} /> : null;
 }
 /**
- * "Make CourtSide yours" (owner, Oct 24: "I like theme thing too"): once, at
- * the ☰ (Theme is in its menu), for someone here a few days who has never
- * changed the app's court. Picking a theme anywhere counts as knowing it
- * (app/theme.tsx), and it never shows over another tip.
- */
-function ThemeTip({ eligible, live, style }: { eligible: boolean; live: boolean; style: StyleProp<ViewStyle> }) {
- const { theme } = useTheme();
- const tip = useTip('theme', useShownAt('/profile') && eligible && theme === 'default' && tipWaiting('theme'));
- return live ? <TipBubble tip="theme" shown={tip.shown} onClose={tip.close} pointer="up" pointerRight={MENU_POINTER} inline on="page" style={style} /> : null;
-}
-/**
  * ☰ at the top of your profile: a small menu under it with Groups (and how
- * many are asking to join the ones you run) and Settings. A brand dot on the
- * ☰ while someone is asking. A see-through Modal holding a card placed under
- * the button, so it opens the same on a phone and in a browser; a tap outside
- * (or Escape, or the phone's Back) closes it.
+ * many are asking to join the ones you run), Theme and Settings. A brand dot
+ * on the ☰ while someone is asking, or while Theme is new to you (Oct 24,
+ * owner: "just have a dot on the 3 lines … once they change it or go into the
+ * tab the noti goes away": opening the Theme page clears it, app/theme.tsx).
+ * A see-through Modal holding a card placed under the button, so it opens the
+ * same on a phone and in a browser; a tap outside (or Escape, or the phone's
+ * Back) closes it.
+ *
+ * The card grows out of the ☰ (Oct 24, owner: "the animation when you click
+ * the 3 lines … has to be better", it was the Modal's own slow fade): a quick
+ * spring from the button's corner, settling with the faintest overshoot, and
+ * a quicker shrink back into it on close (MenuCard).
  */
 function ProfileMenu({ groupsAsking, groupCount, invites }: { groupsAsking: number; groupCount: number; invites: number }) {
   // Invites to groups waiting for your answer (migration 181) light the same dot.
   const invitesWords = invites ? `${invites} ${invites === 1 ? 'invite' : 'invites'}` : '';
   const { theme } = useTheme();
   const themeLabel = themeList.find((t) => t.name === theme)?.label ?? 'CourtSide';
+  // Never opened the Theme page on this phone, and still on the app's own court.
+  const themeNew = useTipWaiting('theme') && theme === 'default';
   const styles = useThemedStyles(styleDefinitions);
   const anchor = useRef<View>(null);
   const { width } = useWindowDimensions();
+  // Where the card sits while it is wanted open; null once asked to close.
   const [at, setAt] = useState<{ top: number; right: number } | null>(null);
-  const open = () => anchor.current?.measureInWindow((x, y, w, h) => setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }));
+  // The Modal stays up until the card has shrunk away (MenuCard's onGone).
+  const [up, setUp] = useState(false);
+  const last = useRef<{ top: number; right: number } | null>(null);
+  if (at) last.current = at;
+  const open = () => anchor.current?.measureInWindow((x, y, w, h) => { setAt({ top: y + h + 6, right: Math.max(8, width - (x + w)) }); setUp(true); });
   const close = () => setAt(null);
+  const gone = useCallback(() => setUp(false), []);
   const go = (path: '/groups' | '/theme' | '/settings') => { close(); router.push(path); };
   // Android: a message that arrives while the menu is open shows as the phone's own alert, not under it (see modalOpen).
-  useModalOpenWhile(!!at);
+  useModalOpenWhile(up);
+  const place = at ?? last.current;
   return <>
     <View ref={anchor} collapsable={false}>
-      <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups, theme and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
+      <Tappable accessibilityRole="button" accessibilityLabel={`Menu: groups, theme and settings${groupsAsking ? `. ${groupsAsking} asking to join your groups` : ''}${invitesWords ? `. ${invitesWords} to a group` : ''}${themeNew ? '. New: themes' : ''}`} onPress={open} hitSlop={10} dim style={styles.headerButton}>
         <Ionicons name="menu-outline" size={30} color={colors.text}/>
-        {groupsAsking || invites ? <View style={styles.menuDot} /> : null}
+        {groupsAsking || invites || themeNew ? <View style={styles.menuDot} /> : null}
       </Tappable>
     </View>
-    <Modal visible={!!at} transparent animationType="fade" statusBarTranslucent onRequestClose={close}><SwipeArea on={false}>
+    <Modal visible={up} transparent animationType="none" statusBarTranslucent onRequestClose={close}><SwipeArea on={false}>
       {/* The backdrop beside the menu, not around it: a button may not hold buttons in a browser. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} style={StyleSheet.absoluteFill} />
-      {at ? <View style={[styles.menu, { top: at.top, right: at.right }]} accessibilityRole="menu">
+      <Pressable accessibilityRole="button" accessibilityLabel="Close menu" onPress={close} disabled={!at} style={StyleSheet.absoluteFill} />
+      {up && place ? <MenuCard open={!!at} onGone={gone} style={[styles.menu, { top: place.top, right: place.right }]}>
         <Pressable accessibilityRole="menuitem" accessibilityLabel={`Groups${groupsAsking ? `, ${groupsAsking} asking to join` : ''}${invitesWords ? `, ${invitesWords}` : ''}`} onPress={() => go('/groups')} style={({ pressed }) => [styles.menuRow, pressed && styles.linkPressed]}>
           <Ionicons name="people-outline" size={20} color={colors.text}/>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Groups</Text>
           {groupsAsking || invites ? <View style={styles.menuTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuTagText}>{groupsAsking ? `${groupsAsking} asking` : invitesWords}</Text></View> : groupCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{groupCount}</Text> : null}
         </Pressable>
-        {/* Theme, one tap from Profile (owner, Oct 24), with the court it wears now as in Settings. */}
-        <Pressable accessibilityRole="menuitem" accessibilityLabel={`Theme, ${themeLabel}`} onPress={() => go('/theme')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
+        {/* Theme lives here only (owner, Oct 24: "make sure theme is not in the settings, but only in the 3 lines"), with the court it wears now. */}
+        <Pressable accessibilityRole="menuitem" accessibilityLabel={`Theme, ${themeLabel}${themeNew ? ', new' : ''}`} onPress={() => go('/theme')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
           <Ionicons name="color-palette-outline" size={20} color={colors.text}/>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Theme</Text>
+          {themeNew ? <View style={styles.rowDot} /> : null}
           <ThemeTile name={theme} />
         </Pressable>
         <Pressable accessibilityRole="menuitem" accessibilityLabel="Settings" onPress={() => go('/settings')} style={({ pressed }) => [styles.menuRow, styles.linkLine, pressed && styles.linkPressed]}>
           <Ionicons name="settings-outline" size={20} color={colors.text}/>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.menuText}>Settings</Text>
         </Pressable>
-      </View> : null}
+      </MenuCard> : null}
     </SwipeArea></Modal>
   </>;
+}
+/** How far the card has grown at its smallest: from the ☰'s corner, never from nothing. */
+const MENU_FROM = 0.6;
+/** Opening: a spring quick enough to feel like the button's, damped to the faintest overshoot. */
+const MENU_SPRING = { damping: 22, stiffness: 340, mass: 0.8 };
+/** Closing: quicker than the open, easing in, so it is out of the way at once. */
+const MENU_CLOSE_MS = 150;
+/** The card's plain open look, said once it has settled (see MenuCard). */
+const MENU_REST = { opacity: 1, transform: [{ scale: 1 }, { translateY: 0 }] };
+/**
+ * The ☰ menu's card, built fresh for each opening. It grows from its top
+ * right corner (under the ☰) with a spring and fades in over the first part of
+ * it; told to close, it shrinks back and fades, then says it is gone, and only
+ * then is the Modal taken down. With Reduce Motion on, a plain quick fade.
+ *
+ * Settled open on a phone, its open look is said by a plain style as well (as
+ * Pop's and Fold's), so a dropped settled animation value can never leave an
+ * open menu invisible on a later re-render; kept through the close (its own
+ * values win as they run). A safety timer takes it down even if the close's
+ * end is never heard, so an invisible Modal can never sit over the page.
+ */
+function MenuCard({ open, onGone, style, children }: { open: boolean; onGone: () => void; style: StyleProp<ViewStyle>; children: React.ReactNode }) {
+  const still = useReducedMotion();
+  const p = useSharedValue(0);
+  const [rested, setRested] = useState(false);
+  useEffect(() => {
+    if (open) {
+      p.value = still ? withTiming(1, { duration: 160 }, (done) => { if (done) runOnJS(setRested)(true); })
+        : withSpring(1, MENU_SPRING, (done) => { if (done) runOnJS(setRested)(true); });
+      return undefined;
+    }
+    p.value = withTiming(0, { duration: still ? 120 : MENU_CLOSE_MS, easing: Easing.in(Easing.quad) }, (done) => { if (done) runOnJS(onGone)(); });
+    const t = setTimeout(onGone, MENU_CLOSE_MS + 250);
+    return () => clearTimeout(t);
+  }, [open, still, p, onGone]);
+  const look = useAnimatedStyle(() => ({
+    // Seen within the first third of the spring, so the growth reads as the card arriving, not a ghost.
+    opacity: Math.min(1, Math.max(0, p.value * 3)),
+    transform: [{ scale: still ? 1 : MENU_FROM + (1 - MENU_FROM) * p.value }, { translateY: still ? 0 : -8 * (1 - Math.min(1, p.value)) }],
+  }));
+  const resting = Platform.OS !== 'web' && rested;
+  return (
+    <Reanimated.View accessibilityRole="menu" pointerEvents={open ? 'auto' : 'none'} style={[style, { transformOrigin: 'top right' } as ViewStyle, look, resting && MENU_REST]}>
+      {children}
+    </Reanimated.View>
+  );
 }
 /**
  * The profile page before the account has come down: your picture (kept on
@@ -394,7 +440,7 @@ const styleDefinitions = StyleSheet.create({
  menuText:{...typography.body,color:colors.text,flex:1},
  menuTag:{paddingHorizontal:7,paddingVertical:3,borderRadius:6,backgroundColor:colors.brandDim},
  menuTagText:{...typography.caption,letterSpacing:0.2,color:colors.brand},
- menuDot:{position:'absolute',top:5,right:3,width:9,height:9,borderRadius:5,backgroundColor:colors.brand,borderWidth:1.5,borderColor:colors.bg},
+ menuDot:{position:'absolute',top:5,right:3,width:9,height:9,borderRadius:5,backgroundColor:colors.brand,borderWidth:1.5,borderColor:colors.bg},rowDot:{width:8,height:8,borderRadius:4,backgroundColor:colors.brand},
  // The banner's shape while the account loads.
  bannerBlank:{padding:16,borderRadius:16,gap:10,overflow:'hidden'},
  bannerBlankHero:{paddingVertical:2},

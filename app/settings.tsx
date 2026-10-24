@@ -16,8 +16,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Screen, Toggle } from '@/components/ui';
 import { useApp } from '@/store/AppContext';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
-import { useTheme, themeList } from '@/theme/ThemeProvider';
-import { ThemeTile } from '@/components/ThemeTile';
 import { buttonShape, colors, font, radius, spacing, typography } from '@/theme';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { confirm } from '@/lib/confirm';
@@ -64,7 +62,6 @@ export default function Settings() {
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');
   };
-  const { theme } = useTheme();
   const tipsOn = useTipsOn();
   // How many joined through your link or code, for the Invites row (Oct 5, owner: partners looked for it in Settings).
   const [joined, setJoined] = useState<number | null>(null);
@@ -133,11 +130,10 @@ export default function Settings() {
   };
 
   const sections: { title: string; rows: Row[]; note?: string }[] = [
-    // Theme first (Oct 5, owner: the city courts are a big feature, so they sit at the top, looking the same as ever).
+    // Theme is in Profile's ☰ menu only (Oct 24, owner: "make sure theme is not in the settings … that way we don't overlap").
     {
       title: 'App',
       rows: [
-        { icon: 'color-palette-outline', label: 'Theme', leading: <ThemeTile name={theme} />, value: themeList.find((t) => t.name === theme)?.label, onPress: () => router.push('/theme') },
         { icon: 'archive-outline', label: 'Archive', onPress: () => router.push('/archive') },
         // How the app behaves, so it sits with Theme rather than under Account.
         tipsRow,

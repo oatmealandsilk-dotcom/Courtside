@@ -34,8 +34,8 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // after you post your first one, pointing at "No one in yet".
   'join-hit': 'Tap I’m in to join. A chat opens to sort the details.',
   'hit-posted': 'We’ll tell you when someone’s in.',
-  // Profile's ☰, once, a few days in, while the app wears its own court (Oct 24, owner).
-  theme: 'Make CourtSide yours: pick a court theme here.',
+  // Never shown as a bubble: Profile's ☰ wears a dot for it until the Theme page is opened (Oct 24, owner).
+  theme: 'Pick a court theme.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -137,6 +137,16 @@ export function resetTips() {
 }
 
 function subscribe(l: () => void) { listeners.add(l); return () => { listeners.delete(l); }; }
+
+/**
+ * Whether this one is still waiting to be learned, once the saved state has been read (never true
+ * before then, so nothing flashes up and away). For a hint that is not a bubble: the ☰'s dot for
+ * Theme (Oct 24, owner: "just have a dot on the 3 lines … once they change it or go into the tab
+ * the noti goes away").
+ */
+export function useTipWaiting(key: TipKey): boolean {
+  return useSyncExternalStore(subscribe, () => loaded && !off && !done.has(key));
+}
 
 /** Whether this tip could still show (tips are on, and it is not done): a caller with work to do before asking (watching for its card to come into view) can skip it. */
 export function tipWaiting(key: TipKey): boolean {
