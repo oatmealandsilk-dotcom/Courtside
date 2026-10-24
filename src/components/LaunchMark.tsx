@@ -243,7 +243,6 @@ function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
  * the old name and line did; on the website it is simply there, as on its loader (public/index.html).
  */
 function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { markWidth: number; line?: string; fadeLine: boolean }) {
-  const { width: W, height: H } = useWindowDimensions();
   const s = markWidth / MARK_C.width;
   const [mx, my, mw, mh] = MARK_C.view;
   const [lx, ly, lw, lh] = LINE_C.view;
@@ -259,17 +258,20 @@ function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { mark
   }, [words, fadeLine]);
   const lineBottom = (PICTURE_C.height - ly - lh) * s;
   return (
-    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-      <View accessible accessibilityRole="image" accessibilityLabel="CourtSide" style={{ position: 'absolute', left: W / 2 - (mw * s) / 2, top: H / 2 - (mh * s) / 2, width: mw * s, height: mh * s }}>
+    // Centred by layout (the middle of the whole screen, as the launch icon and the loader are), not by sums.
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.centre]}>
+      <View accessible accessibilityRole="image" accessibilityLabel="CourtSide" style={{ width: mw * s, height: mh * s }}>
         <Svg width={mw * s} height={mh * s} viewBox={`${mx} ${my} ${mw} ${mh}`}>
           <Path d={MARK_C.d} fill={C.green} fillRule="evenodd" />
         </Svg>
       </View>
       {line === PICTURE_LINE ? (
-        <Animated.View accessible accessibilityRole="image" accessibilityLabel={line} style={{ position: 'absolute', left: W / 2 - (lw * s) / 2, bottom: lineBottom, width: lw * s, height: lh * s, opacity: words }}>
-          <Svg width={lw * s} height={lh * s} viewBox={`${lx} ${ly} ${lw} ${lh}`}>
-            <Path d={LINE_C.d} fill={C.line} />
-          </Svg>
+        <Animated.View style={[styles.centre, { position: 'absolute', left: 0, right: 0, bottom: lineBottom, opacity: words }]}>
+          <View accessible accessibilityRole="image" accessibilityLabel={line} style={{ width: lw * s, height: lh * s }}>
+            <Svg width={lw * s} height={lh * s} viewBox={`${lx} ${ly} ${lw} ${lh}`}>
+              <Path d={LINE_C.d} fill={C.line} />
+            </Svg>
+          </View>
         </Animated.View>
       ) : (
         <Animated.Text allowFontScaling={false} style={[styles.lineC, { bottom: lineBottom, left: 0, right: 0, fontSize: LINE_C.size * s, letterSpacing: LINE_C.tracking * LINE_C.size * s, color: C.line, opacity: words }]}>{line}</Animated.Text>
