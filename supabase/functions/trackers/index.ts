@@ -493,9 +493,11 @@ const longEnough = (s: Session) => (Date.parse(s.payload.ended_at) - Date.parse(
  * Files tennis from the last `hours`. Quietly unless `alerts` (the app's own
  * /sync: the phone shows its own banner); with `alerts` (/sync-all, the
  * hourly run on the server) a session of ALERT_MIN_MINUTES or more may send
- * "Tennis detected", by the database's usual rules (note_detected_activity:
- * once per session, not at night where it was played, not when switched off,
- * not when it ended over 12 hours ago). A session already filed, by either,
+ * an alert, by the database's usual rules (note_detected_activity: once per
+ * session, at any hour, not when switched off, not when it ended over 12
+ * hours ago). Since migration 185 a Tennis session of 20 minutes or more is
+ * logged privately on the server ("Tennis logged"); a Fitbit Sport session
+ * carries `unsure` and asks "Was this tennis?" instead. A session already filed, by either,
  * is never alerted again (record_activity upserts by the tracker's own id,
  * and note_detected_activity answers 'already' once notified_at is set).
  * A session the tracker no longer lists as tennis (deleted, or changed) is

@@ -13,6 +13,12 @@ export type Payload = {
   avg_hr: number | null; max_hr: number | null; kcal: number | null; device: string;
   /** Minutes in each heart-rate zone, easiest first (migration 65). Fitbit's only, and only when Google has them. */
   hr_zones?: number[];
+  /**
+   * A session that may well be tennis but the tracker did not say so (Fitbit's
+   * generic Sport or racket catch-all): filed to ask "Was this tennis?", never
+   * logged by itself (migration 185). Left out when the tracker said Tennis.
+   */
+  unsure?: true;
 };
 /** One tennis session, ready to file: the tracker's own id for it and the payload. */
 export type Session = { ext: string; payload: Payload };
@@ -93,7 +99,8 @@ const namedTennis = (s: unknown) => /(^|[^a-z])tennis([^a-z]|$)/.test(lower(s)) 
  * recognition (SmartTrack) has no Tennis: a game of tennis comes in as the
  * generic "Sport" (SPORT), or under the racket catch-all. Filed the same way
  * as tennis, as a session the player can log or dismiss (they appear in To
- * do); a player who also plays football just dismisses that one. Aerobic
+ * do, asking "Was this tennis?"; never logged by themselves, migration 185);
+ * a player who also plays football just dismisses that one. Aerobic
  * workouts, walks and runs stay out.
  */
 const MAYBE_TENNIS = new Set(['SPORT', 'SPORTS', 'RACKET_SPORTS', 'RACKET_SPORT']);
@@ -162,6 +169,7 @@ export function fitbitSession(e: FitbitExercise, hr?: { avg: number | null; max:
       avg_hr: whole(sum?.averageHeartRateBeatsPerMinute) ?? num(hr?.avg), max_hr: num(hr?.max), kcal: num(sum?.caloriesKcal),
       device: (typeof e.dataSource?.device?.displayName === 'string' && e.dataSource.device.displayName.trim()) || 'Fitbit',
       ...(zones ? { hr_zones: zones } : {}),
+      ...(!fitbitIsTennis(e) && fitbitMaybeTennis(e) ? { unsure: true as const } : {}),
     },
   };
 }

@@ -443,7 +443,11 @@ final class WorkoutWatcher: @unchecked Sendable {
    * another buzz) as more of the same go arrive.
    */
   private func alert(_ newest: [HKWorkout], now: Date, done: @escaping @Sendable () -> Void) {
-    // Night where the phone is, or the person turned these alerts off: in the app only, as on the server.
+    // Night where the phone is, or the person turned these alerts off: in the app only.
+    // NEXT STORE BUILD (owner, Oct 24, "Cancel the 10pm to 7am thing"; migration 185): the
+    // server alerts at any hour now, so drop the hour check here, and for a tennis workout
+    // of 20+ minutes say "Tennis logged" / "Add the score or post it on CourtSide." (the
+    // server logs it privately) and cancel 'courtside-streak-reminder'.
     let hour = Calendar.current.component(.hour, from: now)
     guard loadPrefs()?.alerts == true, hour >= 7, hour < 22 else {
       done()
