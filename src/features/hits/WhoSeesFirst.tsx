@@ -10,7 +10,8 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { AUDIENCES, EVERYONE_FRIENDS_LINE } from './audience';
+import { Chips } from '@/components/sheet/SheetForm';
+import { AUDIENCES, AUDIENCE_SHORT, EVERYONE_FRIENDS_LINE } from './audience';
 
 /*
  * "Who sees it first" on the hit form (migration 76): three answers you tap,
@@ -56,6 +57,43 @@ export function AudienceCards({ value, onChange, forFriends = false }: { value: 
                 {on ? <Ionicons name="checkmark" size={13} color={colors.brandInk} /> : null}
               </View>
             </View>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * The calmer "Who sees it first" (Oct 24): 'A' one three-part switch, the
+ * Game chips' own pills; 'B' three slim text rows in one quiet group, a check
+ * on the chosen one. Either way one short line says what the chosen answer does.
+ */
+export function AudienceChoice({ look, value, onChange, forFriends = false }: { look: 'A' | 'B'; value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const lineOf = (v: HitAudience) => (forFriends && v === 'everyone' ? EVERYONE_FRIENDS_LINE : AUDIENCE_SHORT[v].line);
+  const pick = (v: HitAudience | undefined) => { if (v && v !== value) { haptics.tap(); onChange(v); } };
+  if (look === 'A') {
+    return (
+      <View style={{ gap: spacing.sm + 2 }}>
+        <Chips soft fill label="Who sees it first" value={value} onChange={pick}
+          options={AUDIENCES.map((o) => ({ value: o.value, label: AUDIENCE_SHORT[o.value].short, a11y: `${o.title}. ${lineOf(o.value)}` }))} />
+        <Text style={styles.calmLine}>{lineOf(value)}</Text>
+      </View>
+    );
+  }
+  return (
+    <View style={styles.group} accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
+      {AUDIENCES.map((o, i) => {
+        const on = o.value === value;
+        return (
+          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${o.title}. ${lineOf(o.value)}`}
+            onPress={() => pick(o.value)} style={({ pressed }) => [styles.slim, i > 0 && styles.slimRule, pressed && !on && styles.pressedRow]}>
+            <View style={styles.words}>
+              <Text style={[styles.slimTitle, on && styles.slimTitleOn]}>{o.title}</Text>
+              {on ? <Text style={styles.line}>{lineOf(o.value)}</Text> : null}
+            </View>
+            {on ? <Ionicons name="checkmark" size={18} color={colors.brand} /> : null}
           </Pressable>
         );
       })}
@@ -162,5 +200,11 @@ const styleDefinitions = StyleSheet.create({
   faceName: { ...typography.small, color: colors.textMuted, maxWidth: 60 },
   faceNameOn: { color: colors.text, ...font('600') },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
+  // The calmer looks: the chosen answer's one line under the switch; B's slim rows on hairlines.
+  calmLine: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingHorizontal: 2 },
+  slim: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.md + 2, paddingVertical: 13, minHeight: 48 },
+  slimRule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  slimTitle: { ...typography.body, color: colors.text },
+  slimTitleOn: { ...font('600') },
   empty: { ...typography.small, color: colors.textMuted },
 });

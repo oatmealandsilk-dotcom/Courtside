@@ -18,6 +18,21 @@ export const AUDIENCES: { value: HitAudience; icon: 'people-outline' | 'mail-unr
 ];
 
 /**
+ * Oct 24 looks for "Who sees it first" (he found the three icon rows "a bit
+ * too ai"): 'now' is today's rows; 'A' one three-part switch like the Game
+ * chips, 'B' three slim text rows with a check. A and B also drop the
+ * open-hit banner and cut the note under Post to one line.
+ */
+export const ASK_HIT_LOOK = 'now' as 'now' | 'A' | 'B';
+
+/** The calmer looks' words: a short name (the switch has a third of a row each) and one line, shown for the chosen answer only. */
+export const AUDIENCE_SHORT: Record<HitAudience, { short: string; line: string }> = {
+  everyone: { short: 'Everyone', line: 'Players nearby see it on Find Players.' },
+  invite_first: { short: 'Invite first', line: 'Your invites get first go, then it opens to everyone.' },
+  invite_only: { short: 'Only invited', line: 'No one else sees it.' },
+};
+
+/**
  * "Everyone" for someone not known to be an adult: their hit reaches only
  * the people who follow them (hits/visible), so the card says that instead.
  */

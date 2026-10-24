@@ -8,9 +8,9 @@ import { CourtSearch } from '@/components/CourtSearch';
 import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitAudience, HitRequest, ID } from '@/data/types';
-import { opensAtFor } from '@/features/hits/audience';
+import { ASK_HIT_LOOK, opensAtFor } from '@/features/hits/audience';
 import { markJustPosted } from '@/features/hits/hitTips';
-import { AudienceCards, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
+import { AudienceCards, AudienceChoice, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { notKnownAdult } from '@/features/players/age';
@@ -154,6 +154,13 @@ export default function NewHit() {
   const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${clockWords(opensAt)}` : '';
   // The invite as it will read, updated as you choose.
   const dayWord = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : days[day].toLocaleDateString([], { weekday: 'long' });
+  // The calmer looks (A, B): no banner, and one short line under Post that adds only what the choice above doesn't say.
+  const calm = ASK_HIT_LOOK !== 'now';
+  const calmFine = audience === 'invite_only'
+    ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it.`
+    : audience === 'invite_first'
+      ? (opensNow ? 'It starts within 3 hours, so it opens to everyone now.' : `If a spot’s left ${opensText}, it opens to everyone.`)
+      : asked.length ? `${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : 'Whoever joins gets a chat with you.';
   const summary = [FORMAT_LABEL[format], `${dayWord} at ${timeLabel(hour, half)}`, where?.name].filter(Boolean).join(' · ');
 
   const post = async () => {
@@ -225,7 +232,7 @@ export default function NewHit() {
         <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
           onScroll={(e) => { const s = e.nativeEvent.contentOffset.y > 2; if (s !== scrolled) setScrolled(s); }}>
           {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
-          {asked.length && !inviting ? (
+          {asked.length && !inviting && !calm ? (
             <View style={styles.openNote}>
               <Ionicons name="people-outline" size={16} color={colors.textMuted} />
               <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
@@ -275,7 +282,8 @@ export default function NewHit() {
           </View>
 
           <Section strong title="Who sees it first">
-            <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
+            {ASK_HIT_LOOK === 'now' ? <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
+              : <AudienceChoice look={ASK_HIT_LOOK} value={audience} onChange={setAudience} forFriends={forFriends} />}
           </Section>
           {inviting ? (
             <Section strong title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
@@ -294,7 +302,7 @@ export default function NewHit() {
           {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
-          <Fine>{audience === 'invite_only'
+          <Fine>{calm ? calmFine : audience === 'invite_only'
           ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
           : audience === 'invite_first' && opensNow
             ? `It starts within 3 hours, so it goes on Find Players straight away.${recipients.length ? ` ${recipientNames} still ${recipients.length === 1 ? 'gets' : 'get'} it in your chat.` : ''}`
