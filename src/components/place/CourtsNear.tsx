@@ -21,10 +21,12 @@ import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, lift, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const CARD = 168;
+// The room inside a card, a little more than a grouped box's, since no fill marks its edge.
+const PAD = spacing.lg - 2;
 const MOST = 8;
 
 /**
@@ -225,17 +227,18 @@ const styleDefinitions = StyleSheet.create({
   headLink: { ...typography.smallStrong, color: colors.brand },
   pressed: { opacity: PRESS_DIM },
   scroller: { flexGrow: 0 },
-  // Room above and below for the cards' lift, which the strip would otherwise cut into a box.
+  // Room above and below, so a card's edge is never cut at the strip's.
   row: { gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.lg },
-  card: { ...lift, width: CARD, padding: spacing.md, gap: 4, borderRadius: radius.lg, backgroundColor: colors.surface },
+  // A light card: no fill and no shadow, just a hairline in the theme's border colour, so the strip sits quietly on the page.
+  card: { width: CARD, padding: PAD, gap: 4, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
   // The quiet court tile of the search rows and the map's results: solid brand stays for buttons.
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
   tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  name: { ...typography.bodyStrong, color: colors.text, lineHeight: 20 },
+  name: { ...typography.bodyStrong, fontSize: 16, letterSpacing: -0.2, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - spacing.md * 2 , flexShrink: 1 },
+  badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - PAD * 2, flexShrink: 1 },
   badgeText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   badgeHit: { backgroundColor: colors.brandDim },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
