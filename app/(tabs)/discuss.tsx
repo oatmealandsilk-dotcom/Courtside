@@ -72,6 +72,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { FIND_PLAYERS_LOOK } from '@/features/players/findPlayersLook';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -688,17 +689,51 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
           <FirstReveal order={openHits.length ? 1 : 3}><View style={styles.hits}>
-            <View style={styles.hitsHead}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
-              {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
-              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
-            </View>
+            {(() => {
+              // Look A/B (findPlayersLook): with nothing open, the prompt is one plain line, no sentence under it.
+              const court = !listedHits.length ? promptCourt : null;
+              const post = () => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'));
+              const postLabel = court ? `Post a hit at ${labelOf(court)}` : 'Post a hit';
+              const none = hitsForFriends ? 'None from your friends yet.' : 'None near you yet.';
+              if (FIND_PLAYERS_LOOK === 'A' && !listedHits.length) return (
+                <View style={styles.hitsHead}>
+                  <View style={styles.hitsHeadRow}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+                    <Pressable accessibilityRole="button" accessibilityLabel={postLabel} hitSlop={12} onPress={post} style={({ pressed }) => [styles.postHit, pressed && { opacity: PRESS_DIM }]}>
+                      <Ionicons name="add" size={16} color={colors.brand} />
+                      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.postHitText}>Post a hit</Text>
+                    </Pressable>
+                  </View>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{none}</Text>
+                </View>
+              );
+              if (FIND_PLAYERS_LOOK === 'B' && !listedHits.length) return (
+                <>
+                  <View style={styles.hitsHead}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" accessibilityLabel={postLabel} onPress={post} style={({ pressed }) => [styles.postRow, pressed && { opacity: PRESS_DIM }]}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postRowText} numberOfLines={1}>
+                      {court ? `Play at ${labelOf(court)}? ` : 'Looking for a hit? '}<Text style={styles.postRowLink}>Post one</Text>
+                    </Text>
+                    <View style={styles.postRowGo}><Ionicons name="arrow-forward" size={16} color={colors.brandInk} /></View>
+                  </Pressable>
+                </>
+              );
+              return (
+                <View style={styles.hitsHead}>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+                  {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
+                  {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{none}</Text>}
+                </View>
+              );
+            })()}
             {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
                 the title. With nothing open and a public court close by, it starts the hit at that
                 court; then the note under it says what happens next ("Pick a time" when the court
                 is already picked). "Post a hit", not just "Post", for a screen reader: a post
                 elsewhere is a photo or clip. */}
-            {(() => {
+            {FIND_PLAYERS_LOOK !== 'now' && !listedHits.length ? null : (() => {
               const court = !listedHits.length ? promptCourt : null;
               const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
               return (
@@ -1067,6 +1102,15 @@ const styleDefinitions = StyleSheet.create({
   hits: { gap: spacing.md },
   courtsPair: { gap: 16 },
   hitsHead: { gap: 3, paddingTop: spacing.sm },
+  // Look A: Post a hit beside the title, plain brand words.
+  hitsHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  postHit: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  postHitText: { ...typography.smallStrong, color: colors.brand },
+  // Look B: one row, the words and the round arrow, between hairlines.
+  postRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: 6, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  postRowText: { ...typography.body, color: colors.textMuted, flex: 1 },
+  postRowLink: { ...typography.bodyStrong, color: colors.brand },
+  postRowGo: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   // One quiet line that opens more hits: the rest of the near ones, or those beyond 25 km.
   further: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
   furtherText: { ...typography.smallStrong, color: colors.textMuted },

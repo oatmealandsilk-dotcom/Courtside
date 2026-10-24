@@ -23,9 +23,12 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { FIND_PLAYERS_LOOK } from '@/features/players/findPlayersLook';
 
 const CARD = 168;
 const MOST = 8;
+/** Look B: the nearest few as rows; the rest are on the map (See all). */
+const LIST_ROWS = 3;
 
 /**
  * The named courts around a spot, for Courts near you and the empty Open
@@ -128,16 +131,29 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
   const [heldShown, setHeldShown] = useState(holding);
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
   if (!rows.length && (holding || heldShown)) {
-    const held = (
+    const held = FIND_PLAYERS_LOOK === 'B' ? (
+      <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
+        <View style={styles.head}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
+        </View>
+        <View>
+          {[0, 1, 2].map((i) => (
+            <View key={i} style={[styles.listRow, i > 0 && styles.listLine]}>
+              <View style={styles.listWords}><Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.unseen]} numberOfLines={1}>Courts</Text><View style={[styles.heldLine, styles.heldOver, { width: '58%' }]} /></View>
+              <View style={[styles.heldLine, { width: 64, height: 12 }]} />
+            </View>
+          ))}
+        </View>
+      </View>
+    ) : (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
         </View>
         <View style={[styles.row, styles.heldRow]}>
           {[0, 1, 2].map((i) => (
-            <View key={i} style={styles.card}>
-              <View style={styles.top}><View style={styles.tile} /></View>
-              {/* The real card's room for its words (WordsRoom), under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
+            <View key={i} style={[styles.card, FIND_PLAYERS_LOOK === 'A' && styles.cardA]}>
+              {FIND_PLAYERS_LOOK === 'A' ? null : <View style={styles.top}><View style={styles.tile} /></View>}
               <View>
                 <WordsRoom />
                 <View style={[styles.heldLine, styles.heldOver, { width: '82%' }]} />
@@ -155,6 +171,43 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
     );
   }
   if (!center || !rows.length) return null;
+  if (FIND_PLAYERS_LOOK === 'B') {
+    // Look B: the nearest few as slim rows (name, how far, chevron); See all opens the map with every court.
+    const list = (
+      <View style={styles.wrap}>
+        <View style={styles.head}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
+          <SwipePressable accessibilityRole="link" accessibilityLabel="See all courts on the map" hitSlop={10} onPress={() => router.push('/map')} style={({ pressed }) => (pressed ? styles.pressed : null)}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headLink}>See all</Text>
+          </SwipePressable>
+        </View>
+        <View>
+          {rows.slice(0, LIST_ROWS).map(({ c, miles }, index) => {
+            const meta = [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null].filter(Boolean).join(' · ');
+            const badge = badges.get(c.id);
+            return (
+              <SwipePressable
+                key={c.id}
+                accessibilityRole="link"
+                accessibilityLabel={[labelOf(c), meta, c.lit ? 'lights' : null, badge?.hit ? `hit ${badge.hit}` : null, badge?.posts].filter(Boolean).join(', ')}
+                onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
+                style={({ pressed }) => [styles.listRow, index > 0 && styles.listLine, pressed && styles.pressed]}
+              >
+                <View style={styles.listWords}>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{labelOf(c)}</Text>
+                  {badge?.hit ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hitLine} numberOfLines={1}>{`Hit ${badge.hit}`}</Text> : null}
+                </View>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
+                <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+              </SwipePressable>
+            );
+          })}
+        </View>
+      </View>
+    );
+    return revealOrder === undefined ? list : <FirstReveal order={revealOrder}>{list}</FirstReveal>;
+  }
+  const quiet = FIND_PLAYERS_LOOK === 'A';
   const strip = (
     <View style={styles.wrap}>
       <View style={styles.head}>
@@ -171,29 +224,30 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
               accessibilityRole="link"
               accessibilityLabel={[labelOf(c), meta, badge?.hit ? `hit ${badge.hit}` : null, badge?.posts].filter(Boolean).join(', ')}
               onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
-              style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
+              style={({ pressed }) => [styles.card, quiet && styles.cardA, pressed && styles.cardPressed]}
             >
-              {/* The court's icon with what's on there beside it (a hit first, else its posts), so the card stays short. */}
-              <View style={styles.top}>
+              {/* The court's icon with what's on there beside it (a hit first, else its posts), so the card stays short. Look A: no icon; the hit says so in a line under the distance. */}
+              {quiet ? null : <View style={styles.top}>
                 <View style={styles.tile}><CourtGlyph size={18} color={colors.brand} /></View>
                 {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
                   : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
-              </View>
+              </View>}
               {/* The name keeps two lines' room at every text size, the very rule the held cards use, so a
                   strip of short names is never shorter than the strip it takes the place of. */}
               <View>
                 <WordsRoom />
                 <View style={styles.wordsOver}>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{quiet ? [formatMiles(miles), c.count > 1 ? `${c.count} courts` : null].filter(Boolean).join(' · ') : meta}</Text>
+                  {quiet && badge?.hit ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hitLine} numberOfLines={1}>{`Hit ${badge.hit}`}</Text> : null}
                 </View>
               </View>
             </SwipePressable>
           );
         })}
-        <SwipePressable accessibilityRole="link" accessibilityLabel="See all courts on the map" onPress={() => router.push('/map')} style={({ pressed }) => [styles.card, styles.allCard, pressed && styles.cardPressed]}>
-          <View style={styles.allDisc}><Ionicons name="map-outline" size={20} color={colors.brand} /></View>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.allText}>See all on the map</Text>
+        <SwipePressable accessibilityRole="link" accessibilityLabel="See all courts on the map" onPress={() => router.push('/map')} style={({ pressed }) => [styles.card, styles.allCard, quiet && styles.allCardA, pressed && styles.cardPressed]}>
+          {quiet ? null : <View style={styles.allDisc}><Ionicons name="map-outline" size={20} color={colors.brand} /></View>}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.allText}>{quiet ? 'See all' : 'See all on the map'}</Text>
         </SwipePressable>
       </ScrollView>
     </View>
@@ -255,4 +309,12 @@ const styleDefinitions = StyleSheet.create({
   wordsOver: { position: 'absolute', top: 0, left: 0, right: 0, gap: 4 },
   wordsRoom: { gap: 4 },
   unseen: { opacity: 0 },
+  // Look A: a slimmer card with no icon tile, flat on the page's surface.
+  cardA: { width: 150, paddingVertical: 12 },
+  allCardA: { width: 96 },
+  hitLine: { ...typography.small, color: colors.brand, marginTop: 2 },
+  // Look B: slim rows, a hairline between them.
+  listRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 48, paddingVertical: 10 },
+  listLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  listWords: { flex: 1, minWidth: 0 },
 });
