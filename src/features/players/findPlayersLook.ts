@@ -19,6 +19,12 @@
  * - 'G' postcard: landscape cards, the courts from above on the page's ground.
  * - 'H' court card: portrait cards in the court's colour, lines turned and cut.
  * - 'I' big tile: the nearest court large, the next two as links under it.
+ * After G to I ("Those look worse, show originals", then "Generate some
+ * more"), four close variations of 'now', in components/place/CourtsNearCards.tsx:
+ * - 'J' real court icon: a tiny court from above in its surface's colour in the tile.
+ * - 'K' quieter tile: the tile is the court's colour alone; what's on bottom right.
+ * - 'L' status first: what's on, in the accent, takes the distance's line.
+ * - 'M' lighter card: no fill, a hairline border, more room, a larger name.
  */
-export type FindPlayersLook = 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I';
+export type FindPlayersLook = 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M';
 export const FIND_PLAYERS_LOOK = 'now' as FindPlayersLook;

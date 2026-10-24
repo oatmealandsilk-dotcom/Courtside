@@ -26,10 +26,13 @@ import { TextScale } from '@/theme/textScale';
 import { FIND_PLAYERS_LOOK } from '@/features/players/findPlayersLook';
 import { CourtsNearHeld, CourtsNearLook } from '@/components/place/CourtsNearLooks';
 import { CourtsPictured, CourtsPicturedHeld } from '@/components/place/CourtsNearPictures';
+import { CourtsCards } from '@/components/place/CourtsNearCards';
 
 /** Looks C to F draw the strip in CourtsNearLooks; G to I in CourtsNearPictures. */
 const NEW_LOOK = FIND_PLAYERS_LOOK === 'C' || FIND_PLAYERS_LOOK === 'D' || FIND_PLAYERS_LOOK === 'E' || FIND_PLAYERS_LOOK === 'F' ? FIND_PLAYERS_LOOK : null;
 const PICTURE_LOOK = FIND_PLAYERS_LOOK === 'G' || FIND_PLAYERS_LOOK === 'H' || FIND_PLAYERS_LOOK === 'I' ? FIND_PLAYERS_LOOK : null;
+/** J to M: close variations of the original cards, in CourtsNearCards (they hold their place as the original does). */
+const CARD_LOOK = FIND_PLAYERS_LOOK === 'J' || FIND_PLAYERS_LOOK === 'K' || FIND_PLAYERS_LOOK === 'L' || FIND_PLAYERS_LOOK === 'M' ? FIND_PLAYERS_LOOK : null;
 
 const CARD = 168;
 const MOST = 8;
@@ -158,7 +161,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
         </View>
         <View style={[styles.row, styles.heldRow]}>
           {[0, 1, 2].map((i) => (
-            <View key={i} style={[styles.card, FIND_PLAYERS_LOOK === 'A' && styles.cardA]}>
+            <View key={i} style={[styles.card, FIND_PLAYERS_LOOK === 'A' && styles.cardA, FIND_PLAYERS_LOOK === 'M' && styles.cardM]}>
               {FIND_PLAYERS_LOOK === 'A' ? null : <View style={styles.top}><View style={styles.tile} /></View>}
               <View>
                 <WordsRoom />
@@ -177,8 +180,8 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
     );
   }
   if (!center || !rows.length) return null;
-  if (NEW_LOOK || PICTURE_LOOK) {
-    const look = PICTURE_LOOK ? <CourtsPictured look={PICTURE_LOOK} rows={rows} badges={badges} /> : <CourtsNearLook look={NEW_LOOK!} rows={rows} badges={badges} />;
+  if (NEW_LOOK || PICTURE_LOOK || CARD_LOOK) {
+    const look = CARD_LOOK ? <CourtsCards look={CARD_LOOK} rows={rows} badges={badges} /> : PICTURE_LOOK ? <CourtsPictured look={PICTURE_LOOK} rows={rows} badges={badges} /> : <CourtsNearLook look={NEW_LOOK!} rows={rows} badges={badges} />;
     return revealOrder === undefined ? look : <FirstReveal order={revealOrder}>{look}</FirstReveal>;
   }
   if (FIND_PLAYERS_LOOK === 'B') {
@@ -321,6 +324,8 @@ const styleDefinitions = StyleSheet.create({
   unseen: { opacity: 0 },
   // Look A: a slimmer card with no icon tile, flat on the page's surface.
   cardA: { width: 150, paddingVertical: 12 },
+  // Look M held: the lighter card's hairline, no fill.
+  cardM: { boxShadow: '0px 0px 0px transparent', backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.border, padding: spacing.lg - 2 },
   allCardA: { width: 96 },
   hitLine: { ...typography.small, color: colors.brand, marginTop: 2 },
   // Look B: slim rows, a hairline between them.

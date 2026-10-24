@@ -54,7 +54,7 @@ export function Head({ link }: { link: boolean }) {
  * - E what's on: each card leads with what is happening there (latest report, players on court, an open hit, who plays there).
  * - F type only: the names in larger type, distance under, thin rules between, no boxes.
  */
-export function CourtsNearLook({ look, rows, badges }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I'>; rows: CourtRow[]; badges: Map<string, CourtBadge> }) {
+export function CourtsNearLook({ look, rows, badges }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'>; rows: CourtRow[]; badges: Map<string, CourtBadge> }) {
   const styles = useThemedStyles(styleDefinitions);
   if (look === 'C') {
     return (
@@ -197,7 +197,7 @@ export function Room() {
 }
 
 /** The strip holding its place while the courts load, in each look's own shape. */
-export function CourtsNearHeld({ look }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I'> }) {
+export function CourtsNearHeld({ look }: { look: Exclude<FindPlayersLook, 'now' | 'A' | 'B' | 'G' | 'H' | 'I' | 'J' | 'K' | 'L' | 'M'> }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">

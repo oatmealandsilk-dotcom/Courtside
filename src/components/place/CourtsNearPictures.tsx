@@ -22,7 +22,7 @@ const H_W = 156; const H_H = 200;
 const I_H = 176;
 
 /** What is on at each court, in a few words: the latest report ("Free · 20 min ago"), else the next open hit. */
-function useOnNow(rows: CourtRow[], badges: Map<string, CourtBadge>): Map<string, string> {
+export function useOnNow(rows: CourtRow[], badges: Map<string, CourtBadge>): Map<string, string> {
   const { courtNow, currentUserId, actions } = useApp();
   const ids = rows.map((r) => r.c.id).join(',');
   // The latest reports for these courts (the court page asks the same).
