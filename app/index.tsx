@@ -11,7 +11,8 @@ import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
 import { LAUNCH_FADE_MS, LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/launchSplash';
-import { LaunchMark } from '@/components/LaunchMark';
+import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { NEW_SPLASH } from '@/lib/splashLook';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
 import { colors, lightColors, spacing, typography, font, wordmarkFont } from '@/theme';
@@ -57,7 +58,8 @@ export default function Index() {
   // A browser that already keeps a login is on its way straight in: the mark is simply there, as on
   // the curtain it hands over to (rising in, then cut to the curtain's still copy, would jump).
   const [quickIn] = useState(() => Platform.OS !== 'web' || storedLoginNow());
-  const rise = useRef(new Animated.Value(quickIn ? 1 : 0)).current;
+  // The website's loader (public/index.html) already shows the new look, so with it the mark is simply there too.
+  const rise = useRef(new Animated.Value(quickIn || NEW_SPLASH ? 1 : 0)).current;
   // On a phone the iPhone's launch picture (always cream: it shows before any
   // code runs and cannot know the theme) hands over to this screen, which is in
   // your own theme. A copy of the launch picture sits on top and fades away, so
@@ -197,11 +199,14 @@ export default function Index() {
   }
 
   return (
-    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }]}>
-      {Platform.OS !== 'web' ? (
+    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }, launchGround]}>
+      {NEW_SPLASH && Platform.OS !== 'web' ? <StatusBar style="dark" /> : null}
+      {Platform.OS !== 'web' || NEW_SPLASH ? (
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
+        // Splash C (NEW_SPLASH: a build whose launch picture is the new one, and the website, whose
+        // loader is): the mark and line on the icon's cream, in their own colours (Oct 24).
         <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
       ) : (
         <>
@@ -214,7 +219,7 @@ export default function Index() {
       )}
       {launchCover && !fromLaunch ? (
         // Coming here later (a sign-in, a switch of account): the cream drawn copy, faded once laid out.
-        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }]}>
+        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }, launchGround]}>
           <StatusBar style="dark" />
           <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
         </Animated.View>
