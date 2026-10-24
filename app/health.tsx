@@ -153,7 +153,12 @@ export default function Health() {
       // Workouts are asked for only when this screen has said so (Apple Health's explanation, or WHOOP's own sign-in);
       // every workout only when what it said was "workouts" (Apple Health's or WHOOP's row, or its own ask).
       if (what === 'toggle') await actions.toggleIntegration(provider, { tennis: tennisOn(provider), workouts: workouts(provider) });
-      else if (what === 'sync') await actions.syncHealth(provider);
+      else if (what === 'sync') {
+        // A long look (a month of sessions) can outlast the wait: after 20 s the button lets go and says
+        // where the sessions will land; the sync carries on in the background (Oct 24, Trishiv's spun on).
+        const slow = await Promise.race([actions.syncHealth(provider).then(() => false), new Promise<boolean>((done) => setTimeout(() => done(true), 20_000))]);
+        if (slow) showToast({ title: 'Still syncing', body: 'New sessions show up in To do in a minute.', icon: 'time-outline' });
+      }
       else if (what === 'workouts') { if (provider === 'apple-health' || provider === 'whoop') await actions.turnOnTennis(provider, { workouts: true }); }
       else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
     } catch (err) {

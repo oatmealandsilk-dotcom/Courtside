@@ -414,11 +414,18 @@ async function fitbitTennis(uid: string, since: Date): Promise<Found> {
     next = body.nextPageToken ?? '';
     if (!next || ended) { out.complete = true; break; }
   }
+  // Sessions already filed are not asked for again (Oct 24: a player with 39 of them waited on a
+  // heart-rate call to Google for each on every Sync now, and the button spun for a minute).
+  const exts = tennis.map((e) => fitbitSession(e)?.ext).filter((x): x is string => !!x);
+  const { data: had } = exts.length
+    ? await admin.from('detected_activities').select('external_id').eq('user_id', uid).eq('source', 'fitbit').in('external_id', exts)
+    : { data: [] as { external_id: string }[] };
+  const known = new Set((had ?? []).map((r) => r.external_id as string));
   for (const e of tennis) {
     const s = fitbitSession(e);
     if (!s) continue;
     out.tennisIds.add(s.ext);
-    if (Date.parse(s.payload.ended_at) < since.getTime()) continue;
+    if (Date.parse(s.payload.ended_at) < since.getTime() || known.has(s.ext)) continue;
     out.sessions.push(fitbitSession(e, await fitbitHeart(uid, e)) ?? s);
   }
   return out;
