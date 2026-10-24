@@ -241,7 +241,7 @@ function SurfaceSwatch({ kind }: { kind: SurfaceKind | null }) {
   return (
     <View style={[styles.tile, { backgroundColor: surfaceTint(kind) }]}>
       {/* A fixed tile, so its word never grows with the phone's text size (the card's label says it). */}
-      <Text allowFontScaling={false} style={[styles.swatchText, word.length > 5 && styles.swatchTextLong]} numberOfLines={1}>{word}</Text>
+      <Text allowFontScaling={false} style={[styles.swatchText, word.length === 5 && styles.swatchText5, word.length > 5 && styles.swatchText6]} numberOfLines={1}>{word}</Text>
     </View>
   );
 }
@@ -284,8 +284,10 @@ const styleDefinitions = StyleSheet.create({
   tagDot: { width: 7, height: 7, borderRadius: 4 },
   tagText: { ...typography.caption, letterSpacing: 0, color: colors.text },
   // Look 2: the swatch's word, white on the surface's colour.
-  swatchText: { ...typography.caption, ...font('700'), fontSize: 10, letterSpacing: 0.4, color: colors.onMedia },
-  swatchTextLong: { fontSize: 8.5, letterSpacing: 0.2 },
+  // Sized to the word so it fits the 36 pt tile whole: four letters at 10, five at 8.5, six at 7.5.
+  swatchText: { ...typography.caption, ...font('700'), fontSize: 10, letterSpacing: 0.3, color: colors.onMedia },
+  swatchText5: { fontSize: 8.5, letterSpacing: 0 },
+  swatchText6: { fontSize: 7.5, letterSpacing: 0 },
   name: { ...typography.bodyStrong, fontSize: 16, letterSpacing: -0.2, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
