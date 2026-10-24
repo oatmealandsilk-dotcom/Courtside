@@ -131,6 +131,9 @@ module.exports = {
       // than 18 (src/lib/splashLook.ts), so phones on 18 keep matching splash.png. Android: the mark
       // alone (its launch screen is an icon), 90 points wide on the same cream.
       ['expo-splash-screen', { image: './assets/splash-c.png', backgroundColor: '#F6EFE4', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F6EFE4' } }],
+      // Dark status-bar icons on the cream launch screen (Info.plist UIStatusBarStyleDarkContent), so they do not
+      // flip from white to dark when the app takes over; once the app runs, ThemedStatusBar sets them per theme.
+      ['expo-status-bar', { style: 'dark' }],
       'expo-router',
       // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
       // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.

@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Platform, StyleSheet, Text } from 'react-native';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { StatusBar } from 'expo-status-bar';
 
 import { BrandMark } from '@/components/BrandMark';
 import { LaunchMark, launchGround } from '@/components/LaunchMark';
@@ -89,6 +90,9 @@ export function WarmCurtain() {
   if (!shown) return null;
   return (
     <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style, launchGround]}>
+      {/* Splash C is cream whatever the theme: dark icons while it is up (a Night theme would turn them white);
+          dropped as it lifts, so the theme's own style fades across with the lift. */}
+      {NEW_SPLASH && Platform.OS !== 'web' && !lifting ? <StatusBar style="dark" /> : null}
       {Platform.OS !== 'web' || NEW_SPLASH ? (
         // On a phone: the launch picture's logo and line in the theme's colours, drawn exactly where the
         // launch picture draws them, the same as the screen before it: it lifts into the app (Oct 4).
