@@ -42,7 +42,8 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 
-const TABS = ['Posts', 'Clips', 'Tagged'] as const;
+// Activity (Oct 24, owner): their posts that carry a hit's or a match's numbers, as on your own profile.
+const TABS = ['Posts', 'Clips', 'Activity', 'Tagged'] as const;
 
 /**
  * Someone else's profile, laid out like your own: picture in the middle, name
@@ -112,16 +113,16 @@ function UserProfile() {
   const locked = !!user.isPrivate && !isMe && !following;
   // A post shared to a group lives in that group's feed only (migration 67).
   const own = posts.filter((p) => p.authorId === user.id && !p.archived && !p.groupId);
-  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => section !== 'Clips' || p.kind === 'clip'))
+  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => (section === 'Clips' ? p.kind === 'clip' : section === 'Activity' ? !!p.session && hasSessionStats(p.session) : true)))
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
+  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Activity: own.filter((p) => !!p.session && hasSessionStats(p.session)).length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
   const profile = user.profile;
 
   const grid = (section: (typeof TABS)[number]) => (
         <View style={{ minHeight: 320 }}>
             <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
               {itemsFor(section).map((p) => (
-                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                   {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
                   {/* Several photos: the stacked mark, where a clip has its play mark. */}
@@ -136,7 +137,7 @@ function UserProfile() {
                 </Pressable>
               ))}
             </View>
-            {!itemsFor(section).length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : `No ${section.toLowerCase()} yet`} body="Their shared moments will appear here." />}
+            {!itemsFor(section).length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
         </View>
   );
 
@@ -254,7 +255,7 @@ function UserProfile() {
             ))}
             {tabWidth > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabLine, { width: tabWidth }, underline.style]} /> : null}
           </View>
-          {/* Posts, Clips and Tagged side by side: a swipe slides between them,
+          {/* Posts, Clips, Activity and Tagged side by side: a swipe slides between them,
               the way your own profile does, instead of landing on a tile as a tap. */}
           <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} progress={underline.progress} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
         </>

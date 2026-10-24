@@ -214,7 +214,7 @@ function LikeBurst({ token, played }: { token: number; played: { current: number
  * in that order (a court's).
  */
 export type FeedScope =
-  | { userId: string; set: 'own' | 'clips' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined; activities?: undefined }
+  | { userId: string; set: 'own' | 'clips' | 'activity' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined; activities?: undefined }
   | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined; activities?: undefined }
   // Activities (Oct 4): posts with a session's stats on them, yours and the people you follow, newest first, as Strava's feed.
   | { activities: true; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; groupId?: undefined }
@@ -647,7 +647,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
               // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
-              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set !== 'clips' || p.kind === 'clip'))))
+              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set === 'clips' ? p.kind === 'clip' : set === 'activity' ? !!p.session && hasSessionStats(p.session) : true))))
             // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
             // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
             .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));

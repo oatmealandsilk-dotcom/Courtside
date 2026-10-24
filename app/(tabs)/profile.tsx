@@ -18,6 +18,7 @@ import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats } from '@/features/activity/format';
+import type { Post } from '@/data/types';
 import Reanimated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { Tappable } from '@/components/Tappable';
@@ -59,6 +60,11 @@ const tallButton = { minHeight: buttonShape.profileHeight };
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
 
+/** Whether a post of yours belongs in a section of the grid: All has every one, Clips the clips, Activity those carrying a hit's or a match's numbers. */
+function inSection(p: Post, section: string): boolean {
+  return section === 'Clips' ? p.kind === 'clip' : section === 'Activity' ? !!p.session && hasSessionStats(p.session) : true;
+}
+
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
@@ -83,11 +89,11 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const { isPhone } = useResponsive();
  const inboxTipEligible = isPhone && !tourOpen && previewSection === undefined && forNewPlayer(user?.joinedAt);
  // The section lives here, not in the address (see discuss.tsx for why).
- const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Tagged'>('Posts');
+ const [localTab, setLocalTab] = useState<'Posts' | 'Clips' | 'Activity' | 'Tagged'>('Posts');
  const section = previewSection ?? localTab;
- const tab = section === 'Clips' || section === 'Tagged' ? section : 'Posts';
- const setTab = (next: string) => setLocalTab(next === 'Clips' || next === 'Tagged' ? next : 'Posts');
- useEffect(() => subscribeSectionRequest('/profile', (next) => setLocalTab(next === 'Clips' || next === 'Tagged' ? next : 'Posts')), []);
+ const tab = section === 'Clips' || section === 'Activity' || section === 'Tagged' ? section : 'Posts';
+ const setTab = (next: string) => setLocalTab(next === 'Clips' || next === 'Activity' || next === 'Tagged' ? next : 'Posts');
+ useEffect(() => subscribeSectionRequest('/profile', (next) => setLocalTab(next === 'Clips' || next === 'Activity' || next === 'Tagged' ? next : 'Posts')), []);
  if (previewSection === undefined) reportSection('/profile', tab);
  const [shareError, setShareError] = useState('');
  // Steps skipped during setup; the card below offers to finish them.
@@ -101,21 +107,23 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
   return onSkippedSaved(read);
  }, [user?.id]);
  const SETUP_STEP_INDEX: Record<SetupStep, number> = { permissions: 2, body: 3, calendar: 4 };
- // The underline under Posts / Clips / Tagged travels with the finger during a
+ // The underline under All / Clips / Activity / Tagged travels with the finger during a
  // swipe and glides on a tap, instead of jumping once the page changes.
- const TABS = ['Posts', 'Clips', 'Tagged'] as const;
- // 'Posts' holds everything, clips included, so it is shown as All.
- const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'All', Clips: 'Clips', Tagged: 'Tagged' };
+ const TABS = ['Posts', 'Clips', 'Activity', 'Tagged'] as const;
+ // 'Posts' holds everything, clips included, so it is shown as All. Activity (Oct 24, owner): the posts
+ // that carry a hit's or a match's numbers, the way Strava's profile shows activities.
+ const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'All', Clips: 'Clips', Activity: 'Activity', Tagged: 'Tagged' };
  const tabIndex = TABS.indexOf(tab);
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);
  // A post shared to a group lives in that group's feed only (migration 67).
  const own = posts.filter(p => p.authorId === user?.id && !p.archived && !p.groupId);
- const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => tab !== 'Clips' || p.kind === 'clip')).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+ const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => inSection(p, tab))).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
  // How many of each, shown beside the section names.
  const counts: Record<typeof TABS[number], number> = {
    Posts: own.length,
    Clips: own.filter(p => p.kind === 'clip').length,
+   Activity: own.filter(p => inSection(p, 'Activity')).length,
    Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length : 0,
  };
  // People asking to join the groups you run.
@@ -145,9 +153,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const content = (selected: string) => {
    if (!user) return null;
    // Pinned first, then newest.
-   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => selected !== 'Clips' || p.kind === 'clip')).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
+   const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => inSection(p, selected))).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
-     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Activity' ? 'activity' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW}/> : null}
        {/* Several photos: the stacked mark, where a clip has its play mark. */}
@@ -163,10 +171,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      </Pressable>)}</View>
      {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip, unless the
          "Make your first move" card at the top of the page is already asking for it. */}
-     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/>}
+     {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':selected==='Activity'?'No activity yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : selected==='Activity' ? 'Hits and matches you post with their stats show up here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : selected==='Activity' ? { label: 'Log a session', onPress: () => router.push('/log-session') } : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/>}
    </View>;
  };
- // The three grids are rebuilt only when the posts change, so switching
+ // The four grids are rebuilt only when the posts change, so switching
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
@@ -239,7 +247,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        : <View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth, left: index * tabWidth }]} />)}
    </View>
    {live
-     // Under the tab line only the grid slides, all three grids riding side by
+     // Under the tab line only the grid slides, all four grids riding side by
      // side. A swipe right from Posts is handed up to the tab row (Coaching).
      ? <SectionPager index={index} panes={grids} progress={underline.progress} depth={2} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
      : content(selected)}
@@ -426,7 +434,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
    <View style={styles.links}>
      <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text></View>
    </View>
-   <View style={styles.tabs}>{['All', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
+   <View style={styles.tabs}>{['All', 'Clips', 'Activity', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
    <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
   </>;
 }

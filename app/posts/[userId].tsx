@@ -11,7 +11,7 @@ import { colors } from '@/theme';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { CourtSpinner } from '@/components/CourtSpinner';
 
-type Set = 'own' | 'clips' | 'tagged' | 'archived';
+type Set = 'own' | 'clips' | 'activity' | 'tagged' | 'archived';
 
 /**
  * A grid tile opens here: the same full-screen feed as Home, scoped to that

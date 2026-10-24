@@ -1,7 +1,7 @@
 /**
  * Every page a sideways swipe stops at, left to right: Community's two
  * sections (Find Players, where the app opens, then Discussions), Home,
- * Coaching, and Profile's three. The phone's TabsPager and the bar follow
+ * Coaching, and Profile's four (All, Clips, Activity, Tagged). The phone's TabsPager and the bar follow
  * the same order.
  */
 export const SWIPE_STOPS = [
@@ -11,6 +11,7 @@ export const SWIPE_STOPS = [
   { pathname: '/coaches', section: '' },
   { pathname: '/profile', section: 'Posts' },
   { pathname: '/profile', section: 'Clips' },
+  { pathname: '/profile', section: 'Activity' },
   { pathname: '/profile', section: 'Tagged' },
 ] as const;
 export function swipeDestination(pathname: string, section: string | undefined, direction: 1 | -1) {
