@@ -57,16 +57,16 @@ function OneCourt({ cx, cy, s, portrait, tint, lw, grass }: { cx: number; cy: nu
   );
 }
 
-/** Feet: the room behind each baseline and beside the outer courts, and between two courts side by side. */
-const BACK = 21; const SIDE = 12; const BETWEEN = 12;
+/** Feet between two courts side by side. */
+const BETWEEN = 12;
 
 /**
  * Courts seen from above, as a landscape picture.
- * - 'postcard': the court block (its courts, up to three, and the room around them) on the page's own
- *   ground, with a faint shadow under it.
- * - 'bleed': the block's colour fills the picture, the courts in the middle, like an aerial photo.
+ * - 'postcard': one court and the room around it on the page's own ground, with a faint shadow under it.
+ * - 'bleed': the room's colour fills the picture, the nearest court whole in the middle and the
+ *   next ones (up to two) beside it, cut by the edges, like an aerial photo.
  * - 'close': one court close up, turned a little and cut by the picture's edges.
- * One court lies along the picture; two or three stand side by side. The room around a hard court
+ * The room around a hard court
  * takes the theme's court green where the theme has one (blue inside, green outside, as hard courts are);
  * otherwise it is the court's colour a shade deeper. Lit courts show their four light posts.
  */
@@ -92,12 +92,13 @@ export function AerialCourt({ court, width, height, frame, id }: { court: Court;
           {light}
           {/* A soft darkening at the foot, for the white words over it. */}
           <LinearGradient id={`${gid}-d`} x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0.38" stopColor={colors.checker} stopOpacity={0} />
-            <Stop offset="1" stopColor={colors.checker} stopOpacity={0.62} />
+            <Stop offset="0.4" stopColor={colors.checker} stopOpacity={0} />
+            <Stop offset="0.72" stopColor={colors.checker} stopOpacity={0.5} />
+            <Stop offset="1" stopColor={colors.checker} stopOpacity={0.8} />
           </LinearGradient>
         </Defs>
         <Rect x={0} y={0} width={width} height={height} fill={around ?? tint} />
-        {around ? null : <Rect x={0} y={0} width={width} height={height} fill={colors.checker} fillOpacity={0.2} />}
+        {around ? null : <Rect x={0} y={0} width={width} height={height} fill={colors.checker} fillOpacity={0.27} />}
         <G transform={`rotate(-16 ${cx} ${cy})`}>
           <OneCourt cx={cx} cy={cy} s={s} portrait tint={tint} lw={Math.max(1.6, s * 0.55)} grass={surface === 'grass'} />
         </G>
@@ -106,17 +107,23 @@ export function AerialCourt({ court, width, height, frame, id }: { court: Court;
       </Svg>
     );
   }
-  const n = Math.min(3, Math.max(1, court.count));
-  const portrait = n > 1;
-  // The block in feet: courts plus the room around them.
-  const bw = portrait ? n * 36 + (n - 1) * BETWEEN + 2 * SIDE : 78 + 2 * BACK;
-  const bh = portrait ? 78 + 2 * BACK : 36 + 2 * SIDE;
-  const pad = frame === 'postcard' ? Math.round(height * 0.13) : Math.round(height * 0.1);
-  const s = Math.min((width - pad * 2) / bw, (height - pad * 2) / bh);
+  // Every court lies along the picture. A postcard is one court and the room around it, filling the
+  // card. The bleed is the nearest court whole, sized to the picture, with the next ones beside it
+  // cut by the edges, as an aerial photo of a row of courts would be.
+  const postcard = frame === 'postcard';
+  const back = postcard ? 13 : 16; const side = postcard ? 9 : 14;
+  const bw = 78 + 2 * back; const bh = 36 + 2 * side;
+  const padX = postcard ? 14 : 0; const padY = postcard ? 13 : 0;
+  const s = Math.min((width - padX * 2) / bw, (height - padY * 2) / bh);
   const bx = (width - bw * s) / 2; const by = (height - bh * s) / 2;
   const lw = Math.max(1.1, s * 0.42);
-  const centres = Array.from({ length: n }, (_, i) => (portrait ? { x: bx + (SIDE + 18 + i * (36 + BETWEEN)) * s, y: by + (bh / 2) * s } : { x: width / 2, y: height / 2 }));
-  const posts = court.lit ? [[bx + 3, by + 3], [bx + bw * s - 3, by + 3], [bx + 3, by + bh * s - 3], [bx + bw * s - 3, by + bh * s - 3]] : [];
+  const n = postcard ? 1 : Math.min(3, Math.max(1, court.count));
+  const step = (36 + BETWEEN) * s;
+  const offsets = n === 1 ? [0] : n === 2 ? [0, step] : [-step, 0, step];
+  const centres = offsets.map((dy) => ({ x: width / 2, y: height / 2 + dy }));
+  const portrait = false;
+  // Four light posts at the corners of the court's room.
+  const posts = court.lit ? [[bx + 4, by + 4], [bx + bw * s - 4, by + 4], [bx + 4, by + bh * s - 4], [bx + bw * s - 4, by + bh * s - 4]] : [];
   const blockFill = around ?? tint;
   return (
     <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
@@ -128,12 +135,12 @@ export function AerialCourt({ court, width, height, frame, id }: { court: Court;
           <Rect x={bx - 1} y={by + 2} width={bw * s + 2} height={bh * s + 3} rx={5} fill={colors.checker} fillOpacity={0.07} />
           <Rect x={bx} y={by + 1} width={bw * s} height={bh * s + 1} rx={4} fill={colors.checker} fillOpacity={0.1} />
           <Rect x={bx} y={by} width={bw * s} height={bh * s} rx={3} fill={blockFill} />
-          {around ? null : <Rect x={bx} y={by} width={bw * s} height={bh * s} rx={3} fill={colors.checker} fillOpacity={0.2} />}
+          {around ? null : <Rect x={bx} y={by} width={bw * s} height={bh * s} rx={3} fill={colors.checker} fillOpacity={0.27} />}
         </>
       ) : (
         <>
           <Rect x={0} y={0} width={width} height={height} fill={blockFill} />
-          {around ? null : <Rect x={0} y={0} width={width} height={height} fill={colors.checker} fillOpacity={0.2} />}
+          {around ? null : <Rect x={0} y={0} width={width} height={height} fill={colors.checker} fillOpacity={0.27} />}
         </>
       )}
       {centres.map((c, i) => <OneCourt key={i} cx={c.x} cy={c.y} s={s} portrait={portrait} tint={tint} lw={lw} grass={surface === 'grass'} />)}

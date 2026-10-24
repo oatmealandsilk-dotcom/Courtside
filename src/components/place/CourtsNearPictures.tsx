@@ -98,7 +98,7 @@ export function CourtsPictured({ look, rows, badges }: { look: PictureLook; rows
               <AerialCourt court={c} width={H_W} height={H_H} frame="close" id={c.id} />
               {pill}
               <View style={styles.hWords}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hName} numberOfLines={2}>{labelOf(c)}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hName} numberOfLines={3}>{labelOf(c)}</Text>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hMeta} numberOfLines={1}>{distance(c, miles)}</Text>
               </View>
             </SwipePressable>
@@ -181,9 +181,9 @@ const styleDefinitions = StyleSheet.create({
   // H: the card is the court; the words sit in white on its darkened foot.
   hRow: { gap: 10, paddingBottom: spacing.xs },
   hCard: { width: H_W, height: H_H, borderRadius: 20, overflow: 'hidden' },
-  hWords: { position: 'absolute', left: 14, right: 14, bottom: 13, gap: 2 },
-  hName: { ...typography.bodyStrong, fontSize: 16, lineHeight: 20, letterSpacing: -0.2, color: colors.onMedia },
-  hMeta: { ...typography.small, color: colors.onMedia, opacity: 0.86 },
+  hWords: { position: 'absolute', left: 13, right: 10, bottom: 13, gap: 2 },
+  hName: { ...typography.bodyStrong, lineHeight: 19, letterSpacing: -0.2, color: colors.onMedia, textShadowColor: colors.checker, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
+  hMeta: { ...typography.small, color: colors.onMedia, opacity: 0.9, textShadowColor: colors.checker, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
   // I: one big tile for the nearest, the next two as quiet links under it.
   iMain: { gap: 12 },
   iPicture: { height: I_H, borderRadius: 20, overflow: 'hidden' },
