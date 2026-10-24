@@ -37,7 +37,6 @@ import { openRules } from '@/features/moderation/RemovedNote';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { useArrived } from '@/lib/useArrived';
 import { toastForJoin } from '@/features/groups/GroupInvitesSection';
-import { corner } from '@/theme/look';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -833,7 +832,7 @@ const styleDefinitions = StyleSheet.create({
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   pair: { width: 44, height: 44 },
   pairBack: { position: 'absolute', right: 0, top: 0 },
-  pairFront: { position: 'absolute', left: 0, bottom: 0, borderRadius: corner(18), borderWidth: 2, borderColor: colors.bg },
+  pairFront: { position: 'absolute', left: 0, bottom: 0, borderRadius: 18, borderWidth: 2, borderColor: colors.bg },
   row: {
     flexDirection: 'row',
     alignItems: 'center',

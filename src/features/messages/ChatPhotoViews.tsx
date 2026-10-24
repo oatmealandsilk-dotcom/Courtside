@@ -30,7 +30,7 @@ const GAP = 2;
 /** The most tiles a grid shows; past that the last one says "+3". */
 const SHOWN = 4;
 /** A bubble's rounding, so photos sit in the chat like its messages. */
-const ROUND = 18;
+const ROUND = corner(18);
 
 /**
  * One chat photo, filling whatever holds it: the file itself when it is on

@@ -62,7 +62,6 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
-import { corner } from '@/theme/look';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1960,7 +1959,7 @@ const styleDefinitions = StyleSheet.create({
   trayGhostRow: { flexDirection: 'row' },
   listTitleBox: { flex: 1 },
   flexNone: { flex: 0 },
-  resultsEdge: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: corner(18), borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  resultsEdge: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: 18, borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   resultRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 9 },
   resultTile: { width: 30, height: 30, borderRadius: 9, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   // A place in the map search's list: the court rows' tile, in the quiet surface colour, so places and courts read apart.

@@ -12,7 +12,7 @@ import { Avatar } from '@/components/ui';
 import type { ID, MediaCrop, SessionDetail, User } from '@/data/types';
 import { postZones, zoneColors } from '@/features/activity/zones';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, font, spacing, typography } from '@/theme';
 import type { CardPerson } from './SessionCard';
 import { SessionStrip } from './SessionStrip';
 import { ZoneBar } from './ZoneBar';
@@ -126,7 +126,7 @@ const styleDefinitions = StyleSheet.create({
   whoWords: { flex: 1, minWidth: 0 },
   name: { ...font('600'), fontSize: 14, color: colors.text },
   sub: { ...font('400'), fontSize: 12, color: colors.textFaint },
-  media: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
+  media: { borderRadius: 18, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   blank: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt },
   foot: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // The editor and the ×, together in the top corner, clear of the clip's own controls along the bottom.
