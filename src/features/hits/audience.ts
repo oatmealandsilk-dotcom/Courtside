@@ -10,32 +10,15 @@ import type { HitAudience, HitRequest, ID } from '@/data/types';
 
 const HOUR = 3_600_000;
 
-/** The three answers on the hit form, in its order. */
-export const AUDIENCES: { value: HitAudience; icon: 'people-outline' | 'mail-unread-outline' | 'lock-closed-outline'; title: string; line: string }[] = [
-  { value: 'everyone', icon: 'people-outline', title: 'Everyone', line: 'Players nearby see it on Find Players.' },
-  { value: 'invite_first', icon: 'mail-unread-outline', title: 'Invite first', line: 'The people you invite get first dibs. Then it opens to everyone.' },
-  { value: 'invite_only', icon: 'lock-closed-outline', title: 'Only people I invite', line: 'Never shows to anyone else.' },
-];
-
 /**
- * Oct 24 looks for "Who sees it first" (he found the three icon rows "a bit
- * too ai"): 'now' is today's rows; 'A' one three-part switch like the Game
- * chips, 'B' three slim text rows with a check. A and B also drop the
- * open-hit banner and cut the note under Post to one line.
- * Oct 24 (later, he liked neither): 'C' one quiet setting row ("Who sees it
- * Everyone ›") that opens a small menu; 'D' one switch, "Open to players
- * nearby", off showing Invite first / Only invited; 'E' the answer as a
- * tappable word in the title's summary line, no part on the page; 'F' a small
- * "Everyone ▾" pill beside Post. C, E and F share one small menu.
+ * The three answers on the hit form, in its order: the name its "Who sees it"
+ * row and menu show, and the one line a screen reader hears with it.
  */
-export const ASK_HIT_LOOK = 'now' as 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
-
-/** The calmer looks' words: a short name (the switch has a third of a row each) and one line, shown for the chosen answer only. */
-export const AUDIENCE_SHORT: Record<HitAudience, { short: string; line: string }> = {
-  everyone: { short: 'Everyone', line: 'Players nearby see it on Find Players.' },
-  invite_first: { short: 'Invite first', line: 'Your invites get first go, then it opens to everyone.' },
-  invite_only: { short: 'Only invited', line: 'No one else sees it.' },
-};
+export const AUDIENCES: { value: HitAudience; title: string; line: string }[] = [
+  { value: 'everyone', title: 'Everyone', line: 'Players nearby see it on Find Players.' },
+  { value: 'invite_first', title: 'Invite first', line: 'Your invites get first go, then it opens to everyone.' },
+  { value: 'invite_only', title: 'Only people I invite', line: 'No one else sees it.' },
+];
 
 /**
  * "Everyone" for someone not known to be an adult: their hit reaches only

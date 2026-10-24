@@ -8,9 +8,9 @@ import { CourtSearch } from '@/components/CourtSearch';
 import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitAudience, HitRequest, ID } from '@/data/types';
-import { ASK_HIT_LOOK, opensAtFor } from '@/features/hits/audience';
+import { opensAtFor } from '@/features/hits/audience';
 import { markJustPosted } from '@/features/hits/hitTips';
-import { AudienceCards, AudienceChoice, AudienceMenu, AudiencePill, AudienceSettingRow, AudienceSwitch, AudienceWord, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
+import { AudienceMenu, AudienceSettingRow, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { notKnownAdult } from '@/features/players/age';
@@ -40,8 +40,8 @@ const FORMAT_LABEL: Record<HitRequest['format'], string> = { singles: 'Singles',
  * for the friends who might want the spot. Opened from a court ("Play
  * here"), that court is already where. Opened from "Ask to hit" (?ask=…),
  * the hit also goes straight into your chat with each of those players; it
- * is still an open hit, so the sheet says so: anyone nearby may take the
- * spot first, unless "Who sees it first" says otherwise (migration 76):
+ * is still an open hit, on Find Players too: anyone nearby may take the
+ * spot first, unless "Who sees it" says otherwise (migration 76):
  * Invite first gives the players you tick (and, with My groups, the people
  * in your groups) the first go, and it opens to everyone an hour after
  * posting or three hours before it starts, whichever is sooner; Only people
@@ -154,9 +154,8 @@ export default function NewHit() {
   const opensText = opensAt ? `${opensAt.toDateString() === new Date().toDateString() ? '' : `${opensAt.toLocaleDateString([], { weekday: 'short' })} `}at ${clockWords(opensAt)}` : '';
   // The invite as it will read, updated as you choose.
   const dayWord = day === 0 ? 'Today' : day === 1 ? 'Tomorrow' : days[day].toLocaleDateString([], { weekday: 'long' });
-  // The calmer looks (A, B): no banner, and one short line under Post that adds only what the choice above doesn't say.
-  const calm = ASK_HIT_LOOK !== 'now';
-  const calmFine = audience === 'invite_only'
+  // One short line under Post that adds only what "Who sees it" doesn't say.
+  const fine = audience === 'invite_only'
     ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it.`
     : audience === 'invite_first'
       ? (opensNow ? 'It starts within 3 hours, so it opens to everyone now.' : `If a spot’s left ${opensText}, it opens to everyone.`)
@@ -224,23 +223,16 @@ export default function NewHit() {
   const nudge = (by: 1 | -1) => { haptics.untap(); setSpots((n) => Math.min(3, Math.max(1, n + by))); };
   // A hairline under the title once the form has scrolled beneath it, so the two never run together.
   const [scrolled, setScrolled] = useState(false);
-  // C, E and F: the small menu the row, the summary's word or the pill beside Post opens.
+  // The small menu the "Who sees it" row opens.
   const [menuOpen, setMenuOpen] = useState(false);
   const openMenu = () => setMenuOpen(true);
 
   return (
     <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={ASK_HIT_LOOK === 'E' ? <>{summary} · <AudienceWord value={audience} onOpen={openMenu} /></> : summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
+      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <View style={styles.body}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
           onScroll={(e) => { const s = e.nativeEvent.contentOffset.y > 2; if (s !== scrolled) setScrolled(s); }}>
-          {/* Asked: said first, before anything is picked, so "Ask Sam" never reads as a private invite. */}
-          {asked.length && !inviting && !calm ? (
-            <View style={styles.openNote}>
-              <Ionicons name="people-outline" size={16} color={colors.textMuted} />
-              <Text style={styles.openNoteText}>It’s an open hit: {askedNames} {asked.length === 1 ? 'gets' : 'get'} it in your chat, and anyone nearby can take the spot.</Text>
-            </View>
-          ) : null}
           <Section strong title="When">
             <Tiles soft scroll value={day} onChange={pickDay} options={days.flatMap((d, i) => (i === 0 && !todayOpen ? [] : [{ value: i, top: i === 0 ? 'Today' : d.toLocaleDateString([], { weekday: 'short' }), main: String(d.getDate()), label: d.toDateString() }]))} />
           </Section>
@@ -282,17 +274,10 @@ export default function NewHit() {
                 </Pressable>
               </View>
             </View>
-            {/* C: who sees it as one more row of this list; D: one switch here. */}
-            {ASK_HIT_LOOK === 'C' ? <View style={[styles.rule, styles.lookRow]}><AudienceSettingRow value={audience} onOpen={openMenu} forFriends={forFriends} /></View> : null}
-            {ASK_HIT_LOOK === 'D' ? <View style={[styles.rule, styles.lookRow]}><AudienceSwitch value={audience} onChange={setAudience} forFriends={forFriends} /></View> : null}
+            {/* Who sees it: one more row of this list, its answer on the right; a tap opens the small menu. */}
+            <View style={[styles.rule, styles.audienceRow]}><AudienceSettingRow value={audience} onOpen={openMenu} forFriends={forFriends} /></View>
           </View>
 
-          {ASK_HIT_LOOK === 'now' || ASK_HIT_LOOK === 'A' || ASK_HIT_LOOK === 'B' ? (
-            <Section strong title="Who sees it first">
-              {ASK_HIT_LOOK === 'now' ? <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
-                : <AudienceChoice look={ASK_HIT_LOOK} value={audience} onChange={setAudience} forFriends={forFriends} />}
-            </Section>
-          ) : null}
           {inviting ? (
             <Section strong title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
               <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
@@ -309,29 +294,10 @@ export default function NewHit() {
         <View style={styles.footer}>
           {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          {ASK_HIT_LOOK === 'F' ? (
-            // F: who sees it as a small pill beside Post.
-            <View style={styles.postBar}>
-              <AudiencePill value={audience} onOpen={openMenu} />
-              <View style={{ flex: 1 }}>
-                <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
-              </View>
-            </View>
-          ) : <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />}
-          <Fine>{calm ? calmFine : audience === 'invite_only'
-          ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
-          : audience === 'invite_first' && opensNow
-            ? `It starts within 3 hours, so it goes on Find Players straight away.${recipients.length ? ` ${recipientNames} still ${recipients.length === 1 ? 'gets' : 'get'} it in your chat.` : ''}`
-          : audience === 'invite_first'
-            ? `${recipients.length ? recipientNames : 'Your groups'} ${recipients.length === 1 && !groupsOn ? 'gets' : 'get'} the first go${groupsOn && recipients.length ? ', with your groups' : ''}. If there’s still a spot ${opensText}, it goes on Find Players.`
-            : asked.length
-              ? `It goes to ${askedNames} in your chat. It’s an open hit, so it shows on Find Players too, and someone nearby may take the spot first.`
-              : forFriends
-                ? 'Friends who follow you see it. Whoever joins gets a chat with you.'
-                : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
+          <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
+          <Fine>{fine}</Fine>
         </View>
-        {ASK_HIT_LOOK === 'C' || ASK_HIT_LOOK === 'E' || ASK_HIT_LOOK === 'F'
-          ? <AudienceMenu visible={menuOpen} onClose={() => setMenuOpen(false)} value={audience} onChange={setAudience} forFriends={forFriends} /> : null}
+        <AudienceMenu visible={menuOpen} onClose={() => setMenuOpen(false)} value={audience} onChange={setAudience} forFriends={forFriends} />
       </View>
     </DragSheet>
   );
@@ -347,18 +313,13 @@ const styleDefinitions = StyleSheet.create({
   topRuleOn: { opacity: 1 },
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
   error: { ...typography.small, color: colors.danger, textAlign: 'center', marginBottom: -spacing.sm },
-  // "It's an open hit": one plain line on the sheet's quiet tint, above When.
-  openNote: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.bgElevated },
-  openNoteText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 19 },
   // Level and Players needed: the question left, the answer right, a hairline between the two. The pair
   // gives back its outer padding, so its first pills sit 24 under Game's, as every part sits under the last.
   rows: { marginVertical: -spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48, paddingVertical: spacing.md },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  // C and D: who sees it as one more row of the list.
-  lookRow: { paddingVertical: spacing.xs },
-  // F: the audience pill, then Post.
-  postBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Who sees it: one more row of the list.
+  audienceRow: { paddingVertical: spacing.xs },
   rowWords: { flexShrink: 1, gap: 2 },
   rowTitle: { ...typography.bodyStrong, color: colors.text },
   rowHint: { ...typography.small, color: colors.textMuted },
