@@ -10,7 +10,7 @@ import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } 
 import type { HitAudience, HitRequest, ID } from '@/data/types';
 import { ASK_HIT_LOOK, opensAtFor } from '@/features/hits/audience';
 import { markJustPosted } from '@/features/hits/hitTips';
-import { AudienceCards, AudienceChoice, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
+import { AudienceCards, AudienceChoice, AudienceMenu, AudiencePill, AudienceSettingRow, AudienceSwitch, AudienceWord, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { notKnownAdult } from '@/features/players/age';
@@ -224,10 +224,13 @@ export default function NewHit() {
   const nudge = (by: 1 | -1) => { haptics.untap(); setSpots((n) => Math.min(3, Math.max(1, n + by))); };
   // A hairline under the title once the form has scrolled beneath it, so the two never run together.
   const [scrolled, setScrolled] = useState(false);
+  // C, E and F: the small menu the row, the summary's word or the pill beside Post opens.
+  const [menuOpen, setMenuOpen] = useState(false);
+  const openMenu = () => setMenuOpen(true);
 
   return (
     <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
-      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
+      header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={ASK_HIT_LOOK === 'E' ? <>{summary} · <AudienceWord value={audience} onOpen={openMenu} /></> : summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <View style={styles.body}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
           onScroll={(e) => { const s = e.nativeEvent.contentOffset.y > 2; if (s !== scrolled) setScrolled(s); }}>
@@ -279,12 +282,17 @@ export default function NewHit() {
                 </Pressable>
               </View>
             </View>
+            {/* C: who sees it as one more row of this list; D: one switch here. */}
+            {ASK_HIT_LOOK === 'C' ? <View style={[styles.rule, styles.lookRow]}><AudienceSettingRow value={audience} onOpen={openMenu} forFriends={forFriends} /></View> : null}
+            {ASK_HIT_LOOK === 'D' ? <View style={[styles.rule, styles.lookRow]}><AudienceSwitch value={audience} onChange={setAudience} forFriends={forFriends} /></View> : null}
           </View>
 
-          <Section strong title="Who sees it first">
-            {ASK_HIT_LOOK === 'now' ? <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
-              : <AudienceChoice look={ASK_HIT_LOOK} value={audience} onChange={setAudience} forFriends={forFriends} />}
-          </Section>
+          {ASK_HIT_LOOK === 'now' || ASK_HIT_LOOK === 'A' || ASK_HIT_LOOK === 'B' ? (
+            <Section strong title="Who sees it first">
+              {ASK_HIT_LOOK === 'now' ? <AudienceCards value={audience} onChange={setAudience} forFriends={forFriends} />
+                : <AudienceChoice look={ASK_HIT_LOOK} value={audience} onChange={setAudience} forFriends={forFriends} />}
+            </Section>
+          ) : null}
           {inviting ? (
             <Section strong title="Invite" hint={pickedUsers.length ? `${pickedUsers.length} picked · each gets it in your chat` : 'Tick who gets it in your chat'}>
               <InviteRow picked={picked} onPicked={setPicked} first={askedIds} />
@@ -301,7 +309,15 @@ export default function NewHit() {
         <View style={styles.footer}>
           {past ? <Text style={styles.error}>That time has passed. Pick a later one.</Text> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
-          <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
+          {ASK_HIT_LOOK === 'F' ? (
+            // F: who sees it as a small pill beside Post.
+            <View style={styles.postBar}>
+              <AudiencePill value={audience} onOpen={openMenu} />
+              <View style={{ flex: 1 }}>
+                <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />
+              </View>
+            </View>
+          ) : <Submit label="Post" onPress={post} disabled={!ready} busy={saving} waiting={past ? 'Pick a later time' : !where ? 'Choose where to play' : 'Pick who to invite'} />}
           <Fine>{calm ? calmFine : audience === 'invite_only'
           ? `Only ${recipients.length ? recipientNames : 'the people you invite'}${groupsOn ? ' and your groups' : ''} can see it. It never shows on Find Players.`
           : audience === 'invite_first' && opensNow
@@ -314,6 +330,8 @@ export default function NewHit() {
                 ? 'Friends who follow you see it. Whoever joins gets a chat with you.'
                 : 'Players nearby see it on Find Players. Whoever joins gets a chat with you.'}</Fine>
         </View>
+        {ASK_HIT_LOOK === 'C' || ASK_HIT_LOOK === 'E' || ASK_HIT_LOOK === 'F'
+          ? <AudienceMenu visible={menuOpen} onClose={() => setMenuOpen(false)} value={audience} onChange={setAudience} forFriends={forFriends} /> : null}
       </View>
     </DragSheet>
   );
@@ -337,6 +355,10 @@ const styleDefinitions = StyleSheet.create({
   rows: { marginVertical: -spacing.md },
   row: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48, paddingVertical: spacing.md },
   rule: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // C and D: who sees it as one more row of the list.
+  lookRow: { paddingVertical: spacing.xs },
+  // F: the audience pill, then Post.
+  postBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowWords: { flexShrink: 1, gap: 2 },
   rowTitle: { ...typography.bodyStrong, color: colors.text },
   rowHint: { ...typography.small, color: colors.textMuted },

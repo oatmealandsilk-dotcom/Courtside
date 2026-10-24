@@ -20,7 +20,7 @@ import { brandBoxShadow } from '@/theme/fillMode';
  */
 
 /** The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said). */
-export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize }: { title: string; line?: string; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number }) {
+export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize }: { title: string; /** Words, or words with a tappable part (nested Text). */ line?: React.ReactNode; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.titleRow}>

@@ -11,6 +11,8 @@ import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { Chips } from '@/components/sheet/SheetForm';
+import { RisingSheet } from '@/components/RisingSheet';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 import { AUDIENCES, AUDIENCE_SHORT, EVERYONE_FRIENDS_LINE } from './audience';
 
 /*
@@ -98,6 +100,104 @@ export function AudienceChoice({ look, value, onChange, forFriends = false }: { 
         );
       })}
     </View>
+  );
+}
+
+/** The words the C/E/F menu and its openers use for an answer. */
+const nameOf = (v: HitAudience) => AUDIENCES.find((o) => o.value === v)!.title;
+
+/**
+ * C, E and F's small menu (Oct 24): the phone's own bottom sheet, a small
+ * title and the three answers, one line each, a tick on the chosen one.
+ */
+export function AudienceMenu({ visible, onClose, value, onChange, forFriends = false }: { visible: boolean; onClose: () => void; value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const bottom = useModalSheetBottom(visible, spacing.xxl);
+  const lineOf = (v: HitAudience) => (forFriends && v === 'everyone' ? EVERYONE_FRIENDS_LINE : AUDIENCE_SHORT[v].line);
+  return (
+    <RisingSheet visible={visible} onClose={onClose} closeLabel="Close menu" sheetStyle={[styles.menu, { paddingBottom: bottom }]}>
+      <View style={styles.grabber} />
+      <Text style={styles.menuTitle}>Who sees it</Text>
+      <View accessibilityRole="radiogroup" accessibilityLabel="Who sees it first">
+        {AUDIENCES.map((o, i) => {
+          const on = o.value === value;
+          return (
+            <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${o.title}. ${lineOf(o.value)}`}
+              onPress={() => { onClose(); if (!on) { haptics.tap(); onChange(o.value); } }}
+              style={({ pressed }) => [styles.menuRow, i > 0 && styles.slimRule, pressed && styles.pressedRow]}>
+              <Text style={[styles.slimTitle, on && styles.slimTitleOn]}>{o.title}</Text>
+              {on ? <Ionicons name="checkmark" size={18} color={colors.brand} /> : null}
+            </Pressable>
+          );
+        })}
+      </View>
+    </RisingSheet>
+  );
+}
+
+/** C: one quiet setting row, the question left and the answer right with a ›, in the sheet's Level / Players needed list. */
+export function AudienceSettingRow({ value, onOpen, forFriends = false }: { value: HitAudience; onOpen: () => void; forFriends?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const line = forFriends && value === 'everyone' ? EVERYONE_FRIENDS_LINE : AUDIENCE_SHORT[value].line;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Who sees it: ${nameOf(value)}. ${line}`} accessibilityHint="Opens the choices"
+      onPress={() => { haptics.untap(); onOpen(); }} style={({ pressed }) => [styles.settingRow, pressed && styles.pressed]}>
+      <Text style={styles.settingTitle}>Who sees it</Text>
+      <View style={styles.settingValue}>
+        <Text style={styles.settingValueText} numberOfLines={1}>{nameOf(value)}</Text>
+        <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** D: one switch, on for everyone; off shows the one small choice left (Invite first, the default, or Only invited). */
+export function AudienceSwitch({ value, onChange, forFriends = false }: { value: HitAudience; onChange: (v: HitAudience) => void; forFriends?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const open = value === 'everyone';
+  const label = forFriends ? 'Open to your followers' : 'Open to players nearby';
+  const flip = () => { (open ? haptics.untap : haptics.tap)(); onChange(open ? 'invite_first' : 'everyone'); };
+  return (
+    <View style={{ gap: spacing.sm + 2 }}>
+      <Pressable accessibilityRole="switch" accessibilityState={{ checked: open }} accessibilityLabel={label}
+        accessibilityHint={open ? (forFriends ? EVERYONE_FRIENDS_LINE : AUDIENCE_SHORT.everyone.line) : 'Only the people you invite, at first'}
+        onPress={flip} style={styles.settingRow}>
+        <Text style={styles.settingTitle}>{label}</Text>
+        <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          <Toggle value={open} onChange={flip} />
+        </View>
+      </Pressable>
+      {open ? null : (
+        <View style={{ gap: spacing.sm }}>
+          <Chips soft label="Who sees it first" value={value} onChange={(v) => { if (v && v !== value) { haptics.untap(); onChange(v); } }}
+            options={AUDIENCES.filter((o) => o.value !== 'everyone').map((o) => ({ value: o.value, label: AUDIENCE_SHORT[o.value].short, a11y: `${o.title}. ${AUDIENCE_SHORT[o.value].line}` }))} />
+          <Text style={styles.calmLine}>{AUDIENCE_SHORT[value].line}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** E: the answer as one tappable word at the end of the title's summary line ("Singles · Today at 2pm · Alder Park · Everyone ▾"). */
+export function AudienceWord({ value, onOpen }: { value: HitAudience; onOpen: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Text accessibilityRole="button" accessibilityLabel={`Who sees it: ${nameOf(value)}`} accessibilityHint="Opens the choices" suppressHighlighting
+      onPress={() => { haptics.untap(); onOpen(); }} style={styles.word}>
+      {nameOf(value)} ▾
+    </Text>
+  );
+}
+
+/** F: a small pill beside Post ("Everyone ▾"), the way a post's audience sits beside Share. */
+export function AudiencePill({ value, onOpen }: { value: HitAudience; onOpen: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Who sees it: ${nameOf(value)}`} accessibilityHint="Opens the choices"
+      onPress={() => { haptics.untap(); onOpen(); }} style={({ pressed }) => [styles.pill, pressed && styles.pressed]}>
+      <Text style={styles.pillText} numberOfLines={1}>{AUDIENCE_SHORT[value].short}</Text>
+      <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+    </Pressable>
   );
 }
 
@@ -207,4 +307,19 @@ const styleDefinitions = StyleSheet.create({
   slimTitle: { ...typography.body, color: colors.text },
   slimTitleOn: { ...font('600') },
   empty: { ...typography.small, color: colors.textMuted },
+  // C/E/F's small menu, the MenuSheet's own sheet without its icons.
+  menu: { backgroundColor: colors.bg, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.sm },
+  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
+  menuTitle: { ...typography.caption, color: colors.textFaint, textAlign: 'center', paddingBottom: spacing.sm },
+  menuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  // C and D: a row of the Level / Players needed list.
+  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 48 },
+  settingTitle: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
+  settingValue: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  settingValueText: { ...typography.body, color: colors.textMuted },
+  // E: the summary line's one tappable word.
+  word: { color: colors.brand, ...font('600') },
+  // F: the pill beside Post, as tall as Post.
+  pill: { ...lift, flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 48, paddingHorizontal: spacing.md + 2, borderRadius: radius.pill, backgroundColor: colors.surface },
+  pillText: { ...typography.body, ...font('600'), color: colors.text },
 });

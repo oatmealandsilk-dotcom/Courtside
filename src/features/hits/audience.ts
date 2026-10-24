@@ -22,8 +22,13 @@ export const AUDIENCES: { value: HitAudience; icon: 'people-outline' | 'mail-unr
  * too ai"): 'now' is today's rows; 'A' one three-part switch like the Game
  * chips, 'B' three slim text rows with a check. A and B also drop the
  * open-hit banner and cut the note under Post to one line.
+ * Oct 24 (later, he liked neither): 'C' one quiet setting row ("Who sees it
+ * Everyone ›") that opens a small menu; 'D' one switch, "Open to players
+ * nearby", off showing Invite first / Only invited; 'E' the answer as a
+ * tappable word in the title's summary line, no part on the page; 'F' a small
+ * "Everyone ▾" pill beside Post. C, E and F share one small menu.
  */
-export const ASK_HIT_LOOK = 'now' as 'now' | 'A' | 'B';
+export const ASK_HIT_LOOK = 'now' as 'now' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F';
 
 /** The calmer looks' words: a short name (the switch has a third of a row each) and one line, shown for the chosen answer only. */
 export const AUDIENCE_SHORT: Record<HitAudience, { short: string; line: string }> = {
