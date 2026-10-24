@@ -45,10 +45,12 @@
 --     from Your sessions does the same (it no longer comes back to To do).
 --     A tracker that takes the session back (WHOOP deleted it) takes the
 --     auto-logged session with it, unless it was posted or has tags. A
---     tracker that changes its length changes the untouched session's too.
+--     tracker that changes its length changes the untouched session's too
+--     (never minutes the player changed, never one logged on a twin's length).
 --   * The player's own log wins: logging a session (any app build, even one
 --     that never saw the auto log) takes the place of an untouched auto log
---     of it (no post, no tags) instead of failing with "Already logged.".
+--     of it (no post, no tags, no score or other change) instead of failing
+--     with "Already logged.".
 --   * Invites: a session the server logged by itself is not the invitee
 --     doing something (invite_first_action, invite_second_day).
 --   * No backfill: sessions already waiting in To do stay there.
@@ -70,10 +72,10 @@ do $$
 declare
   r record;
   want jsonb := '{
-    "note_detected_activity": ["804e5d88e5a616bd9890a116f8d749bd", "9a0b06b7998de89c687b7565a695f38d"],
+    "note_detected_activity": ["804e5d88e5a616bd9890a116f8d749bd", "ef023031bab2d4e925e42b010d05c3eb"],
     "send_activity_pushes":   ["662ae4e0364d645f59480587a15c2b5c", "42d79ffd3e542dd6c7bf0d59a26e67b5"],
-    "sweep_activities":       ["f4f320c3bf39edc4bb488c1966b4900b", "5485dc5bfbd06b393e33a98f3df766fb"],
-    "record_activity":        ["7dd7db000e6fe7421b6147c4d8b18eca", "9f3886906f9636336f08a1a445b0a4a5"],
+    "sweep_activities":       ["f4f320c3bf39edc4bb488c1966b4900b", "e0ae64033e3d782af7b04a8cc7a3a726"],
+    "record_activity":        ["7dd7db000e6fe7421b6147c4d8b18eca", "be86a0c3b9b708784d420575f42cdd48"],
     "mark_activity_logged":   ["044c9ee535f1637deae6e5efea2e9bfe", "22ed463e49e4793805aeb63cd3174390"],
     "withdraw_activity":      ["18f79010bf2780b2719160e9a7d44962", "d9571fe1d56ac2f53891d4979cce908a"],
     "invite_first_action":    ["d908956bf0346e22406b4ba45e4b6ba2", "921304feccd26712d5098653ecce73b6"],
@@ -155,6 +157,13 @@ begin
   if not public.tennis_allowed(v_by.user_id, v_by.source) then return false; end if;
   -- Settings → "Log tennis automatically" (on unless switched off).
   if (select us.auto_log from public.user_state us where us.user_id = v_a.user_id) is false then return false; end if;
+  -- Already logged by hand (a tennis session of theirs saved between the
+  -- start and 12 hours after the end of either copy): never a second one.
+  if exists (select 1 from public.practice_sessions s where s.user_id = v_a.user_id and s.activity_id is null and not s.auto_logged
+               and s.kind in ('practice', 'match', 'drills')
+               and s.created_at between least(v_a.started_at, v_by.started_at) and greatest(v_a.ended_at, v_by.ended_at) + interval '12 hours') then
+    return false;
+  end if;
   begin
     -- No place, score or heart rate: the player adds what they like when they post it.
     -- mark_activity_logged then marks the row 'logged' with this session.
@@ -194,10 +203,11 @@ begin
   -- The same session seen twice (WHOOP and the Watch, say): the earlier row
   -- carries the alert, this one stays quiet. Only ever the same sport. A copy
   -- already logged counts whichever was filed first: two copies filed at the
-  -- same moment (a webhook and a sync) never both log themselves (185).
+  -- same moment (a webhook and a sync) never both log themselves, and a copy
+  -- already filed (noted under this lock) counts as the earlier one (185).
   select o.id into v_twin from public.detected_activities o
    where o.user_id = v_a.user_id and o.id <> v_a.id and o.sport = v_a.sport and o.status in ('new', 'logged', 'dismissed')
-     and (o.created_at <= v_a.created_at or o.status = 'logged')
+     and (o.created_at <= v_a.created_at or o.status = 'logged' or o.notified_at is not null)
      and (abs(extract(epoch from o.started_at - v_a.started_at)) <= 600
           or extract(epoch from least(o.ended_at, v_a.ended_at) - greatest(o.started_at, v_a.started_at))
              >= 0.5 * least(extract(epoch from o.ended_at - o.started_at), extract(epoch from v_a.ended_at - v_a.started_at)))
@@ -376,9 +386,10 @@ begin
     elsif v_note = 'duplicate' then
       -- The later copy that got its earlier, shorter copy logged after all
       -- (note_detected_activity's twin rule): that one's "Tennis logged" goes out here.
+      -- Only a session logged in this very run: one logged before was announced then.
       select d.duplicate_of into v_d from public.detected_activities d where d.id = r.id;
       if v_d is not null and exists (select 1 from public.detected_activities o join public.practice_sessions s on s.id = o.session_id
-                                      where o.id = v_d and o.status = 'logged' and s.auto_logged) then
+                                      where o.id = v_d and o.status = 'logged' and s.auto_logged and s.created_at = now()) then
         v_filed := v_filed || v_d;
       end if;
     end if;
@@ -397,7 +408,9 @@ revoke all on function public.sweep_activities() from public, anon, authenticate
 
 -- ------------------------------------------------- 6. filing a session
 -- 138's, but it keeps the unsure flag, and an untouched auto-logged session
--- follows a change of length. Its answer says 'auto' when logged for them.
+-- follows a change of length of its own row (only while it still has that
+-- row's earlier length: never a twin's, never one the player changed). Its
+-- answer says 'auto' when logged for them.
 create or replace function public.record_activity(u uuid, src text, ext text, p jsonb, quiet boolean default false) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -412,6 +425,7 @@ declare
   v_id uuid;
   v_note text;
   v_status text;
+  v_prev int;
 begin
   -- What it was: 'tennis' when the sender does not say (WHOOP and the other trackers, older phones).
   v_sport := coalesce(nullif(lower(btrim(p->>'sport')), ''), 'tennis');
@@ -439,6 +453,8 @@ begin
   pct := public.activity_int(v_pct, 0, 100);
   hr_ok := pct is null or pct >= 50;
   v_strain := case when p->>'strain' ~ '^[0-9]+([.][0-9]+)?$' then case when (p->>'strain')::numeric <= 21 then round((p->>'strain')::numeric, 1) end end;
+  -- This row's length before this filing (null when it is new): see below.
+  select d.minutes into v_prev from public.detected_activities d where d.user_id = u and d.source = src and d.external_id = ext;
 
   insert into public.detected_activities as d (user_id, source, external_id, sport, started_at, ended_at, tz_offset_min, minutes, avg_hr, max_hr, kcal, strain, score_state, device, hr_zones, distance_m, unsure)
   values (
@@ -479,10 +495,14 @@ begin
   returning d.id into v_id;
 
   -- A tracker that changed the length (a WHOOP re-score): an auto-logged
-  -- session nobody posted yet follows it (185).
+  -- session nobody posted yet follows it (185), only while it still has this
+  -- row's earlier length. One logged on a longer twin's length (Apple's 15
+  -- minutes, WHOOP's 60) keeps it when the short copy is sent again, and
+  -- minutes the player changed are never overwritten.
   update public.practice_sessions s set minutes = mins
     from public.detected_activities d
-   where d.id = v_id and s.id = d.session_id and s.user_id = u and s.auto_logged and s.minutes <> mins
+   where d.id = v_id and s.id = d.session_id and s.user_id = u and s.auto_logged
+     and s.minutes = v_prev and s.minutes <> mins
      and public.session_unposted(s.id, u);
 
   v_note := public.note_detected_activity(v_id, quiet);
@@ -523,7 +543,8 @@ revoke all on function public.mark_activity_logged() from public, anon, authenti
 -- build from before this file, or a phone that has not read the auto log
 -- yet): their log, with what they chose (match, score, minutes), takes its
 -- place instead of failing with "Already logged.". Only while the auto log
--- is untouched (no post, nobody tagged); otherwise the unique index answers
+-- is untouched (no post, nobody tagged, still a plain practice with no score,
+-- result, opponent, note or court); otherwise the unique index answers
 -- as before. Runs after guard_session_activity (names go in order), so the
 -- activity is already known to be theirs.
 create or replace function public.replace_auto_log() returns trigger
@@ -533,6 +554,7 @@ begin
     perform set_config('courtside.replacing_auto', '1', true);
     delete from public.practice_sessions s
      where s.activity_id = new.activity_id and s.user_id = new.user_id and s.auto_logged
+       and s.kind = 'practice' and s.sets is null and s.won is null and coalesce(s.opponent, '') = '' and coalesce(s.note, '') = '' and s.court_id is null
        and public.session_unposted(s.id, s.user_id)
        and not exists (select 1 from public.session_tags t where t.session_id = s.id);
     perform set_config('courtside.replacing_auto', '', true);
@@ -649,17 +671,17 @@ do $$
 declare
   f record;
   want jsonb := '{
-    "note_detected_activity(uuid,boolean,boolean)": "9a0b06b7998de89c687b7565a695f38d",
+    "note_detected_activity(uuid,boolean,boolean)": "ef023031bab2d4e925e42b010d05c3eb",
     "send_activity_pushes(uuid,uuid[])": "42d79ffd3e542dd6c7bf0d59a26e67b5",
-    "sweep_activities()": "5485dc5bfbd06b393e33a98f3df766fb",
-    "record_activity(uuid,text,text,jsonb,boolean)": "9f3886906f9636336f08a1a445b0a4a5",
+    "sweep_activities()": "e0ae64033e3d782af7b04a8cc7a3a726",
+    "record_activity(uuid,text,text,jsonb,boolean)": "be86a0c3b9b708784d420575f42cdd48",
     "mark_activity_logged()": "22ed463e49e4793805aeb63cd3174390",
     "withdraw_activity(uuid,text,text)": "d9571fe1d56ac2f53891d4979cce908a",
-    "auto_log_activity(uuid,uuid)": "7c46097c4c3e8aa429d2a299407999a6",
+    "auto_log_activity(uuid,uuid)": "1798d5cf3efbfa7ae723372209347ff4",
     "remove_auto_log(uuid)": "3d98c7b6be1719f47bc0d10ecfb592ac",
     "activity_day(uuid,timestamp with time zone,integer)": "c89246ac98557b36d290aa63d9e44329",
     "session_unposted(uuid,uuid)": "67a5c254f1a37d6c700f64fb88fa05d6",
-    "replace_auto_log()": "830c9cbba8bf899a665689f5a9da3b89",
+    "replace_auto_log()": "0a214f57016f1731e7202588dc8d5fda",
     "invite_first_action(uuid,uuid)": "921304feccd26712d5098653ecce73b6",
     "invite_second_day(uuid,timestamp with time zone)": "f1c199bd787c4e2f55115e25d8b8156d"
   }';

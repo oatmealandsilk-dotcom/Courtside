@@ -107,7 +107,8 @@ export function useTrackerSession(activityId: ID | undefined) {
   const save = async (input: LogInput): Promise<ID> => {
     if (!activity) throw new Error('That session is no longer here.');
     if (logged) return logged.id;
-    if (adopting) throw new Error('Already logged.');
+    // Its server-logged session is still on its way: a moment, not "Already logged.".
+    if (adopting) throw new Error('Saving…');
     if (saving.current) throw new Error('Saving…');
     saving.current = true;
     try {
