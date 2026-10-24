@@ -33,14 +33,23 @@
 //                         come from that tracker yet). Answers {fresh, days}:
 //                         the sessions it just filed and how many days it
 //                         looked back. The app asks when it opens, at most
-//                         hourly, and on "Sync now"
-//   /disconnect         — (signed-in) {provider}: tells the tracker, removes what
+//                         hourly, and on "Sync now". Always quiet (the phone
+//                         shows its own banner)
+//   /sync-all           — (the server's hourly pg_cron job only, migration 184:
+//                         header x-courtside-sync = Vault "trackers_sync_secret")
+//                         the same 36-hour look for every connection that reads
+//                         tennis, 4 at a time, for at most 100 s, with the
+//                         lock-screen alert on for sessions of 20 minutes or
+//                         more. Answers 202 at once and carries on. Owner, Oct 24:
+//                         "Do auto sync"
+//   /disconnect        — (signed-in) {provider}: tells the tracker, removes what
 //                         it sent (forget_tracker_data), forgets the keys
 //
 // Deploy:   supabase functions deploy trackers --no-verify-jwt
 //           (the trackers' redirects carry no app token; /start, /finish,
-//            /sync and /disconnect check the person's token themselves).
-//           Run migration 69 first.
+//            /sync and /disconnect check the person's token themselves;
+//            /sync-all checks the scheduler's secret).
+//           Run migration 69 first; 183 and 184 for the hourly run.
 // Secrets:  FITBIT_CLIENT_ID / FITBIT_CLIENT_SECRET (a Google Cloud OAuth
 //           client of type "Web application", with the Google Health API
 //           switched on), OURA_CLIENT_ID / OURA_CLIENT_SECRET,
@@ -188,6 +197,27 @@ async function report(uid: string, message: string, onceIn?: { tag: string; hour
     const { error } = await admin.from('app_errors').insert({ user_id: uid, message: message.slice(0, 2000), screen: 'trackers', platform: 'server', fatal: false });
     if (error) console.error('[trackers] report', error.message);
   } catch { /* best effort */ }
+}
+/**
+ * Whether this connection is still owed its one look back over the whole
+ * LOOK_BACK_DAYS: it connected before the 30-day first look (Oct 24) and
+ * nothing is kept from this tracker. Once only: the "nothing kept" note
+ * (syncTennis) marks that it ran, and anything kept ends it. A newer
+ * connection already looked 30 days. Asked by the app's /sync and by the
+ * hourly run alike, so whichever comes first does the catch-up (the hourly
+ * run often comes first, and its 36-hour look would otherwise keep a session
+ * and end the catch-up before days 2 to 30 were ever looked at).
+ */
+async function catchUpDue(uid: string, p: ProviderId): Promise<boolean> {
+  const [{ count, error: e1 }, { data: hc, error: e2 }, { count: looked, error: e3 }] = await Promise.all([
+    admin.from('detected_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('source', p),
+    admin.from('health_connections').select('connected_at').match({ user_id: uid, provider: p }).maybeSingle(),
+    admin.from('app_errors').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('screen', 'trackers').like('message', `[trackers] ${p} nothing kept%`),
+  ]);
+  // Not sure: no catch-up this time (the next sync asks again).
+  if (e1 || e2 || e3) return false;
+  const before = !hc?.connected_at || Date.parse(hc.connected_at as string) < Date.parse(FIRST_LOOK_FROM);
+  return count === 0 && before && (looked ?? 0) === 0;
 }
 const unlock = (uid: string, p: ProviderId) => admin.from('tracker_tokens').update({ refresh_lock_until: null }).match({ user_id: uid, provider: p }).then(() => undefined);
 const tokenRow = async (uid: string, p: ProviderId) => (await admin.from('tracker_tokens').select('*').match({ user_id: uid, provider: p }).maybeSingle()).data as
@@ -450,39 +480,63 @@ async function polarTennis(uid: string, since: Date): Promise<Found> {
 const FIND: Record<ProviderId, (uid: string, since: Date) => Promise<Found>> = { fitbit: fitbitTennis, oura: ouraTennis, polar: polarTennis };
 
 /**
- * Files tennis from the last `hours`, quietly (the app shows its own banner).
- * A session the tracker no longer lists as tennis (deleted, or changed) is
- * taken back, unless it was logged, as WHOOP's are. Returns the ids just filed.
+ * Only a session this long or longer may buzz the lock screen (owner, Oct 24:
+ * "I like only sessions over 20"). Shorter ones are still filed, quietly, into
+ * To do and Notifications. The database has the same rule for every tracker
+ * (send_activity_pushes, migration 183); this keeps /sync-all quiet for them
+ * even before that migration is in.
  */
-async function syncTennis(uid: string, p: ProviderId, hours: number): Promise<string[]> {
+const ALERT_MIN_MINUTES = 20;
+const longEnough = (s: Session) => (Date.parse(s.payload.ended_at) - Date.parse(s.payload.started_at)) / 60_000 >= ALERT_MIN_MINUTES - 0.5;
+
+/**
+ * Files tennis from the last `hours`. Quietly unless `alerts` (the app's own
+ * /sync: the phone shows its own banner); with `alerts` (/sync-all, the
+ * hourly run on the server) a session of ALERT_MIN_MINUTES or more may send
+ * "Tennis detected", by the database's usual rules (note_detected_activity:
+ * once per session, not at night where it was played, not when switched off,
+ * not when it ended over 12 hours ago). A session already filed, by either,
+ * is never alerted again (record_activity upserts by the tracker's own id,
+ * and note_detected_activity answers 'already' once notified_at is set).
+ * A session the tracker no longer lists as tennis (deleted, or changed) is
+ * taken back, unless it was logged, as WHOOP's are. `hourly`: the server's
+ * run (its failures are reported at most daily). Returns the ids just filed.
+ */
+async function syncTennis(uid: string, p: ProviderId, hours: number, alerts = false, hourly = alerts): Promise<string[]> {
   const { data: ok } = await admin.rpc('tennis_allowed', { u: uid, src: p });
   if (ok !== true) return [];
   const since = new Date(Date.now() - hours * 3_600_000);
   const found = await FIND[p](uid, since);
+  // The hourly run reports a lasting problem at most daily; the app's own sync every 6 hours.
+  const quietFor = hourly ? 24 : 6;
   if (found.refused) { await setReadsWorkouts(uid, p, false); await report(uid, `[trackers] ${p} refused: tennis turned off, the player must connect again`); return []; }
   if (found.failed) {
     // Not called synced: the time on the player's screen stays the last one that worked.
-    await report(uid, `[trackers] ${p} sync failed: ${found.failed}`, { tag: `[trackers] ${p} sync failed`, hours: 6 });
+    await report(uid, `[trackers] ${p} sync failed: ${found.failed}`, { tag: `[trackers] ${p} sync failed`, hours: quietFor });
     return [];
   }
   const fresh: string[] = [];
   let filed = 0;
-  // A failing record is said once per sync, and at most every 6 hours (crash reports share a rate limit).
+  // A failing record is said once per sync, and at most every 6 hours (crash reports share a rate limit);
+  // every 24 from the hourly run, so a connection that stays broken does not fill the crash checks.
   let reported = false;
   for (const s of found.sessions) {
-    const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: true });
-    if (error) { console.error(`[trackers] ${p} record`, error.message); if (!reported) { reported = true; await report(uid, `[trackers] ${p} record: ${error.message}`, { tag: `[trackers] ${p} record`, hours: 6 }); } continue; }
+    const { data, error } = await admin.rpc('record_activity', { u: uid, src: p, ext: s.ext, p: s.payload, quiet: !(alerts && longEnough(s)) });
+    if (error) { console.error(`[trackers] ${p} record`, error.message); if (!reported) { reported = true; await report(uid, `[trackers] ${p} record: ${error.message}`, { tag: `[trackers] ${p} record`, hours: quietFor }); } continue; }
     if (data?.id) filed += 1;
     if (data?.note === 'filed' || data?.note === 'pushed') fresh.push(data.id);
   }
   // A long look (a week or more: connecting, "Sync now", a first look back)
-  // that kept nothing: say what the tracker did list (Fitbit), so "my
-  // sessions don't show" has an answer without the server's log. None at all
-  // means another Google account, or a watch not synced to its app yet.
-  if (found.skipped && hours >= 7 * 24 && filed === 0) {
-    const other = Object.entries(found.skipped);
+  // that kept nothing: say so, for every tracker, and what it did list
+  // (Fitbit), so "my sessions don't show" has an answer without the server's
+  // log. None at all means another Google account, or a watch not synced to
+  // its app yet. This note is also what marks the one-time catch-up as done
+  // (catchUpDue), so Oura and Polar get it too.
+  if (hours >= 7 * 24 && filed === 0) {
+    const other = found.skipped ? Object.entries(found.skipped) : null;
     const tag = `[trackers] ${p} nothing kept`;
-    await report(uid, `${tag} in ${Math.round(hours / 24)} days; ${found.sessions.length} tennis; other workouts: ${other.length ? other.map(([k, n]) => `${k}×${n}`).join(', ') : 'none listed'}${found.complete ? '' : ' (list cut short)'}`, { tag, hours: 24 });
+    const listed = other ? `; other workouts: ${other.length ? other.map(([k, n]) => `${k}×${n}`).join(', ') : 'none listed'}` : '';
+    await report(uid, `${tag} in ${Math.round(hours / 24)} days; ${found.sessions.length} tennis${listed}${found.complete ? '' : ' (list cut short)'}`, { tag, hours: 24 });
   }
   if (found.complete) {
     const { data: mine } = await admin.from('detected_activities').select('external_id').eq('user_id', uid).eq('source', p)
@@ -529,6 +583,114 @@ async function revoke(uid: string, p: ProviderId) {
       await fetch(`https://www.polaraccesslink.com/v3/users/${encodeURIComponent(row.member_id)}`, { method: 'DELETE', signal: t, headers: { authorization: `Bearer ${row.access_token}` } }).then((r) => r.body?.cancel());
     }
   } catch { /* best effort */ }
+}
+
+// ------------------------------------------------- the hourly run (auto sync)
+// Owner, Oct 24: "Do auto sync": "Tennis detected — log it?" arrives on its
+// own, with the app closed. pg_cron calls /sync-all once an hour (migration
+// 184); before this the trackers were read only when the app opened.
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void } | undefined;
+/** Players synced at the same time: gentle on Google's, Oura's and Polar's rate limits. */
+const SYNC_ALL_AT_ONCE = 4;
+/** No new player is started after this; the run's wall-clock limit is 150 s (400 s on a paid plan). */
+const SYNC_ALL_BUDGET_MS = 100_000;
+/**
+ * A connection the phone (or a run) synced this recently is left for the next
+ * run. The job runs at 20 and 50 past (migration 184); 25 minutes lets each
+ * run reach a player the one before it synced.
+ */
+const SYNC_ALL_FRESH_MS = 25 * 60_000;
+/** Rows read a page at a time: the API answers at most 1000 rows a select, whatever .limit asks. */
+const PAGE = 1000;
+/** The phone's own look: the last 36 hours. */
+const SYNC_ALL_HOURS = 36;
+
+/**
+ * The header pg_cron sends, checked against the Vault secret
+ * "trackers_sync_secret" (made by migration 184, never typed or seen by
+ * anyone) by trackers_sync_ok, which only the server may call. False on any
+ * doubt, so nothing but the scheduled job gets in.
+ */
+async function isScheduler(req: Request): Promise<boolean> {
+  const s = req.headers.get('x-courtside-sync') ?? '';
+  if (s.length < 32 || s.length > 200) return false;
+  const { data, error } = await admin.rpc('trackers_sync_ok', { s });
+  if (error) console.error('[trackers] sync-all check', error.message);
+  return data === true;
+}
+
+/** Every row a select gives, a page at a time (at most 50 pages). */
+async function allRows<T>(page: (from: number, to: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>): Promise<T[]> {
+  const out: T[] = [];
+  for (let i = 0; i < 50; i += 1) {
+    const { data, error } = await page(i * PAGE, i * PAGE + PAGE - 1);
+    if (error) throw new Error(error.message);
+    out.push(...((data ?? []) as T[]));
+    if ((data ?? []).length < PAGE) break;
+  }
+  return out;
+}
+
+/**
+ * Every connection that reads tennis (Fitbit, Oura, Polar, set up on the
+ * server, with keys), longest since a sync first, each given the usual
+ * 36-hour look with alerts on (or its one 30-day catch-up, catchUpDue). One
+ * player's failure never stops the rest: it is reported once (app_errors,
+ * screen 'trackers', at most every 24 hours).
+ *
+ * One session, one alert: Polar Flow and Oura can save their sessions into
+ * Apple Health, where the iPhone's own watcher (modules/workout-watch) alerts
+ * for any tennis workout at once. For a player who also reads tennis from
+ * Apple Health, an Oura or Polar session is filed quietly here, and the
+ * phone's alert stands in. (Fitbit does not write to Apple Health.)
+ */
+async function syncAll(): Promise<{ players: number; done: number; failed: number; left: number }> {
+  const t0 = Date.now();
+  const live = PROVIDERS.filter(isSetUp);
+  const tally = { players: 0, done: 0, failed: 0, left: 0 };
+  if (!live.length) return tally;
+  type Conn = { user_id: string; provider: ProviderId; last_synced_at: string | null };
+  let conns: Conn[], keys: { user_id: string; provider: string }[], apple: { user_id: string }[];
+  try {
+    [conns, keys, apple] = await Promise.all([
+      allRows<Conn>((a, b) => admin.from('health_connections').select('user_id, provider, last_synced_at').in('provider', live).eq('reads_workouts', true)
+        .order('last_synced_at', { ascending: true, nullsFirst: true }).order('user_id').order('provider').range(a, b)),
+      allRows<{ user_id: string; provider: string }>((a, b) => admin.from('tracker_tokens').select('user_id, provider').in('provider', live)
+        .order('user_id').order('provider').range(a, b)),
+      live.some((p) => p !== 'fitbit')
+        ? allRows<{ user_id: string }>((a, b) => admin.from('health_connections').select('user_id').eq('provider', 'apple-health').eq('reads_workouts', true)
+          .order('user_id').range(a, b))
+        : Promise.resolve([]),
+    ]);
+  } catch (e) { console.error('[trackers] sync-all list', String(e)); return tally; }
+  const keyed = new Set(keys.map((k) => `${k.user_id}:${k.provider}`));
+  const onPhone = new Set(apple.map((r) => r.user_id));
+  const todo = conns
+    .filter((c) => keyed.has(`${c.user_id}:${c.provider}`))
+    .filter((c) => !c.last_synced_at || Date.now() - Date.parse(c.last_synced_at) > SYNC_ALL_FRESH_MS);
+  tally.players = todo.length;
+  let next = 0;
+  const worker = async () => {
+    while (next < todo.length && Date.now() - t0 < SYNC_ALL_BUDGET_MS) {
+      const c = todo[next++];
+      try {
+        const hours = (await catchUpDue(c.user_id, c.provider)) ? LOOK_BACK_DAYS * 24 : SYNC_ALL_HOURS;
+        await syncTennis(c.user_id, c.provider, hours, !(c.provider !== 'fitbit' && onPhone.has(c.user_id)), true);
+        tally.done += 1;
+      } catch (e) {
+        tally.failed += 1;
+        console.error(`[trackers] ${c.provider} auto sync`, e);
+        await report(c.user_id, `[trackers] ${c.provider} auto sync: ${String(e)}`, { tag: `[trackers] ${c.provider} auto sync`, hours: 24 });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(SYNC_ALL_AT_ONCE, todo.length) }, worker));
+  tally.left = todo.length - next;
+  const said = JSON.stringify({ ...tally, ms: Date.now() - t0 });
+  // Players left for the next run: a backlog (too many players for one run) shows in the function's log.
+  if (tally.left > 0) console.warn('[trackers] sync-all backlog', said);
+  else console.log('[trackers] sync-all', said);
+  return tally;
 }
 
 Deno.serve(async (req) => {
@@ -606,6 +768,15 @@ Deno.serve(async (req) => {
     return go(`pending&p=${p}&n=${n}`);
   }
 
+  if (path === '/sync-all') {
+    // The server's own hourly run only: refused, and nothing said why, for anyone else.
+    if (req.method !== 'POST' || !(await isScheduler(req))) return json({ error: 'not allowed' }, 403);
+    // pg_net waits only seconds: answer at once, and carry on after the answer.
+    const run = syncAll().catch((e) => { console.error('[trackers] sync-all', e); return null; });
+    if (typeof EdgeRuntime !== 'undefined') { EdgeRuntime.waitUntil(run); return json({ started: true }, 202); }
+    return json({ ran: await run });
+  }
+
   const uid = await whoIs(req);
   if (!uid) return json({ error: 'Sign in first.' }, 401);
   const posted = await req.json().catch(() => ({})) as { provider?: unknown; back?: unknown; n?: unknown; days?: unknown };
@@ -645,18 +816,8 @@ Deno.serve(async (req) => {
   if (path === '/sync') {
     if (!(await tokenRow(uid, p))) return json({ error: `${NAME[p]} is not connected.` }, 400);
     let days = typeof posted.days === 'number' && posted.days > 0 ? Math.min(posted.days, LOOK_BACK_DAYS) : 1.5;
-    // A player who connected before the 30-day first look (this change, Oct 24) and has nothing
-    // kept from this tracker: one look back over the whole 30 days. Once only: the "nothing kept"
-    // note marks that it ran, and anything kept ends it. A newer connection already looked 30 days.
-    if (days < LOOK_BACK_DAYS) {
-      const [{ count }, { data: hc }, { count: looked }] = await Promise.all([
-        admin.from('detected_activities').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('source', p),
-        admin.from('health_connections').select('connected_at').match({ user_id: uid, provider: p }).maybeSingle(),
-        admin.from('app_errors').select('id', { count: 'exact', head: true }).eq('user_id', uid).eq('screen', 'trackers').like('message', `[trackers] ${p} nothing kept%`),
-      ]);
-      const before = !hc?.connected_at || Date.parse(hc.connected_at as string) < Date.parse(FIRST_LOOK_FROM);
-      if (count === 0 && before && (looked ?? 0) === 0) days = LOOK_BACK_DAYS;
-    }
+    // An older connection still owed its one 30-day look (catchUpDue) gets it now.
+    if (days < LOOK_BACK_DAYS && await catchUpDue(uid, p)) days = LOOK_BACK_DAYS;
     try { return json({ fresh: await syncTennis(uid, p, days * 24), days }); } catch (e) { console.error(`[trackers] ${p} sync`, e); await report(uid, `[trackers] ${p} sync: ${String(e)}`, { tag: `[trackers] ${p} sync:`, hours: 6 }); return json({ error: 'sync failed' }, 500); }
   }
 
