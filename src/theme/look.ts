@@ -17,8 +17,8 @@
 export type Roundness = 'now' | 'less' | 'much-less';
 export type WashLook = 'now' | 'soft' | 'faint' | 'none';
 
-export const ROUNDNESS: Roundness = 'now';
-export const WASH: WashLook = 'now';
+export const ROUNDNESS: Roundness = 'less';
+export const WASH: WashLook = 'faint';
 
 /** How much of each court's wash is drawn: 1 is today's. */
 export const WASH_SCALE = ({ now: 1, soft: 0.5, faint: 0.25, none: 0 } as const)[WASH as WashLook];
@@ -29,7 +29,7 @@ const SCALES = {
   'much-less': { xs: 4, sm: 8, card: 8, sheet: 14, chip: 8, input: 8 },
 } as const;
 
-const scale = ROUNDNESS === 'now' ? null : SCALES[ROUNDNESS as Exclude<Roundness, 'now'>];
+const scale = (ROUNDNESS as Roundness) === 'now' ? null : SCALES[ROUNDNESS as Exclude<Roundness, 'now'>];
 
 /**
  * A corner as it is today, at the chosen roundness. Today's value comes back
