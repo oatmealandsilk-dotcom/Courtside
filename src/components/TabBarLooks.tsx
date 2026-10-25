@@ -335,7 +335,8 @@ const styles = StyleSheet.create({
   splitTabs: { flex: 1 },
   splitPlus: { width: SHAPE.height, height: SHAPE.height },
   plusPill: { width: SHAPE.height, height: SHAPE.height, borderRadius: SHAPE.height / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  plusSolo: { alignSelf: 'stretch', width: SHAPE.height },
+  // The whole round button answers a tap, not just the + in it.
+  plusSolo: { width: SHAPE.height, height: SHAPE.height },
   slot: { flex: 1, alignSelf: 'stretch' },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   target: { alignSelf: 'stretch', alignItems: 'center' },
