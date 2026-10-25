@@ -81,6 +81,9 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
 
+/** The plain Create list (round 2, item 2): off until the owner says (Oct 25: "Don't change create tab yet"). */
+const CREATE_PLAIN = false;
+
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 /** What a session was, the log sheet's three. */
 const KINDS: { value: PracticeSession['kind']; label: string }[] = [
@@ -366,7 +369,8 @@ function Compose() {
   // The + menu as a plain list (Oct 25, "D all for less ai", item 2): a small icon at the left and one word a row,
   // thin lines between, no boxes and no explainer sentences (a screen reader still hears them). A status (a session
   // going, a video getting ready) still shows under its word. The challenge's one-card menu keeps its card.
-  const plainMenu = LESS_AI_ROUND2 && !entering;
+  // Held back for now (Oct 25, owner: "Don't change create tab yet"): the Create box keeps its boxes and sentences.
+  const plainMenu = CREATE_PLAIN && LESS_AI_ROUND2 && !entering;
   const navigation = useNavigation();
   const closing = useRef(false);
   const closeMenu = () => {
