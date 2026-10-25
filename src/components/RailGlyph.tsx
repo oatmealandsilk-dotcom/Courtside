@@ -48,11 +48,17 @@ const SHAPES: Record<Exclude<RailIcon, 'more'>, { d: string; cap?: 'round'; join
   save: { d: 'M352 48H160a48 48 0 00-48 48v368l144-128 144 128V96a48 48 0 00-48-48z', cap: 'round', join: 'round' },
 };
 /** A's line, in points. */
-const BOLD_LINE = 2.3;
+const BOLD_LINE = 2.4;
 /** A's dots, their radius on the 512 grid (today's 48): a touch fuller, to sit with the heavier lines. */
 const DOT = 54;
-/** Room around a drawing for its edge, so the edge is never cut off; the button's box stays `size` square. */
+/** Room around a drawing for its edge, so the edge is never cut off; the button's box stays the font's. */
 const PAD = 3;
+/**
+ * The icon font's line, as a share of its size: the box an outline took, with
+ * the drawing centred in it (the font's own room above and below). A drawn
+ * icon takes the same box, so the count under the heart stays where it was.
+ */
+const LINE = 1.1;
 /**
  * A's edge: the outline's crisp dark edge (GLYPH_EDGE's black, a point low),
  * drawn as two dark copies under the white, a wide faint one and a close
@@ -88,9 +94,10 @@ function BoldGlyph({ icon, on, size, ink, edge }: { icon: RailIcon; on: boolean;
       </G>
     );
   };
+  const box = size * LINE;
   return (
-    <View style={{ width: size, height: size }}>
-      <Svg width={size + PAD * 2} height={size + PAD * 2} viewBox={`${-room} ${-room} ${512 + room * 2} ${512 + room * 2}`} style={{ position: 'absolute', left: -PAD, top: -PAD }}>
+    <View style={{ width: size, height: box }}>
+      <Svg width={size + PAD * 2} height={size + PAD * 2} viewBox={`${-room} ${-room} ${512 + room * 2} ${512 + room * 2}`} style={{ position: 'absolute', left: -PAD, top: (box - size) / 2 - PAD }}>
         {edge ? EDGE.map(([extra, drop, strength], i) => draw(`edge${i}`, 'black', line + extra * unit, drop * unit, strength)) : null}
         {draw('glyph', ink, line)}
       </Svg>
