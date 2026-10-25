@@ -1,6 +1,7 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
+import { usePageLeaving } from '@/features/feed/pageLeaving';
 
 export interface ClipVideoHandle { seek: (seconds: number) => void; player: null; reattach: () => void }
 
@@ -23,8 +24,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Plays only on the screen you are looking at, as on a phone: a page pushed
   // over this one, or a tab slid away, holds it until you come back. The
   // comments stage is the exception: its clip plays on above the sheet.
+  // On a feed page a swipe has just been decided away from, it stops as the
+  // finger lifts, before the next page has landed (pageLeaving).
   const onTop = useIsFocused() || held;
-  const active = wanted && onTop;
+  const leaving = usePageLeaving();
+  const active = wanted && onTop && !leaving;
   const el = useRef<HTMLVideoElement>(null);
   // Rate and level are set on the element, and set again whenever it reloads
   // its file (Safari does on some seeks), so a half-speed clip stays half speed.

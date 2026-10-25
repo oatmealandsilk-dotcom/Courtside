@@ -5,6 +5,7 @@ import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, peekLeft, takeLeft } from '@/features/feed/clipResume';
+import { usePageLeaving } from '@/features/feed/pageLeaving';
 
 /** How many seconds of a clip are fetched before it counts as loaded and may start. */
 const PRELOAD_SECONDS = 3;
@@ -81,8 +82,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // whatever the page that drew it asked for, and it carries on when you
   // come back. A clip's own page needs to say nothing for this. The one
   // exception is the comments stage, which keeps its clip playing above it.
+  // On a feed page a swipe has just been decided away from, it stops (silent
+  // first) as the finger lifts, before the next page has landed (pageLeaving).
   const onTop = useIsFocused() || held;
-  const active = wanted && onTop;
+  const leaving = usePageLeaving();
+  const active = wanted && onTop && !leaving;
   // The player is made and freed by hand rather than by the toolkit's hook:
   // the hook freed a still-playing player when a page left the feed, and
   // its sound could run on after. Here it is silenced and stopped first,
@@ -292,10 +296,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       if (!wantPlay.current) wantedAt.current = Date.now();
       wantPlay.current = true;
       if (readyRef.current) begin.current();
-    } else if (active || !onTop) {
+    } else if (active || !onTop || leaving) {
       // Paused by the viewer, or covered: a page pushed over the feed (the
       // comments, a profile) or its tab slid away. Neither is a swipe, so it
       // holds right here and picks up from this spot however long that took.
+      // So does a swipe decided away from it (pageLeaving) until the feed has
+      // landed elsewhere: turned round, however slowly, it carries on from
+      // here (and a pause the viewer chose stays); landed elsewhere, the
+      // swipe rule below takes over from then.
       if (started.current) playFromHere.current = true;
       wantPlay.current = false;
       started.current = false;
@@ -316,7 +324,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       // never take the pause down with it, or the clip plays on after the swipe.
       safely(() => player.pause());
     }
-  }, [player, active, paused, trimStart, onTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [player, active, paused, trimStart, onTop, leaving]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); }; }, [player]);
   // The app leaves the front (home, lock, the app switcher, Control Centre, a
   // call): the clip stops right there, picture and sound, where it stood.

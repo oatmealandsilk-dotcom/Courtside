@@ -12,6 +12,7 @@ import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
+import { usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
 
@@ -65,8 +66,12 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Plays only on the screen you are looking at: a page pushed over this one,
   // or a tab slid away, holds it until you come back (the phone's player does
   // the same in ClipVideo). The comments stage keeps its clip playing.
+  // A swipe decided away from its page stops it as the finger lifts, before
+  // the next page has landed (pageLeaving), as the phone's ClipVideo does.
   const onTop = useIsFocused() || held;
-  const active = wanted && onTop;
+  const leaving = usePageLeaving();
+  const shown = wanted && onTop;
+  const active = shown && !leaving;
   const insets = useSafeAreaInsets();
   // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
   const drop = useContext(TopBandContext);
@@ -213,8 +218,10 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
         if ((e as { name?: string } | null)?.name !== 'NotAllowedError' || !onScreen.current) return;
         el.muted = true; setMuted(true); el.play().catch(() => setPaused(true));
       });
-    } else if (active || !onTop) {
+    } else if (active || !onTop || leaving) {
       // Paused by the viewer, or covered (a page pushed over the feed, another tab): held right here.
+      // So is a swipe decided away from it (pageLeaving) until the feed lands elsewhere: turned round,
+      // however slowly, it carries on from here; landed elsewhere, the swipe rule below takes over then.
       if (started.current) fromHere.current = true;
       started.current = false;
       // Stopped by the app or the viewer: the page coming back to the front does not start it again.
@@ -229,7 +236,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
       el.pause();
     }
     return () => { if (place) el.removeEventListener('loadedmetadata', place); el.pause(); };
-  }, [active, paused, trimStart, onTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [active, paused, trimStart, onTop, leaving]); // eslint-disable-line react-hooks/exhaustive-deps
   // Taken off the page while it was the clip on screen (the feed rebuilt its
   // pages): its spot is kept, so the page built in its place carries on from there.
   const latestUri = useRef(uri);
@@ -248,8 +255,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     el.volume = volume ?? 1;
   }, [speed, volume, fast]);
   // Swiped away or covered, a pause is forgotten; held still under a page
-  // opened over the comments stage, a pause the viewer chose is kept.
-  useEffect(() => { if (!active && !onStage) setPaused(false); }, [active, onStage]);
+  // opened over the comments stage, a pause the viewer chose is kept. A swipe
+  // still gliding away (pageLeaving) has not left yet: turned round, the pause stays.
+  useEffect(() => { if (!shown && !onStage) setPaused(false); }, [shown, onStage]);
   // Space bar on a computer: play / pause the clip on screen.
   useEffect(() => { if (!active) return; return onSpaceBar(togglePause); }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
