@@ -415,7 +415,8 @@ const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   content: { flexGrow: 1 },
   // The page's side margins, and the gap under the section row, which scrolls away with the content.
-  body: { paddingHorizontal: spacing.lg, paddingTop: 16 },
+  // 10 under the section row (Oct 24, owner: less space above the search so the map can be bigger).
+  body: { paddingHorizontal: spacing.lg, paddingTop: 10 },
   pullRow: { position: 'absolute', top: 0, left: 0, right: 0, height: PULL_DISC, alignItems: 'center', justifyContent: 'center' },
   webRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   updated: { position: 'absolute', alignSelf: 'center', top: 8, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },

@@ -640,7 +640,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     </Fold>
   );
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
-  const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 16 }}>
+  const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 12 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
@@ -1105,7 +1105,7 @@ const styleDefinitions = StyleSheet.create({
   searchClear: { position: 'absolute', right: 14 },
   searchCancel: { fontSize: 16, ...font('600'), color: colors.brand },
   searchIcon: { position: 'absolute', left: 16, zIndex: 1 },
-  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: inputCorner(radius.pill), paddingLeft: 42, paddingRight: spacing.lg, minHeight: 46, paddingVertical: 10, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  search: { ...typography.body, fontSize: 16, color: colors.text, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: inputCorner(radius.pill), paddingLeft: 42, paddingRight: spacing.lg, minHeight: 40, paddingVertical: 7, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
   // The map card while a search is up: kept, out of the layout. In a browser `display: none` keeps it.
   // On a phone it would not: the phone takes a view with display none off the screen entirely, its map's
   // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
