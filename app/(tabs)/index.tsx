@@ -17,6 +17,7 @@ import { GlassFadeScope, GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { TipBubble } from '@/components/TipBubble';
 import { useTip } from '@/features/tips/tips';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useArrived } from '@/lib/useArrived';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack, onPageChange, sheetOnTop } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -253,6 +254,8 @@ const sessionOnly = (p: { imageUrl?: string; videoUrl?: string; session?: unknow
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
 const phone = Platform.OS !== 'web' || !isDesktopBrowser();
+/** How many pages either side of the one open get their stand-in with the feed itself, on a phone (see the pages below). */
+const STAND_IN_REACH = 4;
 
 /**
  * The rail's icons and their sizes, matched by eye rather than by number: a
@@ -420,6 +423,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const { theme } = useTheme();
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready: appReady, followingIds, mutedIds, blockedIds, conversations } = app;
+  // Whether this feed's page has slid in (a profile's grid, a court's clips) or a moment has passed (the tab): see the stand-ins below.
+  const arrived = useArrived();
   // A guest's Feed (guest mode, Oct 17) is dealt once guest mode's posts are in, not from the empty list before them.
   const ready = appReady && (!app.isGuest || app.guestLoaded);
   // Instants are held back (features/stories/instantsSwitch, owner Oct 8): none dealt in and none
@@ -1933,6 +1938,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               if (!inReach(index)) {
                 // A page not built yet holds its slot with the brand on it, so a
                 // fast scroll lands on the mark (a post) or the name (a clip or thread).
+                // On a phone, a page more than STAND_IN_REACH away holds it with the plain page
+                // (same colour, same height) until the feed has arrived, then gets its stand-in
+                // too, as background work: a swipe moves one page, so none of those can be on
+                // screen before then. Building a stand-in for every post a player has held up a
+                // tap on their grid (Oct 24, owner: "Buttons need to be way more responsive").
+                // A browser lists every page at once: there they all keep it.
+                if (Platform.OS !== 'web' && !arrived && distance > STAND_IN_REACH) return <View key={pageKey} style={styles.holdPage} />;
                 return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
               }
               // The same over a built page whose picture has not landed yet.

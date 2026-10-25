@@ -141,13 +141,14 @@ export function TabsPager({ pathname }: { pathname: string }) {
     if (!communityLeft.current || TAB_PATHS[activeRef.current] === '/discuss') return;
     communityLeft.current = false;
     requestScrollToTop('/discuss', true);
-    requestSection('/discuss', 'discussions');
+    // Out of sight, so as background work: a tap on the tab you just reached goes first.
+    requestSection('/discuss', 'discussions', { background: true });
   }
   // Opened on another tab (a link straight to the Feed, a notification): Community was never left,
   // so it still sits on Find Players. It is put on Discussions now, out of sight, so a swipe from
   // the Feed brings in the section next door. Not when a page already asked for one.
   useEffect(() => {
-    if (TAB_PATHS[activeRef.current] !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions');
+    if (TAB_PATHS[activeRef.current] !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions', { background: true });
   }, []);
 
   // Shared values, not plain variables: the animation thread only ever sees a

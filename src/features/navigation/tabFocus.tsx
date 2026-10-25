@@ -17,6 +17,13 @@ import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/ca
 const TabFocusContext = createContext<boolean | undefined>(undefined);
 /** The same, as a box read on demand, for the theme's gate (reading the context would redraw it on every swipe). */
 const TabActiveBox = createContext<{ active: boolean } | undefined>(undefined);
+/**
+ * Only whether a tab sits in the tab row at all, which never changes. The route reads this, not
+ * TabFocusContext: reading that one redrew the leaving tab and the arriving tab whole, from the
+ * top, on every bar tap, before the row could start to glide (Oct 24, owner: "Buttons need to be
+ * way more responsive"). The parts that follow focus still hear it (useTabActive, useIsFocused).
+ */
+const InTabRowContext = createContext(false);
 
 export function TabFocus({ active, children }: { active: boolean; children: React.ReactNode }) {
   // Whether this tab is on show (its slot on screen, and no page opened over the tabs), worked out
@@ -27,11 +34,13 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   const box = useRef({ active }).current;
   useLayoutEffect(() => { box.active = active; }, [box, active]);
   return (
-    <TabFocusContext.Provider value={active}>
-      <TabActiveBox.Provider value={box}>
-        <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
-      </TabActiveBox.Provider>
-    </TabFocusContext.Provider>
+    <InTabRowContext.Provider value>
+      <TabFocusContext.Provider value={active}>
+        <TabActiveBox.Provider value={box}>
+          <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+        </TabActiveBox.Provider>
+      </TabFocusContext.Provider>
+    </InTabRowContext.Provider>
   );
 }
 
@@ -53,7 +62,7 @@ export function useTabActive(): boolean {
  */
 export function asTabRoute<P extends object>(Screen: React.ComponentType<P>, pane: string) {
   function TabRoute(props: P) {
-    const inPager = useContext(TabFocusContext) !== undefined;
+    const inPager = useContext(InTabRowContext);
     // The router hands every screen a `segment` prop of its own, so "no
     // props" never held and the hidden copy was fully alive: a second Home
     // feed, with its own player on the first clip, fighting the visible one.
