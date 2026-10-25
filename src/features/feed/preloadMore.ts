@@ -47,6 +47,10 @@ export const PRIME_LIMITS: PrimeLimits = {
   bytes: 1_000_000,
   // A link this slow is better left to the clips nearer: given up, and not tried again.
   giveUpMs: 8000,
+  // Stopped short of its second and going no further (on Android the 1 MB cap stops a heavier
+  // clip a little before it): what is in by then is kept, and the player is freed this soon
+  // after rather than held until `giveUpMs`.
+  stallMs: 1000,
 };
 
 /** One clip to start fetching: its address, and where it starts playing (a trimmed clip's kept start). */

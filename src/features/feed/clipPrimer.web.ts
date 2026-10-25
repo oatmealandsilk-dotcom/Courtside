@@ -1,5 +1,5 @@
-/** How much of a clip's beginning to fetch, the most it may cost, and how long to try (preloadMore). */
-export type PrimeLimits = { seconds: number; minSeconds: number; bytes: number; giveUpMs: number };
+/** How much of a clip's beginning to fetch, the most it may cost, how long to try, and how long a stopped fetch is waited on (preloadMore). */
+export type PrimeLimits = { seconds: number; minSeconds: number; bytes: number; giveUpMs: number; stallMs: number };
 
 /**
  * Fetches the very beginning of a clip in a browser, ahead of its page being built (the phone's
@@ -21,6 +21,9 @@ export function primeClip(uri: string, from: number, limits: PrimeLimits, done: 
   const video = document.createElement('video');
   let over = false;
   let placed = from <= 0.05;
+  // Where the fetch last stood and since when: one that stops short of `seconds` is done once it has sat still `stallMs`.
+  let lastAt = -1;
+  let movedAt = 0;
   const events = ['loadedmetadata', 'progress', 'canplay', 'canplaythrough', 'error'] as const;
   const free = () => {
     clearInterval(timer);
@@ -46,9 +49,15 @@ export function primeClip(uri: string, from: number, limits: PrimeLimits, done: 
       if (Math.abs(video.currentTime - from) > 0.05) { video.currentTime = from; return; }
     }
     const need = Math.min(limits.seconds, Math.max(0.3, length - from - 0.1));
+    // How far the fetch reaches from where the clip starts playing.
+    let at = 0;
     for (let i = 0; i < video.buffered.length; i += 1) {
-      if (video.buffered.start(i) <= from + 0.05 && video.buffered.end(i) >= from + need) { finish(true); return; }
+      if (video.buffered.start(i) <= from + 0.05 && video.buffered.end(i) > at) at = video.buffered.end(i);
     }
+    if (at >= from + need) { finish(true); return; }
+    // The browser stopped fetching short of it (as the phone's clipPrimer): what is in is kept.
+    const now = Date.now();
+    if (at !== lastAt) { lastAt = at; movedAt = now; } else if (at > from && now - movedAt >= limits.stallMs) finish(true);
   }
   events.forEach((name) => video.addEventListener(name, check));
   const timer = setInterval(check, 100);

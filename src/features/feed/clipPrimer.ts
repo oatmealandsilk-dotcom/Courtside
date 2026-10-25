@@ -2,8 +2,8 @@ import { AppState, Platform } from 'react-native';
 import { createVideoPlayer, type BufferOptions, type VideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
 
-/** How much of a clip's beginning to fetch, the most it may cost, and how long to try (preloadMore). */
-export type PrimeLimits = { seconds: number; minSeconds: number; bytes: number; giveUpMs: number };
+/** How much of a clip's beginning to fetch, the most it may cost, how long to try, and how long a stopped fetch is waited on (preloadMore). */
+export type PrimeLimits = { seconds: number; minSeconds: number; bytes: number; giveUpMs: number; stallMs: number };
 
 /** The sound's share of a clip's data a second, about what a phone records. */
 const AUDIO_BPS = 128_000;
@@ -31,6 +31,9 @@ export function primeClip(uri: string, from: number, limits: PrimeLimits, done: 
   // Until the clip's weight is known, a second; then as much as `bytes` buys, within the limits.
   let seconds = Math.min(limits.seconds, 1);
   let placed = from <= 0.05;
+  // Where the fetch last stood and since when: one that stops short of `seconds` is done once it has sat still `stallMs`.
+  let lastAt = -1;
+  let movedAt = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   let giveUp: ReturnType<typeof setTimeout> | undefined;
   const subs: { remove: () => void }[] = [];
@@ -72,7 +75,12 @@ export function primeClip(uri: string, from: number, limits: PrimeLimits, done: 
         if (Math.abs(p.currentTime - from) > 0.05) { p.currentTime = from; return; }
       }
       const need = Math.min(seconds, Math.max(0.3, length - from - 0.1));
-      if (p.bufferedPosition >= from + need) finish(true);
+      const at = p.bufferedPosition;
+      if (at >= from + need) { finish(true); return; }
+      // Android's byte cap stops a heavier clip just short of `need`, and it never gets further:
+      // what is in is kept, and the player is freed now rather than held until `giveUpMs`.
+      const now = Date.now();
+      if (at !== lastAt) { lastAt = at; movedAt = now; } else if (at > from && now - movedAt >= limits.stallMs) finish(true);
     } catch {
       finish(false);
     }
