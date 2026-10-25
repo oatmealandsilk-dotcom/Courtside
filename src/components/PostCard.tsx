@@ -38,7 +38,7 @@ import { goToTab } from '@/features/navigation/startTab';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -368,7 +368,7 @@ function PostCardInner({
       {short ? null : roomBox}
       <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} style={({ pressed }) => [styles.addComment, room === null && styles.addCommentWait, pressed && styles.addCommentPressed]}>
         {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length || LESS_AI_ROUND2 ? 'Add a comment…' : 'Be the first to comment…'}</Text>
       </Pressable>
       {short ? roomBox : null}
     </Card>

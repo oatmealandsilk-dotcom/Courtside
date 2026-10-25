@@ -79,3 +79,16 @@ export const LESS_AI_DISCUSS: boolean = true;
 
 /** "Do these quadrants" (Oct 24), panel 4 + 9 + 11: Your sessions without "Only you see this.", a flat summary card, rows that lead with the date, and no hours repeated on This week. */
 export const LESS_AI_SESSIONS: boolean = true;
+
+/**
+ * Round 2 of the hand-made pass (Oct 25). He saw the 12 most visible things
+ * left and said "D all for less ai": Profile's Tennis profile card on Clean
+ * drawn like the session sheet, the Create sheet as a plain list, quiet
+ * Follow in lists of people, Your sessions' This week card on Clean like the
+ * sheet, Notifications as one plain list, Discussions' name line without the
+ * @handle, the Coaching tab's AI coach row and lines, "Add a comment…", AI
+ * Coach without its paragraph, Tennis profile's Activity and Recent sessions
+ * rows, and a player's profile left-aligned with the streak as one line.
+ * Everything else from round 1 he did not pick stays behind LESS_AI (off).
+ */
+export const LESS_AI_ROUND2: boolean = true;

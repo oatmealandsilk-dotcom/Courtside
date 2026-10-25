@@ -73,7 +73,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { LESS_AI, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -804,7 +804,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                     <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                   </View>
-                  <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>
               </Pressable>
             ))}
@@ -833,7 +833,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                     <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
                   </View>
-                  <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
                 </View>
               </Pressable>
             )} />

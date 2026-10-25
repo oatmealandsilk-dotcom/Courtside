@@ -30,7 +30,7 @@ import { useApp } from '@/store/AppContext';
 import { InboxButton, UnreadBadge } from '@/components/InboxButton';
 import { unseenCount } from '@/features/activity/found';
 import { PlayerCard } from '@/components/tennis/PlayerCard';
-import { CardWash, cardLook } from '@/components/session/SessionCard';
+import { CardWash, boxLook, cardLook } from '@/components/session/SessionCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
 import { TilePin } from '@/components/TilePin';
@@ -54,7 +54,7 @@ import * as haptics from '@/lib/haptics';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -445,7 +445,8 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The banner's own colours (the session box's: cream here, the court colour on the city courts), so it fades into the real one in place.
-  const look = cardLook(theme);
+  // On Clean the banner is the stats sheet's light box (Oct 25, item 1), so its blank is too.
+  const look = LESS_AI_ROUND2 ? boxLook(theme) : cardLook(theme);
   const breathe = useSharedValue(0);
   useEffect(() => {
     breathe.value = withRepeat(withTiming(1, { duration: 900, easing: Easing.inOut(Easing.quad) }), -1, true);

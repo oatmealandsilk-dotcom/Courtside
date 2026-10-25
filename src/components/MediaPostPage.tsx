@@ -47,6 +47,7 @@ import { PhotoCarousel } from '@/components/PhotoCarousel';
 import { photosOf } from '@/features/compose/carousel';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { LESS_AI_ROUND2 } from '@/theme/look';
 
 interface Props {
   post: Post;
@@ -470,7 +471,7 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         {closed ? null : (
           <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id, focus: '1' } })} onLayout={measured(setEntry, entry)} style={({ pressed }) => [styles.addComment, pressed && styles.addCommentPressed]}>
             {currentUser ? <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={28} /> : null}
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length ? 'Add a comment…' : 'Be the first to comment…'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addCommentText}>{thread.length || LESS_AI_ROUND2 ? 'Add a comment…' : 'Be the first to comment…'}</Text>
           </Pressable>
         )}
       </View>

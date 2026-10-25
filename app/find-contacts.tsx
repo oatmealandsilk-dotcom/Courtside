@@ -17,7 +17,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
-import { corner } from '@/theme/look';
+import { LESS_AI_ROUND2, corner } from '@/theme/look';
 
 type Found = { match: ContactMatch; contactName?: string };
 type Phase = 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
@@ -141,7 +141,7 @@ export default function FindContacts() {
                   </View>
                 </Pressable>
                 {/* The pill knows about an ask sent to a private account: it reads Requested, not Follow. */}
-                <FollowPill small following={on} userId={match.id} name={match.name || match.handle} onPress={() => { const who = users.find((u) => u.id === match.id); if (on && who) confirmUnfollow(who, () => actions.toggleFollow(match.id)); else actions.toggleFollow(match.id); }} />
+                <FollowPill small soft={LESS_AI_ROUND2} following={on} userId={match.id} name={match.name || match.handle} onPress={() => { const who = users.find((u) => u.id === match.id); if (on && who) confirmUnfollow(who, () => actions.toggleFollow(match.id)); else actions.toggleFollow(match.id); }} />
               </View>
             );
           })}

@@ -25,7 +25,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /** People offered to follow on the page. */
 const PICKS = 3;
@@ -146,7 +146,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
                     <View style={styles.personMeta}><LevelPill profile={user.profile} small /><Text style={styles.reason} numberOfLines={1}>{reason}</Text></View>
                   </View>
                 </Pressable>
-                <FollowPill small soft={LESS_AI} following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
+                <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
               </View>
             ))}
             {/* Where to find the people you already know (owner, Oct 6). The teen rules are the Find friends page's own. */}
@@ -181,7 +181,7 @@ export function NearYouTag({ user, over = false, follow = true }: { user: User; 
     <View style={[styles.near, over && styles.nearOver, over && !follow && styles.nearOverLabel]}>
       <Ionicons name="location" size={14} color={colors.brand} />
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nearText}>Near you</Text>
-      {follow ? <FollowPill small following={following} userId={user.id} name={user.name.split(' ')[0]} onPress={() => (following ? confirmUnfollow(user, () => actions.toggleFollow(user.id)) : actions.toggleFollow(user.id))} /> : null}
+      {follow ? <FollowPill small soft={LESS_AI_ROUND2} following={following} userId={user.id} name={user.name.split(' ')[0]} onPress={() => (following ? confirmUnfollow(user, () => actions.toggleFollow(user.id)) : actions.toggleFollow(user.id))} /> : null}
     </View>
   );
 }

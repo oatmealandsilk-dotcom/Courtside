@@ -44,7 +44,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -372,7 +372,8 @@ function Waiting({ user }: { user: User }) {
     <View>
       {/* One for each row, as the mock counts them; each row says its own number ("4 workouts to log"). */}
       {/* "To do" (Oct 24, owner: "Rename to todo"), the name Your sessions already uses for the same list. */}
-      <SectionHead title="To do" count={LESS_AI ? undefined : (ask ? 1 : 0) + (w ? 1 : 0)} />
+      {/* No count circle beside the heading (Oct 25, "D all for less ai", item 10). */}
+      <SectionHead title="To do" count={LESS_AI_ROUND2 ? undefined : (ask ? 1 : 0) + (w ? 1 : 0)} />
       <Box>
         {ask && tagger ? (
           <Row first
@@ -429,8 +430,8 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   const who = from && fromFirst ? (s.kind === 'match' && from.role === 'opponent' ? `vs ${fromFirst}` : `with ${fromFirst}`) : people ? peopleText(people, false) : '';
   const note = s.note && !from ? s.note : '';
   const place = note.startsWith('At ') ? note.slice(3).split(' · ')[0] : '';
-  // The hand-made look (Oct 24): the date leads the row ("TUE" over "21"), so the line under says only who and where.
-  const sub = [who, LESS_AI ? null : dayLabel(s.day), place].filter(Boolean).join(' · ');
+  // The date leads the row ("TUE" over "21"), as on Your sessions (Oct 25, "D all for less ai", item 11), so the line under says only who and where.
+  const sub = [who, LESS_AI_ROUND2 ? null : dayLabel(s.day), place].filter(Boolean).join(' · ');
   const onOpen = from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
     : canScore(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
     : undefined;
@@ -440,7 +441,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   // A score is the small ScoreBoard beside the length (T1, Oct 22), so the title leaves it out.
   const board = canScore(s.kind) && !!s.sets?.length;
   return (
-    <Row first={first} minHeight={60} lead={LESS_AI ? <DayLead day={s.day} /> : <Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub || undefined} subLines={board ? 2 : 1}
+    <Row first={first} minHeight={60} lead={LESS_AI_ROUND2 ? <DayLead day={s.day} /> : <Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub || undefined} subLines={board ? 2 : 1}
       right={(
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {board ? <ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /> : null}
@@ -449,7 +450,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
       )}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}
-      accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}${LESS_AI ? `, ${dayLabel(s.day)}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
+      accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}${LESS_AI_ROUND2 ? `, ${dayLabel(s.day)}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
     />
   );
 }

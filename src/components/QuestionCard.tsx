@@ -18,7 +18,8 @@ import { Tappable } from '@/components/Tappable';
 import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI_DISCUSS } from '@/theme/look';
+import { LESS_AI_DISCUSS, LESS_AI_ROUND2 } from '@/theme/look';
+import { levelBadge } from '@/lib/badges';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -76,21 +77,26 @@ function QuestionCardInner({
 
   return (
     <Card onPress={onPress} style={styles.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI_DISCUSS ? 'nowrap' : 'wrap' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI_DISCUSS && !LESS_AI_ROUND2 ? 'nowrap' : 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
             after it. A thread carried in from outside keeps to the handle —
             the badge beside it already says where it came from. */}
+        {/* Oct 25 ("D all for less ai", item 6): the name alone, no @handle (it is on their profile), and the line may
+            wrap rather than cut anything short. A thread from outside still goes by its handle. */}
         <PlayerName userId={author?.id} style={[styles.footerText, LESS_AI_DISCUSS && { flexShrink: 1 }]} numberOfLines={1}>
-          {author && !question.source ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerName}>{author.name} </Text> : null}
-          @{author?.handle ?? 'player'}
+          {author && !question.source ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerName}>{author.name}{LESS_AI_ROUND2 ? '' : ' '}</Text> : null}
+          {LESS_AI_ROUND2 && author && !question.source ? null : `@${author?.handle ?? 'player'}`}
         </PlayerName>
         {question.source ? (
           <View style={styles.sourceBadge}>
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sourceText}>{question.source.label}</Text>
           </View>
-        ) : author ? <LevelPill profile={author.profile} small style={styles.levelPill} /> : null}
+        ) : author ? (LESS_AI_ROUND2
+          // The rating as plain grey words, not a pill (item 6).
+          ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.footerText, { flexShrink: 0 }]}>{levelBadge(author.profile).label}</Text>
+          : <LevelPill profile={author.profile} small style={styles.levelPill} />) : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
         {LESS_AI_DISCUSS ? (
           <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, pressed && { opacity: PRESS_DIM }]}>

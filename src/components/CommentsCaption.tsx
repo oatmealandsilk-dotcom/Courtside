@@ -21,7 +21,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, font, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI_ROUND2 } from '@/theme/look';
 
 /**
  * The post itself, at the top of its comments: who, the whole caption (never
@@ -105,7 +105,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
             {offerFollow.current ? (
               <FollowPill
                 small
-                soft={LESS_AI}
+                soft={LESS_AI_ROUND2}
                 following={following}
                 userId={author.id}
                 name={author.name}

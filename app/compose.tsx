@@ -79,7 +79,7 @@ import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
-import { corner } from '@/theme/look';
+import { LESS_AI_ROUND2, corner } from '@/theme/look';
 
 type Mode = 'clip' | 'post' | 'story' | 'hit';
 /** What a session was, the log sheet's three. */
@@ -363,6 +363,10 @@ function Compose() {
   const tight = windowH < 900 && !entering;
   const tighter = windowH < 760 && !entering;
   const choiceIcon = tighter ? 24 : 28;
+  // The + menu as a plain list (Oct 25, "D all for less ai", item 2): a small icon at the left and one word a row,
+  // thin lines between, no boxes and no explainer sentences (a screen reader still hears them). A status (a session
+  // going, a video getting ready) still shows under its word. The challenge's one-card menu keeps its card.
+  const plainMenu = LESS_AI_ROUND2 && !entering;
   const navigation = useNavigation();
   const closing = useRef(false);
   const closeMenu = () => {
@@ -1348,12 +1352,17 @@ function Compose() {
   );
 
   if (stage === 'choose') stageBack.current = () => { closeMenu(); return true; };
+  const choiceStyle = (line: boolean) => (plainMenu ? [styles.choiceRow, line && styles.choiceRowLine] : [styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]);
+  const menuIcon = plainMenu ? 22 : choiceIcon;
+  const choiceWords = (label: string, note: string, status: string | null) => (plainMenu
+    ? <View style={styles.choiceWords}><Text style={styles.choiceRowLabel}>{label}</Text>{status ? <Text style={styles.note}>{status}</Text> : null}</View>
+    : <><Text style={styles.choiceLabel}>{label}</Text><Text style={styles.note}>{note}</Text></>);
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
     <Reanimated.View style={[styles.choiceSheet, tight && styles.choiceSheetTight, { maxHeight: menuMaxH }, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
-      <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight]} bounces={false} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight, plainMenu && styles.choiceListPlain]} bounces={false} showsVerticalScrollIndicator={false}>
       {/* Session (Oct 6, owner chose "A": one card for both, so the menu stays five cards): a card like the
           others. Tapped, it opens the Session sheet (new-session.tsx; Oct 16, owner: "do a with week strip"):
           your week, Start a session, your tracker's sessions waiting to log, and Log one yourself. It took the
@@ -1363,27 +1372,29 @@ function Compose() {
         accessibilityRole="button"
         accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveState(liveSession) === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
         onPress={() => (!liveSession ? router.replace('/new-session') : liveState(liveSession) === 'finished' ? finishLive(liveSession, actions, { open: () => openLiveLog('replace') }) : router.replace('/live-session'))}
-        style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}
+        style={choiceStyle(false)}
       >
-        <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={choiceIcon} color={liveSession ? colors.open : colors.textMuted}/>
-        <Text style={styles.choiceLabel}>{!liveSession ? 'Session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
-        <Text style={styles.note}>{!liveSession ? 'Start one now, or log one you’ve played.' : [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ')}</Text>
+        <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={menuIcon} color={liveSession ? colors.open : colors.textMuted}/>
+        {(() => {
+          const status = liveSession ? [liveState(liveSession) === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ') : null;
+          return choiceWords(!liveSession ? 'Session' : liveState(liveSession) === 'finished' ? 'Log your session' : 'Session in progress', status ?? 'Start one now, or log one you’ve played.', status);
+        })()}
       </Pressable></Reanimated.View>}
-      <Reanimated.View entering={arrive(entering ? 0 : 1)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, entering && styles.choiceChallenge]}>
-        {preparing === 'video' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={choiceIcon} color={entering ? colors.brand : colors.textMuted}/>}<Text style={styles.choiceLabel}>{entering ? 'Choose your clip' : 'Clip'}</Text><Text style={styles.note}>{preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.'}</Text>
+      <Reanimated.View entering={arrive(entering ? 0 : 1)}><Pressable accessibilityRole="button" accessibilityLabel={entering ? `Choose your clip for the ${challenge.title} challenge` : 'Create a clip'} onPress={() => { setMode('clip'); void openDevice('video'); }} style={[choiceStyle(true), entering && styles.choiceChallenge]}>
+        {preparing === 'video' ? <PreparingRing size={menuIcon} done={prepDone} /> : <Ionicons name={entering ? 'trophy-outline' : 'videocam-outline'} size={menuIcon} color={entering ? colors.brand : colors.textMuted}/>}{choiceWords(entering ? 'Choose your clip' : 'Clip', preparing === 'video' ? 'Getting your video ready — shrinking it so it posts fast.' : entering ? `A video from your phone. #${challenge.tag} is already in the caption.` : 'Share a video from your device.', preparing === 'video' ? 'Getting your video ready…' : null)}
       </Pressable></Reanimated.View>
       {/* Entering the challenge: the clip is the only way in, so nothing else is offered. */}
-      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all', true); }} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
-        {preparing === 'all' ? <PreparingRing size={choiceIcon} done={prepDone} /> : <Ionicons name="images-outline" size={choiceIcon} color={colors.textMuted}/>}<Text style={styles.choiceLabel}>Post</Text><Text style={styles.note}>{preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.'}</Text>
+      {entering ? null : <Reanimated.View entering={arrive(2)}><Pressable accessibilityRole="button" accessibilityLabel="Create a post" onPress={() => { setMode('post'); void openDevice('all', true); }} style={choiceStyle(true)}>
+        {preparing === 'all' ? <PreparingRing size={menuIcon} done={prepDone} /> : <Ionicons name="images-outline" size={menuIcon} color={colors.textMuted}/>}{choiceWords('Post', preparing === 'all' ? 'Getting it ready…' : 'Choose from your photos and videos.', preparing === 'all' ? 'Getting it ready…' : null)}
       </Pressable></Reanimated.View>}
       {pickError ? <Text style={styles.pickError}>{pickError}</Text> : null}
       {/* Order (Oct 7, owner): what we most want people to post first — a session, then a clip; then a post, a thread, an Instant. */}
-      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
-        <Ionicons name="chatbubbles-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Thread or question</Text><Text style={styles.note}>Ask the community or start a conversation.</Text>
+      {entering ? null : <Reanimated.View entering={arrive(3)}><Pressable accessibilityRole="button" accessibilityLabel="Create a thread or question" onPress={() => router.replace('/ask')} style={choiceStyle(true)}>
+        <Ionicons name="chatbubbles-outline" size={menuIcon} color={colors.textMuted}/>{choiceWords(plainMenu ? 'Thread' : 'Thread or question', 'Ask the community or start a conversation.', null)}
       </Pressable></Reanimated.View>}
       {/* Instants are held back until the server's flag:instants says so (features/stories/instantsSwitch, owner Oct 8): no card, and no gap where it was. */}
-      {entering || !flagsOn.instants ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={[styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]}>
-        <Ionicons name="camera-outline" size={choiceIcon} color={colors.textMuted}/><Text style={styles.choiceLabel}>Instant</Text><Text style={styles.note}>A photo after you play. Up on the feed for a day.</Text>
+      {entering || !flagsOn.instants ? null : <Reanimated.View entering={arrive(4)}><Pressable accessibilityRole="button" accessibilityLabel="Take an Instant" onPress={() => router.replace('/hit')} style={choiceStyle(true)}>
+        <Ionicons name="camera-outline" size={menuIcon} color={colors.textMuted}/>{choiceWords('Instant', 'A photo after you play. Up on the feed for a day.', null)}
       </Pressable></Reanimated.View>}
       </ScrollView>
     </Reanimated.View>
@@ -1882,6 +1893,12 @@ const styleDefinitions = StyleSheet.create({
   choiceOptionTighter: { paddingVertical: 12, gap: 4 },
   choiceChallenge: { borderWidth: 1, borderColor: colors.brand },
   choiceLabel: { fontSize: 16, ...font('600'), color: colors.text },
+  // The plain list (LESS_AI_ROUND2): rows with a small icon and one word, a hairline between them.
+  choiceListPlain: { gap: 0 },
+  choiceRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 52, paddingVertical: 12 },
+  choiceRowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  choiceWords: { flex: 1, minWidth: 0, gap: 2 },
+  choiceRowLabel: { fontSize: 17, ...font('500'), color: colors.text },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   // What fades in as a handed-over sheet grows into the "Log it" page: everything on it, the sheet's own surface staying put.
   riseBody: { flex: 1 },

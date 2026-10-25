@@ -1,5 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
 import Animated, { Easing, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -678,7 +678,7 @@ export default function Notifications() {
                   // tabs. Never '/', the splash screen's address too, which opened a second app on top.
                   if (to === '/') { goHome(); requestScrollToTop('/'); } else router.push(to);
                 }}
-                style={({ pressed }) => [styles.row, group.unread && styles.rowUnread, pressed && !dead && styles.rowPressed]}
+                style={({ pressed }) => [styles.row, !heading && index > 0 && styles.rowLine, group.unread && styles.rowUnread, pressed && !dead && styles.rowPressed]}
               >
                 <View>
                   {/* Two faces, overlapped, when more than one person did it. */}
@@ -701,7 +701,7 @@ export default function Notifications() {
                       <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={32} /></View>
                     </View>
                   ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
-                  {group.kind === 'weekly-recap' || (LESS_AI && group.kind !== 'hit-called-off') ? null : (
+                  {group.kind === 'weekly-recap' || (LESS_AI_ROUND2 && group.kind !== 'hit-called-off') ? null : (
                     <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
                       {icon.name === 'hit'
                         ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
@@ -818,7 +818,7 @@ export default function Notifications() {
                   // In for your hit: straight to the hit's group chat, where the details get sorted.
                   <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Chat</Text></Pressable>
                 ) : (group.kind === 'follow' || group.kind === 'joined' || group.kind === 'map-new-player') && first && first !== currentUserId ? (
-                  <FollowPill small following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
+                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                     {thumb.uri ? <TileCover uri={thumb.uri} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />
@@ -845,9 +845,10 @@ const ROW_GLIDE = LinearTransition.duration(240).easing(Easing.bezier(0.25, 0.8,
 const ROW_OUT = FadeOut.duration(180);
 
 const styleDefinitions = StyleSheet.create({
-  list: { gap: 2 },
+  // One plain list (Oct 25, "D all for less ai", item 5): rows touch, a thin line between them.
+  list: { gap: LESS_AI_ROUND2 ? 0 : 2 },
   brandFace: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
-  brandFaceOnTint: LESS_AI ? {} : { backgroundColor: colors.surface },
+  brandFaceOnTint: LESS_AI_ROUND2 ? {} : { backgroundColor: colors.surface },
   recapFace: { backgroundColor: colors.brand },
   recapHours: { ...typography.smallStrong, color: colors.brand },
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
@@ -862,8 +863,10 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
   },
-  // Unread rows: the dot and the "New" heading already mark them, so no fill under the hand-made look (Oct 24).
-  rowUnread: LESS_AI ? {} : { backgroundColor: colors.brandDim },
+  // Unread rows: the dot and the "New" heading already mark them, so no fill (Oct 25, item 5: "new ones keep only the dot").
+  rowUnread: LESS_AI_ROUND2 ? {} : { backgroundColor: colors.brandDim },
+  // The thin line between two rows of one section; square, so the lines run straight.
+  rowLine: LESS_AI_ROUND2 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, borderRadius: 0 } : {},
   // Held: the list rows' tint (theme/press).
   rowPressed: { backgroundColor: colors.surfaceAlt },
   // A pill button held: it shrinks slightly (theme/press).
