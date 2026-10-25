@@ -199,14 +199,13 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const tuck = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
-  // A look picked in place of today's glass pill (tabBarLook, Oct 24): the same bar, drawn plainer.
+  // The quiet pill in place of the glass one (tabBarLook, Oct 25): the same bar, drawn plainer.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (
       <LookBar
         items={ITEMS}
         activeRoute={activeRoute}
         profileAlerts={profileAlerts}
-        me={currentUser}
         onTab={(route) => navigation.navigate(route)}
         onCreate={openCreate}
         tourRef={tourRef}

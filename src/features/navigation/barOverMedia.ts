@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * Whether the Feed has a picture (a clip, an Instant) filling the screen
- * right now, as its own top row reads it. A plain bar (tabBarLook A, B, C)
+ * right now, as its own top row reads it. The quiet pill (tabBarLook)
  * turns dark over it the way today's glass does, so its icons stay readable.
  */
 let onPicture = false;

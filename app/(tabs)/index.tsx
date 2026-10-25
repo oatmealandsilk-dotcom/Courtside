@@ -2617,7 +2617,7 @@ function GroupedFeed() {
   useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
-  // A plain tab bar (tabBarLook) turns dark over a picture, as the glass one does by itself.
+  // The quiet pill (tabBarLook) turns dark over a picture, as the glass one does by itself.
   useEffect(() => { setFeedOnPicture(chrome.picture); }, [chrome.picture]);
   const insets = useSafeAreaInsets();
   // Android's Back on a group's feed goes back to For you rather than leaving

@@ -1,20 +1,23 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, makeMutable, runOnJS, withTiming, type SharedValue } from 'react-native-reanimated';
+import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { Avatar } from '@/components/ui/Avatar';
-import { BAR_DOCKED, TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
+import { BrandWash } from '@/components/ui/BrandWash';
 import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
+import { barCompact } from '@/features/navigation/barShrink';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
+import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { TextScale, colors, font, inkOn, withAlpha } from '@/theme';
-import type { User } from '@/data/types';
+import { TextScale, colors, font, inkOn, typography, withAlpha } from '@/theme';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
 type AnimStyle = React.ComponentProps<typeof Animated.View>['style'];
+
+/** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
+const PX = PixelRatio.get();
 
 /** The bar going dark over a clip, or light again: the Feed's top row's own 180 ms, so the two change together. */
 const MEDIA_FADE_MS = 180;
@@ -30,19 +33,18 @@ export interface LookItem {
 }
 
 /**
- * The phone's tab bar in one of the looks offered in place of today's glass
- * pill (src/features/navigation/tabBarLook.ts: A, B or C). NavBar keeps
- * everything it does (the rise on a fresh open, the tuck as you scroll, the
- * Create box's dim, the tutorial's targets); this only draws the bar.
+ * The phone's tab bar as a quiet pill (src/features/navigation/tabBarLook.ts):
+ * today's bar in a new shape. NavBar keeps everything it does (the rise on a
+ * fresh open, the tuck as you scroll, the Create box's dim, the tutorial's
+ * targets); this only draws the bar.
  */
 export function LookBar({
-  items, activeRoute, profileAlerts, me, onTab, onCreate, tourRef, tourCreate,
+  items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate,
   bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
   profileAlerts: number;
-  me: User | null | undefined;
   onTab: (route: string) => void;
   onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined;
@@ -51,7 +53,7 @@ export function LookBar({
   bottom: number;
   /** The rise on a fresh open (NavBar's `held` and `duck`). */
   outerStyle: AnimStyle;
-  /** The tuck toward the edge while scrolling down (a floating bar only). */
+  /** The tuck toward the edge while scrolling down. */
   tuckStyle: AnimStyle;
   hideFromReader: 'auto' | 'no-hide-descendants';
   veilStyle: AnimStyle;
@@ -96,37 +98,23 @@ export function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
-    <Face palette={palette} media={overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts} me={me}
-      onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} bottom={bottom} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
+    <Face palette={palette} media={overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
+      onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
   );
-  // A theme picked on the Theme page: the bar in the court being left, laid over the live one and
-  // fading with the page (ThemeFade). Nothing here is glass, so nothing under a fade can go see-through.
-  const copies = (
-    <>
-    {mediaLayers.map((layer) => (
-      <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
-    ))}
-    <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
-      <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
-    ))} />
-    </>
-  );
-  if (BAR_DOCKED) {
-    return (
-      <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.dock, outerStyle]}>
-        <View>
-          {face(themes[theme], true)}
-          {copies}
-        </View>
-      </Animated.View>
-    );
-  }
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom }, outerStyle]}>
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
         <View style={styles.pillShadow}>
           {face(themes[theme], true)}
-          {copies}
+          {/* The bar as it was before a clip came or went, fading out over the live one. */}
+          {mediaLayers.map((layer) => (
+            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
+          ))}
+          {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one and
+              fading with the page (ThemeFade). Nothing here is glass, so nothing under a fade can go see-through. */}
+          <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
+            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
+          ))} />
         </View>
       </Animated.View>
     </Animated.View>
@@ -134,47 +122,38 @@ export function LookBar({
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, live, items, activeRoute, profileAlerts, me, onTab, onCreate, tourRef, tourCreate, bottom, veilStyle, veilBlocks, onVeil }: {
+function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
   palette: Palette; media: boolean; live: boolean;
-  items: LookItem[]; activeRoute: string | undefined; profileAlerts: number; me: User | null | undefined;
+  items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
-  bottom: number; veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void;
+  veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void;
 }) {
+  // Ducking lets the words go and settles the icons into the middle, as today's bar does
+  // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
+  const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   // Over a picture: a dark ground (the page's own where it is dark already, as on New York) and white marks.
   const darkPage = inkOn(c.bg) === '#FFFFFF';
-  const ground = media ? (darkPage ? c.bg : darkColors.bg) : TAB_BAR_LOOK === 'B' ? c.surface : c.bg;
+  const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.surface;
   const line = media ? withAlpha(c.onMedia, 0.14) : c.border;
-  const ink = media ? c.onMedia : c.text;
-  const muted = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
-  // The lit tab: ink in A and C; the brand's colour in B (white over a picture).
-  const lit = TAB_BAR_LOOK === 'B' && !media ? c.brand : ink;
-  // C draws every icon in ink, filled when lit, as Instagram does.
-  const idle = TAB_BAR_LOOK === 'C' ? ink : muted;
-  // A's +: the court's own colour. Over a clip on a light court (its ground gone near-black) it is lifted
-  // toward white so it still reads, in that court's own hue: never another court's green (New York's
-  // + stays yellow, Paris's terracotta, Melbourne's blue).
-  const brandMark = media && !darkPage ? toward(c.brand, c.onMedia, 0.35) : c.brand;
-
-  const badge = profileAlerts > 0 ? (
-    <View style={[styles.badge, TAB_BAR_LOOK === 'C' && styles.badgeOnAvatar, { backgroundColor: c.danger }]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
-    </View>
-  ) : null;
+  const idleIcon = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
+  const idleLabel = media ? withAlpha(c.onMedia, 0.6) : c.textFaint;
+  // The lit tab in today's colours: Community amber, Coaching blue, the rest the court's own colour.
+  // Over a clip on a light court (its ground gone near-black) that colour is lifted a little toward
+  // white so it still reads, in the same hue.
+  const litOf = (route: string) => {
+    const base = route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
+    return media && !darkPage ? toward(base, c.onMedia, 0.35) : base;
+  };
 
   const plus = (
     <View style={[styles.slot, styles.plusAbove]} key="create">
-      <Pressable ref={live ? tourCreate : undefined} disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} hitSlop={8} style={styles.hit}>
-        <View style={styles.iconBox}>
-          {TAB_BAR_LOOK === 'A' ? (
-            <View style={[styles.plusOutline, { borderColor: brandMark }]}><Ionicons name="add" size={19} color={brandMark} /></View>
-          ) : TAB_BAR_LOOK === 'B' ? (
-            <View style={[styles.plusSquare, { backgroundColor: c.brand }]}><Ionicons name="add" size={22} color={c.brandInk} /></View>
-          ) : (
-            <View style={[styles.plusInk, { borderColor: ink }]}><Ionicons name="add" size={19} color={ink} /></View>
-          )}
+      <Pressable disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} style={styles.hit}>
+        <View ref={live ? tourCreate : undefined} style={[styles.plus, { backgroundColor: c.brand }]}>
+          <BrandWash radius={PLUS_RADIUS} />
+          <Ionicons name="add" size={24} color={c.brandInk} />
         </View>
-        {TAB_BAR_LOOK === 'A' ? <View style={styles.labelSpace} /> : null}
       </Pressable>
     </View>
   );
@@ -183,12 +162,9 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, me, 
   items.forEach((item, index) => {
     if (index === 2) row.push(plus);
     const active = item.route === activeRoute;
-    const tint = active ? lit : idle;
-    const avatar = TAB_BAR_LOOK === 'C' && item.route === 'profile' && me;
     row.push(
       <View style={styles.slot} key={item.route}>
         <Pressable
-          ref={live ? tourRef(item.route) : undefined}
           disabled={!live}
           accessible={live}
           onPress={() => onTab(item.route)}
@@ -197,43 +173,35 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, me, 
           accessibilityLabel={item.label}
           style={styles.hit}
         >
-          <View style={styles.iconBox}>
-            {avatar ? (
-              // Your own picture, ringed in ink when Profile is the tab on show (Instagram's way).
-              <View style={[styles.avatarRing, { borderColor: active ? ink : 'transparent' }]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-                <Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={24} />
+          {/* What the tutorial lights: the tab's width, the icon and its word's height, as today. */}
+          <View ref={live ? tourRef(item.route) : undefined} style={styles.target}>
+            <Animated.View style={[styles.inner, settle]}>
+              <View>
+                <Ionicons name={active ? item.activeIcon : item.icon} size={23} color={active ? litOf(item.route) : idleIcon} />
+                {item.route === 'profile' && profileAlerts > 0 ? (
+                  <View style={[styles.badge, { backgroundColor: c.danger }]}>
+                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                  </View>
+                ) : null}
               </View>
-            ) : (
-              <Ionicons name={active ? item.activeIcon : item.icon} size={TAB_BAR_LOOK === 'C' ? 25 : 24} color={tint} />
-            )}
-            {item.route === 'profile' ? badge : null}
+              <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
+            </Animated.View>
           </View>
-          {TAB_BAR_LOOK === 'A' ? (
-            <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, { color: tint }, active && styles.labelLit]}>{item.label}</Text>
-          ) : null}
         </Pressable>
       </View>,
     );
   });
 
-  const veil = live ? (
-    <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, !BAR_DOCKED && styles.veilRound, { backgroundColor: colors.overlay }, veilStyle]}>
-      <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
-    </Animated.View>
-  ) : null;
-
-  if (BAR_DOCKED) {
-    return (
-      <View style={[styles.dockBar, { backgroundColor: ground, borderTopColor: line, paddingBottom: bottom }]}>
-        <View style={styles.row}>{row}</View>
-        {veil}
-      </View>
-    );
-  }
   return (
-    <View style={[styles.pill, { backgroundColor: ground, borderColor: line }]}>
+    <View style={[styles.pill, { backgroundColor: ground }]}>
       {row}
-      {veil}
+      {/* The hairline edge is a layer of its own under the Create box's dim, so it darkens with the rest. */}
+      <View pointerEvents="none" style={[styles.rim, { borderColor: line }]} />
+      {live ? (
+        <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: colors.overlay }, veilStyle]}>
+          <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      ) : null}
     </View>
   );
 }
@@ -247,38 +215,31 @@ function toward(hex: string, to: string, t: number): string {
   return `#${mixed.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+/** Less round than today's pill (its ends were half its height). */
 const PILL_RADIUS = 18;
+const PLUS_RADIUS = 11;
 
 const styles = StyleSheet.create({
-  // A and C: along the bottom edge, the whole width.
-  dock: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30 },
-  dockBar: { borderTopWidth: StyleSheet.hairlineWidth },
-  row: { height: TAB_BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 },
-  // B: floating, slimmer and squarer than today's pill.
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
-  pillWrap: { width: '100%', paddingHorizontal: 16 },
+  // As far in from each side as today's pill (the tutorial's lit tab keeps inside it: TourOverlay's BAR_SIDE).
+  pillWrap: { width: '100%', paddingHorizontal: 14 },
   pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
-  pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4, borderWidth: StyleSheet.hairlineWidth },
+  pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
+  rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
   slot: { flex: 1, alignSelf: 'stretch' },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  target: { alignSelf: 'stretch', alignItems: 'center' },
+  inner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   // The + stands above the Create box's dim (zIndex 2 over the veil's 1).
   plusAbove: { zIndex: 2 },
-  iconBox: { height: 28, minWidth: 28, alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 10, lineHeight: 12, marginTop: 1, ...font('500'), letterSpacing: 0.1 },
-  labelLit: { ...font('600') },
-  // The + in A has no word under it; this keeps its square level with the icons.
-  labelSpace: { height: 13 },
-  plusOutline: { width: 26, height: 26, borderRadius: 8, borderWidth: 1.75, alignItems: 'center', justifyContent: 'center' },
-  plusSquare: { width: 38, height: 32, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  plusInk: { width: 24, height: 24, borderRadius: 7, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
-  avatarRing: { width: 30, height: 30, borderRadius: 15, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
+  plus: { width: 42, height: 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
+  label: { ...typography.smallStrong, fontSize: 11, letterSpacing: 0.15 },
+  // Sits off the icon's shoulder rather than on top of it, as today.
   badge: {
-    position: 'absolute', top: -3, left: 16,
+    position: 'absolute', top: -5, left: 14,
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
     alignItems: 'center', justifyContent: 'center',
   },
-  badgeOnAvatar: { top: -6, left: 21 },
   badgeText: { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
-  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 },
-  veilRound: { borderRadius: PILL_RADIUS },
+  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: PILL_RADIUS },
 });
