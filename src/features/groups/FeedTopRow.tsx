@@ -9,6 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
 import { useStageMotion } from '@/features/feed/useStageMotion';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut } from '@/features/feed/feedWindows';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
@@ -88,6 +89,13 @@ interface Props {
    * features/feed/topRowScroll). A tap on the strip where it lives brings it back.
    */
   row?: SharedValue<number>;
+  /**
+   * A hold on any word (HOLD_MS): the Feed's windows (features/feed/feedWindows). Given only while
+   * they are on for this person; without it a word behaves exactly as before. A tap still picks.
+   */
+  onHold?: () => void;
+  /** A finger landed on a word: the windows get their stills and posters ready. */
+  onHoldStart?: () => void;
 }
 
 /** How far the row rides up as it goes: past its own top, into the clock's strip, gone by the time it gets there. */
@@ -122,7 +130,7 @@ function useScreenReader() {
   return on;
 }
 
-export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, pinched = false, waiting, invites = 0, row }: Props) {
+export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidden, pinched = false, waiting, invites = 0, row, onHold, onHoldStart }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { theme } = useTheme();
@@ -237,7 +245,10 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // so its heavy first draw never holds the row back.
   // The feed underneath is switched only once the glide has landed: building a
   // whole new feed mid-glide froze the screen for a few frames (Oct 4, owner: "smoother, by a lot").
+  // A hold mid-glide (a tap just picked a feed) is let go: the feed under it is about to change.
+  const glidedAt = useRef(0);
   const glideTo = (key: string, then: () => void) => {
+    glidedAt.current = Date.now();
     const at = layout?.at.get(key);
     if (!at || !viewW) { then(); return; }
     target.current = viewW / 2 - (at.x + at.w / 2);
@@ -341,12 +352,18 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
                     onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }}
                     onBlur={() => setFocusIn(false)}
-                    onPressIn={pressIn}
-                    onPressOut={pressOut}
+                    onPressIn={onHoldStart ? () => { pressIn(); onHoldStart(); } : pressIn}
+                    onPressOut={onHoldStart ? () => { pressOut(); noteFeedPressOut(); } : pressOut}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
+                    onLongPress={onHold ? () => { if (Date.now() - glidedAt.current > 360) onHold(); } : undefined}
+                    delayLongPress={onHold ? HOLD_MS : undefined}
+                    accessibilityActions={onHold ? SHOW_ALL_FEEDS : undefined}
+                    onAccessibilityAction={onHold ? (e) => { if (e.nativeEvent.actionName === 'showAllFeeds') onHold(); } : undefined}
+                    style={onHold ? NO_CALLOUT : undefined}
+                    {...(onHold ? HOLD_MARK : null)}
                     onLayout={(e) => { const width = e.nativeEvent.layout.width; setWidths((m) => (m[key] === width ? m : { ...m, [key]: width })); }}
                   >
-                    <Word name={w.name} at={layout?.at.get(key)} shift={shift} viewW={viewW} style={styles.word} tone={inkLook} />
+                    <Word name={w.name} at={layout?.at.get(key)} shift={shift} viewW={viewW} style={onHold ? [styles.word, NO_CALLOUT] : styles.word} tone={inkLook} />
                   </Pressable>
                 </React.Fragment>
               );

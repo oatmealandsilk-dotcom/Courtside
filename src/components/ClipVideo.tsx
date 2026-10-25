@@ -4,6 +4,7 @@ import { VideoView, createVideoPlayer, type SurfaceType, type VideoPlayer } from
 import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, peekLeft, takeLeft } from '@/features/feed/clipResume';
 import { usePageLeaving } from '@/features/feed/pageLeaving';
 
@@ -84,7 +85,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // exception is the comments stage, which keeps its clip playing above it.
   // On a feed page a swipe has just been decided away from, it stops (silent
   // first) as the finger lifts, before the next page has landed (pageLeaving).
-  const onTop = useIsFocused() || held;
+  // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
+  const windowsHeld = useWindowsHeld();
+  const onTop = (useIsFocused() && !windowsHeld) || held;
   const leaving = usePageLeaving();
   const active = wanted && onTop && !leaving;
   // The player is made and freed by hand rather than by the toolkit's hook:

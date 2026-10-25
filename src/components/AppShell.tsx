@@ -19,6 +19,7 @@ import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { closeFeedWindows } from '@/features/feed/feedWindows';
 import { askForCommunityMap, isStartTab, isTabPage } from '@/features/navigation/startTab';
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
@@ -462,7 +463,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     // A theme just picked: the tab this shows, and the one under the page closing, are on it as they show (catchUp).
     if (destination !== pathname) catchUpNow(['active', destination]);
     // Already here: a second tap on the same icon takes the page back to the top.
-    if (destination === pathname) requestScrollToTop(destination);
+    if (destination === pathname) { if (!(destination === paths.index && closeFeedWindows())) requestScrollToTop(destination); }
     // From a page pushed on top (settings, edit profile…), go back down to the
     // tab the way the back button would — a pop with its slide, not a jump.
     else if (!Object.values(paths).includes(pathname as (typeof paths)[keyof typeof paths])) {
