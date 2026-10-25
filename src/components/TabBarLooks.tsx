@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
-import { Glass } from '@/components/ui/Glass';
-import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
+import { CLEAR_GLASS_ALPHA, Glass } from '@/components/ui/Glass';
+import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
@@ -28,6 +29,17 @@ const MEDIA_FADE_MS = 180;
 let mediaSeq = 0;
 /** The bar as it was before a clip came or went (`media`), laid over the live bar and fading out. */
 interface MediaLayer { key: number; media: boolean; op: SharedValue<number> }
+/** A tab lit at the touch whose page has not come (the finger slid off, or the page never answered) goes dark again after this. */
+const LIT_GIVE_UP_MS = 1500;
+/** After a finger lifts, how long a tab lit at the touch waits for the tap itself before it is taken back. */
+const LIT_TAP_WAIT_MS = 150;
+/**
+ * A tab answers the touch at once. A browser otherwise holds a press back 50 ms (react-native-web's
+ * own wait, meant for a finger that may yet scroll; the bar never scrolls), and adds that wait to a
+ * hold, so the Feed's hold keeps it to stay as long as it was. React Native has no such wait.
+ */
+const PRESS_AT_ONCE = (Platform.OS === 'web' ? { delayPressIn: 0 } : {}) as object;
+const HOLD_EXTRA_MS = Platform.OS === 'web' ? 50 : 0;
 
 export interface LookItem {
   route: string;
@@ -49,16 +61,20 @@ export interface LookItem {
  * on the glass; its shadow sits on the rounded layer around it, as on the old
  * glass bar for weeks.
  */
-export function LookBar({
-  items, activeRoute, feedUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
+export const LookBar = React.memo(function LookBar({
+  items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
   bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
   /** Whether the page under the bar is the Feed itself, not a page opened over it (AppShell). */
   feedUnder: boolean;
+  /** Whether it is one of the four tabs, not a page opened over them (AppShell). */
+  tabsUnder: boolean;
   profileAlerts: number;
   onTab: (route: string) => void;
+  /** A finger came down on a tab: the page it will open can get ready while it is down. */
+  onTabPressIn?: (route: string) => void;
   onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined;
   tourCreate: (node: View | null) => void;
@@ -79,25 +95,97 @@ export function LookBar({
   // Over a clip on the Feed the bar turns dark, as today's glass does over a picture: on the Feed
   // itself, never on a light page opened from the clip (a player, a court), where the Feed tab is still the lit one.
   const onPicture = useFeedOnPicture();
-  const media = activeRoute === 'index' && feedUnder && onPicture;
-  // A clip coming or going (or the Feed being left) changes the bar's ground: the look being left is
-  // laid over the new one in the same redraw and fades out, then is taken away, so the bar never
-  // snaps from light to dark under a top row that eases, and nothing rests on an animated value.
+  // Whether the Feed is the tab under the bar: on the phone, as the tab row slides (half way across,
+  // TabsPager), not at the tap while the row still shows the tab being left, and with no page opened
+  // over the tabs; in a browser, whose tabs change in one go, the tab on show.
+  const rowOnFeed = useRowOnFeed();
+  const feedShown = rowOnFeed ?? activeRoute === 'index';
+  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && onPicture;
+  // A clip coming or going (or a page opened over the Feed) changes the bar's ground: the look being
+  // left is laid over the new one in the same redraw and fades out, then is taken away, so the bar
+  // never snaps from light to dark under a top row that eases, and nothing rests on an animated value.
+  // A change of tab does not: the page under the bar is changing whole then, and the glass simply
+  // turns, once (Oct 25 audit: a solid white or black slab at the tap that washed through grey,
+  // with the icons all but gone, on every tap to or from the Feed over a clip).
   const [shownMedia, setShownMedia] = useState(media);
+  const [shownFeed, setShownFeed] = useState(feedShown);
   const [mediaLayers, setMediaLayers] = useState<readonly MediaLayer[]>([]);
   // The glass's own dark or light: `media`, except for two frames after a clip's comments were up.
   const [glassHeld, setGlassHeld] = useState<boolean | null>(null);
-  if (shownMedia !== media) {
-    const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
+  if (shownMedia !== media || shownFeed !== feedShown) {
     setShownMedia(media);
-    setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
-    // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
-    // to nothing), and a page opened over them (a profile, a court) flips `media` in the same redraw that
-    // lets the fade go, which reaches the screen only a frame later. Glass re-tinted under a parent at
-    // nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole again,
-    // under the solid copy fading over it. Anywhere else it re-tints at once, as before.
-    if (glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
+    setShownFeed(feedShown);
+    if (shownMedia !== media && shownFeed === feedShown) {
+      const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
+      setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+      // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
+      // to nothing), and a page opened over them (a profile, a court) flips `media` in the same redraw that
+      // lets the fade go, which reaches the screen only a frame later. Glass re-tinted under a parent at
+      // nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole again,
+      // under the copy fading over it. Anywhere else it re-tints at once, as before.
+      if (glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
+    }
   }
+  // The tab lit at the touch (Oct 25 audit: the new tab lit only once the router had redrawn about a
+  // thousand parts, 60-170 ms after the finger lifted, with no answer to the touch before that). It
+  // lights the moment the finger comes down, in a redraw of the bar alone, and the page follows; the
+  // address catching up makes it the lit tab by right. A finger that slides off takes it back.
+  const [pressed, setPressed] = useState<string | null>(null);
+  const [seenRoute, setSeenRoute] = useState(activeRoute);
+  if (seenRoute !== activeRoute) {
+    setSeenRoute(activeRoute);
+    if (pressed !== null) setPressed(null);
+  }
+  const lit = pressed ?? activeRoute;
+  useEffect(() => {
+    if (pressed === null) return undefined;
+    const t = setTimeout(() => setPressed(null), LIT_GIVE_UP_MS);
+    return () => clearTimeout(t);
+  }, [pressed]);
+  // Read by the handlers below, which are made once (the bar redraws only when what it shows changes).
+  const now = useRef({ activeRoute, onTab, onTabPressIn });
+  now.current = { activeRoute, onTab, onTabPressIn };
+  const press = useRef({ route: null as string | null, tapped: false, painted: true, frame: 0, wait: undefined as ReturnType<typeof setTimeout> | undefined });
+  useEffect(() => () => { clearTimeout(press.current.wait); cancelAnimationFrame(press.current.frame); }, []);
+  const tabPressIn = useCallback((route: string) => {
+    const p = press.current;
+    clearTimeout(p.wait);
+    p.tapped = false;
+    p.route = route;
+    if (route !== now.current.activeRoute) {
+      setPressed(route);
+      // In a browser the bar's redraw and the page's share one thread: the page waits for a frame
+      // with the lit tab in it (below). A phone draws the bar's redraw on its own.
+      p.painted = false;
+      cancelAnimationFrame(p.frame);
+      p.frame = requestAnimationFrame(() => { p.painted = true; });
+    }
+    now.current.onTabPressIn?.(route);
+  }, []);
+  const tabPressOut = useCallback(() => {
+    const p = press.current;
+    clearTimeout(p.wait);
+    // The tap itself comes just after (or just before) the finger lifts; a press that never became one goes dark again.
+    p.wait = setTimeout(() => { if (!p.tapped) { p.route = null; setPressed(null); } }, LIT_TAP_WAIT_MS);
+  }, []);
+  const tabPress = useCallback((route: string) => {
+    const p = press.current;
+    clearTimeout(p.wait);
+    p.tapped = true;
+    const go = () => now.current.onTab(route);
+    if (route === now.current.activeRoute) { go(); return; }
+    // Lit already at the touch, and drawn: the page goes now. Otherwise (a quick tap in a busy
+    // browser, a keyboard, a screen reader) the lit tab is drawn first, then the page.
+    const litFirst = p.route !== route || !p.painted;
+    p.route = route;
+    setPressed(route);
+    if (Platform.OS === 'web' && litFirst) {
+      cancelAnimationFrame(p.frame);
+      p.frame = requestAnimationFrame(() => { setTimeout(go, 0); });
+      return;
+    }
+    go();
+  }, []);
   useEffect(() => {
     if (glassHeld === null) return undefined;
     let second = 0;
@@ -127,18 +215,22 @@ export function LookBar({
     }
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
-  const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
-    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
-      onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
+  const face = (palette: Palette, live: boolean, overMedia: boolean = media, copyAlpha = 1) => (
+    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts}
+      onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
+  // The shadow around the glass: on an iPhone, drawn along the pill's own outline (a box shadow),
+  // not worked out from everything inside it, which redrew the bar off screen every frame while a
+  // page slid or scrolled under the glass (Oct 25 audit). The same shadow to look at. Quicker press feel only (admins first).
+  const quick = usePressV2();
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom }, outerStyle]}>
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
-        <View style={styles.pillShadow}>
+        <View style={[styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
           {face(themes[theme], true)}
-          {/* The bar as it was before a clip came or went, solid, fading out over the live glass (already re-tinted). */}
+          {/* The bar as it was before a clip came or went, as see-through as the glass, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
-            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
+            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media, CLEAR_GLASS_ALPHA)}</FadeCopy>
           ))}
           {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one (beside
               the glass, never holding it) and fading with the page (ThemeFade). The glass re-tints at the tap, under it. */}
@@ -149,13 +241,16 @@ export function LookBar({
       </Animated.View>
     </Animated.View>
   );
-}
+});
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {
+function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; media: boolean; glassMedia: boolean; live: boolean;
+  /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
+  copyAlpha: number;
   items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
+  onTabPressIn: (route: string) => void; onTabPressOut: () => void;
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
   veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void; onFeedHold?: () => void;
@@ -202,11 +297,12 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
         <Pressable
           disabled={!live}
           accessible={live}
+          onPressIn={() => { onTabPressIn(item.route); if (hold) noteFeedPressIn(); }}
+          onPressOut={() => { onTabPressOut(); if (hold) noteFeedPressOut(); }}
           onPress={() => onTab(item.route)}
-          onPressIn={hold ? noteFeedPressIn : undefined}
-          onPressOut={hold ? noteFeedPressOut : undefined}
           onLongPress={hold}
-          delayLongPress={hold ? HOLD_MS : undefined}
+          delayLongPress={hold ? HOLD_MS + HOLD_EXTRA_MS : undefined}
+          {...PRESS_AT_ONCE}
           accessibilityRole="tab"
           accessibilityState={{ selected: active }}
           accessibilityLabel={item.label}
@@ -251,8 +347,10 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
     </>
   );
   // A fading copy is never glass: it is the one thing here whose opacity moves, and glass under a
-  // fade can go see-through and stay that way (Oct 17). Solid, it reads as the glass it stands for.
-  if (!live) return <View style={[styles.pill, { backgroundColor: ground }]}>{inside}</View>;
+  // fade can go see-through and stay that way (Oct 17). For a clip's look its ground is as
+  // see-through as the glass's own tint, so it reads as the glass it stands for, never as a solid
+  // slab over it (Oct 25 audit); for a court being left, solid, as that court's page is under it.
+  if (!live) return <View style={[styles.pill, { backgroundColor: copyAlpha < 1 ? withAlpha(ground, copyAlpha) : ground }]}>{inside}</View>;
   // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades.
@@ -284,6 +382,8 @@ const styles = StyleSheet.create({
   pillWrap: { width: '100%', paddingHorizontal: 14 },
   // The shadow on a rounded layer of its own around the glass (no fill, never faded), as the old glass bar's.
   pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  // The same shadow along the pill's outline (an iPhone's shadowRadius is half a box shadow's blur).
+  pillShadowPath: { shadowOpacity: 0, boxShadow: '0px 3px 20px rgba(0, 0, 0, 0.07)' },
   pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
   slot: { flex: 1, alignSelf: 'stretch' },

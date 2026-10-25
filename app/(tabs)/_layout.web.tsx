@@ -7,6 +7,7 @@ import Profile from './profile';
 import { Redirect, Tabs, router, usePathname, useGlobalSearchParams } from 'expo-router';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { setPendingTab } from '@/features/navigation/pendingTab';
+import { noteTabSwitch } from '@/features/navigation/barShrink';
 import { TABS_SLIDE, listenForSlides, type PageSlide } from '@/features/navigation/pageSlide';
 import { askedSection, requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
@@ -86,7 +87,7 @@ function TabsLayoutBody() {
   };
   const swipe = (direction: 1 | -1) => {
     const next = destination(direction);
-    if (next) { requestSection(next.pathname, next.section); router.navigate(next.pathname); }
+    if (next) { requestSection(next.pathname, next.section); if (next.pathname !== pathname) noteTabSwitch(); router.navigate(next.pathname); }
     // Kept until the page it went to is drawn and the surface lets go, so the
     // picture sliding in stays the same one; the next swipe is a finger's.
     const done = asked.current;

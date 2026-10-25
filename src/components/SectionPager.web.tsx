@@ -55,6 +55,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, delegate
   keepMounted?: boolean;
   /** Only the phone's pager reads this (a held pull); a browser's pull never moves the page. */
   blocked?: SharedValue<boolean>;
+  /** Only the phone's pager fills this in: here the pane drawn always follows `index` in the same redraw. */
+  jumpRef?: React.MutableRefObject<((pane: number) => void) | null>;
 }) {
   const last = panes.length - 1;
   const reduced = useReducedMotion();

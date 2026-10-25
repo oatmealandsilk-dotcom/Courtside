@@ -1,6 +1,6 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { Easing, runOnUI, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Easing, cancelAnimation, runOnUI, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 const easeOut = Easing.out(Easing.cubic);
 /**
@@ -49,6 +49,20 @@ export function useTabUnderline(index: number, count: number, tabWidth: number) 
     const at = Math.max(0, Math.min(count - 1, base.value + progress.value));
     return { transform: [{ translateX: at * tabWidth }] };
   });
+  // Put straight under a tab, with no glide: for a section changed while its page is out of sight
+  // (Community put back on Find Players as the bar brings you there), so the line is already in
+  // place as the page shows. It used to glide across after Community had slid in (Oct 25 audit).
+  // The redraw for the new tab then finds the line there and simply lands it.
+  const jump = useCallback((to: number) => {
+    const set = (at: number) => {
+      'worklet';
+      cancelAnimation(base);
+      progress.value = 0;
+      base.value = at;
+    };
+    if (Platform.OS === 'web') set(to);
+    else runOnUI(set)(to);
+  }, [base, progress]);
   // `base` too, for anything else that follows the line (the tab words' colour): drawn at base + progress.
-  return { progress, base, style };
+  return { progress, base, style, jump };
 }

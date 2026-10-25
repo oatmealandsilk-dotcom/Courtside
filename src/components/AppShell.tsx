@@ -1,6 +1,6 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import { catchUpNow } from '@/theme/catchUp';
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AppState, Platform, View } from 'react-native';
 import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
 import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
@@ -19,6 +19,7 @@ import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { noteTabSwitch } from '@/features/navigation/barShrink';
 import { closeFeedWindows } from '@/features/feed/feedWindows';
 import { askForCommunityMap, isStartTab, isTabPage } from '@/features/navigation/startTab';
 import { launchSettle, useCurtainDown } from '@/features/feed/warmup';
@@ -138,7 +139,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       if (e.key === 'Escape' && SHEETS.has(pathname)) { e.preventDefault(); goBack('/'); return; }
       if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && TAB_ORDER.includes(pathname) && !e.metaKey && !e.altKey) {
         const next = TAB_ORDER[TAB_ORDER.indexOf(pathname) + (e.key === 'ArrowRight' ? 1 : -1)];
-        if (next) { e.preventDefault(); if (next === paths.discuss) askForCommunityMap(); router.navigate(next); }
+        if (next) { e.preventDefault(); if (next === paths.discuss) askForCommunityMap(); noteTabSwitch(); router.navigate(next); }
       }
     };
     window.addEventListener('keydown', onKey);
@@ -355,6 +356,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // Only its style changes; the bar and its glass are never built again.
   const [barSteady, setBarSteady] = useState(showNav);
   const barAway = useSharedValue(showNav ? 0 : 1);
+  // Where the bar was last sent (0 in place, 1 away), so a slide is never replayed to where it already is.
+  const awayTo = useRef(showNav ? 0 : 1);
   const wantedBefore = useRef(barWanted);
   // Gone: drawn no more, and the next time it comes it starts from below the edge again.
   const barGone = useCallback(() => { setBarKept(false); setBarSteady(false); }, []);
@@ -366,15 +369,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const arriving = barWanted && !wantedBefore.current;
     wantedBefore.current = barWanted;
     // First arrival after the splash or sign-in: NavBar's own rise does it, nothing on top.
-    if (showNav && arriving) { setBarKept(true); setBarSteady(true); barAway.value = 0; return; }
+    if (showNav && arriving) { setBarKept(true); setBarSteady(true); awayTo.current = 0; barAway.value = 0; return; }
     if (showNav) {
       setBarKept(true);
       const slideIn = { duration: 200, easing: Easing.out(Easing.cubic) };
+      // Already in place and staying: nothing to slide. Every change of page (each tab tap) replayed a
+      // slide to where the bar already was, moving the glass's parent every frame for a fifth of a
+      // second under the tab's glide (Oct 25 audit).
+      if (barSteady && awayTo.current === 0) return;
+      awayTo.current = 0;
       // Already in place (or leaving from there, now coming back): its style says so already.
       if (barSteady) { barAway.value = withTiming(0, slideIn); return; }
       barAway.value = withTiming(0, slideIn, (done) => { if (done) runOnJS(setBarSteady)(true); });
       return;
     }
+    awayTo.current = 1;
     if (!barWanted) { barGone(); barAway.value = 1; return; }
     // A sheet rising from the bottom covers the bar's place itself: the bar goes at once, never fading over it.
     if (SHEETS.has(pathname)) { barGone(); barAway.value = 1; return; }
@@ -455,9 +464,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sentTo.current = detour;
     router.replace(detour);
   }, [detour]);
-  const nav = <NavBar state={{ index: selected.current, routes }} feedUnder={barOver.current === paths.index} navigation={{ navigate: name => {
+  // The bar's tab taps. Made once and read through a ref (navigate below), so the bar is handed the
+  // same thing every time and is drawn again only when what it shows changes (Oct 25 audit).
+  const navigateNow = useRef<(name: string) => void>(() => undefined);
+  const navigation = useMemo(() => ({
+    navigate: (name: string) => navigateNow.current(name),
+    // A finger down on a tab: a theme just picked catches up on the tab it will show while the
+    // finger is still down, as background to the lit tab (drawn first), never in the tap's own
+    // redraw (Oct 25 audit: the first tap after a theme change redrew that whole tab before the page moved).
+    prepare: (name: string) => {
+      const destination = paths[name as keyof typeof paths];
+      if (!destination) return;
+      requestAnimationFrame(() => { setTimeout(() => { if (destination !== pathnameNow.current) catchUpNow([destination]); }, 0); });
+    },
+  }), []);
+  const pathnameNow = useRef(pathname);
+  pathnameNow.current = pathname;
+  const barState = useMemo(() => ({ index: selected.current, routes }), [selected.current]); // eslint-disable-line react-hooks/exhaustive-deps
+  navigateNow.current = name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
+    if (destination !== pathname) noteTabSwitch();
     // Community opens on its map, from the top, whenever the bar takes you there.
     if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
     // A theme just picked: the tab this shows, and the one under the page closing, are on it as they show (catchUp).
@@ -492,7 +519,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
     else if (destination === '/') goHome();
     else router.navigate(destination);
-  } }} />;
+  };
+  const nav = <NavBar state={barState} feedUnder={barOver.current === paths.index} tabsUnder={TAB_ORDER.includes(barOver.current)} navigation={navigation} />;
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}

@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import { asTabRoute } from '@/features/navigation/tabFocus';
+import { asTabRoute, useOnShowNow } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -132,14 +132,18 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // opened from a link, then swiped back): that ask was kept for it.
   const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && askedSection('/discuss')) || START_SECTION));
   const section = previewSection ? asSection(previewSection) : localSection;
+  // A section asked for out of sight whose redraw is still on its way (background work, below):
+  // the row and the line are already on it, so a tap reads it as the section on show.
+  const comingSection = useRef<Section | null>(null);
+  if (comingSection.current === localSection) comingSection.current = null;
   // Held locally only: pushing it into the address on every swipe made the
   // whole app re-render mid-gesture.
-  const setSection = (value: string) => setLocalSection(asSection(value));
+  const setSection = (value: string) => { comingSection.current = null; setLocalSection(asSection(value)); };
   // A tab tapped in the row. In a phone-width browser it plays the swipe's own
   // slide, the pages gliding sideways with the line, as the phone's pager does
   // (the browser's pager otherwise flips at once); on a computer it flips.
   const tapSection = (value: Section) => {
-    if (value === section) return;
+    if (value === (comingSection.current ?? section)) return;
     if (Platform.OS === 'web' && isPhone && !previewSection) { slidePagesTo('/discuss', { pathname: '/discuss', section: value }); return; }
     setSection(value);
   };
@@ -169,14 +173,35 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The real tab takes each ask as it hears it, so an old one can't come back
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
+  const onShowNow = useOnShowNow();
+  // Filled in below, once the line and the pager are made.
+  const jumpLine = useRef<((pane: number) => void) | null>(null);
+  const jumpPages = useRef<((pane: number) => void) | null>(null);
   useEffect(() => {
     const off = subscribeSectionRequest('/discuss', (value, background) => {
       if (!previewSection) takeAskedSection('/discuss');
-      // Put back on Discussions once left (TabsPager): this whole tab is redrawn for it, out of
-      // sight, so as background work. A later ask (the bar's Find Players) still wins over it.
+      const next = asSection(value);
+      // Asked while this tab is out of sight (put back on Discussions once left, or the bar asking
+      // for Find Players on its way here): the line and the pages are set straight there, so they
+      // are in place as the page shows, never gliding across after Community has slid in (Oct 25
+      // audit: every bar tap to Community slid the line from Discussions to Find Players).
+      const outOfSight = !previewSection && !onShowNow();
+      if (outOfSight) {
+        jumpLine.current?.(next === 'players' ? 0 : 1);
+        jumpPages.current?.(next === 'players' ? 0 : 1);
+      }
+      // This whole tab is redrawn for it. Out of sight, as background work, so a tap goes first: the
+      // bar's tab lights and the row sets off without waiting for all of Community (Oct 25 audit:
+      // 94-258 ms). On the phone the row and the line are already there (above); a browser draws
+      // its pages by the section itself, so there only the put-back waits. A later ask still wins.
       // With the quicker press feel only (pressV2: admins first); otherwise at once, as before.
-      if (background && pressV2On()) startTransition(() => setLocalSection(asSection(value)));
-      else setLocalSection(asSection(value));
+      if ((background || (outOfSight && Platform.OS !== 'web')) && pressV2On()) {
+        comingSection.current = next;
+        startTransition(() => setLocalSection(next));
+      } else {
+        comingSection.current = null;
+        setLocalSection(next);
+      }
     });
     if (!previewSection) { const late = takeAskedSection('/discuss'); if (late) setLocalSection(asSection(late)); }
     return off;
@@ -195,6 +220,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const sectionIndex = section === 'players' ? 0 : 1;
   const [tabWidth, setTabWidth] = useState(0);
   const underline = useTabUnderline(sectionIndex, 2, tabWidth);
+  jumpLine.current = underline.jump;
   // The two words take their colour from where the line is, so they change with it as it moves
   // rather than snapping on landing. The theme's own two tones only (every court theme).
   // Any of Find Players in view: where the row actually is (under a finger, mid-glide), not the section
@@ -1019,6 +1045,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}
+        jumpRef={previewSection ? undefined : jumpPages}
         depth={1}
         delegateLeft
         delegateRight
