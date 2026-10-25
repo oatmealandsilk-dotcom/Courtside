@@ -34,6 +34,7 @@ import { Avatar, Chip, EmptyState, Screen } from '@/components/ui';
 import { QuestionListSkeleton } from '@/components/Skeleton';
 import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -755,11 +756,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             {courtMatches.map(({ c, miles }, index) => {
               const meta = [youAt ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
               return (
-                <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                  <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>
+                <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}${LESS_AI && surfaceSaid(c.surface, c.count) ? `, ${surfaceSaid(c.surface, c.count)}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                  {LESS_AI ? null : <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>}
                   <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
                     <Highlighted text={labelOf(c)} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={2} wordStart />
-                    {meta ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
+                    {LESS_AI ? <SurfaceLine surface={c.surface} rest={meta} style={styles.playerMeta} /> : meta ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
                 </Pressable>
@@ -777,7 +778,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             </View>
             {placeMatches.map((p, index) => (
               <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}, see its courts on the map`} onPress={() => openPlace(p)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={20} color={colors.textMuted} /></View>
+                {LESS_AI ? null : <View style={styles.placeTile}><Ionicons name={p.kind === 'area' ? 'map-outline' : 'location-outline'} size={20} color={colors.textMuted} /></View>}
                 <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
                   <Highlighted text={p.title} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={1} wordStart />
                   {p.sub ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{p.sub}</Text> : null}

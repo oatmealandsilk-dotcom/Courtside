@@ -11,6 +11,7 @@ import Reanimated from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Highlighted, labelOf } from '@/components/CourtSearch';
 import { PersonRow } from '@/components/PersonRow';
@@ -385,9 +386,9 @@ export default function Search() {
         onPress={() => openThread(question)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       >
-        <View style={[styles.topicTile, { backgroundColor: `${tint}26` }]}>
+        {LESS_AI ? null : <View style={[styles.topicTile, { backgroundColor: `${tint}26` }]}>
           <Ionicons name={meta?.icon ?? 'chatbubbles-outline'} size={18} color={tint} />
-        </View>
+        </View>}
         <View style={[styles.rowBody, styles.threadBody, !first && styles.rowRule]}>
           <Highlighted text={question.title} words={q.words} style={styles.rowName} strong={styles.rowNameMatch} lines={2} wordStart />
           {bodyOnly ? (
@@ -410,14 +411,14 @@ export default function Search() {
       <Pressable
         key={court.id}
         accessibilityRole="link"
-        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}, open the court`}
+        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}${LESS_AI && surfaceSaid(court.surface, court.count) ? `, ${surfaceSaid(court.surface, court.count)}` : ''}, open the court`}
         onPress={() => openCourt(court)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       >
-        <View style={styles.courtTile}><CourtGlyph size={14} color={colors.brand} /></View>
+        {LESS_AI ? null : <View style={styles.courtTile}><CourtGlyph size={14} color={colors.brand} /></View>}
         <View style={[styles.rowBody, !first && styles.rowRule]}>
           <Highlighted text={labelOf(court)} words={q.words} style={styles.rowName} strong={styles.rowNameMatch} lines={2} wordStart />
-          {meta ? <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text> : null}
+          {LESS_AI ? <SurfaceLine surface={court.surface} rest={meta} style={styles.rowMeta} /> : meta ? <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text> : null}
         </View>
       </Pressable>
     );
@@ -427,6 +428,7 @@ export default function Search() {
     const tag = r.kind === 'term' && r.text.startsWith('#');
     const line2 = user ? `@${user.handle}` : r.kind === 'thread' ? 'Thread' : r.kind === 'court' && home && r.lat !== undefined && r.lng !== undefined ? formatMiles(milesBetween(home, { lat: r.lat, lng: r.lng })) : '';
     const lead = user ? <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={40} ring={user.isCoach} />
+      : LESS_AI ? null
       : r.kind === 'court' ? <View style={[styles.circle, styles.circleCourt]}><CourtGlyph size={15} color={colors.brand} /></View>
         : r.kind === 'thread' ? <View style={styles.circle}><Ionicons name="chatbubbles-outline" size={17} color={colors.textMuted} /></View>
           : tag ? <View style={styles.circle}><Text style={styles.hash}>#</Text></View>

@@ -4,6 +4,19 @@ import { isClosedCourt, type Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
 import { colors, surfaceColorFor } from '@/theme';
+import { LESS_AI } from '@/theme/look';
+import { surfaceKind } from '@/features/places/courtSurface';
+
+/**
+ * A court pin's colour by what it is played on (Oct 24, owner: "the courts near me hard grass
+ * clay"): hard blue, clay orange, grass green, turf, carpet and synthetic a neutral grey. A court
+ * the map says nothing about keeps the court colour. Read on each draw, so it follows the theme.
+ */
+export function courtTone(court: Court): string {
+  if (!LESS_AI) return colors.court;
+  const kind = surfaceKind(court.surface);
+  return kind === 'hard' ? colors.surfaceHard : kind === 'clay' ? colors.surfaceClay : kind === 'grass' ? colors.surfaceGrass : kind ? colors.surfaceOther : colors.court;
+}
 
 /*
  * The pins, as HTML: MapLibre draws markers as DOM, in the browser and
@@ -273,9 +286,10 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
     ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
     : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
   const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
-  const tone = closed ? colors.borderStrong : colors.court;
+  const tint = courtTone(court);
+  const tone = closed ? colors.borderStrong : tint;
   const fill = on ? tone : colors.bg;
-  const glyph = on ? (closed ? colors.bg : colors.brandInk) : closed ? colors.textMuted : colors.court;
+  const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
   return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
 }
