@@ -23,7 +23,7 @@ import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const FACE = 52;
-/** Every face's slot, yours included, so the faces sit on one even rhythm (yours used to be wider). Wide enough for "You’re open" and its dot. */
+/** Every face's slot, yours included, so the faces sit on one even rhythm (yours used to be wider). Wide enough for "Free today" and its dot. */
 const ITEM = 86;
 /** The row's own padding: it runs out to the screen's edges, the faces starting a little in from the page's margin. */
 const ROW_PAD = spacing.lg - 6;
@@ -35,22 +35,14 @@ const MINE_CENTER = ROW_PAD + ITEM / 2 - spacing.lg;
  * the heading by as much, so nothing on the page moves.
  */
 const HALO = 12;
-/**
- * Room below the row, the same way, for the bottom of the "till midnight"
- * under your face: a full 44pt to tap without the browser's help (it has no
- * hitSlop). Less than the page's 16 between parts, so it never reaches the next one.
- */
+/** Room below the row, the same way, so nothing under the faces is cut off. Less than the page's 16 between parts, so it never reaches the next one. */
 const BELOW = 12;
-/** "till midnight": drawn as one small line, tapped as 44pt, all of it below your ring's switch (never over it). */
-const TILL_LINE = 14;
-const TILL_PAD_TOP = 2;
-const TILL_PAD_BOTTOM = 44 - TILL_LINE - TILL_PAD_TOP;
-/**
- * The room it takes in the row: two of those lines, so your item is as tall
- * as a player's beside it (a name, how far, until when) and the row is one
- * height whether or not anyone is open. The rest of its 44pt hangs below.
- */
-const TILL_ROOM = 2 * TILL_LINE + 6;
+/** The ring's drawn box (OpenRing: face, gap, ring), a name's line and a caption's. */
+const RING_BOX = FACE + 13;
+const NAME_LINE = 16;
+const META_LINE = 14;
+/** A player's item (ring, name, how far, until when): yours is held at the same height, so the row never jumps as you turn on or off. */
+const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string }
@@ -97,8 +89,9 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  * on), then a face for each player near you who is open, with how far and
  * until when ("till 8pm"). A face opens the map on them, their card up.
  *
- * Your time and distance: hold your ring, or tap the "till midnight" under
- * it once it is on. Either opens the sheet. The first tap on your ring shows
+ * Once on, one line under your ring: "Free today" (Oct 24, owner: "Instead
+ * of your open just one line that says free today"). Your time and
+ * distance: hold your ring, or tap that line. Either opens the sheet. The first tap on your ring shows
  * the tip about holding, but never alongside the "Turn on Location" note:
  * one thing on screen at a time, so with that note up the tip waits for a
  * later tap.
@@ -133,7 +126,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
       }
     });
   };
-  // Holding it, or its "till midnight": until when, and how far.
+  // Holding it, or its "Free today": until when, and how far.
   const edit = () => {
     haptics.tap();
     learned('hold-to-edit');
@@ -152,31 +145,25 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
-        {/* Your own: the ring is the switch; once on, the time under it opens the sheet. Two presses side by side, never one inside the other. */}
-        <View style={styles.item}>
+        {/* Your own: the ring is the switch; once on, the "Free today" under it opens the sheet. Two presses one above the other, never one inside the other. */}
+        <View style={[styles.item, styles.mine]}>
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
             <View>
               <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
               {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
             </View>
-            {/* On: ink words after a small green dot, as a player's card says it (green words were too faint to read on the court palettes). */}
-            <View style={styles.nameRow}>
-              {up ? <Animated.View entering={FadeIn.duration(160)} style={styles.dot} /> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>{up ? 'You’re open' : 'I’m free'}</Text>
-            </View>
+            {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>I’m free</Text>}
           </Pressable>
-          {/* 44pt tall in its own padding, all of it below the switch, so a near miss never turns your ring off.
-              Off, the same box held empty, so turning on never moves the row. */}
-          {up && till ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Open ${till}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.tillLink, pressed && styles.pressed]}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{till}</Text>
-              <Ionicons name="chevron-forward" size={10} color={colors.textMuted} />
+          {/* On: one line where a player's name sits, ink words after a small green dot (green words were too faint on the court palettes).
+              44pt to tap, all of it below the switch, so a near miss never turns your ring off. */}
+          {up ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`Free today${till ? `, ${till}` : ''}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.freeLink, pressed && styles.pressed]}>
+              <View style={styles.freeLine}>
+                <Animated.View entering={FadeIn.duration(160)} style={styles.dot} />
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>Free today</Text>
+              </View>
             </Pressable>
-          ) : (
-            <View style={styles.tillLink} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}> </Text>
-            </View>
-          )}
+          ) : null}
         </View>
         {people.map((p) => {
           const theirs = tillLabel(p.until);
@@ -224,21 +211,22 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   count: { ...typography.small, color: colors.textMuted },
   // Runs to the screen's edges, the way the stories rail does, and a little above and below the
-  // faces' line (into the gaps around it), so the halos and your "till" are never cut off.
+  // faces' line (into the gaps around it), so the halos and your "Free today" are never cut off.
   scroll: { marginHorizontal: -spacing.lg, marginTop: -HALO, marginBottom: -BELOW },
   row: { paddingHorizontal: ROW_PAD, paddingTop: HALO, paddingBottom: BELOW, gap: 2, alignItems: 'flex-start' },
   item: { width: ITEM, alignItems: 'center', paddingVertical: 2 },
   face: { alignItems: 'center', gap: 3 },
   pressed: { opacity: PRESS_DIM },
   plus: { position: 'absolute', right: 2, bottom: 2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2, maxWidth: ITEM },
+  // Your item, held at a player's height (MINE_H).
+  mine: { minHeight: MINE_H },
+  // "Free today": one centred line where a player's name sits; its 44pt runs on down inside your item.
+  freeLink: { marginTop: 5, height: 44, marginBottom: NAME_LINE - 44, alignItems: 'center' },
+  freeLine: { flexDirection: 'row', alignItems: 'center', gap: 4, height: NAME_LINE, maxWidth: ITEM },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.open },
   name: { ...typography.smallStrong, color: colors.text, marginTop: 2, flexShrink: 1 },
   nameIn: { marginTop: 0 },
   meta: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, ...font('500') },
-  // "till midnight", once you are open: a quiet way into the sheet, the same as holding. Drawn as
-  // one line; its 44pt runs on down past the item (the row's BELOW room), never up over the switch.
-  tillLink: { flexDirection: 'row', alignItems: 'center', gap: 1, marginTop: 1, paddingTop: TILL_PAD_TOP, paddingBottom: TILL_PAD_BOTTOM, marginBottom: TILL_ROOM - 1 - 44 },
   empty: { justifyContent: 'center', height: FACE + 18, paddingLeft: spacing.sm, maxWidth: 210 },
   emptyText: { ...typography.small, ...font('500'), color: colors.text },
   emptyHint: { ...typography.small, color: colors.textMuted, marginTop: 2 },
