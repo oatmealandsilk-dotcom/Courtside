@@ -376,7 +376,7 @@ function Compose() {
   const closeMenu = () => {
     if (closing.current) return;
     closing.current = true;
-    // The tab bar stays under the box (Oct 17); its dim fades with the box's own.
+    // The tab bar stays under the box (Oct 17); its veil fades with the box's own.
     markCreateLeaving();
     // The page's own fade would run after the box has already gone, leaving
     // an invisible layer that swallows taps for a moment; it is switched off

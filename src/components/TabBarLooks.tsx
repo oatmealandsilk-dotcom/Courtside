@@ -9,10 +9,11 @@ import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
+import { BAR_RECEDE } from '@/features/compose/createMenu';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { TextScale, colors, font, inkOn, typography, withAlpha } from '@/theme';
+import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -39,7 +40,7 @@ export interface LookItem {
  * today's bar in a new shape, on the old bar's Liquid Glass (Oct 25, owner:
  * "Te bottom bar should be Liquid Glass like Strava and instagram"). NavBar
  * keeps everything it does (the rise on a fresh open, the tuck as you scroll,
- * the Create box's dim, the tutorial's targets); this only draws the bar.
+ * the Create box's veil, the tutorial's targets); this only draws the bar.
  *
  * The glass bar's rules, kept here: nothing that holds the glass ever fades
  * (the rise and the tuck only move it; the fading copies are solid and laid
@@ -225,11 +226,14 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
   const inside = (
     <>
       {row}
-      {/* The hairline edge is a plain layer of its own, never a border on the glass, and under the
-          Create box's dim, so it darkens with the rest (Oct 17, owner: "outer edge not brighter"). */}
+      {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
+          Create box's veil, so the bar keeps its own edge while the box is up. */}
       <View pointerEvents="none" style={[styles.rim, { borderColor: line }]} />
+      {/* While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
+          gets dark grey"): a veil of its own ground, not the page's dim, steps the four tabs back so the
+          lit + stands out, and catches a tap there to close the box. Only this child fades, never the glass. */}
       {live ? (
-        <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: colors.overlay }, veilStyle]}>
+        <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: withAlpha(ground, BAR_RECEDE) }, veilStyle]}>
           <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
         </Animated.View>
       ) : null}
@@ -270,12 +274,12 @@ const styles = StyleSheet.create({
   // The shadow on a rounded layer of its own around the glass (no fill, never faded), as the old glass bar's.
   pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
-  rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
+  rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
   slot: { flex: 1, alignSelf: 'stretch' },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   target: { alignSelf: 'stretch', alignItems: 'center' },
   inner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
-  // The + stands above the Create box's dim (zIndex 2 over the veil's 1).
+  // The + stands above the Create box's veil (zIndex 2 over the veil's 1), at full strength.
   plusAbove: { zIndex: 2 },
   plus: { width: PLUS_SHAPE === 'circle' ? 38 : 42, height: PLUS_SHAPE === 'circle' ? 38 : 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
   label: { ...typography.smallStrong, fontSize: 11, letterSpacing: 0.15 },

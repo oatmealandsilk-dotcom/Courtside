@@ -12,7 +12,7 @@ import { isStartTab } from '@/features/navigation/startTab';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
-import { closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
+import { BAR_RECEDE, closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { BrandWash } from '@/components/ui/BrandWash';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,10 +142,11 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
     if (pathname !== '/compose') { markCreateOpening(); router.push('/compose'); return; }
     closeCreateMenu();
   };
-  // While the Create box is up, the bar stays where it is, under the same dim
-  // as the page: a veil over the pill, in and out on the box's own timing. A
-  // tap on the veil closes the box, as a tap anywhere else outside it does;
-  // only the + stands above it, lit, and closes the box too.
+  // While the Create box is up, the bar stays where it is, in its own colour:
+  // a veil of its own ground over the pill steps the tabs back (BAR_RECEDE),
+  // in and out on the box's own timing; never the page's dim, which turned it
+  // a dark grey (Oct 25). A tap on the veil closes the box, as a tap anywhere
+  // else outside it does; only the + stands above it, lit, and closes the box too.
   const createMenu = useCreateMenuState();
   const boxUp = pathname === '/compose' && (createMenu === 'opening' || createMenu === 'open');
   const veil = useSharedValue(boxUp ? 1 : 0);
@@ -262,13 +263,10 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
                 </React.Fragment>
               );
             })}
-            <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, veilStyle]}>
+            <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: withAlpha(colors.bg, BAR_RECEDE) }, veilStyle]}>
               <Pressable accessible={false} importantForAccessibility="no" onPress={() => { closeCreateMenu(); }} style={StyleSheet.absoluteFill} />
             </Animated.View>
           </Glass>
-          {/* The pill's thin light edge sits outside the glass's inside, where the veil can't reach: the same
-              dim laid over just that edge, so it darkens with the rest (Oct 17, owner: "outer edge not brighter"). */}
-          <Animated.View pointerEvents="none" style={[styles.veilRim, veilStyle]} />
           {/* A theme picked on the Theme page: the whole pill in the court being left, edge included, laid over
               the live one (beside the glass, never holding it) and fading with the page (ThemeFade). The glass
               re-tints at the tap, under this; nothing that holds the glass ever fades. */}
@@ -471,9 +469,8 @@ const styleDefinitions = StyleSheet.create({
   createSlot: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   // The + stands above the veil while the Create box is up (zIndex 2 over the veil's 1).
   createAbove: { zIndex: 2 },
-  // The Create box's dim, over the pill (its colour is the box's backdrop's, colors.overlay, read where it is drawn).
-  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: TAB_BAR_H / 2, backgroundColor: colors.overlay },
-  veilRim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: TAB_BAR_H / 2, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.overlay },
+  // The Create box's veil over the pill (its colour, the bar's own ground, is read where it is drawn).
+  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: TAB_BAR_H / 2 },
   createButton: { width: 46, height: 46, borderRadius: 23, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow },
   // On a dark page the button's own colour as a shadow reads as a glow; a plain dark one just lifts it.
   // The bar floats: a glass pill a little above the bottom edge, the page running on beneath it.
