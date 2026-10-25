@@ -18,6 +18,7 @@ import { Tappable } from '@/components/Tappable';
 import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { LESS_AI } from '@/theme/look';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -90,18 +91,23 @@ function QuestionCardInner({
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sourceText}>{question.source.label}</Text>
           </View>
         ) : author ? <LevelPill profile={author.profile} small style={styles.levelPill} /> : null}
-        {brandCorner ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
+        {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
+        {LESS_AI ? (
+          <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto' }, pressed && { opacity: PRESS_DIM }]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerText}>{meta.label}{brandCorner ? '' : ` · ${relativeTime(question.createdAt)}${question.editedAt ? ' · Edited' : ''}`}</Text>
+          </SwipePressable>
+        ) : brandCorner ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
       </View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.preview}>{question.body}</RichText>}
       {question.poll ? <PollView question={question} compact /> : null}
-      <View style={styles.metaRow}>
+      {LESS_AI ? null : <View style={styles.metaRow}>
         {/* The topic is a tag ringed in its own colour: a tap shows every thread under it.
             Its words are the page's quiet ink: the topic colours alone fell short of 4.5:1 on several courts. */}
         <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: PRESS_DIM }]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.tagText}>{meta.label}</Text>
         </SwipePressable>
-      </View>
+      </View>}
 
       <View style={styles.footer}>
         <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
@@ -112,13 +118,13 @@ function QuestionCardInner({
           style={styles.action}
         >
           <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
-          <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>
+          {LESS_AI && !(question.answerIds.length + (question.source?.replies ?? 0)) ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>}
         </Tappable>
 
         {onShare ? (
           <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={styles.action}>
             <Ionicons name="arrow-redo-outline" size={20} color={colors.text} />
-            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.shares ?? 0}</Text>
+            {LESS_AI && !question.shares ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.shares ?? 0}</Text>}
           </Tappable>
         ) : null}
 

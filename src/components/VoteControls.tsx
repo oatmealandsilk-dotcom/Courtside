@@ -5,6 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { LESS_AI } from '@/theme/look';
 
 export function voteCounts(item: { votes: number; votedBy: Record<string, 1 | -1> }) {
   const votes = Object.values(item.votedBy);
@@ -35,7 +36,8 @@ export function VoteControls({ item, userId, onVote }: {
 }
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: 6 },
-  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: colors.bgElevated },
+  // The hand-made look (Oct 24): no grey pill behind the votes, a pale brand tint only once you vote.
+  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI ? 'transparent' : colors.bgElevated },
   active: { backgroundColor: colors.brandDim },
   count: { color: colors.textMuted, fontSize: 12, ...font('600') },
 });
