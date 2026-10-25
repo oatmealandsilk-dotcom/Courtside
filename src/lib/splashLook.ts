@@ -22,7 +22,8 @@ import Constants from 'expo-constants';
 /** The last iPhone store build whose launch picture is the old one (build 18, in review Oct 24). */
 export const LAST_OLD_SPLASH_BUILD = 18;
 
-function iosBuild(): number {
+/** The installed iPhone app's own build number (0 when unknown: Expo Go, a failed read). */
+export function iosBuild(): number {
   try {
     const n = Number(Constants.platform?.ios?.buildNumber ?? 0);
     return Number.isFinite(n) ? n : 0;

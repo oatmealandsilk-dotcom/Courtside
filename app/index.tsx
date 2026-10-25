@@ -11,7 +11,7 @@ import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
 import { LAUNCH_FADE_MS, LAUNCH_MAX_MS, hideLaunch, launchShowing } from '@/lib/launchSplash';
-import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { LaunchMark, launchGround, launchStatusStyle, useLaunchDark } from '@/components/LaunchMark';
 import { NEW_SPLASH } from '@/lib/splashLook';
 import { BrandMark } from '@/components/BrandMark';
 import { useApp } from '@/store/AppContext';
@@ -44,6 +44,8 @@ export default function Index() {
   const launchUpdate = useLaunchUpdate();
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
+  // The launch look (white or dark, as the phone is) redrawn should the phone's mode be heard again while it shows.
+  useLaunchDark(!gone);
   const [settledCode, setSettledCode] = useState(false);
   useEffect(() => {
     if (Platform.OS !== 'web' || !/[?&]code=/.test(window.location.search)) return;
@@ -199,14 +201,15 @@ export default function Index() {
   }
 
   return (
-    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }, launchGround]}>
-      {NEW_SPLASH && Platform.OS !== 'web' ? <StatusBar style="dark" /> : null}
+    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }, launchGround()]}>
+      {NEW_SPLASH && Platform.OS !== 'web' ? <StatusBar style={launchStatusStyle()} /> : null}
       {Platform.OS !== 'web' || NEW_SPLASH ? (
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
         // Splash C (NEW_SPLASH: a build whose launch picture is the new one, and the website, whose
-        // loader is): the mark and line on white, in their own colours (Oct 24; white, not cream, Oct 25).
+        // loader is): the mark and line on white, in their own colours (Oct 24; white, not cream, Oct 25),
+        // or on dark when the phone is in dark mode, as its own launch picture is (Oct 25).
         <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
       ) : (
         <>
@@ -219,8 +222,8 @@ export default function Index() {
       )}
       {launchCover && !fromLaunch ? (
         // Coming here later (a sign-in, a switch of account): the cream drawn copy, faded once laid out.
-        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }, launchGround]}>
-          <StatusBar style="dark" />
+        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }, launchGround()]}>
+          <StatusBar style={launchStatusStyle()} />
           <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
         </Animated.View>
       ) : null}

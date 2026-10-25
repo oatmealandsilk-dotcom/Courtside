@@ -227,6 +227,19 @@ export function catchUpNow(scope: 'all' | 'active' | readonly string[]) {
   }
 }
 
+/**
+ * A change the app made by itself (the phone turning dark or light, with Match phone on),
+ * away from the Theme page, in the same go as the change: the tab on show turns with the rest of
+ * the screen, in one redraw, rather than a moment after it (nothing is fading over it to wait
+ * for). The other tabs carry on catching up out of sight, as background work. Behind a page (the
+ * tabs not on show), nothing is let go here: they catch up out of sight as after a pick.
+ */
+export function catchUpShown() {
+  if (nav && !nav.tabsOnShow()) return;
+  released = Math.max(released, 1);
+  catchUpNow('active');
+}
+
 /** Whether nothing is fading and every tab is on the court picked. */
 export function catchUpSettled(): boolean {
   return fading === 0 && !held();

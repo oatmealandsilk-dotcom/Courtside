@@ -73,6 +73,14 @@ export function FadeSpot({ store, render }: { store: FadeStore; render: (layers:
 let pageStore: FadeStore | null = null;
 const onShowListeners = new Set<() => void>();
 const tellOnShow = () => onShowListeners.forEach((listener) => listener());
+/** The Theme page's `begin`, while it is open: the phone turning dark or light (Match phone) fades on it as a pick does. */
+let pageBegin: ((leaving: ThemeName) => void) | null = null;
+/** Starts the open Theme page's fade from `leaving`, in the caller's go; false when no Theme page is open. */
+export function beginPageFade(leaving: ThemeName): boolean {
+  if (!pageBegin) return false;
+  pageBegin(leaving);
+  return true;
+}
 /** The fade of the Theme page open now (no copies when none is). */
 export const activeFade: FadeStore = {
   get: () => pageStore?.get() ?? NO_LAYERS,
@@ -149,6 +157,10 @@ export function useThemeFade() {
     put(next);
     setStarted((n) => n + 1);
   }, [store, put]);
+  useEffect(() => {
+    pageBegin = begin;
+    return () => { if (pageBegin === begin) pageBegin = null; };
+  }, [begin]);
 
   // Each new copy starts fading once it is drawn. Passive effects run children first, so every copy's
   // animated style is in place before its opacity moves; the fade's first frame is the old look exactly.

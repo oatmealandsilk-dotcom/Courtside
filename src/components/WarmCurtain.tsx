@@ -6,7 +6,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { StatusBar } from 'expo-status-bar';
 
 import { BrandMark } from '@/components/BrandMark';
-import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { LaunchMark, launchGround, launchStatusStyle, useLaunchDark } from '@/components/LaunchMark';
 import { NEW_SPLASH } from '@/lib/splashLook';
 import { MAP_WAIT_MS, curtainLiftBy, curtainReadyAnyway, launchSettle, setCurtainDown, setMapWaitOver, useCurtainReady, useStartDrawn } from '@/features/feed/warmup';
 import { colors, spacing, font, wordmarkFont } from '@/theme';
@@ -44,6 +44,7 @@ export function WarmCurtain() {
   const drawn = useStartDrawn();
   const still = useReducedMotion();
   const [shown, setShown] = useState(!warm);
+  useLaunchDark(shown);
   // Once the lift has begun it never takes touches again, even if a map on the
   // page asks it to wait a moment longer while it fades (see useStartMapHold).
   const [lifting, setLifting] = useState(false);
@@ -89,14 +90,16 @@ export function WarmCurtain() {
   }, [warm, drawn]);
   if (!shown) return null;
   return (
-    <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style, launchGround]}>
-      {/* Splash C is white whatever the theme: dark icons while it is up (a Night theme would turn them white);
-          dropped as it lifts, so the theme's own style fades across with the lift. */}
-      {NEW_SPLASH && Platform.OS !== 'web' && !lifting ? <StatusBar style="dark" /> : null}
+    <Animated.View pointerEvents={warm || lifting ? 'none' : 'auto'} style={[styles.curtain, style, launchGround()]}>
+      {/* Splash C is white or dark as the phone is, whatever the theme: icons to suit it while it is up (a
+          Night theme would turn them white on the white one); dropped as it lifts, so the theme's own
+          style fades across with the lift. */}
+      {NEW_SPLASH && Platform.OS !== 'web' && !lifting ? <StatusBar style={launchStatusStyle()} /> : null}
       {Platform.OS !== 'web' || NEW_SPLASH ? (
         // On a phone: the launch picture's logo and line in the theme's colours, drawn exactly where the
         // launch picture draws them, the same as the screen before it: it lifts into the app (Oct 4).
-        // Splash C (NEW_SPLASH, and the website) is drawn in its own colours on its own white (Oct 24; white Oct 25).
+        // Splash C (NEW_SPLASH, and the website) is drawn in its own colours on its own white (Oct 24; white Oct 25),
+        // or dark when the phone is in dark mode (Oct 25).
         <Animated.View style={[StyleSheet.absoluteFill, brandStyle]}>
           <LaunchMark ink={colors.brand} faint={colors.launchLine} />
         </Animated.View>

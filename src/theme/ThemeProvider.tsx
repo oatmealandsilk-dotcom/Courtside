@@ -1,10 +1,15 @@
-import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react';
+import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, Platform, StyleSheet, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, lightColors } from './index';
-import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark';
 import { NEW_SPLASH } from '@/lib/splashLook';
-import { catchUpNow, installCatchUp, noteLive, tapped } from './catchUp';
+import { catchUpNow, catchUpShown, installCatchUp, noteLive, tapped } from './catchUp';
+import { beginPageFade } from './ThemeFade';
+import { PHONE_APPEARANCE, onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
+import { keysAtOpen, keysAtOpenNow, usedBefore } from '@/lib/usedBefore';
+import { claimedDepth } from '@/features/navigation/gestureClaim';
+import { isPageDragging, isPageScrolling, subscribePageDragging } from '@/features/navigation/swipeLock';
 
 type Palette = Record<keyof typeof lightColors, string>;
 
@@ -199,18 +204,44 @@ export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
  */
 export const DEFAULT_THEME: ThemeName = 'clean';
 
+/** The court picked, saved on this phone (or in this browser). With Match phone on, still the court picked, never the Night it shows. */
 const STORAGE_KEY = 'courtside-theme';
+/** Match phone, saved beside it: '1' on, anything else off (Oct 25). Saved from the first open on (matchPhoneFrom). */
+const AUTO_DARK_KEY = 'courtside-theme-auto-dark';
 const LEGACY_NIGHT_KEY = 'courtside-night-mode';
 
-function readStored(): ThemeName {
+/**
+ * Match phone, as saved; or, where it was never saved, decided now and saved, so it is decided once
+ * and never changes by itself after (Oct 25, owner: "Match phone. On for new users"):
+ *   - a new player (nothing of CourtSide's saved on this phone, or in this browser, as this open
+ *     began: a fresh install) starts with it on;
+ *   - anyone who used the app here before (any of its saved things there: src/lib/usedBefore.ts)
+ *     keeps what they had, off, until they switch it on.
+ * Either way the Theme page's switch changes it, as before. Where what was saved could not be read,
+ * it stays off and nothing is saved (the next open, finding this one's things, counts as used).
+ * Where the app cannot see the phone's mode (iPhone builds up to 18, PHONE_APPEARANCE) the switch is
+ * hidden: always off there, and nothing is decided or saved, so the first open of a build that can
+ * see it decides, by then counting that phone as used.
+ */
+function matchPhoneFrom(saved: string | null | undefined, keysBefore: readonly string[] | null): boolean {
+  if (!PHONE_APPEARANCE) return false;
+  if (saved != null) return saved === '1';
+  const before = usedBefore(keysBefore, AUTO_DARK_KEY);
+  if (before === null) return false;
+  save(AUTO_DARK_KEY, before ? '0' : '1');
+  return !before;
+}
+
+function readStored(): { court: ThemeName; autoDark: boolean } {
   try {
-    if (Platform.OS !== 'web') return DEFAULT_THEME;
+    if (Platform.OS !== 'web') return { court: DEFAULT_THEME, autoDark: false };
     const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved && saved in themes) return saved as ThemeName;
+    const autoDark = matchPhoneFrom(localStorage.getItem(AUTO_DARK_KEY), keysAtOpenNow());
+    if (saved && saved in themes) return { court: saved as ThemeName, autoDark };
     // Anyone who had night mode on before keeps it.
-    return localStorage.getItem(LEGACY_NIGHT_KEY) === 'true' ? 'night' : DEFAULT_THEME;
+    return { court: localStorage.getItem(LEGACY_NIGHT_KEY) === 'true' ? 'night' : DEFAULT_THEME, autoDark };
   } catch {
-    return DEFAULT_THEME;
+    return { court: DEFAULT_THEME, autoDark: false };
   }
 }
 
@@ -265,6 +296,48 @@ let live: ThemeName = 'default';
 /** Set once someone has picked a court, so a late read of the saved one never overrides their pick. */
 let picked = false;
 
+/*
+ * Match phone (Oct 25, owner: "a toggle where you can do like automatic dark mode … it
+ * automatically turned dark mode when your phone does … I think that's what Instagram Snapchat
+ * does", then "Match phone. On for new users"). On from the start for a new player, off for
+ * everyone who used the app before (matchPhoneFrom); the Theme page's switch either way. On: Night
+ * while the phone is in dark mode, the court picked while it is light. A dark court picked (Night,
+ * New York) stays as it is.
+ *
+ * `chosen` is the court picked (what is saved); `live` is what shows. They differ only while this is
+ * on and the phone is dark. Picking a court while that is so (a light one: the app is on Night)
+ * turns Match phone off, so the court picked is what you see; picking one while the phone
+ * is light keeps it on, the court picked becoming the one for light mode.
+ *
+ * Only where the app can see the phone's mode (PHONE_APPEARANCE: the website, Android, iPhone builds
+ * after 18); elsewhere it is never on.
+ */
+let chosen: ThemeName = DEFAULT_THEME;
+let autoDark = false;
+/** The phone (or browser) in dark mode, as last heard. */
+let phoneIsDark = false;
+
+/** What shows for a court picked, with Match phone on or off and the phone dark or light. */
+export function shownFor(court: ThemeName, auto: boolean, dark: boolean): ThemeName {
+  return auto && dark && !DARK_THEMES.has(court) ? 'night' : court;
+}
+const shownNow = () => shownFor(chosen, autoDark && PHONE_APPEARANCE, phoneIsDark);
+
+/** Whether this app can offer Match phone (it can see the phone's light or dark mode). */
+export const AUTO_DARK_AVAILABLE = PHONE_APPEARANCE;
+
+const autoListeners = new Set<() => void>();
+const subscribeAuto = (listener: () => void) => { autoListeners.add(listener); return () => { autoListeners.delete(listener); }; };
+const getAuto = () => autoDark && PHONE_APPEARANCE;
+/** Match phone on or off, for the Theme page's switch. */
+export function useAutoDark(): boolean {
+  return useSyncExternalStore(subscribeAuto, getAuto, getAuto);
+}
+/** The court picked (saved), whatever shows: with Match phone on and the phone dark, Night shows over it. */
+export const pickedTheme = (): ThemeName => chosen;
+/** What would show with Match phone switched to `on`, now (the Theme page starts its fade only when that differs). */
+export const shownWithAutoDark = (on: boolean): ThemeName => shownFor(chosen, on && PHONE_APPEARANCE, phoneIsDark);
+
 /** The court picked, whatever any held-back tab is still showing. */
 export const liveTheme = (): ThemeName => live;
 
@@ -302,25 +375,112 @@ export function makeThemeSource(initial: ThemeName, scoped = false): ThemeSource
 const rootSource = makeThemeSource('default');
 export const ThemeSourceContext = createContext<ThemeSource>(rootSource);
 
-function saveTheme(name: ThemeName) {
+function save(key: string, value: string) {
   try {
-    if (Platform.OS === 'web') localStorage.setItem(STORAGE_KEY, name);
-    else void AsyncStorage.setItem(STORAGE_KEY, name).catch(() => undefined);
+    if (Platform.OS === 'web') localStorage.setItem(key, value);
+    else void AsyncStorage.setItem(key, value).catch(() => undefined);
   } catch {}
 }
 
 /**
- * Picks a court: saved at once, the live colours swapped, and what is on
- * screen redrawn in one go. The tabs out of sight follow afterwards (catchUp).
+ * Shows a court: the live colours swapped, and what is on screen redrawn in
+ * one go. The tabs out of sight follow afterwards (catchUp).
  */
-function setTheme(name: ThemeName) {
-  if (!(name in themes) || name === live) return;
-  picked = true;
-  saveTheme(name);
+function show(name: ThemeName) {
+  if (name === live) return;
   live = name;
   Object.assign(colors, themes[name]);
   tapped(name);
   rootSource.set(name);
+}
+
+/**
+ * Picks a court: saved at once and shown (see show). With Match phone on and the phone
+ * dark, a light court picked turns it off, so what you picked is what you see.
+ */
+function setTheme(name: ThemeName) {
+  if (!(name in themes)) return;
+  const autoOff = autoDark && PHONE_APPEARANCE && phoneIsDark && !DARK_THEMES.has(name);
+  if (name === chosen && name === live && !autoOff) return;
+  picked = true;
+  if (autoOff) setAutoFlag(false);
+  chosen = name;
+  save(STORAGE_KEY, name);
+  show(shownNow());
+}
+
+function setAutoFlag(on: boolean) {
+  autoDark = on;
+  save(AUTO_DARK_KEY, on ? '1' : '0');
+  autoListeners.forEach((listener) => listener());
+}
+
+/**
+ * Match phone on or off (the Theme page's switch): saved at once, and the app goes to Night
+ * or back to the court picked if the phone is dark, the same way as a pick.
+ */
+export function setAutoDark(on: boolean) {
+  if (!PHONE_APPEARANCE || on === autoDark) return;
+  picked = true;
+  phoneIsDark = phoneDark();
+  setAutoFlag(on);
+  show(shownNow());
+}
+
+/*
+ * The phone turning dark or light with Match phone on. Never under a finger: a page or a
+ * section being swiped, the Feed's clips scrolling, or a moment after either (the swipe settling),
+ * the change waits for the page to be still. On the Theme page it plays as a pick does (the old look
+ * fading off the page); anywhere else the page on show turns in one go and the rest follow out of
+ * sight, as after a pick.
+ */
+/** How long after a swipe ends before the phone's change lands (the page settling into place). */
+const AFTER_SWIPE_MS = 450;
+/** A change of mode heard this soon after another is waited out, so a quick there-and-back never shows. */
+const SETTLE_MS = 120;
+/** Whatever a finger is doing, the change lands this long after it was heard at the latest. */
+const MOST_WAIT_MS = 4000;
+let followTimer: ReturnType<typeof setTimeout> | null = null;
+let swipeEnded = -Infinity;
+let heardAt = 0;
+const stamp = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
+
+function underFinger(): boolean {
+  let claimed = false;
+  try { claimed = claimedDepth.value > 0; } catch { /* not readable here */ }
+  return claimed || isPageDragging() || isPageScrolling() || stamp() - swipeEnded < AFTER_SWIPE_MS;
+}
+
+function followPhone() {
+  followTimer = null;
+  const next = shownNow();
+  if (next === live) return;
+  if (underFinger() && stamp() - heardAt < MOST_WAIT_MS) { followTimer = setTimeout(followPhone, 120); return; }
+  const leaving = live;
+  // The Theme page open: its own fade, exactly as a pick (the copies go on in this same go).
+  const onThemePage = beginPageFade(leaving);
+  show(next);
+  if (!onThemePage) catchUpShown();
+}
+
+function phoneChanged(dark: boolean) {
+  phoneIsDark = dark;
+  heardAt = stamp();
+  if (followTimer) clearTimeout(followTimer);
+  followTimer = setTimeout(followPhone, SETTLE_MS);
+}
+
+function installFollowPhone(): () => void {
+  if (!PHONE_APPEARANCE) return () => undefined;
+  const stopPhone = onPhoneAppearance(phoneChanged);
+  const stopSwipe = subscribePageDragging(() => { if (!isPageDragging()) swipeEnded = stamp(); });
+  // A change heard between the first draw and now.
+  phoneChanged(phoneDark());
+  return () => {
+    stopPhone();
+    stopSwipe();
+    if (followTimer) { clearTimeout(followTimer); followTimer = null; }
+  };
 }
 
 // Kept so existing callers of the old night-mode switch keep working.
@@ -352,13 +512,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // The live colours are set as the app first draws, not as this file loads: style sheets are
   // written in the default palette, and the colour-to-slot map (slotOf) is built from it.
   useState(() => {
-    live = readStored();
+    const stored = readStored();
+    chosen = stored.court;
+    autoDark = stored.autoDark;
+    phoneIsDark = phoneDark();
+    live = shownNow();
     noteLive(live);
     Object.assign(colors, themes[live]);
     rootSource.set(live);
     return live;
   });
   useEffect(() => installCatchUp(), []);
+  useEffect(() => installFollowPhone(), []);
 
   // A phone has no localStorage, and its own store can only be read back
   // asynchronously — so the app opens on the default and switches to the saved
@@ -369,14 +534,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // picture's cream meanwhile, so the loading screen opens in your own theme
   // instead of snapping to it (Oct 2).
   const [loaded, setLoaded] = useState(Platform.OS === 'web');
+  useLaunchDark(!loaded);
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     let alive = true;
     const giveUp = setTimeout(() => { if (alive) setLoaded(true); }, 800);
-    AsyncStorage.getItem(STORAGE_KEY)
-      .then((saved) => {
-        if (!alive || picked || !saved || !(saved in themes) || saved === live) return;
-        applyNow(saved as ThemeName);
+    Promise.all([AsyncStorage.multiGet([STORAGE_KEY, AUTO_DARK_KEY]), keysAtOpen()])
+      .then(([pairs, keysBefore]) => {
+        if (!alive || picked) return;
+        const saved = pairs[0]?.[1];
+        if (saved && saved in themes) chosen = saved as ThemeName;
+        autoDark = matchPhoneFrom(pairs[1]?.[1], keysBefore);
+        if (autoDark) autoListeners.forEach((listener) => listener());
+        phoneIsDark = phoneDark();
+        const next = shownNow();
+        if (next !== live) applyNow(next);
       })
       .catch(() => {})
       .finally(() => { if (alive) { clearTimeout(giveUp); setLoaded(true); } });
@@ -385,7 +557,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeSourceContext.Provider value={rootSource}>
-      <View style={[{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }, loaded ? null : launchGround]}>
+      <View style={[{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }, loaded ? null : launchGround()]}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4).
             Splash C (Oct 24): the same drawn mark and line as the font gate and the splash before it. */}

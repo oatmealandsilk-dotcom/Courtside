@@ -31,7 +31,13 @@ module.exports = {
     version: '1.0.0',
     orientation: 'portrait',
     scheme: 'courtside',
-    userInterfaceStyle: 'dark',
+    // The app follows the phone's light or dark mode (Oct 25), for two things: Match phone on
+    // the Theme page (Night while the phone is dark), and the launch screen's dark look on a dark
+    // phone (expo-splash-screen's `dark`, below). Until then it was fixed to 'dark', so the app could
+    // never tell. The app's own pages still wear the court picked; what follows the phone is only
+    // the phone's own parts: its alerts, menus, keyboard and pickers. iPhone: the next store build
+    // (after 18; src/lib/phoneAppearance.ts). Android: below.
+    userInterfaceStyle: 'automatic',
     // The root behind the app (expo-system-ui): white, the launch screen's own ground and the Clean
     // theme's (Oct 25), so a frame between the launch screen and the app's first draw is never a third
     // colour. Native: the next store build. On Android the app sets it to the theme's own once running.
@@ -113,13 +119,16 @@ module.exports = {
       // No app links yet: the iPhone app has no associated domains either, so links to
       // app.courtsidebase.com open the website on both. Add the two together when wanted.
       ...(googleServicesFile ? { googleServicesFile } : {}),
-      // Android's own parts of the app (its dialogs, its navigation-bar buttons) in their
-      // light look (Oct 5). The 'dark' above is for the iPhone; on Android it forced the
-      // whole window into night mode, so phones with three-button navigation had a dark
-      // band with white buttons along the bottom of every cream page. The app's own
-      // pages follow its theme either way. (Buttons that follow the Night and New York
-      // themes need expo-navigation-bar, a later build: see docs/android-setup.md.)
-      userInterfaceStyle: 'light',
+      // Android's own parts of the app (its dialogs, its navigation-bar buttons) follow the
+      // phone's light or dark mode (Oct 25), as on the iPhone: without that the app cannot
+      // see the phone's mode (Match phone, the dark launch screen). From Oct 5 they
+      // were fixed light: 'dark' had forced the whole window into night mode, so phones
+      // with three-button navigation had a dark band with white buttons along the bottom
+      // of every cream page. Following the phone, that band shows only on a phone in dark
+      // mode with a light court picked and Match phone off. The app's own pages
+      // follow its theme either way. (Buttons that follow the theme itself need
+      // expo-navigation-bar, a later build: see docs/android-setup.md.)
+      userInterfaceStyle: 'automatic',
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
@@ -135,11 +144,27 @@ module.exports = {
       // alone (its launch screen is an icon), 90 points wide on the same ground.
       // Oct 25: on white, not the icon's cream: the Clean theme's ground, what the app opens in since Oct 24
       // (owner: "Think the loading screen color is off"); the line in Clean's muted grey.
-      ['expo-splash-screen', { image: './assets/splash-c.png', backgroundColor: '#FFFFFF', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#FFFFFF' } }],
-      // Dark status-bar icons on the white launch screen (Info.plist UIStatusBarStyleDarkContent), so they do not
-      // flip from white to dark when the app takes over; once the app runs, ThemedStatusBar sets them per theme.
-      ['expo-status-bar', { style: 'dark' }],
-      'expo-router',
+      // Oct 25, later: two looks, white and dark (owner: "just have two themes for the loading screen just
+      // white clean and dark mode"). A phone in dark mode shows the dark one: the same mark and line on the
+      // Night theme's ground, in Night's green and grey (assets/splash-c-dark.png, splash-c-android-dark.png,
+      // from scripts/make-splash-c.py). The phone picks by its own mode, before the app runs; the app's drawn
+      // copy picks the same way (src/components/LaunchMark.tsx). Next store build (iPhone: after 18).
+      ['expo-splash-screen', {
+        image: './assets/splash-c.png', backgroundColor: '#FFFFFF', resizeMode: 'cover', enableFullScreenImage_legacy: true,
+        dark: { image: './assets/splash-c-dark.png', backgroundColor: '#0F1412' },
+        android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#FFFFFF', dark: { image: './assets/splash-c-android-dark.png', backgroundColor: '#0F1412' } },
+      }],
+      // The status-bar icons on the launch screen follow the phone's mode, as its two looks do (dark icons on
+      // the white one, light on the dark one), so they do not flip when the app takes over; once the app
+      // runs, ThemedStatusBar sets them per theme. Replaces expo-status-bar's plugin (fixed dark, Oct 24).
+      './plugins/withLaunchStatusBar',
+      // adaptiveColors off (Oct 25): left on, expo-router redraws every page in the app the moment the
+      // phone (or browser) turns dark or light, for its own Color API, which the app does not use. With
+      // the app following the phone (userInterfaceStyle 'automatic'), that would be a whole-app redraw at
+      // every change of mode, switch on or off, under a finger too. Match phone does its own
+      // change instead, through the smooth path (src/theme/ThemeProvider.tsx followPhone). Read from the
+      // app's config at runtime, so it reaches phones by update.
+      ['expo-router', { adaptiveColors: false }],
       // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
       // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', recordAudioAndroid: false }],

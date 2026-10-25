@@ -5,12 +5,19 @@ centred, and "GROWING THE GAME" small and quiet low down, the way Instagram, Wha
 open (the mark alone, a quiet line at the foot). Oct 25: on white, the Clean theme's own ground
 (Clean is what the app opens in since Oct 24; on the icon's cream the launch then turned white,
 owner: "Think the loading screen color is off"), the line in Clean's muted grey.
+Oct 25, later: two looks, white and dark (owner: "just have two themes for the loading screen just
+white clean and dark mode"). The dark one is the same mark and line on the Night theme's ground, the
+mark in Night's green and the line in Night's muted grey. The phone shows whichever matches its own
+light or dark mode; the app's drawn copy follows the phone the same way (src/components/LaunchMark.tsx).
 
 Writes, from one set of shapes, so the phone's launch picture and the app's drawn copy of it
 are the same pixels:
   assets/splash-c.png                 the iPhone launch picture, 1284 x 2778, drawn to cover the screen
+  assets/splash-c-dark.png            the same, dark (shown when the phone is in dark mode)
   assets/splash-c-android.png         Android 12+ launch icon: the mark alone on a clear 1024 square
+  assets/splash-c-android-dark.png    the same in Night's green, for the dark launch screen
   src/components/launchPictureC.ts    the same mark and line as outlines, in the picture's pixels
+  public/index.html                   the website's loader: both looks, picked by the browser's own light or dark mode
 
     python3 scripts/make-splash-c.py        (needs numpy, pillow, fonttools; run from anywhere)
 
@@ -37,6 +44,11 @@ ICON_CREAM = (0xF6, 0xEF, 0xE4)  # the icon's cream (assets/icon-thin.png): only
 GROUND = (0xFF, 0xFF, 0xFF)  # the launch screen's ground: the Clean theme's bg (src/theme/ThemeProvider.tsx), white
 GREEN = (0x2E, 0x7E, 0x4B)   # the icon's green
 LINE_INK = (0x53, 0x64, 0x71)  # the quiet line: Clean's muted ink (textMuted), 6.1:1 on white
+# The dark look (Oct 25): the Night theme's ground, its green (brand) and its muted ink (textMuted),
+# src/theme/ThemeProvider.tsx darkColors.
+DARK_GROUND = (0x0F, 0x14, 0x12)
+DARK_GREEN = (0x6F, 0xB4, 0x83)
+DARK_LINE_INK = (0xA6, 0xB1, 0xAB)
 PIC_W, PIC_H = 1284, 2778
 MARK_FRAC = 0.22             # the mark's width, as a share of the screen's
 THIN = 0.016                 # the Oct 22 thinning, as a share of the refined mark's width
@@ -257,10 +269,11 @@ def main():
     lw = max(PIC_W / 2 - line_box[0], line_box[0] + line_box[2] - PIC_W / 2)
     line_view = [PIC_W / 2 - lw, line_box[1], 2 * lw, line_box[3]]
 
-    pic = Image.new('RGB', (PIC_W, PIC_H), GROUND)
-    paint(pic, mark_poly, mark_box, GREEN)
-    paint(pic, line_poly, line_box, LINE_INK)
-    pic.save(os.path.join(ROOT, 'assets/splash-c.png'), optimize=True)
+    for ground, green, ink, name in ((GROUND, GREEN, LINE_INK, 'splash-c.png'), (DARK_GROUND, DARK_GREEN, DARK_LINE_INK, 'splash-c-dark.png')):
+        pic = Image.new('RGB', (PIC_W, PIC_H), ground)
+        paint(pic, mark_poly, mark_box, green)
+        paint(pic, line_poly, line_box, ink)
+        pic.save(os.path.join(ROOT, 'assets', name), optimize=True)
 
     # Android 12+: the mark alone on a clear square the phone shows ANDROID_PT across; the mark
     # MARK_FRAC of a 411-point-wide phone (90 pt), in the middle of the screen.
@@ -269,11 +282,13 @@ def main():
     asx = aw / (x1 - x0); ah = (y1 - y0) * asx
     ap = [[(512 - aw / 2 + (x - x0) * asx, 512 - ah / 2 + (y - y0) * asx) for x, y in polygon_of(sh)] for sh in shapes]
     cov = raster(ap, 1024, 1024, 4)
-    rgba = np.zeros((1024, 1024, 4), np.uint8); rgba[..., :3] = GREEN; rgba[..., 3] = np.round(cov * 255).astype(np.uint8)
-    Image.fromarray(rgba, 'RGBA').save(os.path.join(ROOT, 'assets/splash-c-android.png'), optimize=True)
+    for green, name in ((GREEN, 'splash-c-android.png'), (DARK_GREEN, 'splash-c-android-dark.png')):
+        rgba = np.zeros((1024, 1024, 4), np.uint8); rgba[..., :3] = green; rgba[..., 3] = np.round(cov * 255).astype(np.uint8)
+        Image.fromarray(rgba, 'RGBA').save(os.path.join(ROOT, 'assets', name), optimize=True)
 
     hexc = lambda c: '#%02X%02X%02X' % c
     ts = TS.format(W=PIC_W, H=PIC_H, ground=hexc(GROUND), green=hexc(GREEN), line=hexc(LINE_INK),
+                   dground=hexc(DARK_GROUND), dgreen=hexc(DARK_GREEN), dline=hexc(DARK_LINE_INK),
                    mbox=[round(v, 2) for v in mark_view], mw=f'{mw:.2f}', cx=PIC_W / 2, cy=PIC_H / 2, md=mark_d,
                    text=LINE_TEXT, size=f'{LINE_SIZE:g}', track=LINE_TRACK, base=f'{LINE_BASELINE:g}',
                    lbox=[round(v, 2) for v in line_view], ld=line_d, apt=ANDROID_PT, apx=f'{aw:.2f}')
@@ -282,16 +297,21 @@ def main():
 
     # The website's own loader (public/index.html), shown before any of the app's code has run: the same
     # shapes, sized as the app's web splash sizes them (WebLaunchMarkC: the mark 22% of the width, at most
-    # 96 px), so the app's first screen replaces it with nothing moving.
+    # 96 px), so the app's first screen replaces it with nothing moving. White, or dark when the browser
+    # (the phone or computer it runs on) is in dark mode: the app's first screen picks the same way.
     vb = lambda v: ' '.join(f'{x:g}' for x in (round(t, 2) for t in v))
     u = f'calc(min({MARK_FRAC * 100:g}vw, 96px) / {mw:.2f})'
+    looks = (
+        f'#cs-launch{{background:{hexc(GROUND)}}}#cs-launch .cs-mark{{fill:{hexc(GREEN)}}}#cs-launch .cs-line{{fill:{hexc(LINE_INK)}}}'
+        f'@media (prefers-color-scheme: dark){{#cs-launch{{background:{hexc(DARK_GROUND)}}}#cs-launch .cs-mark{{fill:{hexc(DARK_GREEN)}}}#cs-launch .cs-line{{fill:{hexc(DARK_LINE_INK)}}}}}')
     block = (
         '<!-- launch:start (written by scripts/make-splash-c.py; the app\'s first screen replaces it) -->\n'
-        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;background:{hexc(GROUND)};--u:{u}">\n'
+        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;--u:{u}">\n'
+        f'        <style>{looks}</style>\n'
         f'        <svg viewBox="{vb(mark_view)}" style="position:absolute;left:50%;top:50%;width:calc(var(--u) * {mark_view[2]:g});height:calc(var(--u) * {mark_view[3]:g});transform:translate(-50%,-50%)">'
-        f'<path fill="{hexc(GREEN)}" fill-rule="evenodd" d="{mark_d}"/></svg>\n'
+        f'<path class="cs-mark" fill-rule="evenodd" d="{mark_d}"/></svg>\n'
         f'        <svg viewBox="{vb(line_view)}" style="position:absolute;left:50%;bottom:calc(var(--u) * {PIC_H - line_view[1] - line_view[3]:g});width:calc(var(--u) * {line_view[2]:g});height:calc(var(--u) * {line_view[3]:g});transform:translateX(-50%)">'
-        f'<path fill="{hexc(LINE_INK)}" d="{line_d}"/></svg>\n'
+        f'<path class="cs-line" d="{line_d}"/></svg>\n'
         '      </div>\n'
         '      <!-- launch:end -->')
     page = os.path.join(ROOT, 'public/index.html')
@@ -315,6 +335,12 @@ export const PICTURE_C = {{ width: {W}, height: {H} }};
 /** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
 export const SPLASH_C_COLORS = {{ ground: '{ground}', green: '{green}', line: '{line}' }};
 
+/**
+ * The dark look (Oct 25, assets/splash-c-dark.png), shown when the phone is in dark mode: the Night
+ * theme's ground, its green and its muted grey.
+ */
+export const SPLASH_C_DARK_COLORS = {{ ground: '{dground}', green: '{dgreen}', line: '{dline}' }};
+
 /** The mark: its box (x, y, width, height), its own width, the middle it is centred on, and its outline (even-odd: the windows are holes). */
 export const MARK_C = {{
   view: {mbox},
@@ -332,7 +358,7 @@ export const LINE_C = {{
   d: '{ld}',
 }};
 
-/** Android's launch icon (assets/splash-c-android.png): 1024 px shown {apt} points across, the mark {apx} px wide in it. */
+/** Android's launch icon (assets/splash-c-android.png, and -dark): 1024 px shown {apt} points across, the mark {apx} px wide in it. */
 export const ANDROID_C = {{ iconPt: {apt}, iconPx: 1024, markPx: {apx} }};
 '''
 

@@ -1,12 +1,13 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Animated, Easing, PixelRatio, Platform, StyleSheet, Text, View, useWindowDimensions, type TextLayoutEvent } from 'react-native';
 import Svg, { G, Path, Rect } from 'react-native-svg';
 
 import { font, wordmarkFont } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
-import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS } from '@/components/launchPictureC';
+import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS, SPLASH_C_DARK_COLORS } from '@/components/launchPictureC';
 import { NEW_SPLASH } from '@/lib/splashLook';
+import { onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
@@ -206,17 +207,44 @@ function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
  * Splash C (Oct 24): the logo-only look, as Instagram, WhatsApp and Threads open: the icon's thin mark
  * in the icon's green, and "GROWING THE GAME" small and quiet at the foot. On white since Oct 25 (the
  * Clean theme's ground: on the icon's cream, the app then turned white; owner: "Think the loading
- * screen color is off"), the line in Clean's muted grey. Always in those colours (the launch picture's
- * own, whatever the theme): the curtain's fade into the app carries you into your theme, as before.
+ * screen color is off"), the line in Clean's muted grey. Always in the launch picture's own colours,
+ * whatever the theme: the curtain's fade into the app carries you into your theme, as before.
  * Shapes from launchPictureC.ts (scripts/make-splash-c.py, written with assets/splash-c.png from the
  * same outlines). Drawn only where the launch picture is the
  * new one (NEW_SPLASH, src/lib/splashLook.ts); older iPhone builds keep the look above.
+ *
+ * Two looks since Oct 25 (owner: "just have two themes for the loading screen just white clean and
+ * dark mode"): white, and dark when the phone is in dark mode (assets/splash-c-dark.png: Night's
+ * ground, green and grey). The phone's own launch picture follows the phone's light or dark mode, not
+ * the app's theme (it is shown before any of the app runs), so the drawn copy follows the phone too
+ * (launchDark), and the two always match at the hand-over.
  */
-const C = SPLASH_C_COLORS;
+
+/** The launch look is the dark one: the phone is in dark mode (only where the launch picture is splash C and the app can tell). */
+export function launchDark(): boolean {
+  return NEW_SPLASH && phoneDark();
+}
+
+/** The launch look's colours: white or dark, as the phone's own launch picture is. */
+const lookC = () => (launchDark() ? SPLASH_C_DARK_COLORS : SPLASH_C_COLORS);
+
+const noWatch = () => () => undefined;
+const watchPhone = (told: () => void) => onPhoneAppearance(() => told());
+/**
+ * Whether the launch look is the dark one, and a redraw of the part using it should the phone's mode
+ * be heard again while it is up (`on`: a first reading put right as the app's window comes up). Every
+ * part that draws the launch look or its ground uses this, listening only while it shows the look, so
+ * the phone changing mode later redraws nothing. Older iPhone builds: always false, nothing heard.
+ */
+export function useLaunchDark(on = true): boolean {
+  return useSyncExternalStore(NEW_SPLASH && on ? watchPhone : noWatch, launchDark, launchDark);
+}
 const LINE_C_TEXT = { size: LINE_C.size, tracking: LINE_C.tracking, baseline: LINE_C.baseline, centre: PICTURE_C.width / 2 };
 
 /** iPhone: the picture's mark and line, where the picture (drawn to cover the screen) has them. */
 function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
+  useLaunchDark();
+  const C = lookC();
   const { width: W, height: H } = useWindowDimensions();
   const s = Math.max(W / PICTURE_C.width, H / PICTURE_C.height);
   const ox = (W - PICTURE_C.width * s) / 2;
@@ -245,6 +273,8 @@ function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
  * the old name and line did; on the website it is simply there, as on its loader (public/index.html).
  */
 function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { markWidth: number; line?: string; fadeLine: boolean }) {
+  useLaunchDark();
+  const C = lookC();
   const s = markWidth / MARK_C.width;
   const [mx, my, mw, mh] = MARK_C.view;
   const [lx, ly, lw, lh] = LINE_C.view;
@@ -306,8 +336,17 @@ export const LaunchMark: (props: { ink: string; faint: string; line?: string }) 
   ? (Platform.OS === 'web' ? WebLaunchMarkC : Platform.OS === 'android' ? AndroidLaunchMarkC : PhoneLaunchMarkC)
   : (Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark);
 
-/** Splash C is drawn on its own white (whatever the theme); today's look keeps the screen's own colour. */
-export const launchGround = NEW_SPLASH ? { backgroundColor: C.ground } : null;
+const GROUND_LIGHT = { backgroundColor: SPLASH_C_COLORS.ground };
+const GROUND_DARK = { backgroundColor: SPLASH_C_DARK_COLORS.ground };
+/** Splash C is drawn on its own ground, white or dark as the phone is (whatever the theme); today's look keeps the screen's own colour. */
+export function launchGround() {
+  return NEW_SPLASH ? (launchDark() ? GROUND_DARK : GROUND_LIGHT) : null;
+}
+
+/** The status bar's icons over the launch look: light on the dark one, dark on white (and on today's cream). */
+export function launchStatusStyle(): 'light' | 'dark' {
+  return launchDark() ? 'light' : 'dark';
+}
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },
