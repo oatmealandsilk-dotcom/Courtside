@@ -4,6 +4,7 @@ import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui/Avatar';
 import { RichText } from '@/components/RichText';
@@ -21,6 +22,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { useCommentsV2 } from '@/features/feed/commentsV2';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -76,6 +78,8 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { users, posts, stories, comments, currentUserId, currentUser, actions } = useApp();
+  // COMMENTS_V2: the heart pops as you like, and Reply answers the press.
+  const v2 = useCommentsV2();
   const ask = useScopedConfirm();
   const who = users.find((u) => u.id === comment.authorId);
   // A comment on an Instant is its own kind to the server.
@@ -168,7 +172,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         {/* Beside the words' own button, not inside it: a button may not hold another on the web. */}
         {onReply && !comment.removed ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${who?.name ?? 'this comment'}`} onPress={onReply} style={styles.replyButton}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.replyText, big && styles.replyTextBig]}>Reply</Text>
+            {({ pressed }) => <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.replyText, big && styles.replyTextBig, v2 && pressed && styles.replyPressed]}>Reply</Text>}
           </Pressable>
         ) : null}
         {onUnhide ? (
@@ -195,12 +199,40 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         </SwipeArea></Modal>
       ) : null}
       {onUnhide ? null : (
-        <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
-          <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
-          {comment.likedBy.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
-        </Pressable>
+        v2 ? (
+          <LikeHeart liked={liked} count={comment.likedBy.length} onPress={() => actions.toggleLikeComment(comment.id)} />
+        ) : (
+          <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={() => actions.toggleLikeComment(comment.id)} style={styles.like}>
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
+            {comment.likedBy.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, liked && { color: colors.danger }]}>{comment.likedBy.length}</Text> : null}
+          </Pressable>
+        )
       )}
     </View>
+  );
+}
+
+/**
+ * A comment's heart (COMMENTS_V2): liking it fills it and pops it once, a
+ * quick swell and a settle; unliking just empties it. It moves only on a
+ * press, never as the list is drawn or scrolled. The count keeps a fixed
+ * width, so a new number never shifts the row.
+ */
+function LikeHeart({ liked, count, onPress }: { liked: boolean; count: number; onPress: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const pop = useSharedValue(1);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  const press = () => {
+    if (!liked) pop.value = withSequence(withTiming(1.25, { duration: 110 }), withSpring(1, { damping: 14, stiffness: 300 }));
+    onPress();
+  };
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={liked ? 'Unlike comment' : 'Like comment'} accessibilityState={{ selected: liked }} hitSlop={8} onPress={press} style={styles.like}>
+      <Animated.View style={popStyle}>
+        <Ionicons name={liked ? 'heart' : 'heart-outline'} size={16} color={liked ? colors.danger : colors.textFaint} />
+      </Animated.View>
+      {count ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, styles.countFixed, liked && { color: colors.danger }]}>{count}</Text> : null}
+    </Pressable>
   );
 }
 
@@ -221,12 +253,14 @@ const styleDefinitions = StyleSheet.create({
   // A full 44-point target round the heart (a browser has no hitSlop), taking no more room beside the words than before.
   like: { alignItems: 'center', gap: 2, paddingTop: 4, minWidth: 44, minHeight: 44, marginHorizontal: -10 },
   count: { ...typography.caption, color: colors.textFaint, letterSpacing: 0 },
+  countFixed: { minWidth: 24, textAlign: 'center' },
   photo: { width: 168, height: 210, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginTop: 7 },
   // A full finger's height (a browser has no hitSlop): the words where they were, the extra hanging into the gap below.
   replyButton: { alignSelf: 'flex-start', minHeight: 44, minWidth: 44, paddingTop: 6, paddingRight: 16, marginBottom: -20 },
   removedActions: { paddingTop: 2 },
   replyText: { ...typography.smallStrong, fontSize: 12, color: colors.textFaint },
   replyTextBig: { fontSize: 13 },
+  replyPressed: { opacity: 0.45 },
   // Unhide · Delete, on one your Hidden words hid: a shade stronger than Reply, so they read as the actions here.
   hiddenActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 6 },
   hiddenText: { ...typography.smallStrong, color: colors.textMuted },

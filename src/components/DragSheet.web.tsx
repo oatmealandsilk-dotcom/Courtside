@@ -100,6 +100,14 @@ export function DragSheet({
   handOverSignal?: number;
   /** No warm glow behind the header (the Send to sheet only; see the native twin). The side panel and the stage ignore it. */
   plain?: boolean;
+  /**
+   * The comments' keyboard on an iPhone (see the native twin). A browser
+   * reports no keyboard height frame by frame, so this sheet keeps its own
+   * keyboard handling and ignores it.
+   */
+  keyboardSync?: boolean;
+  /** The stage's calm open on a phone (see the native twin); a browser's stage already glides. Ignored. */
+  smoothOpen?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.

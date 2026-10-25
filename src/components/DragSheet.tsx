@@ -4,11 +4,11 @@ import { Keyboard, Platform, StyleSheet, View, useWindowDimensions } from 'react
 import { Pressable } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, KeyboardState, ReduceMotion, runOnJS, useAnimatedKeyboard, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming, type AnimatedKeyboardInfo, type SharedValue } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, radius } from '@/theme';
 import { Wash } from '@/components/Wash';
-import { CLOSE_MS, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
+import { CLOSE_MS, OPEN_MS_CALM, OPEN_SPRING, STAGE_EASING, getStage, setFull, stageChromeHold, stageDip, stageTop, subscribe as onStageChange, type StageGeo } from '@/features/feed/commentStage';
 import { useAndroidBack } from '@/lib/androidBack';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 import { corner } from '@/theme/look';
@@ -31,9 +31,106 @@ export interface SheetDrag {
   start: () => void;
   to: (translationY: number) => void;
   release: (velocityY: number) => void;
+  /**
+   * A worklet: the keyboard is up and rides with the sheet (keyboardSync on an
+   * iPhone). A pull down on the list is then the keyboard's own (it follows
+   * the finger down, and back up if let go early), never a pull on the sheet.
+   */
+  keyboardUp: () => boolean;
 }
 const DragSheetContext = createContext<SheetDrag | null>(null);
 export const useSheetDrag = () => useContext(DragSheetContext);
+
+/**
+ * For a page in a sheet with keyboardSync: where the top of the sheet's body
+ * (just under its header) will be, in window points, once the keyboard is all
+ * the way up. Read when the keyboard is about to show, so the page can scroll
+ * once, from the final layout, at the same moment the keyboard starts.
+ */
+export interface SheetKeyboard { bodyTopWithKeyboard: () => number }
+const SheetKeyboardContext = createContext<SheetKeyboard | null>(null);
+export const useSheetKeyboard = () => useContext(SheetKeyboardContext);
+
+const OPENING = KeyboardState.OPENING;
+/** The keyboard's full height the last time it came up (it is the same each time on a phone), so a ride's very first frame is already right. */
+let lastKeyboard = 0;
+
+/**
+ * keyboardSync, on an iPhone: the keyboard's own height moves the sheet, frame
+ * by frame on the animation thread, so the keyboard, the box riding on it and
+ * the sheet's top travel as one move and arrive together, both ways, and
+ * follow a finger that drags the keyboard down. No spring of its own.
+ *
+ * `pos` is where the sheet is (its top, or how far below full it sits),
+ * `full` where the keyboard takes it, `back()` where it comes back to.
+ * `raised` says the keyboard (not a finger) took it up: a drag clears it and
+ * the sheet stops following. It starts on the animation thread the moment the
+ * keyboard does, so a busy moment in JavaScript can never leave the sheet a
+ * step behind; JavaScript then gives it the keyboard's exact height.
+ */
+function useKeyboardRide({ on, keyboard, pos, full, back, raised, closing, H, onShow, onUp, onDown }: {
+  on: boolean;
+  keyboard: AnimatedKeyboardInfo;
+  pos: SharedValue<number>;
+  full: number;
+  back: () => number;
+  raised: SharedValue<boolean>;
+  closing: SharedValue<boolean>;
+  /** The window's height, for a first guess at the keyboard's before it has ever been up. */
+  H: number;
+  onShow?: () => void;
+  onUp?: () => void;
+  onDown?: () => void;
+}) {
+  const from = useSharedValue(0);
+  const kbFull = useSharedValue(lastKeyboard || Math.round(H * 0.39));
+  useAnimatedReaction(() => keyboard.height.value, (h, prev) => {
+    if (!on || closing.value) return;
+    if (!raised.value) {
+      if (!(h > 0 && (prev === null || prev <= 0) && keyboard.state.value === OPENING)) return;
+      if (pos.value <= full + 1) return;
+      raised.value = true;
+      from.value = pos.value;
+    }
+    pos.value = from.value + (full - from.value) * Math.min(1, h / Math.max(1, kbFull.value));
+  }, [on, full]);
+  const latest = useRef({ back, onShow, onUp, onDown });
+  latest.current = { back, onShow, onUp, onDown };
+  useEffect(() => {
+    if (!on) return undefined;
+    // Between the keyboard starting up and it being all the way gone.
+    let shown = false;
+    const subs = [
+      Keyboard.addListener('keyboardWillShow', (e) => {
+        const k = e.endCoordinates.height;
+        if (!(k > 0)) return;
+        // Its height changing while up (another keyboard, the word bar): the sheet stays at full.
+        if (!shown) { shown = true; kbFull.value = k; lastKeyboard = k; } else kbFull.value = Math.min(kbFull.value, k);
+        latest.current.onShow?.();
+        if (raised.value || closing.value || pos.value <= full + 1) return;
+        raised.value = true;
+        from.value = pos.value;
+      }),
+      // All the way up: exactly at full, a plain number; from here a hide comes back to `back`.
+      Keyboard.addListener('keyboardDidShow', () => {
+        if (!raised.value || closing.value) return;
+        pos.value = full;
+        from.value = latest.current.back();
+        latest.current.onUp?.();
+      }),
+      Keyboard.addListener('keyboardWillHide', () => { if (raised.value && !closing.value) from.value = latest.current.back(); }),
+      Keyboard.addListener('keyboardDidHide', () => {
+        shown = false;
+        if (!raised.value) return;
+        raised.value = false;
+        if (closing.value) return;
+        pos.value = latest.current.back();
+        latest.current.onDown?.();
+      }),
+    ];
+    return () => subs.forEach((sub) => sub.remove());
+  }, [on, full]); // eslint-disable-line react-hooks/exhaustive-deps
+}
 
 /**
  * A card sheet with exactly two places the drag handle can leave it: open
@@ -98,9 +195,22 @@ export function DragSheet(props: {
   handOverSignal?: number;
   /** No warm glow behind the header: a flat sheet in the page colour (the Send to sheet only). Opt-in; the comments stage ignores it. */
   plain?: boolean;
+  /**
+   * The comments' keyboard (Oct 25, COMMENTS_V2): on an iPhone the keyboard's
+   * own height moves the sheet (useKeyboardRide) instead of a spring of its
+   * own; a tap on the header puts the keyboard away; closing takes the
+   * keyboard down with the sheet; on the stage a pull down on the list with
+   * the keyboard up is the keyboard's. Opt-in; every other sheet leaves it out.
+   */
+  keyboardSync?: boolean;
+  /** The stage rises as one calm glide once it has drawn, its clip's words fading on their own short clock (COMMENTS_V2). The plain sheet ignores it. */
+  smoothOpen?: boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
+
+/** A tap on a sheet's header puts the keyboard away (keyboardSync); with it down, nothing happens. */
+const keyboardAway = () => { if (Keyboard.isVisible()) Keyboard.dismiss(); };
 
 function PlainSheet({
   header,
@@ -114,6 +224,7 @@ function PlainSheet({
   ownBack = false,
   handOverSignal = 0,
   plain = false,
+  keyboardSync = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -126,6 +237,7 @@ function PlainSheet({
   ownBack?: boolean;
   handOverSignal?: number;
   plain?: boolean;
+  keyboardSync?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -217,6 +329,7 @@ function PlainSheet({
   const dismiss = () => {
     if (closing.value) return;
     closing.value = true;
+    raisedByKeyboard.value = false;
     // The keyboard (a search or comment box in the sheet) goes down with the
     // sheet, not after it: the page it uncovers is then already at rest.
     Keyboard.dismiss();
@@ -257,12 +370,25 @@ function PlainSheet({
   // the keyboard frame by frame (the phone reports its height as it moves),
   // so a box at the bottom stays right on top of it, never jumping after it.
   const keyboard = useAnimatedKeyboard();
+  // keyboardSync on an iPhone: the keyboard's height takes it up to full and,
+  // when the keyboard goes, back to where it was resting (useKeyboardRide).
+  const ride = keyboardSync && Platform.OS === 'ios';
+  const raisedByKeyboard = useSharedValue(false);
+  useKeyboardRide({
+    on: ride, keyboard, pos: translateY, full: 0, back: () => latestOpen.current, raised: raisedByKeyboard, closing, H: windowHeight,
+    onShow: () => { touched.current = true; },
+  });
   useEffect(() => {
+    if (ride) return undefined;
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const show = Keyboard.addListener(showEvent, () => openFull());
     return () => { show.remove(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [windowHeight]);
+  const sheetKeyboard = useMemo<SheetKeyboard>(() => ({
+    // Fully open (the ride takes it there): its top a sliver below the status bar, its body under the header.
+    bodyTopWithKeyboard: () => insets.top + 20 + headH,
+  }), [insets.top, headH]);
 
   const closeCount = useRef(closeSignal);
   useEffect(() => {
@@ -297,6 +423,8 @@ function PlainSheet({
     .onStart(() => {
       'worklet';
       if (closing.value) return;
+      // A finger has it now: the keyboard no longer moves it.
+      raisedByKeyboard.value = false;
       startY.value = translateY.value;
       runOnJS(markTouched)();
     })
@@ -335,12 +463,14 @@ function PlainSheet({
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         {plain ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
-          <View style={styles.handle} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
+          <View style={styles.handle} onTouchEnd={keyboardSync ? keyboardAway : undefined} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== headH) setHeadH(h); }}>
             <View style={styles.grabber} />
             <Animated.View style={contentStyle}>{header}</Animated.View>
           </View>
         </GestureDetector>
-        <Animated.View style={[styles.body, bodyStyle, contentStyle]}>{children}</Animated.View>
+        <Animated.View style={[styles.body, bodyStyle, contentStyle]}>
+          {keyboardSync ? <SheetKeyboardContext.Provider value={sheetKeyboard}>{children}</SheetKeyboardContext.Provider> : children}
+        </Animated.View>
       </Animated.View>
     </View>
   );
@@ -370,6 +500,8 @@ function StageSheet({
   onSettled,
   geo,
   stageOverlay,
+  keyboardSync = false,
+  smoothOpen = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -378,6 +510,8 @@ function StageSheet({
   onSettled?: () => void;
   geo: StageGeo;
   stageOverlay?: React.ReactNode;
+  keyboardSync?: boolean;
+  smoothOpen?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
@@ -430,9 +564,34 @@ function StageSheet({
       stageDip.value = withSequence(withTiming(0, { duration: 100, reduceMotion: ReduceMotion.Never }), withTiming(1, { duration: 120, reduceMotion: ReduceMotion.Never }));
       stageTop.value = withDelay(100, withTiming(yh, { duration: 0, reduceMotion: ReduceMotion.Never }));
       card.value = withDelay(100, withTiming(1, { duration: 200, reduceMotion: ReduceMotion.Never }));
+    } else if (smoothOpen) {
+      // The clip's words stay as they are until the rise starts (they would otherwise go with the sheet's first point of travel).
+      stageChromeHold.value = 1;
     } else {
       stageTop.value = withSpring(yh, OPEN_SPRING);
     }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // smoothOpen (COMMENTS_V2): the rise starts once the sheet and its comments
+  // are on screen (its first layout, then the next frame), so no frame of it
+  // is spent waiting on them being drawn: one glide on the stage's curve, with
+  // no overshoot, the clip shrinking with it from the first frame. The clip's
+  // words fade on their own short clock from that same moment. Never later
+  // than a moment after the tap, whatever happens to the layout.
+  const rose = useRef(!smoothOpen || reduced);
+  const rise = () => {
+    if (rose.current) return;
+    rose.current = true;
+    stageChromeHold.value = withTiming(0, { duration: 120, easing: Easing.out(Easing.quad), reduceMotion: ReduceMotion.Never });
+    // The keyboard (or a finger) took it already: it is theirs from here.
+    if (closing.value || raisedByKeyboard.value || stageTop.value < H - 1) return;
+    stageTop.value = withTiming(yh, { duration: OPEN_MS_CALM, easing: STAGE_EASING, reduceMotion: ReduceMotion.Never });
+  };
+  // Read from the header's first layout (it is laid out in the same pass as the comments, and never changes size as the sheet moves).
+  const onDrawn = () => { if (!rose.current) requestAnimationFrame(rise); };
+  useEffect(() => {
+    if (rose.current) return undefined;
+    const late = setTimeout(rise, 150);
+    return () => clearTimeout(late);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Opened: told once, the first time the sheet reaches a stop (half, or
@@ -452,6 +611,8 @@ function StageSheet({
     if (closing.value) return;
     closing.value = true;
     raisedByKeyboard.value = false;
+    // keyboardSync: the keyboard goes down with the sheet, not after the page has gone.
+    if (keyboardSync) Keyboard.dismiss();
     // Whatever happens to the animation, the page is not left open behind it.
     setTimeout(finish, (reduced ? 240 : CLOSE_MS) + 200);
     if (reduced) {
@@ -472,7 +633,19 @@ function StageSheet({
   // The keyboard takes the sheet up to full and the clip fades out as it
   // goes; when it goes away the sheet comes back to half and the clip grows
   // back, still playing. A sheet the person pulled to full stays there.
+  // keyboardSync on an iPhone: the keyboard's own height does this instead, as one move with it (useKeyboardRide).
+  const ride = keyboardSync && Platform.OS === 'ios';
+  useKeyboardRide({
+    on: ride, keyboard, pos: stageTop, full: yf, back: () => yh, raised: raisedByKeyboard, closing, H,
+    onUp: () => setFull(true), onDown: () => setFull(false),
+  });
+  // The top of the comments, under the header, once the keyboard is up: the sheet at full (the ride takes it there).
+  const handleH = useRef(60);
+  const sheetKeyboard = useMemo<SheetKeyboard>(() => ({
+    bodyTopWithKeyboard: () => Math.min(stageTop.value, yf) + StyleSheet.hairlineWidth + handleH.current,
+  }), [yf]);
   useEffect(() => {
+    if (ride) return undefined;
     const ios = Platform.OS === 'ios';
     const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => {
       if (closing.value || stageTop.value <= yf + 1) return;
@@ -568,7 +741,8 @@ function StageSheet({
       .onEnd((e) => { 'worklet'; release(e.velocityY); });
     const stageTap = Gesture.Tap().maxDistance(10).onEnd((_e, success) => { 'worklet'; if (success) runOnJS(tapStage)(); });
     // The list's pull down at its top (see comments) is this same drag.
-    const drag: SheetDrag = { start: dragStart, to: dragTo, release };
+    const keyboardUp = () => { 'worklet'; return ride && keyboard.height.value > 1; };
+    const drag: SheetDrag = { start: dragStart, to: dragTo, release, keyboardUp };
     return { headerPan, stageZone: Gesture.Exclusive(stagePan, stageTap), drag };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -597,12 +771,14 @@ function StageSheet({
         <Animated.View style={[styles.sheet, styles.stageSheet, sheetStyle]}>
           <Wash height={300} strength={0.85} />
           <GestureDetector gesture={headerPan}>
-            <View style={[styles.handle, styles.stageHandle]}>
+            <View style={[styles.handle, styles.stageHandle]} onTouchEnd={keyboardSync ? keyboardAway : undefined} onLayout={(e) => { handleH.current = e.nativeEvent.layout.height; onDrawn(); }}>
               <View style={styles.grabber} />
               {header}
             </View>
           </GestureDetector>
-          <Animated.View style={[styles.body, bodyStyle]}>{children}</Animated.View>
+          <Animated.View style={[styles.body, bodyStyle]}>
+            {keyboardSync ? <SheetKeyboardContext.Provider value={sheetKeyboard}>{children}</SheetKeyboardContext.Provider> : children}
+          </Animated.View>
         </Animated.View>
       </View>
     </DragSheetContext.Provider>

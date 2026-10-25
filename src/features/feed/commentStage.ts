@@ -36,6 +36,8 @@ export const STAGE_CURVE_CSS = 'cubic-bezier(.32,.72,0,1)';
 export const OPEN_SPRING = { damping: 24, stiffness: 240, mass: 0.9, reduceMotion: ReduceMotion.Never } as const;
 /** Closed by a button, a tap or a key: long enough that the clip lands softly back to full size. */
 export const CLOSE_MS = 320;
+/** The sheet rising to half as one glide on the stage's curve, once it has drawn (COMMENTS_V2's smoothOpen). */
+export const OPEN_MS_CALM = 380;
 export const OPEN_MS_WEB = 380;
 export const SNAP_MS_WEB = 240;
 
@@ -66,6 +68,13 @@ export const stageTop = makeMutable(STAGE_IDLE);
 export const stageGeo = makeMutable<StageGeo | null>(null);
 /** Reduce Motion: the page dips out and back in place of travelling. */
 export const stageDip = makeMutable(1);
+/**
+ * The smooth open (COMMENTS_V2): the clip's words and buttons are held at
+ * least this shown, so they fade on their own short clock from the moment
+ * the rise starts rather than with the sheet's first point of travel. 0 (no
+ * hold) everywhere else, so every other move fades them by where the sheet is.
+ */
+export const stageChromeHold = makeMutable(0);
 
 const clampN = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
@@ -147,7 +156,7 @@ export function stageFrame(y: number, G: StageGeo | null): StageFrame {
     ty: cy - pcy,
     s,
     video,
-    chrome: 1 - clamp(p / 0.3, 0, 1),
+    chrome: Math.max(1 - clamp(p / 0.3, 0, 1), stageChromeHold.value),
     rail: railIn * video,
     railDy: 8 * (1 - railIn),
     nav: 1 - clamp(p / 0.2, 0, 1),
@@ -200,6 +209,7 @@ export function begin({ owner, key, mode, geo = null, focusBack = null, ownerOnT
   lastId += 1;
   current = { id: lastId, owner, key, mode, covered: false, lost: false, mounted: false, full: false, ending: false, geo, focusBack, ownerOnTop };
   stageGeo.value = geo;
+  stageChromeHold.value = 0;
   emit();
 }
 export const setCovered = (covered: boolean) => update({ covered });
@@ -227,6 +237,7 @@ export function clear() {
   current = null;
   stageGeo.value = null;
   stageTop.value = STAGE_IDLE;
+  stageChromeHold.value = 0;
   lastPlaced = STAGE_IDLE;
   liveY = STAGE_IDLE;
   glideNow = null;
