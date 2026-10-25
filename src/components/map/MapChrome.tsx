@@ -1,6 +1,6 @@
 import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -38,7 +38,6 @@ import { useOpenClock } from '@/features/players/useOpenClock';
 import { LevelPill as Level } from '@/components/LevelPill';
 import type { User } from '@/data/types';
 import { countLabel } from '@/features/places/court';
-import { CityHaze } from '@/components/map/CityHaze';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } from '@/features/players/courtLink';
 import { Toggle } from '@/components/ui';
@@ -1582,6 +1581,16 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
 }
 
 /**
+ * The thin edge in the map's ground colour on the card's city words. A
+ * browser draws it as a tight ring of three short shadows, close to a map
+ * label's halo; a phone's one shadow is kept just as short. `ground` is the
+ * court's page colour, the map's own ground.
+ */
+const labelEdge = (ground: string) => (Platform.OS === 'web'
+  ? ({ textShadow: `0 0 1px ${ground}, 0 0 2px ${ground}, 0 0 3px ${ground}` } as object)
+  : { textShadowColor: ground, textShadowRadius: 3, textShadowOffset: { width: 0, height: 0 } });
+
+/**
  * What sits on the still card in the Find Players tab: your city's name in
  * the middle of its own map, the way Snapchat's map names where you are, with
  * who is around under it; a round location switch, and the weather. Nothing
@@ -1590,6 +1599,8 @@ export function HitSheet({ hit, miles, onClose }: { hit: HitRequest; miles?: num
  */
 export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { theme } = useTheme();
+  const edge = labelEdge(themes[theme].bg);
   // A teen sees only friends who follow each other with them (migration 78),
   // so for anyone not known to be an adult an empty map says nothing about
   // the town: no "be the first" for them.
@@ -1606,19 +1617,19 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
   return (
     <>
       {/* The city's name is the top layer, so a player's ring or a court never
-          sits over the words however busy the middle of town gets. Behind the
-          words, a soft haze of the page colour that fades to nothing on every
-          side (CityHaze), so the name reads over roads and pins. */}
+          sits over the words however busy the middle of town gets. Each word
+          wears a thin edge of the map's ground colour, the way a map's own
+          labels do, so it reads over roads and pins with nothing behind it
+          (Oct 25, owner: "I don't like this big glare here", of the haze that was). */}
       <View pointerEvents="none" style={styles.cityMark}>
         <View style={styles.cityGlow}>
-          <CityHaze />
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cityName} numberOfLines={1}>{cityName}</Text>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn]}>{line}</Text>
-          {hitCount ? <Text style={styles.cityHits}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cityName, edge]} numberOfLines={1}>{cityName}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn, edge]}>{line}</Text>
+          {hitCount ? <Text style={[styles.cityHits, edge]}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
-            : !count && placeCount && hint ? <Text style={styles.cityHits}>{hint}</Text>
+            : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={styles.cityHits}>Be the first player on the map</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Be the first player on the map</Text> : null}
         </View>
       </View>
       {onToggleLocation ? (
@@ -1944,13 +1955,12 @@ const styleDefinitions = StyleSheet.create({
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   // In the middle of the card, where it always sat (Oct 6, owner: the Oct 5 move to the top was unasked).
   cityMark: { position: 'absolute', left: spacing.xl, right: spacing.xl, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', zIndex: 10, elevation: 10 },
-  // Holds the words and their haze (CityHaze, drawn behind them). Oct 2, William: "more of a
-  // rectangle with like a shadow fade" but "it shouldn't be clear that it is a rectangle".
+  // Holds the words, each with its thin edge (labelEdge); nothing is drawn behind them.
   cityGlow: { alignItems: 'center', gap: 2, paddingHorizontal: 12, paddingVertical: 6 },
-  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.4, color: colors.text, textShadowColor: colors.bg, textShadowRadius: 10, textShadowOffset: { width: 0, height: 0 } },
-  cityCount: { ...typography.smallStrong, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  cityName: { ...typography.title, fontSize: 26, letterSpacing: -0.4, color: colors.text },
+  cityCount: { ...typography.smallStrong, color: colors.textMuted },
   cityCountOn: { color: colors.brand },
-  cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, textShadowColor: colors.bg, textShadowRadius: 8, textShadowOffset: { width: 0, height: 0 } },
+  cityHits: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
   // The map search's courts, under the bar: the bar's own glass, one row per place.
   resultsWrap: { paddingHorizontal: spacing.md },
   results: { paddingHorizontal: spacing.md },

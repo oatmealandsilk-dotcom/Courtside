@@ -17,6 +17,7 @@ import { GlassFill, liquidGlass, useGlassSteady } from '@/components/ui/Glass';
 import { BrandWash } from '@/components/ui';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
+import { boxLook } from './SessionCard';
 import { ZoneGlyph } from './ZoneGlyph';
 
 /** Small words over video wear a crisp dark edge (see ReelCaption); white over media is the one exception to the theme's colours. */
@@ -42,8 +43,11 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   active?: boolean;
 }) {
   const k = scale;
-  useTheme(); // repaint when the theme changes
-  const isDark = pageIsDark();
+  const { theme } = useTheme(); // and repaint when the theme changes
+  // The neutral dark glass, white words: the dark courts, and Clean, whose session box is no longer
+  // green (Oct 25, owner: "clean theme is no longer this green for the card"). Clean's other things
+  // over a clip (the level pill) are the same neutral frost, as Instagram's chips over video are.
+  const neutral = pageIsDark() || !!boxLook(theme).plain;
   const p = pillPieces(session, hidden);
   const result = resultWord(session);
   // The pill shows a match's score beside the result (pillPieces, migration 91); said here as "6 to 4".
@@ -81,7 +85,7 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
 
   // Lighter and tighter (Oct 4): the time bold, the rest a quieter medium, as the waitlist page sets type.
   // On the solid colour the words need no shadow (it only muddied them); on the dark glass they keep one.
-  const text = { ...font('500'), fontSize: 13 * k, letterSpacing: -0.15 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...(isDark ? EDGE_SMALL : null) };
+  const text = { ...font('500'), fontSize: 13 * k, letterSpacing: -0.15 * k, color: '#FFFFFF', fontVariant: ['tabular-nums' as const], ...(neutral ? EDGE_SMALL : null) };
   const row = (words: string, still = false) => (
     // Instagram's "Made with Edits" pill (Oct 4): slim, fully round, one line, a hairline before See stats, a small arrow.
     <View style={[styles.row, { height: 30 * k, paddingLeft: 11 * k, paddingRight: 9 * k, gap: 7 * k }]}>
@@ -115,8 +119,8 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   const steady = useGlassSteady();
   const blurLayer = Platform.OS === 'ios' && steady ? <BlurView pointerEvents="none" intensity={30} tint="dark" style={StyleSheet.absoluteFill} /> : null;
   // The workout card's own colour (Oct 3): the theme's brand with the same wash,
-  // so a clip's stats read as the same thing as a stats post. Dark themes keep the glass.
-  const glass = !isDark
+  // so a clip's stats read as the same thing as a stats post. Dark themes and Clean keep the neutral glass.
+  const glass = !neutral
     // Frosted glass tinted the theme's colour, its wash faint over it, no shine (Oct 4, owner: option A in the theme's colour).
     ? liquidGlass
       // iOS 26: Apple's glass carrying the theme's colour, the wash faint inside it.
