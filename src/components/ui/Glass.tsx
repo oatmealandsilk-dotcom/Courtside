@@ -23,14 +23,16 @@ export const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
  * York's navy), with two warnings each time; nearly solid also keeps the
  * labels readable over a busy clip.
  */
-export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, behind = false }: {
+export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, behind = false, dark: darkGlass }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean;
   /** A hint of colour in the glass; the theme's ground by default. */ tint?: string;
   /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean;
   /** The glass a layer of its own behind what it holds (a toast's tick drawing itself in). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
+  /** Dark glass whatever the court (the tab bar over a clip on the Feed, with a dark `tint`); the court's own by default. */ dark?: boolean;
 }) {
   // Dark glass on a dark page (Night, and New York's navy).
-  const { dark } = useTheme();
+  const { dark: darkPage } = useTheme();
+  const dark = darkGlass ?? darkPage;
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
   const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };

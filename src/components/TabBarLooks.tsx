@@ -4,6 +4,7 @@ import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, 
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
+import { Glass } from '@/components/ui/Glass';
 import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
@@ -34,9 +35,16 @@ export interface LookItem {
 
 /**
  * The phone's tab bar as a quiet pill (src/features/navigation/tabBarLook.ts):
- * today's bar in a new shape. NavBar keeps everything it does (the rise on a
- * fresh open, the tuck as you scroll, the Create box's dim, the tutorial's
- * targets); this only draws the bar.
+ * today's bar in a new shape, on the old bar's Liquid Glass (Oct 25, owner:
+ * "Te bottom bar should be Liquid Glass like Strava and instagram"). NavBar
+ * keeps everything it does (the rise on a fresh open, the tuck as you scroll,
+ * the Create box's dim, the tutorial's targets); this only draws the bar.
+ *
+ * The glass bar's rules, kept here: nothing that holds the glass ever fades
+ * (the rise and the tuck only move it; the fading copies are solid and laid
+ * over it, never around it); its hairline edge is a plain layer, not a border
+ * on the glass; its shadow sits on the rounded layer around it, as on the old
+ * glass bar for weeks.
  */
 export function LookBar({
   items, activeRoute, feedUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
@@ -109,12 +117,12 @@ export function LookBar({
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
         <View style={styles.pillShadow}>
           {face(themes[theme], true)}
-          {/* The bar as it was before a clip came or went, fading out over the live one. */}
+          {/* The bar as it was before a clip came or went, solid, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
           ))}
-          {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one and
-              fading with the page (ThemeFade). Nothing here is glass, so nothing under a fade can go see-through. */}
+          {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one (beside
+              the glass, never holding it) and fading with the page (ThemeFade). The glass re-tints at the tap, under it. */}
           <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
           ))} />
@@ -136,9 +144,11 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
   const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
-  // Over a picture: a dark ground (the page's own where it is dark already, as on New York) and white marks.
+  // The ground: the old glass bar's Liquid Glass, tinted with the page's own colour (NavBar's 'now'),
+  // and on a fading copy that colour solid. Over a picture: dark glass (the page's own colour where it
+  // is dark already, as on New York) and white marks, the glass told so too, so the two always agree.
   const darkPage = inkOn(c.bg) === '#FFFFFF';
-  const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.surface;
+  const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.bg;
   const line = media ? withAlpha(c.onMedia, 0.14) : c.border;
   const idleIcon = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
   const idleLabel = media ? withAlpha(c.onMedia, 0.6) : c.textFaint;
@@ -195,17 +205,29 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
     );
   });
 
-  return (
-    <View style={[styles.pill, { backgroundColor: ground }]}>
+  const inside = (
+    <>
       {row}
-      {/* The hairline edge is a layer of its own under the Create box's dim, so it darkens with the rest. */}
+      {/* The hairline edge is a plain layer of its own, never a border on the glass, and under the
+          Create box's dim, so it darkens with the rest (Oct 17, owner: "outer edge not brighter"). */}
       <View pointerEvents="none" style={[styles.rim, { borderColor: line }]} />
       {live ? (
         <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: colors.overlay }, veilStyle]}>
           <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
         </Animated.View>
       ) : null}
-    </View>
+    </>
+  );
+  // A fading copy is never glass: it is the one thing here whose opacity moves, and glass under a
+  // fade can go see-through and stay that way (Oct 17). Solid, it reads as the glass it stands for.
+  if (!live) return <View style={[styles.pill, { backgroundColor: ground }]}>{inside}</View>;
+  // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
+  // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
+  // under the solid copy fading over it; nothing that holds it ever fades.
+  return (
+    <Glass clear tint={ground} dark={media ? true : undefined} radius={PILL_RADIUS} style={styles.pill}>
+      {inside}
+    </Glass>
   );
 }
 
@@ -228,6 +250,7 @@ const styles = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   // As far in from each side as today's pill (the tutorial's lit tab keeps inside it: TourOverlay's BAR_SIDE).
   pillWrap: { width: '100%', paddingHorizontal: 14 },
+  // The shadow on a rounded layer of its own around the glass (no fill, never faded), as the old glass bar's.
   pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
