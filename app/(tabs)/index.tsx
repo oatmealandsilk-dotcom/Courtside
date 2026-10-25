@@ -44,6 +44,7 @@ import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
+import { RailGlyph } from '@/components/RailGlyph';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
@@ -257,8 +258,9 @@ const phone = Platform.OS !== 'web' || !isDesktopBrowser();
  * The rail's icons and their sizes, matched by eye rather than by number: a
  * heart, a bubble, an arrow, a bookmark and three dots each read as about
  * 26pt of glyph at these sizes, where equal sizes made the heart look biggest.
+ * How they are drawn (outline, bolder, filled) is RAIL_ICONS_LOOK's (components/RailGlyph.tsx).
  */
-const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-redo-outline', 30], ['bookmark-outline', 28], ['ellipsis-horizontal', 26]] as const;
+const RAIL_ICONS = [['heart', 31], ['comment', 29], ['share', 30], ['save', 28], ['more', 26]] as const;
 /**
  * The rail stands a little above the words' bottom line (Oct 4, owner: the dots sat too low,
  * crowding the tab bar; Oct 24 again: "a bit too low"), and every item takes the same slot (Oct 24,
@@ -1053,7 +1055,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         {RAIL_ICONS.map(([name, size]) => (
           <View key={name} style={styles.action}>
             {/* No shadow here: the shadow lifts white glyphs off a video, and on the plain page it only reads as a smudge. */}
-            <View style={styles.glyphBox}><Ionicons name={name} size={size} color={colors.textFaint} /></View>
+            <View style={styles.glyphBox}><RailGlyph icon={name} size={size} ink={colors.textFaint} /></View>
           </View>
         ))}
       </Reanimated.View>
@@ -2032,11 +2034,11 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       <RailShade />
                       <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
                       <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} dim style={styles.action}>
-                        <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
+                        <View style={styles.glyphBox}><RailGlyph icon="comment" size={RAIL_ICONS[1][1]} style={styles.actionGlyph} /></View>
                         {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
                       </Tappable>
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} dim style={styles.action}>
-                        <View style={styles.glyphBox}><Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} /></View>
+                        <View style={styles.glyphBox}><RailGlyph icon="more" size={RAIL_ICONS[4][1]} style={styles.actionGlyph} /></View>
                       </Tappable>
                     </Reanimated.View>
                     </ChromeLayer>
@@ -2243,7 +2245,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       dim
                       style={styles.action}
                     >
-                      <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
+                      <View style={styles.glyphBox}><RailGlyph icon="comment" size={RAIL_ICONS[1][1]} style={styles.actionGlyph} /></View>
                       {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
                     </Tappable>
                     {/* Taken down, nobody else could open it: nothing to send. */}
@@ -2254,7 +2256,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         dim
                         style={styles.action}
                       >
-                        <View style={styles.glyphBox}><Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} /></View>
+                        <View style={styles.glyphBox}><RailGlyph icon="share" size={RAIL_ICONS[2][1]} style={styles.actionGlyph} /></View>
                         {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
                       </Tappable>
                     )}
@@ -2264,7 +2266,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       dim
                       style={styles.action}
                     >
-                      <View style={styles.glyphBox}><Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} /></View>
+                      <View style={styles.glyphBox}><RailGlyph icon="save" on={isSaved} size={RAIL_ICONS[3][1]} style={styles.actionGlyph} /></View>
                       {(post.savedBy?.length ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text> : null}
                     </Tappable>
                     <Tappable
@@ -2273,7 +2275,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       dim
                       style={styles.action}
                     >
-                      <View style={styles.glyphBox}><Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} /></View>
+                      <View style={styles.glyphBox}><RailGlyph icon="more" size={RAIL_ICONS[4][1]} style={styles.actionGlyph} /></View>
                     </Tappable>
                   </Reanimated.View>
                   </ChromeLayer>
@@ -2469,6 +2471,7 @@ const styleDefinitions = StyleSheet.create({
   // Each glyph centred in the same box, whatever its size (RAIL_ICONS are matched by eye).
   glyphBox: { height: RAIL_GLYPH, justifyContent: 'center', alignItems: 'center' },
   // Plain white outlines with a crisp dark edge, as Reels sets them, rather than a heavier icon or a soft smudge.
+  // RailGlyph takes it as "with an edge": the bolder and filled looks (RAIL_ICONS_LOOK) draw their own.
   actionGlyph: GLYPH_EDGE,
   // Counts in the name's weight (TikTok's newest rail), figures all one width so "9" to "10" does not shift.
   // They sit high, where the words' shade is lightest (the rail's own shade is behind them), so they wear the darkest edge (COUNT_EDGE); the heart's count takes this too.

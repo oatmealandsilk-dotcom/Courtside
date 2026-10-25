@@ -1,9 +1,9 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { useSharedValue } from 'react-native-reanimated';
 
 import { LikeButton } from '@/components/LikeButton';
+import { RailGlyph } from '@/components/RailGlyph';
 import { Tappable } from '@/components/Tappable';
 import { COUNT_EDGE, GLYPH_EDGE, MAX_GROW, railCount } from '@/components/ReelCaption';
 import { useRailLive, useStageMotion } from '@/features/feed/useStageMotion';
@@ -43,12 +43,12 @@ export function StageRail({ kind, id }: { kind: 'post' | 'hit'; id: string }) {
               Taken down, nobody else could open it: nothing to send (as the feed rail). */}
           {post.removed ? null : (
             <Tappable accessibilityLabel={shareLabel(post, currentUserId, 'clip')} onPress={() => sharePost(post, currentUserId)} dim style={styles.action}>
-              <Ionicons name="arrow-redo-outline" size={26} color="white" style={GLYPH_EDGE} />
+              <RailGlyph icon="share" size={26} style={GLYPH_EDGE} />
               <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
             </Tappable>
           )}
           <Tappable accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'} onPress={() => actions.toggleSavePost(post.id)} dim style={styles.action}>
-            <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={25} color="white" style={GLYPH_EDGE} />
+            <RailGlyph icon="save" on={isSaved} size={25} style={GLYPH_EDGE} />
             <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text>
           </Tappable>
         </>

@@ -47,7 +47,7 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
         scaleTo={0.78}
         hitSlop={8}
       >
-        <Heart liked={like.on} pop={pop} size={size} ink={ink} style={glyphStyle} />
+        <Heart rail liked={like.on} pop={pop} size={size} ink={ink} style={glyphStyle} />
       </Tappable>
       <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
         {/* "1.2k" past a thousand; no likes yet shows nothing, the space holding the line so the rail never jumps. */}
