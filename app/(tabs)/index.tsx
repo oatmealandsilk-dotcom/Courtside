@@ -267,6 +267,16 @@ const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-r
  * fall one every RAIL_SLOT + the rail's gap, the way TikTok's rail does.
  */
 const RAIL_DROP = 16;
+/**
+ * What shows under a rail button with nothing to count yet (Oct 24, owner: "The reel buttons don't
+ * look even if one has a like and one does not"): 'now' nothing; 'words' a short word, as YouTube
+ * Shorts does ("Like", "Comment", "Share", "Save"); 'zeros' a 0. Words or zeros give every button
+ * the same look, so the gaps read even whatever the counts are.
+ */
+const RAIL_LABELS = 'now' as 'now' | 'words' | 'zeros';
+/** The line under a rail button: its count, or with none yet, what RAIL_LABELS says. */
+const railLine = (n: number, word: string): string | null => (n > 0 ? railCount(n) : RAIL_LABELS === 'words' ? word : RAIL_LABELS === 'zeros' ? '0' : null);
+const LIKE_EMPTY = RAIL_LABELS === 'words' ? 'Like' : RAIL_LABELS === 'zeros' ? '0' : undefined;
 const RAIL_GLYPH = 32;
 const RAIL_SLOT = RAIL_GLYPH + 2 + 16;
 /**
@@ -2030,10 +2040,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     </Reanimated.View>
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
-                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
+                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} emptyLabel={LIKE_EMPTY} />
                       <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} dim style={styles.action}>
                         <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
-                        {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
+                        {railLine(story.commentIds.length, 'Comment') ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railLine(story.commentIds.length, 'Comment')}</Text> : null}
                       </Tappable>
                       <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} dim style={styles.action}>
                         <View style={styles.glyphBox}><Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} /></View>
@@ -2236,7 +2246,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                   {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
                   <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                     <RailShade />
-                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
+                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} emptyLabel={LIKE_EMPTY} />
                     <Tappable
                       accessibilityLabel="Clip comments"
                       onPress={() => openClipComments()}
@@ -2244,7 +2254,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       style={styles.action}
                     >
                       <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
-                      {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
+                      {railLine(post.commentIds.length, 'Comment') ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railLine(post.commentIds.length, 'Comment')}</Text> : null}
                     </Tappable>
                     {/* Taken down, nobody else could open it: nothing to send. */}
                     {post.removed ? null : (
@@ -2255,7 +2265,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         style={styles.action}
                       >
                         <View style={styles.glyphBox}><Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} /></View>
-                        {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
+                        {railLine(post.shares ?? 0, 'Share') ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railLine(post.shares ?? 0, 'Share')}</Text> : null}
                       </Tappable>
                     )}
                     <Tappable
@@ -2265,7 +2275,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       style={styles.action}
                     >
                       <View style={styles.glyphBox}><Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} /></View>
-                      {(post.savedBy?.length ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text> : null}
+                      {railLine(post.savedBy?.length ?? 0, 'Save') ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railLine(post.savedBy?.length ?? 0, 'Save')}</Text> : null}
                     </Tappable>
                     <Tappable
                       accessibilityLabel="More options"

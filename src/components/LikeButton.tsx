@@ -25,6 +25,8 @@ interface Props {
   style?: StyleProp<ViewStyle>;
   glyphStyle?: object;
   labelStyle?: StyleProp<TextStyle>;
+  /** What the line under the heart says with no likes yet ("Like" or "0" on the clip rail); nothing when left out. */
+  emptyLabel?: string;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * itself and the count moves with it; the store follows a beat later without
  * anything on screen changing again.
  */
-export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop = 0, size = 36, ink = 'white', what, style, glyphStyle, labelStyle }: Props) {
+export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop = 0, size = 36, ink = 'white', what, style, glyphStyle, labelStyle, emptyLabel }: Props) {
   const like = useOptimisticToggle(ledgerKey, liked, onToggle, pop);
   const thing = what ? ` ${what}` : '';
   const total = count + like.delta;
@@ -51,7 +53,7 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
       </Tappable>
       <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
         {/* "1.2k" past a thousand; no likes yet shows nothing, the space holding the line so the rail never jumps. */}
-        {(state) => (total > 0 ? <Text maxFontSizeMultiplier={1.2} style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{compactNumber(total)}</Text> : null)}
+        {(state) => (total > 0 ? <Text maxFontSizeMultiplier={1.2} style={[labelStyle, (state as { hovered?: boolean }).hovered && { textDecorationLine: 'underline' }]}>{compactNumber(total)}</Text> : emptyLabel ? <Text maxFontSizeMultiplier={1.2} style={labelStyle}>{emptyLabel}</Text> : null)}
       </Pressable>
     </View>
   );
