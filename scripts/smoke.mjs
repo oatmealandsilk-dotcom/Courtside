@@ -833,14 +833,18 @@ async function matchPhoneCheck(page, seed, shot) {
     await other.send('Page.reload', {});
     const afterReload = await court();
     let inLight = null;
+    let fade = null;
     if (!seed) {
       await other.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
       inLight = await other.waitUntil(async () => { const now = await other.eval('window.__courtsideTheme?.live?.() ?? null'); return now === 'night' ? null : now; }, 10000, 'the app to leave Night as the screen turns light').catch(() => 'night');
+      // How that change played (src/theme/screenFade.web.tsx): the browser's own cross-fade, not a jump.
+      fade = await other.eval('window.__courtsideScreenFade ? { ...window.__courtsideScreenFade } : null');
+      await sleep(500);
     }
     if (other.problems.length) throw Object.assign(new Error(`${other.problems.length} error(s) in the Match phone page`), { problems: other.problems });
     if (other.blockedSupabase.length) throw new Error(`the app tried to reach the live backend: ${other.blockedSupabase[0]}`);
-    log(`match phone (${seed ? 'used before' : 'new'}): saved ${saved}, ${theme} (page ${pageBg}), after reload ${afterReload}${inLight ? `, light ${inLight}` : ''}`);
-    return { saved, theme, page: pageBg, afterReload, inLight };
+    log(`match phone (${seed ? 'used before' : 'new'}): saved ${saved}, ${theme} (page ${pageBg}), after reload ${afterReload}${inLight ? `, light ${inLight}` : ''}${fade ? `, faded by ${fade.way}` : ''}`);
+    return { saved, theme, page: pageBg, afterReload, inLight, fade };
   } finally {
     await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => undefined);
   }
@@ -1333,6 +1337,8 @@ const STEPS = [
       if (fresh.saved !== '1' || fresh.theme !== 'night' || fresh.page !== NIGHT_BG) throw new Error(`a new player in a dark browser: Match phone saved "${fresh.saved}", app on ${fresh.theme}, page ${fresh.page} (want "1", night, ${NIGHT_BG})`);
       if (fresh.afterReload !== 'night') throw new Error(`a new player, opened again: the app is on ${fresh.afterReload} (want night: decided once, never flipped)`);
       if (fresh.inLight !== 'clean') throw new Error(`a new player, the screen turned light: the app is on ${fresh.inLight} (want clean)`);
+      // Oct 25, owner: "It should fade to dark mode not immediately change". Chrome has view transitions.
+      if (fresh.fade?.way !== 'transition') throw new Error(`a new player, the screen turned light: the change played as ${fresh.fade?.way || 'a jump'} (want the browser's cross-fade, a view transition: src/theme/screenFade.web.tsx)`);
       // A new player who came through a link: courtsidebase.com's landing page (public/waitlist.html,
       // the same site) saved its visitor id and the link's mark before the app opened. Still new.
       const linked = await matchPhoneCheck(page, { 'courtside-visitor': '00000000-0000-4000-8000-000000000000', 'courtside-seen-fb': new Date().toDateString() }, path.join(OPTS.out, `${number}-match-phone-link.png`));
