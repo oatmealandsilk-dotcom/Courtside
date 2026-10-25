@@ -97,7 +97,8 @@ export function PeekCardBody(p: PeekCardProps) {
       <View style={styles.peek}>
         <CourtMapThumb lat={p.lat} lng={p.lng} width={PEEK_W} height={PEEK_H} zoom={ZOOM} draw={p.draw} />
         <Pin />
-        <Text pointerEvents="none" style={styles.credit}>© OpenStreetMap</Text>
+        {/* The map's licence asks for its credit on the map: tucked in the corner, small and muted, never growing with Text Size (Oct 25, owner: "make open street map smaller"). */}
+        <Text pointerEvents="none" maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>© OpenStreetMap</Text>
         {/* On the map's foot: the surface and what's on there, small light chips. Beside an open hit the
             surface is its dot alone, so the hit's time always reads whole. */}
         <View style={styles.chips} pointerEvents="none">
@@ -171,7 +172,7 @@ export const peekFrame = StyleSheet.create({ card: { width: PEEK_CARD_W, padding
 
 const styleDefinitions = StyleSheet.create({
   peek: { width: PEEK_W, height: PEEK_H, backgroundColor: colors.bgElevated, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  credit: { position: 'absolute', right: 5, top: 3, fontSize: 7, lineHeight: 9, color: colors.textFaint, opacity: 0.8 },
+  credit: { position: 'absolute', right: 4, top: 2, fontSize: 6.5, lineHeight: 8, letterSpacing: 0, color: colors.textFaint, opacity: 0.75 },
   // The chips' dot lines up with the name's first letter below (6 in, plus the chip's own 6).
   chips: { position: 'absolute', left: 6, bottom: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexShrink: 0 },

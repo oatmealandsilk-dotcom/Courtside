@@ -6,8 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { CrownGlyph } from '@/components/place/CrownGlyph';
-import { ListRow, SectionHead } from '@/components/place/courtPage/parts';
-import { Collapse } from '@/components/ui/Collapse';
+import { SectionHead } from '@/components/place/courtPage/parts';
 import { Avatar } from '@/components/ui';
 import type { CourtKings, ID, User } from '@/data/types';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
@@ -72,29 +71,23 @@ const wins = (n: number) => plural(n, 'win', 'wins');
  * database without the switch, while it is asked, or in the demo. The
  * server keeps working the boards out meanwhile.
  */
-export function CourtKing({ courtId, name, refresh = 0, look = 'section', line = true }: {
+export function CourtKing({ courtId, name, refresh = 0, look = 'section' }: {
   courtId: string;
   name: string;
   refresh?: number;
   /**
-   * How it sits on the page. 'section': today's, a head and its line. 'line'
-   * (the court page's options A and C, Oct 24): with no King, one line,
-   * "King of the Court · No King yet" and its (i), the rule moved into the
-   * (i); a King's board as today. 'row' (option B): a row of the page's list,
-   * "King of the Court … No King yet" (or the King's handle), opening the
-   * rule or the board in place.
+   * How it sits on the page. 'section': the old page's, a head and its line.
+   * 'line' (the court page, Oct 24/25): with no King, one line, "King of the
+   * Court · No King yet" and its (i), the rule moved into the (i); a King's
+   * board as before.
    */
-  look?: 'section' | 'line' | 'row';
-  /** 'row' only: a hairline above it. */
-  line?: boolean;
+  look?: 'section' | 'line';
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, users, currentUserId } = useApp();
   // undefined while it is asked; null when it can't be (a database without it).
   const [kings, setKings] = useState<CourtKings | null | undefined>(undefined);
   const [info, setInfo] = useState(false);
-  // 'row': whether its rule or board is open under it.
-  const [unfolded, setUnfolded] = useState(false);
   const { courtKings: switchedOn } = useTennisFlags();
   useEffect(() => {
     if (!currentUserId || !switchedOn) { setKings(null); return undefined; }
@@ -161,7 +154,7 @@ export function CourtKing({ courtId, name, refresh = 0, look = 'section', line =
     </View>
   );
 
-  // The options' one line: the title and "No King yet", the rule in the (i) (with how to take the crown, unless you can't be ranked).
+  // The court page's one line: the title and "No King yet", the rule in the (i) (with how to take the crown, unless you can't be ranked).
   const lineRule = unranked ? 'Up to 2 wins a day count. Ties go to the latest win.' : 'Win a match here and post it to take the crown. Up to 2 wins a day count. Ties go to the latest win.';
   const infoButton = (
     <Pressable accessibilityRole="button" accessibilityLabel="How King of the Court works" accessibilityState={{ expanded: info }} hitSlop={6} onPress={() => setInfo((v) => !v)} style={({ pressed }) => [styles.info, pressed && styles.pressed]}>
@@ -185,35 +178,8 @@ export function CourtKing({ courtId, name, refresh = 0, look = 'section', line =
       ) : null}
     </View>
   );
-  /** B's row: the value on the right, the rule or the board opening under it. */
-  const kingRow = (value: string, details: React.ReactNode, crowned = false) => (
-    <View>
-      <ListRow
-        label="King of the Court"
-        value={value}
-        lead={crowned ? <CrownGlyph size={14} color={colors.sun} /> : null}
-        onPress={loading ? undefined : () => setUnfolded((v) => !v)}
-        open={loading ? undefined : unfolded}
-        a11y={loading ? 'King of the Court' : `King of the Court: ${value}. ${unfolded ? 'Hide' : 'Show'} how it works`}
-        line={line}
-        tall
-      />
-      <Collapse open={unfolded && !loading}>
-        <View style={styles.rowDetails}>{details}</View>
-      </Collapse>
-    </View>
-  );
-
   // Still asking, or nothing posted here yet: the title and one quiet line, no card.
   if (loading || empty) {
-    if (look === 'row') {
-      return kingRow(loading ? '' : 'No King yet', (
-        <>
-          <Text style={styles.noteText}>{lineRule}</Text>
-          {mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
-        </>
-      ));
-    }
     if (look === 'line') {
       return (
         <View style={styles.wrap}>
@@ -322,26 +288,9 @@ export function CourtKing({ courtId, name, refresh = 0, look = 'section', line =
         )}
       </View>
   );
-  if (look === 'row') {
-    return regulars
-      ? kingRow('No King yet', (
-        <>
-          <Text style={styles.noteText}>{lineRule}</Text>
-          {mineUnranked ? <View style={[styles.card, styles.cardSolo]}>{mineUnranked}</View> : null}
-          {regularsHead}
-          {board}
-        </>
-      ))
-      : kingRow(firstIsMe ? 'You' : `@${first.user.handle}`, (
-        <>
-          {sub ? <Text style={styles.noteText}>{sub}</Text> : null}
-          {board}
-        </>
-      ), true);
-  }
   return (
     <Animated.View entering={FadeIn.duration(220)} style={styles.wrap}>
-      {/* The options' one line, with no King; otherwise the section's own head. */}
+      {/* The court page's one line, with no King; otherwise the section's own head. */}
       {look === 'line' && regulars ? lineHead : head}
       {/* No King yet: said first, as on an empty court (with your own wins, if only you see them), then the regulars. */}
       {regulars && look !== 'line' ? noKing : null}
@@ -398,12 +347,10 @@ const styleDefinitions = StyleSheet.create({
   quiet: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, minHeight: 19 },
   quietText: { flex: 1, ...typography.small, color: colors.textMuted, lineHeight: 19 },
   quietStrong: { ...font('600'), color: colors.text },
-  // The options' one line (no King): the crown, "King of the Court · No King yet", the (i).
+  // The court page's one line (no King): the crown, "King of the Court · No King yet", the (i).
   lineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 26 },
   lineText: { flex: 1, minWidth: 0, ...typography.body, color: colors.textMuted },
   lineStrong: { ...font('600'), color: colors.text },
-  // B's row, opened: the rule, then the board.
-  rowDetails: { gap: spacing.md, paddingTop: 2, paddingBottom: spacing.md },
   skeletonWrap: { gap: 7, paddingTop: 4, paddingBottom: 3 },
   skeleton: { height: 12, width: '100%', maxWidth: 420, borderRadius: 6, backgroundColor: colors.surfaceAlt },
   skeletonShort: { width: '55%' },

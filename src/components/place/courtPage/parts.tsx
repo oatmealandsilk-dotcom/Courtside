@@ -14,7 +14,7 @@ import { playHere } from '@/features/players/courtLink';
 import { NOW_ICON, nowAgo, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { TextScale, buttonShape, colors, font, oneLine, pageIsDark, spacing, typography } from '@/theme';
+import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 import type { CourtView } from './view';
 
@@ -43,7 +43,7 @@ export function SectionHead({ title, count, sub, link, accessory, before }: {
   link?: { label: string; a11y: string; onPress: () => void } | null;
   /** A small control on the right in place of a link. */
   accessory?: React.ReactNode;
-  /** A small control just left of the link (the court page's options: Post's "+" beside Watch all). */
+  /** A small control just left of the link (Post's "+" beside Watch all). */
   before?: React.ReactNode;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -70,48 +70,27 @@ export function SectionHead({ title, count, sub, link, accessory, before }: {
 /* ------------------------------ A list row ------------------------------ */
 
 /**
- * One row of a plain list on the court page's options (B's "This court",
- * C's "About this court"): what it is on the left, its value on the right,
- * hairlines between rows, no card and no icon tile. A row with a tap shows
- * a chevron; `open` turns it into a fold's head (down, or up while open).
+ * One row of a plain list on the court page (what players say): what it is
+ * on the left, its value on the right, hairlines between rows, no card and
+ * no icon tile.
  */
-export function ListRow({ label, value, tone = 'muted', lead, onPress, a11y, open, line = true, tall = false }: {
+export function ListRow({ label, value, tone = 'muted', a11y, line = true }: {
   label: string;
-  value?: React.ReactNode;
-  /** The value's colour: muted, the brand's (a link), or the text's own. */
-  tone?: 'muted' | 'brand' | 'text';
-  /** A small mark just before the value (a surface's dot, a status icon). */
-  lead?: React.ReactNode;
-  onPress?: () => void;
+  value: string;
+  /** The value's colour: muted, or the text's own. */
+  tone?: 'muted' | 'text';
   a11y?: string;
-  /** A fold's head: whether it is open. */
-  open?: boolean;
   /** A hairline above it (every row but a list's first). */
   line?: boolean;
-  /** 52pt rather than 44pt. */
-  tall?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const body = (
-    <>
+  return (
+    <View style={[styles.row, line && styles.rowLine]} accessible accessibilityLabel={a11y}>
       <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
       <View style={styles.rowValue}>
-        {lead ?? null}
-        {value != null && value !== '' ? (
-          typeof value === 'string'
-            ? <Text style={[styles.rowValueText, tone === 'brand' ? styles.rowBrand : tone === 'text' ? styles.rowText : null]} numberOfLines={2}>{value}</Text>
-            : value
-        ) : null}
-        {onPress ? <Ionicons name={open === undefined ? 'chevron-forward' : open ? 'chevron-up' : 'chevron-down'} size={15} color={tone === 'brand' ? colors.brand : colors.textMuted} /> : null}
+        <Text style={[styles.rowValueText, tone === 'text' && styles.rowText]} numberOfLines={2}>{value}</Text>
       </View>
-    </>
-  );
-  const style = [styles.row, tall && styles.rowTall, line && styles.rowLine];
-  if (!onPress) return <View style={style} accessible accessibilityLabel={a11y}>{body}</View>;
-  return (
-    <Pressable accessibilityRole="button" accessibilityLabel={a11y} accessibilityState={open === undefined ? undefined : { expanded: open }} onPress={onPress} style={({ pressed }) => [...style, pressed && styles.rowPressed]}>
-      {body}
-    </Pressable>
+    </View>
   );
 }
 
@@ -129,19 +108,15 @@ export function sessionLook(state: CourtView['session']['state']): { label: stri
  * lift (DESIGN.md, the One Shadow Rule), the stopwatch and the whole job in
  * words, so nobody has to guess what a circle called "Start" starts.
  */
-/** A part-width primary's words (the court page's option B): every state short, so none is cut on a small phone or at a larger Text Size. */
-const SHORT_LABEL: Record<CourtView['session']['state'], string> = { start: 'Start a session', live: 'In progress', finished: 'Log session' };
-
-export function PrimaryBar({ session, height = 50, short = false }: { session: CourtView['session']; height?: number; /** Part width: short words for every state ("Start a session", "In progress", "Log session"; the page says where), less room at the sides, and words that shrink a little rather than be cut. */ short?: boolean }) {
+export function PrimaryBar({ session, height = 50 }: { session: CourtView['session']; height?: number }) {
   const styles = useThemedStyles(styleDefinitions);
-  const full = sessionLook(session.state);
-  const look = short ? { ...full, label: SHORT_LABEL[session.state] } : full;
+  const look = sessionLook(session.state);
   return (
     <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: buttonShape.radius }, pageIsDark() ? styles.liftDark : styles.lift]}>
       <BrandWash radius={buttonShape.radius} curve />
-      <View style={[styles.primaryInner, short && styles.primaryInnerShort]}>
+      <View style={styles.primaryInner}>
         {look.icon === 'live' ? <LiveDot size={9} color={colors.brandInk} /> : <Ionicons name={look.icon} size={19} color={colors.brandInk} />}
-        <Text {...(short ? oneLine(TextScale.TITLE, 0.85) : {})} style={[styles.primaryLabel, short && styles.primaryLabelShort]} numberOfLines={1}>{look.label}</Text>
+        <Text style={styles.primaryLabel} numberOfLines={1}>{look.label}</Text>
       </View>
     </Tappable>
   );
@@ -317,21 +292,16 @@ const styleDefinitions = StyleSheet.create({
   headLink: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 2 },
   headLinkText: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
   sub: { ...typography.small, color: colors.textMuted, lineHeight: 18, flexShrink: 1 },
-  // A list row (the options' lists): label left, value right, hairlines between.
+  // A list row: label left, value right, hairlines between.
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 44, paddingVertical: 8 },
-  rowTall: { minHeight: 52 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  rowPressed: { backgroundColor: colors.surfaceAlt },
   rowLabel: { ...typography.body, color: colors.text, flexShrink: 0 },
   rowValue: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 6 },
   rowValueText: { ...typography.body, color: colors.textMuted, flexShrink: 1, textAlign: 'right' },
-  rowBrand: { ...font('600'), color: colors.brand },
   rowText: { color: colors.text },
   // The primary.
   primary: { alignSelf: 'stretch', ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
   primaryInner: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.xl },
-  primaryInnerShort: { paddingHorizontal: spacing.md, maxWidth: '100%' },
-  primaryLabelShort: { flexShrink: 1 },
   primaryLabel: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   // The one shadow on the page: the primary action, in its own colour (plain dark on a dark page).
   lift: { ...brandShadow },

@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -19,37 +19,41 @@ import type { CourtAccess } from '@/data/types';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { openCourtNow } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
+import { useArrived } from '@/lib/useArrived';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale, buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
-import { courtPageLook, type CourtPageLook } from './look';
-import { AboutList, FactsLine, GlassActions, MapCredit, MetaLine, NameIcons, NowRow, PlayAndSquares, PlayUnder, SaysA, StartAndPlay, StatusLine, ThisCourtList, canSayNow } from './Options';
+import { courtPageLook } from './look';
+import { FactsLine, MapCredit, NameHeart, NowRow, OpenHits, PlayAndSquares, PlayersSay, canSayNow } from './final';
 import type { CourtView } from './view';
 import { LESS_AI_COURTS, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 
 /*
- * A court's page (owner, Oct 10: "Do b."), the place card: the court the
- * way Apple Maps shows a place.
+ * A court's page, the place card: the court the way Apple Maps shows a place
+ * (owner, Oct 10: "Do b."; made whole Oct 25, look.ts 'final').
  *
  *   The map of the court, edge to edge, with its pin; a tap opens the full
- *   map there ("See on map" says so).
- *   The page rises over it as a sheet: the name; the town, how far, how many
- *   follow it; who has played here, as faces; how it is right now (a tap
- *   tells players, Update once someone has); the page's one primary, Start a
- *   session here, full width; five round, labelled actions (Directions,
- *   Follow, Play here, Post, Share); the court's facts in one strip.
- *   Then its sections, each opening the same way (SectionHead: a title, one
- *   grey line, at most one link on the right) and 32pt apart: the posts as
- *   a grid, whose head shows above the fold; the open hits; King of the
- *   Court and the regulars; what players say.
+ *   map there ("See on map" says so), its credit small in the corner.
+ *   The page rises over it as a sheet: the name with Follow's heart beside
+ *   it; the facts in one line ("4 courts · ● Hard · Lights · Public"); the
+ *   town, how far, how many follow it; who has played here, as faces; how it
+ *   is right now, as one row; the page's one primary, Start a session here;
+ *   Play here (tinted) with Directions and Share as two small squares; "What
+ *   surface?" where the map does not say.
+ *   Then its sections, each opening the same way (SectionHead) and every
+ *   empty one a single line: the open hits first, the clips, King of the
+ *   Court, what players say, and the map's credit for the facts.
+ *
+ * The page before it (look.ts 'now': five round actions, a facts strip,
+ * the clips first) is kept one switch away.
  *
  * The route (app/court/[id]) works out what is shown, by the court's own
  * rules, and hands it over (CourtView); this only lays it out. Back, and
@@ -88,10 +92,19 @@ export function PlaceCard({ view }: { view: CourtView }) {
   const solidAt = heroH - SHEET_OVER - (top + BAR_H) + 36;
   const meta = [view.area, view.distance, view.followers ? `${view.followers} ${view.followers === 1 ? 'follower' : 'followers'}` : null].filter(Boolean).join(' · ');
   const nameSize = view.name.length > 30 ? styles.nameLong : null;
-  // Today's page, or one of the options he is choosing between (look.ts; 'now' unless switched).
+  // The page (look.ts: 'final', or the one before it, 'now').
   const look = courtPageLook();
   const nowOK = canSayNow(view);
-  const nameText = <Text accessibilityRole="header" style={[styles.name, nameSize, (look === 'A' || look === 'C') && styles.nameGrow]} numberOfLines={3}>{view.name}</Text>;
+  // On a phone the page can only start to slide in once all of it is built, so the sections under the
+  // clips (King of the Court, what players say, the credit) are built once it has slid in (useArrived).
+  // Only with two rows of posts or more: then they are under the bar on every phone, out of sight, and
+  // nothing on screen moves; with fewer they can show on the first screen, and come with the page. A
+  // computer or an iPad shows them at once. Once built, they stay (posts landing later never take them away).
+  const arrived = useArrived();
+  const belowBuilt = useRef(false);
+  const below = belowBuilt.current || arrived || !isPhone || view.posts.length <= 3;
+  belowBuilt.current = below;
+  const nameText = <Text accessibilityRole="header" style={[styles.name, nameSize, look === 'final' && styles.nameGrow]} numberOfLines={3}>{view.name}</Text>;
 
   return (
     <View style={styles.root}>
@@ -99,11 +112,9 @@ export function PlaceCard({ view }: { view: CourtView }) {
         <PlaceHero lat={view.here.lat} lng={view.here.lng} top={top} height={heroH} name={view.name} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone} />
         <View testID="court-sheet" style={[styles.sheet, !isPhone && styles.sheetWide]}>
           <View style={styles.gutter}>
-            {look === 'A' || look === 'C' ? <View style={styles.nameRow}>{nameText}<NameIcons view={view} share={look === 'C'} /></View> : nameText}
-            {look === 'C' && nowOK ? <StatusLine view={view} /> : null}
-            {look === 'A' || look === 'B' ? <FactsLine view={view} /> : null}
-            {look === 'B' || look === 'C' ? <MetaLine view={view} meta={meta} /> : meta || view.areaPending ? <Text style={styles.meta} numberOfLines={2}>{meta || ' '}</Text> : null}
-            {look === 'B' && nowOK ? <StatusLine view={view} onlyFresh /> : null}
+            {look === 'final' ? <View style={styles.nameRow}>{nameText}<NameHeart view={view} /></View> : nameText}
+            {look === 'final' ? <FactsLine view={view} /> : null}
+            {meta || view.areaPending ? <Text style={styles.meta} numberOfLines={2}>{meta || ' '}</Text> : null}
             {view.players.length ? (
               <View style={styles.people}>
                 <View style={styles.faces}>
@@ -116,27 +127,31 @@ export function PlaceCard({ view }: { view: CourtView }) {
                 <Text style={styles.peopleText} numberOfLines={1}>Played here by <Text style={styles.peopleNames}>{view.playedBy}</Text></Text>
               </View>
             ) : null}
-            {look === 'now' ? (
-              <>
-                {nowOK && view.factsId ? <PlaceNow courtId={view.factsId} name={view.name} access={view.access} /> : null}
-                <View style={[styles.primary, short && styles.primaryShort]}><PrimaryBar session={view.session} /></View>
-              </>
-            ) : look === 'A' ? (
+            {look === 'final' ? (
               <>
                 {nowOK ? <NowRow view={view} /> : null}
                 <View style={[styles.primary, short && styles.primaryShort]}><PrimaryBar session={view.session} /></View>
                 <PlayAndSquares view={view} />
+                {view.askSurface ? <View style={styles.ask}><SurfaceAsk courtId={view.askSurface} onRegistered={view.onSurface} ruled /></View> : null}
               </>
-            ) : look === 'B' ? (
-              <StartAndPlay view={view} />
             ) : (
               <>
+                {nowOK && view.factsId ? <PlaceNow courtId={view.factsId} name={view.name} access={view.access} /> : null}
                 <View style={[styles.primary, short && styles.primaryShort]}><PrimaryBar session={view.session} /></View>
-                <PlayUnder view={view} />
               </>
             )}
           </View>
-          {look === 'now' ? (
+          {look === 'final' ? (
+            <View style={[styles.gutter, styles.finalSections, short && styles.sectionsShort]}>
+              {/* Open hits first (owner, Oct 25), then the clips; the rest once the page has slid in, when it is out of sight. */}
+              <OpenHits view={view} count={hits.length} />
+              <ClipsSection view={view} quiet />
+              {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). */}
+              {below && view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} look="line" /> : null}
+              {below && view.extras && view.factsId ? <PlayersSay courtId={view.factsId} name={view.name} /> : null}
+              {below ? <MapCredit view={view} /> : null}
+            </View>
+          ) : (
             <>
               <View style={[styles.acts, short && styles.actsShort]}><CourtActions view={view} /></View>
               <FactStrip view={view} short={short} />
@@ -147,60 +162,14 @@ export function PlaceCard({ view }: { view: CourtView }) {
                 {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). */}
                 {view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} /> : null}
                 {view.extras && view.factsId ? <SaysSection courtId={view.factsId} name={view.name} /> : null}
-                {view.factsLine ? <Text style={styles.credit}>Court details from OpenStreetMap</Text> : null}
+                {view.factsLine ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>Court details from OpenStreetMap</Text> : null}
               </View>
             </>
-          ) : (
-            <View style={[styles.gutter, styles.optionSections, short && styles.sectionsShort]}>
-              <OptionSections look={look} view={view} hits={hits.length} />
-            </View>
           )}
         </View>
       </Screen>
-      <TopBar name={view.name} top={top} offsetY={offsetY} strip={strip} solidAt={solidAt} end={look === 'B' ? <GlassActions view={view} /> : null} />
+      <TopBar name={view.name} top={top} offsetY={offsetY} strip={strip} solidAt={solidAt} />
     </View>
-  );
-}
-
-/**
- * The sections of the options (look.ts), every empty one a single line.
- * A: Clips (Post its link), Open hits only while some are open, King of the
- * Court, What players say with Add what you know, the map's credit.
- * B: Clips, then one list (Right now, Open hits, King, What players say).
- * C: Clips, Open hits only while some are open (Play here sits under
- * Start a session), King of the Court, then About this court.
- */
-function OptionSections({ look, view, hits }: { look: Exclude<CourtPageLook, 'now'>; view: CourtView; hits: number }) {
-  const king = view.factsId && view.currentUserId && view.access !== 'private'
-    ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} look="line" />
-    : null;
-  if (look === 'A') {
-    return (
-      <>
-        <ClipsSection view={view} quiet />
-        <HitsSection view={view} count={hits} look="A" />
-        {king}
-        {view.extras && view.factsId ? <SaysA courtId={view.factsId} name={view.name} /> : null}
-        <MapCredit view={view} />
-      </>
-    );
-  }
-  if (look === 'B') {
-    return (
-      <>
-        <ClipsSection view={view} quiet />
-        <ThisCourtList view={view} count={hits} />
-        <MapCredit view={view} />
-      </>
-    );
-  }
-  return (
-    <>
-      <ClipsSection view={view} quiet />
-      <HitsSection view={view} count={hits} look="C" />
-      {king}
-      <AboutList view={view} />
-    </>
   );
 }
 
@@ -252,7 +221,8 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
           </View>
         )}
       </Pressable>
-      <Text pointerEvents="none" style={[styles.osm, { bottom: over + 8 }]}>© OpenStreetMap</Text>
+      {/* The map's licence asks for its credit on the map: kept small, muted, in the corner (Oct 25, owner: "make open street map smaller"). */}
+      <Text pointerEvents="none" maxFontSizeMultiplier={TextScale.CHROME} style={[styles.osm, { bottom: over + 5 }]}>© OpenStreetMap</Text>
     </View>
   );
 }
@@ -293,7 +263,7 @@ function PlacePin({ spotY }: { spotY: number }) {
  * once the sheet has gone up under it, the bar fills with the page's colour
  * and the court's name comes into it.
  */
-function TopBar({ name, top, offsetY, strip, solidAt, end }: { name: string; top: number; offsetY: SharedValue<number>; strip: number; solidAt: number; /** Buttons on the right (option B's Follow and Share); else room as wide as Back. */ end?: React.ReactNode }) {
+function TopBar({ name, top, offsetY, strip, solidAt }: { name: string; top: number; offsetY: SharedValue<number>; strip: number; solidAt: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduced = useReducedMotion();
   const [solid, setSolid] = useState(false);
@@ -317,7 +287,7 @@ function TopBar({ name, top, offsetY, strip, solidAt, end }: { name: string; top
         <View pointerEvents="none" style={styles.barTitleWrap}>
           <Animated.Text style={[styles.barTitle, title]} numberOfLines={1} accessibilityElementsHidden={!solid} importantForAccessibility={solid ? 'auto' : 'no-hide-descendants'}>{name}</Animated.Text>
         </View>
-        {end ?? <View pointerEvents="none" style={styles.barEnd} />}
+        <View pointerEvents="none" style={styles.barEnd} />
       </View>
     </View>
   );
@@ -441,7 +411,7 @@ const styleDefinitions = StyleSheet.create({
   mapChipPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   mapChipGlass: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   mapChipText: { ...typography.smallStrong, color: colors.text },
-  osm: { position: 'absolute', left: spacing.lg, fontSize: 9, lineHeight: 11, color: colors.textFaint, opacity: 0.9 },
+  osm: { position: 'absolute', left: 10, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
   pin: { position: 'absolute', left: '50%', marginLeft: -PIN_W / 2, width: PIN_W, height: PIN_H, alignItems: 'center' },
   pinGround: { position: 'absolute', bottom: 0, width: 20, height: 7, borderRadius: 4, marginBottom: 0.5 },
   pinBadge: { position: 'absolute', top: 3, left: 3, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
@@ -454,7 +424,7 @@ const styleDefinitions = StyleSheet.create({
   sheetWide: { marginTop: spacing.lg, borderRadius: 0, boxShadow: 'none' },
   name: { ...font('500'), fontSize: 28, lineHeight: 33, letterSpacing: -0.5, color: colors.text },
   nameLong: { fontSize: 25, lineHeight: 30, letterSpacing: -0.4 },
-  // The options: the name shares its row with the heart (A, C).
+  // The name shares its row with the heart.
   nameRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   nameGrow: { flex: 1, minWidth: 0 },
   meta: { ...typography.body, color: colors.textMuted, marginTop: 4, lineHeight: 20 },
@@ -496,9 +466,11 @@ const styleDefinitions = StyleSheet.create({
   sections: { marginTop: spacing.xxl, gap: spacing.xxl, paddingBottom: spacing.sm },
   // A short phone: the first section a step closer to the facts (the sections keep their 32pt between them).
   sectionsShort: { marginTop: spacing.xl },
-  // The options' sections: one-line empties, so a step closer together than today's.
-  optionSections: { marginTop: 28, gap: 28, paddingBottom: spacing.sm },
-  credit: { ...typography.caption, letterSpacing: 0.2, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
+  // The sections: one-line empties, so a step closer together than the old page's.
+  finalSections: { marginTop: 28, gap: 28, paddingBottom: spacing.sm },
+  // Below the Play here row: the surface question, a row of its own.
+  ask: { marginTop: spacing.lg },
+  credit: { fontSize: 9, lineHeight: 12, letterSpacing: 0.1, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
   // The bar over the top.
   bar: { position: 'absolute', left: 0, right: 0, top: 0 },
   barGround: { backgroundColor: colors.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

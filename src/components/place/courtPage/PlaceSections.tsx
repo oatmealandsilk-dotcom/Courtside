@@ -48,8 +48,8 @@ const GAP = 3;
 export function ClipsSection({ view, quiet = false }: {
   view: CourtView;
   /**
-   * The court page's options (look.ts, Oct 24): Post lives here as the head's
-   * link ("Post", or a "+" beside Watch all), and an empty court is one line,
+   * The court page (look.ts 'final'): Post lives here as the head's link
+   * ("Post", or a "+" beside Watch all), and an empty court is one line,
    * "No clips yet.", with no card.
    */
   quiet?: boolean;
@@ -209,32 +209,9 @@ function GridTile({ post, author, width, height, onPress }: { post: Post; author
  * private court is never suggested for a hit: no New hit, and no section
  * at all with none open.
  */
-export function HitsSection({ view, count, look = 'now' }: {
-  view: CourtView;
-  count: number;
-  /**
-   * The court page's options (look.ts), 'A' and 'C': Play here sits under
-   * Start a session, so the section shows only while some are open, with
-   * New hit as its link; each card leaves out the court's name (this page
-   * is that court).
-   */
-  look?: 'now' | 'A' | 'C';
-}) {
+export function HitsSection({ view, count }: { view: CourtView; count: number }) {
   const { currentUser } = useApp();
   if (view.closed && !count) return null;
-  if (look === 'A' || look === 'C') {
-    if (!count) return null;
-    return (
-      <View style={sectionGap}>
-        <SectionHead
-          title="Open hits"
-          count={String(count)}
-          link={!view.closed ? { label: 'New hit', a11y: `Play here. Post a hit at ${view.name}`, onPress: () => playHere(view.here) } : null}
-        />
-        <CourtHits place={view.here} atCourt />
-      </View>
-    );
-  }
   const forFriends = !!currentUser && notKnownAdult(currentUser);
   const sub = count ? null : `None here yet. Post a time and ${forFriends ? 'friends who follow you' : 'players nearby'} can join.`;
   return (
@@ -324,6 +301,6 @@ const styleDefinitions = StyleSheet.create({
   emptyTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyWords: { flex: 1, minWidth: 0, gap: 4 },
   emptyButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
-  // The options: Post's "+" beside Watch all.
+  // Post's "+" beside Watch all.
   plus: { width: 30, height: 26, alignItems: 'center', justifyContent: 'center' },
 });

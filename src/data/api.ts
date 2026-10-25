@@ -468,12 +468,14 @@ export async function courtKings({ courtId, me, sessions, ranked = true }: { cou
 
 /**
  * The demo's court_surface_votes: one answer per player per court, newest
- * first. Marigold Park, the demo court the map says nothing about, already
+ * first. Marigold Park, a demo court the map says nothing about, already
  * has four players' "Hard", so a fifth Hard registers it, the way five in a
- * row do on the server (vote_court_surface). Kept for the session only.
+ * row do on the server (vote_court_surface). Bellwood has two, so a Hard
+ * there reads "3 of 5 agree". Kept for the session only.
  */
 const demoSurfaceVotes = new Map<string, { userId: ID; surface: VotedSurface }[]>([
   [DEMO_PARK(4).id, ['u-mira', 'u-dev', 'u-june', 'u-tomas'].map((userId) => ({ userId, surface: 'hard' as const }))],
+  [DEMO_PARK(2).id, ['u-june', 'u-tomas'].map((userId) => ({ userId, surface: 'hard' as const }))],
 ]);
 const demoPlayerSurface = new Map<string, VotedSurface>();
 
