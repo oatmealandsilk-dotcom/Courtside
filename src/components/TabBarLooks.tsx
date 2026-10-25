@@ -221,7 +221,7 @@ function toward(hex: string, to: string, t: number): string {
 /** Less round than today's pill (its ends were half its height). */
 const PILL_RADIUS = 18;
 /** The +'s shape in the quiet pill (Oct 25, owner: "Show me square vs circle"): 'square' a 42×32 rounded square, 'circle' a 38 round button. */
-const PLUS_SHAPE = 'square' as 'square' | 'circle';
+const PLUS_SHAPE = 'circle' as 'square' | 'circle';
 const PLUS_RADIUS = PLUS_SHAPE === 'circle' ? 19 : 11;
 
 const styles = StyleSheet.create({
