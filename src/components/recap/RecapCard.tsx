@@ -13,7 +13,7 @@ import { CardWash, type CardLook } from '@/components/session/SessionCard';
 import { duration } from '@/lib/format';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha, wordmarkFont } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_SESSIONS, corner } from '@/theme/look';
 
 const DAY_LETTERS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
@@ -254,7 +254,8 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
   );
   return (
     <View style={[styles.summary, { backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-      <CardWash look={look} radius={corner(22)} />
+      {/* Flat, no fade, under the hand-made look (Oct 24, "Do these quadrants": Your sessions' flat summary card). */}
+      <CardWash look={look} radius={corner(22)} flat={LESS_AI || LESS_AI_SESSIONS} />
       {onOpen ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Your week, ${weekRange(recap.week).replace(' – ', ' to ')}: ${spoken}. Open`} onPress={onOpen} style={({ pressed }) => [styles.sumMain, pressed && styles.pressed]}>
           {body}

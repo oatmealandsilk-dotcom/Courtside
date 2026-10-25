@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { colors, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI_DISCUSS } from '@/theme/look';
 
 export function voteCounts(item: { votes: number; votedBy: Record<string, 1 | -1> }) {
   const votes = Object.values(item.votedBy);
@@ -30,7 +30,7 @@ export function VoteControls({ item, userId, onVote }: {
       accessibilityState={{ selected: active }} onPress={event => { event.stopPropagation(); onVote(direction); }}
       style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: PRESS_DIM }]}>
       <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? colors.brand : colors.textMuted}/>
-      {LESS_AI && !count ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>}
+      {LESS_AI_DISCUSS && !count ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>}
     </Pressable>;
   })}</View>;
 }
@@ -39,7 +39,7 @@ const styleDefinitions = StyleSheet.create({
   // The hand-made look (Oct 24): no grey pill behind the votes, a pale brand tint only once you vote.
   // A zero count is hidden there, so each button keeps room for a one-digit count (52): the first vote's number
   // fills that room instead of widening the button and pushing what sits beside it.
-  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI ? 'transparent' : colors.bgElevated, ...(LESS_AI ? { minWidth: 52 } : null) },
+  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI_DISCUSS ? 'transparent' : colors.bgElevated, ...(LESS_AI_DISCUSS ? { minWidth: 52 } : null) },
   active: { backgroundColor: colors.brandDim },
   count: { color: colors.textMuted, fontSize: 12, ...font('600') },
 });

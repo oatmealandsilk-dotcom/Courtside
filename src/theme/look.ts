@@ -60,3 +60,22 @@ export const trackCorner = (pad: number) => (scale ? scale.chip + pad : 999);
  * exactly as it was; true turns the whole pass on at once.
  */
 export const LESS_AI: boolean = false;
+
+/*
+ * The parts of the hand-made pass that are ON (Oct 24). He circled four of the
+ * six panels on the Before | After summary and said "Do these quadrants".
+ * Everything he did not circle (the Profile pill row, the Health page, and
+ * the rest of the list) stays behind LESS_AI above, still off.
+ */
+
+/** "Do these quadrants" (Oct 24), panel 1: each court shows its surface (Hard, Clay) at the start of its line and the court icon tile is gone, in Search, Find Players, open hits, map court pins and the court page. */
+export const LESS_AI_COURTS: boolean = true;
+
+/** "Do these quadrants" (Oct 24), panel 1 + 8, open hits only: hit cards outlined with no shadow, and the "Looking for a hit?" field without its glow. */
+export const LESS_AI_HITS: boolean = true;
+
+/** "Do these quadrants" (Oct 24), panel 4 + 6: on Discussions, a thread and its comments, the topic is a muted word on the name's line (still a tap), zero counts hide, no grey pill behind votes, plain tag links, no sort-menu hints, no "This week" pill, and empty states without the extra sentence. */
+export const LESS_AI_DISCUSS: boolean = true;
+
+/** "Do these quadrants" (Oct 24), panel 4 + 9 + 11: Your sessions without "Only you see this.", a flat summary card, rows that lead with the date, and no hours repeated on This week. */
+export const LESS_AI_SESSIONS: boolean = true;

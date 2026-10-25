@@ -18,7 +18,7 @@ import { Tappable } from '@/components/Tappable';
 import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI_DISCUSS } from '@/theme/look';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -76,12 +76,12 @@ function QuestionCardInner({
 
   return (
     <Card onPress={onPress} style={styles.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI ? 'nowrap' : 'wrap' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI_DISCUSS ? 'nowrap' : 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
             after it. A thread carried in from outside keeps to the handle —
             the badge beside it already says where it came from. */}
-        <PlayerName userId={author?.id} style={[styles.footerText, LESS_AI && { flexShrink: 1 }]} numberOfLines={1}>
+        <PlayerName userId={author?.id} style={[styles.footerText, LESS_AI_DISCUSS && { flexShrink: 1 }]} numberOfLines={1}>
           {author && !question.source ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerName}>{author.name} </Text> : null}
           @{author?.handle ?? 'player'}
         </PlayerName>
@@ -92,7 +92,7 @@ function QuestionCardInner({
           </View>
         ) : author ? <LevelPill profile={author.profile} small style={styles.levelPill} /> : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
-        {LESS_AI ? (
+        {LESS_AI_DISCUSS ? (
           <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, pressed && { opacity: PRESS_DIM }]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.footerText}>{meta.label}{brandCorner ? '' : ` · ${relativeTime(question.createdAt)}${question.editedAt ? ' · Edited' : ''}`}</Text>
           </SwipePressable>
@@ -101,7 +101,7 @@ function QuestionCardInner({
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
       {showBody && !!question.body && <RichText maxFontSizeMultiplier={TextScale.CARD} style={styles.preview}>{question.body}</RichText>}
       {question.poll ? <PollView question={question} compact /> : null}
-      {LESS_AI ? null : <View style={styles.metaRow}>
+      {LESS_AI_DISCUSS ? null : <View style={styles.metaRow}>
         {/* The topic is a tag ringed in its own colour: a tap shows every thread under it.
             Its words are the page's quiet ink: the topic colours alone fell short of 4.5:1 on several courts. */}
         <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={6} style={({ pressed }) => [styles.tag, { borderColor: topicTint(question.topic) }, pressed && { opacity: PRESS_DIM }]}>
@@ -118,13 +118,13 @@ function QuestionCardInner({
           style={[styles.action, styles.counted]}
         >
           <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
-          {LESS_AI && !(question.answerIds.length + (question.source?.replies ?? 0)) ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>}
+          {LESS_AI_DISCUSS && !(question.answerIds.length + (question.source?.replies ?? 0)) ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>}
         </Tappable>
 
         {onShare ? (
           <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={[styles.action, styles.counted]}>
             <Ionicons name="arrow-redo-outline" size={20} color={colors.text} />
-            {LESS_AI && !question.shares ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.shares ?? 0}</Text>}
+            {LESS_AI_DISCUSS && !question.shares ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.shares ?? 0}</Text>}
           </Tappable>
         ) : null}
 
@@ -168,7 +168,7 @@ const styleDefinitions = StyleSheet.create({
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
   // The hand-made look hides a zero reply or share count, so those two keep room for a one-digit count (56):
   // the first one fills that room and never moves the buttons beside it.
-  counted: LESS_AI ? { minWidth: 56 } : {},
+  counted: LESS_AI_DISCUSS ? { minWidth: 56 } : {},
   actionLabel: { ...typography.smallStrong, color: colors.text },
   sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceAlt },
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },

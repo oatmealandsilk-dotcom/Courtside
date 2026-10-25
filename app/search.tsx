@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI, LESS_AI_COURTS } from '@/theme/look';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
@@ -411,14 +411,14 @@ export default function Search() {
       <Pressable
         key={court.id}
         accessibilityRole="link"
-        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}${LESS_AI && surfaceSaid(court.surface, court.count) ? `, ${surfaceSaid(court.surface, court.count)}` : ''}, open the court`}
+        accessibilityLabel={`${labelOf(court)}${meta ? `, ${meta}` : ''}${LESS_AI_COURTS && surfaceSaid(court.surface, court.count) ? `, ${surfaceSaid(court.surface, court.count)}` : ''}, open the court`}
         onPress={() => openCourt(court)}
         style={({ pressed }) => [styles.row, pressed && styles.pressed]}
       >
-        {LESS_AI ? null : <View style={styles.courtTile}><CourtGlyph size={14} color={colors.brand} /></View>}
+        {LESS_AI_COURTS ? null : <View style={styles.courtTile}><CourtGlyph size={14} color={colors.brand} /></View>}
         <View style={[styles.rowBody, !first && styles.rowRule]}>
           <Highlighted text={labelOf(court)} words={q.words} style={styles.rowName} strong={styles.rowNameMatch} lines={2} wordStart />
-          {LESS_AI ? <SurfaceLine surface={court.surface} rest={meta} style={styles.rowMeta} /> : meta ? <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text> : null}
+          {LESS_AI_COURTS ? <SurfaceLine surface={court.surface} rest={meta} style={styles.rowMeta} /> : meta ? <Text style={styles.rowMeta} numberOfLines={1}>{meta}</Text> : null}
         </View>
       </Pressable>
     );

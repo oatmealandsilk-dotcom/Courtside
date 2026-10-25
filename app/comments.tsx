@@ -1,5 +1,5 @@
 import { brandShadow } from '@/theme/fillMode';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI_DISCUSS } from '@/theme/look';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
@@ -414,7 +414,7 @@ export default function CommentsSheet() {
               {threadEls}
             </JumpProvider>
             {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
-            {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? (LESS_AI ? 'No comments yet.' : 'No comments yet. Start the conversation.') : looked ? 'This is no longer available.' : ''}</Text> : null}
+            {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? (LESS_AI_DISCUSS ? 'No comments yet.' : 'No comments yet. Start the conversation.') : looked ? 'This is no longer available.' : ''}</Text> : null}
             <HiddenComments count={hidden.length}>
               {hidden.map((c) => (
                 <CommentRow key={c.id} comment={c} big onUnhide={() => actions.unhideByWords(kind === 'hit' ? 'hit-comment' : 'comment', c.id)} />

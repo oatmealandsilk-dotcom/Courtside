@@ -73,7 +73,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { LESS_AI, corner, inputCorner } from '@/theme/look';
+import { LESS_AI, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -756,11 +756,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             {courtMatches.map(({ c, miles }, index) => {
               const meta = [youAt ? formatMiles(miles) : null, c.count > 1 ? `${c.count} courts` : null, c.lit ? 'lights' : null].filter(Boolean).join(' · ');
               return (
-                <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}${LESS_AI && surfaceSaid(c.surface, c.count) ? `, ${surfaceSaid(c.surface, c.count)}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                  {LESS_AI ? null : <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>}
+                <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${labelOf(c)}${meta ? `, ${meta}` : ''}${LESS_AI_COURTS && surfaceSaid(c.surface, c.count) ? `, ${surfaceSaid(c.surface, c.count)}` : ''}, open the court`} onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                  {LESS_AI_COURTS ? null : <View style={styles.courtTile}><CourtGlyph size={20} color={colors.brand} /></View>}
                   <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
                     <Highlighted text={labelOf(c)} words={searchWords} style={styles.playerName} strong={styles.courtNameMatch} lines={2} wordStart />
-                    {LESS_AI ? <SurfaceLine surface={c.surface} rest={meta} style={styles.playerMeta} /> : meta ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
+                    {LESS_AI_COURTS ? <SurfaceLine surface={c.surface} rest={meta} style={styles.playerMeta} /> : meta ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{meta}</Text> : null}
                   </View>
                   <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
                 </Pressable>
@@ -883,7 +883,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { if (key !== sort) haptics.tick(); setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
-                      {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>}
+                      {LESS_AI_DISCUSS ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>}
                     </View>
                     {sort === key ? <Ionicons name="checkmark" size={16} color={colors.brand} /> : null}
                   </Pressable>
@@ -916,7 +916,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <EmptyState
           icon="help-circle-outline"
           title="No questions here"
-          body={LESS_AI ? undefined : 'Be the first to ask. Specific questions get specific answers.'}
+          body={LESS_AI_DISCUSS ? undefined : 'Be the first to ask. Specific questions get specific answers.'}
           // Never a dead end (Oct 5): asking opens with this topic picked.
           action={{ label: 'Ask a question', onPress: () => router.push(topic === 'all' ? '/ask' : { pathname: '/ask', params: { topic } }) }}
         />
@@ -924,10 +924,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <View style={styles.list}>
           {pinned ? (
             <View style={styles.pinned}>
-              <View style={styles.pinnedLabel} accessible accessibilityLabel={LESS_AI ? 'Question of the week' : 'Question of the week, this week'}>
+              <View style={styles.pinnedLabel} accessible accessibilityLabel={LESS_AI_DISCUSS ? 'Question of the week' : 'Question of the week, this week'}>
                 <Ionicons name="pin" size={13} color={colors.brand} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pinnedTitle}>Question of the week</Text>
-                {LESS_AI ? null : <View style={styles.weekPill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.weekPillText}>This week</Text></View>}
+                {LESS_AI_DISCUSS ? null : <View style={styles.weekPill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.weekPillText}>This week</Text></View>}
               </View>
               <QuestionCard
                 question={pinned}

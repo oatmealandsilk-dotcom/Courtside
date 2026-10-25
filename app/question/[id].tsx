@@ -44,7 +44,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { show as showToast } from '@/lib/toast';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI_DISCUSS, corner } from '@/theme/look';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -185,7 +185,7 @@ function QuestionDetail() {
             </View>
           </Pressable>
           {/* The hand-made look (Oct 24): the topic a muted word, not a filled chip; still a tap to its threads. */}
-          {LESS_AI ? (
+          {LESS_AI_DISCUSS ? (
             <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} hitSlop={10} onPress={() => openTopic(question.topic)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{meta.label}</Text>
             </Pressable>
@@ -195,7 +195,7 @@ function QuestionDetail() {
         <RichText style={styles.body}>{question.body}</RichText>
         {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
-          {question.tags.map((tag) => (LESS_AI ? (
+          {question.tags.map((tag) => (LESS_AI_DISCUSS ? (
             <Pressable key={tag} accessibilityRole="link" accessibilityLabel={`#${tag}`} hitSlop={8} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>#{tag}</Text>
             </Pressable>
@@ -260,14 +260,14 @@ function QuestionDetail() {
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title={`${question.source.replies} ${question.source.replies === 1 ? 'reply' : 'replies'} on ${question.source.label}`}
-              body={LESS_AI ? undefined : 'Those stay on the original site. Be the first to answer it here.'}
+              body={LESS_AI_DISCUSS ? undefined : 'Those stay on the original site. Be the first to answer it here.'}
             />
           ) : (
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title="No answers yet"
               // Your own thread: the asker is told what happens next, not asked to answer it.
-              body={LESS_AI ? undefined : question.authorId === currentUserId
+              body={LESS_AI_DISCUSS ? undefined : question.authorId === currentUserId
                 ? 'We’ll let you know when a player or coach answers.'
                 : 'Know this one? A specific answer beats three vague ones.'}
             />

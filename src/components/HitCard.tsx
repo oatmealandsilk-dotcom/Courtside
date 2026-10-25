@@ -27,7 +27,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI_HITS, LESS_AI_COURTS, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { surfaceKind, surfaceLabel, surfaceAdjective } from '@/features/places/courtSurface';
 import { useLoadedSurface } from '@/features/players/courts';
@@ -115,8 +115,8 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
   const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
   // The surface comes from the courts on the phone (a hit's saved place does not record it), shown as soon as they load; none found, no tag.
-  const loaded = useLoadedSurface(LESS_AI ? hit.place.id : undefined);
-  const surface = LESS_AI ? surfaceKind(loaded) : null;
+  const loaded = useLoadedSurface(LESS_AI_COURTS ? hit.place.id : undefined);
+  const surface = LESS_AI_COURTS ? surfaceKind(loaded) : null;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);
@@ -176,7 +176,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
         <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
-          {LESS_AI ? null : <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>}
+          {LESS_AI_COURTS ? null : <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>}
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
@@ -319,7 +319,7 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  card: { ...(LESS_AI_HITS ? { borderWidth: 1, borderColor: colors.border } : lift), gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   // The court's surface, when the courts already on the phone know it: its dot and word lead the details line.
   surfaceLead: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
   surfaceDot: { width: 7, height: 7, borderRadius: 4 },

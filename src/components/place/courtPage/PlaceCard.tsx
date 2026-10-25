@@ -28,7 +28,7 @@ import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typograp
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import type { CourtView } from './view';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI_COURTS, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 
@@ -305,7 +305,7 @@ function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
   if (access !== 'unknown') cols.push({ label: 'Access', value: ACCESS_SHORT[access], a11y: `Who can play: ${ACCESS_SAID[access]}` });
   if (map) cols.push({ label: map.count === 1 ? 'Court' : 'Courts', value: String(map.count), a11y: `${map.count} ${map.count === 1 ? 'court' : 'courts'}` });
   // The surface in the same words and colours as everywhere else a court is listed ("Hard", "Clay"), when it is one we know (Oct 24).
-  const kind = LESS_AI ? surfaceKind(map?.surface) : null;
+  const kind = LESS_AI_COURTS ? surfaceKind(map?.surface) : null;
   if (map?.surface && kind) {
     cols.push({ label: 'Surface', value: surfaceLabel[kind], a11y: `${surfaceAdjective[kind]} court${map.count === 1 ? '' : 's'}`, dot: kind });
   } else if (map?.surface) {

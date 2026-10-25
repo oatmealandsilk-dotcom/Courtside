@@ -201,9 +201,17 @@ export const clearWordShade = (u: number): TextStyle => ({ textShadowColor: 'rgb
  * (with the cream box's hairline, unless `edge` is off for a picture drawn
  * edge to edge), or the brand's wash in the plain green box.
  */
-export function CardWash({ look, radius, edge = true, keepGlow = false }: { look: CardLook; radius: number; edge?: boolean; /** A picture made to share (the session stamp): it keeps its fade whatever the in-app look. */ keepGlow?: boolean }) {
+export function CardWash({ look, radius, edge = true, keepGlow = false, flat = LESS_AI }: {
+  look: CardLook;
+  radius: number;
+  edge?: boolean;
+  /** A picture made to share (the session stamp): it keeps its fade whatever the in-app look. */
+  keepGlow?: boolean;
+  /** The box's own flat fill, no fade (the hand-made look; Your sessions' summary passes its own switch). */
+  flat?: boolean;
+}) {
   // The hand-made look (Oct 24, owner: the glows "seem a bit ai"): the box's own flat fill, only its hairline kept.
-  if (LESS_AI && !keepGlow) return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
+  if (flat && !keepGlow) return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
   if (look.wash === 'brand') return <BrandWash radius={radius} glow />;
   return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
 }

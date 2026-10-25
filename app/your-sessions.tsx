@@ -37,7 +37,7 @@ import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI_SESSIONS, corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -45,7 +45,7 @@ const WEEKS = 8;
 const ROW_PAD = 14;
 const HERO_LINE = 32;
 /** The row's lead column: the icon (22), or the date under the hand-made look (34). */
-const LEAD = LESS_AI ? 34 : 22;
+const LEAD = LESS_AI_SESSIONS ? 34 : 22;
 
 /** The Monday a day's week starts on, as a day ("2026-09-28"). */
 function weekOf(day: string): string {
@@ -244,8 +244,8 @@ export default function YourSessions() {
   if (summaryKey !== firstSummary.current) summaryLate.current = true;
 
   return (
-    // "Only you see this." stays in the hand-made look too: a privacy fact, never filler.
-    <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
+    // "Only you see this." goes on Your sessions (Oct 24, owner circled the panel that drops it: "Do these quadrants").
+    <Screen title="Your sessions" subtitle={LESS_AI_SESSIONS ? undefined : 'Only you see this.'} compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
       {/* The first time ever (nothing read ahead yet) it still arrives a beat late: it fades in as the page below glides down. */}
       <HeightGlide duration={260}>
@@ -305,7 +305,7 @@ export default function YourSessions() {
               <Text style={[styles.sectionTitle, styles.weekName]}>{weekLabel(start)}</Text>
               {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
               {/* This week's hours are the card's at the top: said once under the hand-made look (Oct 24). */}
-              {onCourt && !(LESS_AI && weekLabel(start) === 'This week') ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
+              {onCourt && !(LESS_AI_SESSIONS && weekLabel(start) === 'This week') ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
             </View>
             <SoftCard fill={fill}>
               {list.map((s, i) => {
@@ -353,7 +353,7 @@ export default function YourSessions() {
                     far={activity && !isTennisActivity(activity) ? formatDistance(activity.distanceM) : null}
                     postId={postId}
                     // Post it only on the last 7 days' sessions under the hand-made look (Oct 24): an old one is quieter as it is.
-                    postable={checked && !postId && s.day >= firstPostable && (!LESS_AI || s.day >= localDay(new Date(Date.now() - 7 * 86400000)))}
+                    postable={checked && !postId && s.day >= firstPostable && (!LESS_AI_SESSIONS || s.day >= localDay(new Date(Date.now() - 7 * 86400000)))}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
                     onShare={share}
                     onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => removeSession(s.id) })}
@@ -591,13 +591,13 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
   const title = `${far ? `${loggedLabel(s)} · ${far}` : loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
   // A note that only says who it was with ("With Mira"), when the title already names them, is skipped under the hand-made look (Oct 24).
   const names = people ? [...people.vs, ...people.with].map((w) => w.name.toLowerCase()) : [];
-  const onlyNames = LESS_AI && !!s.note && names.length > 0 && s.note.toLowerCase().replace(/\b(with|vs\.?|against|and)\b|[,.&!]/g, ' ').split(/\s+/).filter(Boolean).every((w) => names.some((n) => n.split(' ').includes(w)));
+  const onlyNames = LESS_AI_SESSIONS && !!s.note && names.length > 0 && s.note.toLowerCase().replace(/\b(with|vs\.?|against|and)\b|[,.&!]/g, ' ').split(/\s+/).filter(Boolean).every((w) => names.some((n) => n.split(' ').includes(w)));
   const shownNote = s.note && !hideNote && !onlyNames ? s.note : '';
   const place = shownNote.startsWith('At ') ? shownNote.slice(3) : '';
   const note = place ? '' : shownNote;
   // The day, and where it came from: "Sat Oct 3 · WHOOP".
   // The hand-made look leads the row with the date, so the line under it leaves the date out.
-  const day = LESS_AI ? source : source ? `${dayWords(s.day)} · ${source}` : dayWords(s.day);
+  const day = LESS_AI_SESSIONS ? source : source ? `${dayWords(s.day)} · ${source}` : dayWords(s.day);
   // Where, on the same line when it all fits on a phone ("Yesterday · Alder Park"), else on a line of its own.
   const placeOnDay = !!place && !!day && `${day} · ${place}`.length <= 30;
   return (
@@ -613,15 +613,15 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
         delayLongPress={450}
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
-        {LESS_AI ? <View style={styles.dayLead}><DayLead day={s.day} width={LEAD} /></View> : <View style={styles.icon}>
+        {LESS_AI_SESSIONS ? <View style={styles.dayLead}><DayLead day={s.day} width={LEAD} /></View> : <View style={styles.icon}>
           {s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
             : s.kind === 'fitness' ? <Ionicons name={s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />
             : <CourtGlyph size={15} color={colors.textMuted} />}
         </View>}
         <View style={styles.words}>
           {/* How long, big: the number you scan a week of sessions for. A record wears its gold pill beside it. */}
-          <View style={[styles.heroLine, LESS_AI ? styles.heroLinePost : styles.heroLineShare]}>
-            <Text style={[styles.hero, LESS_AI && styles.heroInk]}>{duration(s.minutes)}</Text>
+          <View style={[styles.heroLine, LESS_AI_SESSIONS ? styles.heroLinePost : styles.heroLineShare]}>
+            <Text style={[styles.hero, LESS_AI_SESSIONS && styles.heroInk]}>{duration(s.minutes)}</Text>
             {record ? <RecordPill /> : null}
           </View>
           {/* A score is the small ScoreBoard at the right of the words, under the row's buttons. */}
@@ -656,8 +656,8 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
           row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
         {/* The hand-made look (Oct 24): the circle goes, the share stays as a bare quiet icon (the only way to share a match or practice from here). */}
-        <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={8} onPress={onShare} style={({ pressed }) => [LESS_AI ? styles.shareBare : styles.share, pressed && styles.pressed]}>
-          <Ionicons name="share-outline" size={16} color={LESS_AI ? colors.textFaint : colors.text} />
+        <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={8} onPress={onShare} style={({ pressed }) => [LESS_AI_SESSIONS ? styles.shareBare : styles.share, pressed && styles.pressed]}>
+          <Ionicons name="share-outline" size={16} color={LESS_AI_SESSIONS ? colors.textFaint : colors.text} />
         </Pressable>
         <View style={styles.postSlot}>
           {postId ? (
@@ -666,8 +666,8 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
               <Text style={styles.postedText}>Posted</Text>
             </Pressable>
           ) : postable ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={onPost} style={({ pressed }) => [LESS_AI ? styles.postWord : styles.action, pressed && styles.pressed]}>
-              <Text style={[styles.actionText, LESS_AI && styles.postWordText]}>Post it</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={onPost} style={({ pressed }) => [LESS_AI_SESSIONS ? styles.postWord : styles.action, pressed && styles.pressed]}>
+              <Text style={[styles.actionText, LESS_AI_SESSIONS && styles.postWordText]}>Post it</Text>
             </Pressable>
           ) : null}
         </View>
