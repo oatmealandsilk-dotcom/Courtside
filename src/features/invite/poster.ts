@@ -1,12 +1,6 @@
 import { lightColors as c } from '@/theme';
 import { qrPath } from './qr';
 
-/**
- * The scan box's printed line, fixed: the app's card border went fainter (Oct 25, cards closer to
- * the page), and a home printer drops a line that light. This keeps the poster as it was.
- */
-const PAPER_LINE = '#DCD6C8';
-
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch] ?? ch);
 
 /** A tennis court from above, in the poster's green: the one picture it needs. */
@@ -44,7 +38,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helveti
 h1 { position: relative; margin-top: calc(var(--u) * 17); font-size: calc(var(--u) * ${headline}); line-height: 0.98; letter-spacing: -0.04em; font-weight: 700; max-width: calc(var(--u) * 84); }
 h1 em { font-style: normal; color: ${c.brand}; }
 .lead { margin-top: calc(var(--u) * 4); font-size: calc(var(--u) * 2.9); line-height: 1.42; color: ${c.textMuted}; max-width: calc(var(--u) * 72); }
-.scan { margin-top: auto; display: flex; align-items: center; gap: calc(var(--u) * 4.5); padding: calc(var(--u) * 3.2); border-radius: calc(var(--u) * 3.2); background: ${c.bg}; border: 1px solid ${PAPER_LINE}; }
+.scan { margin-top: auto; display: flex; align-items: center; gap: calc(var(--u) * 4.5); padding: calc(var(--u) * 3.2); border-radius: calc(var(--u) * 3.2); background: ${c.bg}; border: 1px solid ${c.border}; }
 .qr { flex: none; width: calc(var(--u) * 25); height: calc(var(--u) * 25); background: #fff; border-radius: calc(var(--u) * 1.4); }
 .scan h2 { font-size: calc(var(--u) * 4.8); line-height: 1.05; letter-spacing: -0.025em; font-weight: 700; }
 .scan p { margin-top: calc(var(--u) * 1.4); font-size: calc(var(--u) * 2.3); line-height: 1.45; color: ${c.textMuted}; }
