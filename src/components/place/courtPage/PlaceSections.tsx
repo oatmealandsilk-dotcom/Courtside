@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { HitGlyph } from '@/components/HitGlyph';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { CourtHits } from '@/components/place/CourtHits';
@@ -45,7 +46,15 @@ const GAP = 3;
  * "See all 9 posts" under the grid; then, while older ones are to come,
  * "Show older posts". Nothing yet: one card that says so, with Post a clip.
  */
-export function ClipsSection({ view }: { view: CourtView }) {
+export function ClipsSection({ view, quiet = false }: {
+  view: CourtView;
+  /**
+   * The court page's options (look.ts, Oct 24): Post lives here as the head's
+   * link ("Post", or a "+" beside Watch all), and an empty court is one line,
+   * "No clips yet.", with no card.
+   */
+  quiet?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const { posts, users, status, more, loadingOlder, name } = view;
   const [all, setAll] = useState(false);
@@ -83,6 +92,15 @@ export function ClipsSection({ view }: { view: CourtView }) {
     );
   }
 
+  const postLink = view.onPost ? { label: 'Post', a11y: `Post a clip or photo from ${name}`, onPress: view.onPost } : null;
+  if (!posts.length && quiet) {
+    return (
+      <View style={styles.section}>
+        <SectionHead title="Clips" sub="No clips yet." link={postLink} />
+      </View>
+    );
+  }
+
   if (!posts.length) {
     return (
       <View style={styles.section}>
@@ -107,6 +125,11 @@ export function ClipsSection({ view }: { view: CourtView }) {
         count={count}
         sub={view.lastPost}
         link={view.lead ? { label: 'Watch all', a11y: `Watch all ${posts.length} ${word} from ${name}`, onPress: () => view.onOpenReel(view.lead!) } : null}
+        before={quiet && postLink ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={postLink.a11y} hitSlop={10} onPress={postLink.onPress} style={({ pressed }) => [styles.plus, pressed && styles.pressed]}>
+            <Ionicons name="add" size={22} color={colors.brand} />
+          </Pressable>
+        ) : null}
       />
       <View style={styles.grid} onLayout={(e) => measure(e.nativeEvent.layout.width)}>
         {tileW ? shown.map((p) => <GridTile key={p.id} post={p} author={byId.get(p.authorId)} width={tileW} height={tileH} onPress={() => view.onOpenReel(p)} />) : null}
@@ -187,9 +210,39 @@ function GridTile({ post, author, width, height, onPress }: { post: Post; author
  * private court is never suggested for a hit: no New hit, and no section
  * at all with none open.
  */
-export function HitsSection({ view, count }: { view: CourtView; count: number }) {
+export function HitsSection({ view, count, look = 'now' }: {
+  view: CourtView;
+  count: number;
+  /**
+   * The court page's options (look.ts): 'A' hides the section while none are
+   * open (Play here sits above it); 'C' makes Play here the section's first
+   * row, its one way to post a hit, and drops the sentence.
+   */
+  look?: 'now' | 'A' | 'C';
+}) {
+  const styles = useThemedStyles(styleDefinitions);
   const { currentUser } = useApp();
   if (view.closed && !count) return null;
+  if (look === 'A' && !count) return null;
+  if (look === 'A' || look === 'C') {
+    return (
+      <View style={sectionGap}>
+        <SectionHead
+          title="Open hits"
+          count={count ? String(count) : null}
+          link={look === 'A' && !view.closed ? { label: 'New hit', a11y: `Play here. Post a hit at ${view.name}`, onPress: () => playHere(view.here) } : null}
+        />
+        {look === 'C' && !view.closed ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`Play here. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} style={({ pressed }) => [styles.playRow, pressed && styles.playRowPressed]}>
+            <HitGlyph size={21} color={colors.brand} />
+            <Text style={styles.playText}>Play here</Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.brand} />
+          </Pressable>
+        ) : null}
+        {count ? <CourtHits place={view.here} /> : null}
+      </View>
+    );
+  }
   const forFriends = !!currentUser && notKnownAdult(currentUser);
   const sub = count ? null : `None here yet. Post a time and ${forFriends ? 'friends who follow you' : 'players nearby'} can join.`;
   return (
@@ -279,4 +332,9 @@ const styleDefinitions = StyleSheet.create({
   emptyTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyWords: { flex: 1, minWidth: 0, gap: 4 },
   emptyButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
+  // The options: Post's "+" beside Watch all, and C's Play here row (the one way to post a hit, at the top of Open hits).
+  plus: { width: 30, height: 26, alignItems: 'center', justifyContent: 'center' },
+  playRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  playRowPressed: { backgroundColor: colors.surfaceAlt },
+  playText: { flex: 1, ...typography.bodyStrong, color: colors.brand },
 });
