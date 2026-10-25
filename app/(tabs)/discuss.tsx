@@ -36,6 +36,7 @@ import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
+import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { FollowPill } from '@/components/FollowPill';
@@ -630,7 +631,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Each with its place in the first showing's stagger (FirstReveal), which depends on what comes first.
   // Keyed, so open hits coming or going moves them in the list rather than building them again.
   const yourCourts = (order: number) => <YourCourts key="your-courts" from={youAt} revealOrder={order} />;
-  const courtsBlock = (order: number) => <CourtsNear key="courts-near" center={youAt} revealOrder={order} foldGap={16} />;
+  const courtsBlock = (order: number) => <CourtsNear key="courts-near" center={youAt} revealOrder={order} foldGap={16} pictures={!previewSection} />;
   // Your courts and Courts near you sit above Open hits in a quiet area and under them once there are
   // hits. When that changes (the last hit called off, the first one posted), they fold shut in one place
   // as they unfold in the other, rather than the whole page jumping (Oct 22 sweep, item 7).
@@ -987,6 +988,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
       }
     >
+      {/* First, so everything else covers it: where a phone draws Courts near you's little maps, one at a time, while this page is on show (the chat's own way). */}
+      {previewSection ? null : <CourtsNearSnapshots />}
       {/* Under the header and out of every scroller, so it stays exactly where it is while
           either section scrolls or the two slide past each other. */}
       <View style={[styles.sectionsColumn, column ? { maxWidth: column } : null]}>

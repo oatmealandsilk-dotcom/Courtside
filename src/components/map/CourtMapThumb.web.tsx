@@ -77,7 +77,11 @@ function drawNext(key: string, lat: number, lng: number, zoom: number, width: nu
  * A still map of a spot, `width` × `height`, in the theme's own map colours. Takes no taps: the card it sits in does.
  * `zoom`: how close in (a chat's card shows the streets around, Start a session the court's own block).
  */
-export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { lat: number; lng: number; width: number; height: number; zoom?: number }) {
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw = true }: {
+  lat: number; lng: number; width: number; height: number; zoom?: number;
+  /** False: only a picture kept from before shows (else the stand-in); nothing new is drawn until it turns true. */
+  draw?: boolean;
+}) {
   const { theme } = useTheme();
   const key = thumbKey(theme, lat, lng, width, height, zoom);
   const look = useMemo(() => thumbLook(lookFor(themes[theme])), [theme]);
@@ -90,10 +94,10 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { 
     void lookUp(key).then(() => {
       if (gone) return;
       if (shots.has(key)) queue.emit();
-      else queue.join(key);
+      else if (draw) queue.join(key);
     });
     return () => { gone = true; if (!shots.has(key)) queue.leave(key); };
-  }, [key]);
+  }, [key, draw]);
   useEffect(() => { if (turn && !shot) drawNext(key, lat, lng, zoom, width, height, look); }, [turn, shot, key]); // eslint-disable-line react-hooks/exhaustive-deps
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);

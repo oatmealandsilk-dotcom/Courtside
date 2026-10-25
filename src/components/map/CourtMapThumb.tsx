@@ -67,7 +67,11 @@ const jobs = new Map<string, Job>();
  * `zoom`: how close in (a chat's card shows the streets around, Start a
  * session the court's own block).
  */
-export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { lat: number; lng: number; width: number; height: number; zoom?: number }) {
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw = true }: {
+  lat: number; lng: number; width: number; height: number; zoom?: number;
+  /** False: only a picture kept from before shows (else the stand-in); nothing new is drawn until it turns true. */
+  draw?: boolean;
+}) {
   const { theme } = useTheme();
   const key = thumbKey(theme, lat, lng, width, height, zoom);
   const look = useMemo(() => thumbLook(lookFor(themes[theme])), [theme]);
@@ -76,10 +80,11 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { 
   useEffect(() => {
     if (shots.has(key) || failed.has(key)) return undefined;
     if (fromDisk(key)) { queue.emit(); return undefined; }
+    if (!draw) return undefined;
     jobs.set(key, { lat, lng, zoom, width, height, lookJson: JSON.stringify(look), ground: look.background?.fill });
     queue.join(key);
     return () => { if (!shots.has(key)) { queue.leave(key); jobs.delete(key); } };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, draw]); // eslint-disable-line react-hooks/exhaustive-deps
   // The picture fades in over the stand-in once it has loaded, never popping.
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
