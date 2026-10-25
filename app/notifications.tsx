@@ -1,4 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { LESS_AI } from '@/theme/look';
 import Animated, { Easing, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -134,7 +135,7 @@ const VERB: Record<NotificationKind, string> = {
   // When and where (or when, and the room now) come from the row's preview, on the line under it.
   'hit-called-off': 'called off the hit',
   'hit-left': 'can’t make it',
-  activity: 'Tap to log it.',
+  activity: LESS_AI ? '' : 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
   'map-new-hit': 'posted an open hit near you',
   'map-new-player': 'is new and shared their spot near you',
@@ -297,10 +298,17 @@ function activityNow(a: DetectedActivity | undefined, auto = false): { who: stri
   if (a.status === 'logged' && auto) return { who: 'Tennis logged.', verb: 'Only you can see it. Tap to add the score or post it.', opens: true };
   if (a.status === 'logged') return { who: `${what} logged.`, verb: 'Tap to post it.', opens: true };
   // The tracker only said "Sport" (Fitbit, migration 185).
-  if (a.status === 'new' && a.unsure) return { who: 'Was this tennis?', verb: 'Tap to log it.', opens: true };
+  if (a.status === 'new' && a.unsure) return { who: 'Was this tennis?', verb: LESS_AI ? '' : 'Tap to log it.', opens: true };
   if (a.status === 'dismissed') return { who: `${what} detected.`, verb: 'You hid it.', opens: false };
   if (a.status === 'withdrawn') return { who: `${what} detected.`, verb: 'No longer on your tracker.', opens: false };
   return undefined;
+}
+
+/** "6h" from the weekly recap's line ("Your week on court 6h 15m, 4 sessions…"); null when it gives no hours. */
+function recapHours(preview: string | undefined | null): string | null {
+  const m = preview?.match(/(\d+)h\b/) ?? preview?.match(/(\d+)\s?m(?:in)?\b/);
+  if (!m) return null;
+  return m[0].includes('h') ? `${m[1]}h` : `${m[1]}m`;
 }
 
 export default function Notifications() {
@@ -427,7 +435,7 @@ export default function Notifications() {
       if (now) return now.verb;
     }
     // "Your week on court 6h 15m, 4 sessions — up 2h. Best streak yet.": the server's line, as the phone alert said it.
-    if (group.kind === 'weekly-recap') return group.preview ?? 'is ready';
+    if (group.kind === 'weekly-recap') return (LESS_AI && group.preview ? group.preview.replace(/\.\s.*$/, '.') : group.preview) ?? 'is ready';
     // Someone who joined through a link you shared (migration 68).
     if (group.kind === 'follow' && group.preview === INVITE_LINE) return 'joined CourtSide from your link';
     if (group.kind === 'follow-request' && group.preview === INVITE_LINE) return 'joined CourtSide from your link and asked to follow you';
@@ -674,7 +682,10 @@ export default function Notifications() {
                   {/* Two faces, overlapped, when more than one person did it. */}
                   {group.kind === 'weekly-recap' ? (
                     // Your own week: its bars in a brand disc, no badge.
-                    <View style={[styles.brandFace, styles.recapFace]}><Ionicons name="stats-chart" size={20} color={colors.brandInk} /></View>
+                    LESS_AI && recapHours(group.preview) ? (
+                      // The week's real hours where the chart was (Oct 24).
+                      <View style={styles.brandFace}><Text maxFontSizeMultiplier={1.2} style={styles.recapHours}>{recapHours(group.preview)}</Text></View>
+                    ) : <View style={[styles.brandFace, styles.recapFace]}><Ionicons name="stats-chart" size={20} color={colors.brandInk} /></View>
                   ) : group.kind === 'review-request' && askerOf(group) ? (
                     // The player who asked, when this phone knows them by their handle.
                     <Avatar name={askerOf(group)!.name} seed={askerOf(group)!.avatarSeed} uri={askerOf(group)!.avatarUrl} size={44} />
@@ -688,7 +699,7 @@ export default function Notifications() {
                       <View style={styles.pairFront}><Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={32} /></View>
                     </View>
                   ) : <Avatar name={nameOf(first)} seed={seedOf(first)} uri={photoOf(first)} size={44} />}
-                  {group.kind === 'weekly-recap' ? null : (
+                  {group.kind === 'weekly-recap' || (LESS_AI && group.kind !== 'hit-called-off') ? null : (
                     <View style={[styles.badge, { backgroundColor: colors[icon.tint] }]}>
                       {icon.name === 'hit'
                         ? <HitGlyph size={HIT_BADGE} color={colors.brandInk} rim={colors[icon.tint]} />
@@ -834,8 +845,9 @@ const ROW_OUT = FadeOut.duration(180);
 const styleDefinitions = StyleSheet.create({
   list: { gap: 2 },
   brandFace: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.brandDim },
-  brandFaceOnTint: { backgroundColor: colors.surface },
+  brandFaceOnTint: LESS_AI ? {} : { backgroundColor: colors.surface },
   recapFace: { backgroundColor: colors.brand },
+  recapHours: { ...typography.smallStrong, color: colors.brand },
   heading: { ...typography.smallStrong, color: colors.text, paddingHorizontal: spacing.sm, paddingBottom: spacing.xs },
   pair: { width: 44, height: 44 },
   pairBack: { position: 'absolute', right: 0, top: 0 },
@@ -848,7 +860,8 @@ const styleDefinitions = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: radius.md,
   },
-  rowUnread: { backgroundColor: colors.brandDim },
+  // Unread rows: the dot and the "New" heading already mark them, so no fill under the hand-made look (Oct 24).
+  rowUnread: LESS_AI ? {} : { backgroundColor: colors.brandDim },
   // Held: the list rows' tint (theme/press).
   rowPressed: { backgroundColor: colors.surfaceAlt },
   // A pill button held: it shrinks slightly (theme/press).

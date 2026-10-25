@@ -44,7 +44,7 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { show as showToast } from '@/lib/toast';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -251,14 +251,14 @@ function QuestionDetail() {
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title={`${question.source.replies} ${question.source.replies === 1 ? 'reply' : 'replies'} on ${question.source.label}`}
-              body="Those stay on the original site. Be the first to answer it here."
+              body={LESS_AI ? undefined : 'Those stay on the original site. Be the first to answer it here.'}
             />
           ) : (
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title="No answers yet"
               // Your own thread: the asker is told what happens next, not asked to answer it.
-              body={question.authorId === currentUserId
+              body={LESS_AI ? undefined : question.authorId === currentUserId
                 ? 'We’ll let you know when a player or coach answers.'
                 : 'Know this one? A specific answer beats three vague ones.'}
             />

@@ -28,7 +28,7 @@ import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
 import { useShownAt } from '@/features/navigation/shownAt';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -105,7 +105,7 @@ function Coaching() {
       <View style={[styles.section, myCoach ? null : styles.sectionFirst]}>
         <View style={styles.sectionRow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Ask a coach</Text>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>free</Text>
+          {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>free</Text>}
         </View>
       </View>
       {/* The first-visit tip, in the page's flow just above the box and pointing down at it:
@@ -132,10 +132,10 @@ function Coaching() {
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <SwipePressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
-          <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>
+          {LESS_AI ? null : <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>}
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>AI coach</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>
+            {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>}
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </SwipePressable>
@@ -176,8 +176,10 @@ function Coaching() {
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
+                  {LESS_AI && coach.headline ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={2}>{coach.headline}</Text> : <>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
+                  </>}
                 </View>
                 <View style={styles.coachFoot}>
                   {coach.ratingCount ? (
@@ -227,7 +229,7 @@ function Coaching() {
                       <View style={styles.rowWords}>
                         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={2}>{question.title}</Text>
                         <View style={styles.metaRow}>
-                          {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                          {waiting ? <LiveDot size={7} /> : LESS_AI ? null : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
                           <PlayerName userId={author?.id} style={styles.meta}>
                             {waiting ? 'Awaiting a coach' : question.resolved ? 'Answered' : `${question.replyIds.length} ${question.replyIds.length === 1 ? 'reply' : 'replies'}`} · @{author?.handle ?? 'player'} · {relativeTime(question.createdAt)}
                           </PlayerName>
@@ -247,7 +249,7 @@ function Coaching() {
                     <View style={styles.rowWords}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={2}>{r.question || service?.title || 'Coaching request'}</Text>
                       <View style={styles.metaRow}>
-                        {waiting ? <LiveDot size={7} /> : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
+                        {waiting ? <LiveDot size={7} /> : LESS_AI ? null : <Ionicons name="checkmark-circle" size={13} color={colors.success} />}
                         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>
                           {statusLabel(r)} · Private, with {coachUser?.name ?? 'a coach'} · {relativeTime(r.createdAt)}
                         </Text>
@@ -270,7 +272,12 @@ function Coaching() {
           </View>
           <Ionicons name="arrow-forward" size={18} color={colors.text} />
         </SwipePressable>
-      ) : shown.length === 0 ? null : (
+      ) : shown.length === 0 ? null : LESS_AI ? (
+        // A plain text link, not a card (Oct 24).
+        <SwipePressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} hitSlop={8} style={({ pressed }) => [styles.applyLink, pressed && styles.pressed]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>Coach? <Text style={styles.applyLinkWord}>Apply to get listed</Text></Text>
+        </SwipePressable>
+      ) : (
         <SwipePressable accessibilityRole="link" accessibilityLabel="Apply to be a coach" onPress={() => router.push('/coach-apply')} style={({ pressed }) => [styles.foot, pressed && styles.pressed]}>
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>Coach on CourtSide</Text>
@@ -296,7 +303,9 @@ const styleDefinitions = StyleSheet.create({
   },
   askFieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   askPlaceholder: { ...typography.body, fontSize: 16, color: colors.textFaint, flex: 1 },
-  askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow },
+  askGo: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...(LESS_AI ? null : brandShadow) },
+  applyLink: { alignSelf: 'flex-start', marginTop: spacing.xl, paddingVertical: spacing.sm },
+  applyLinkWord: { color: colors.brand, ...font('500') },
   // Everything else is rows on hairlines, not boxes.
   list: { marginTop: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14, paddingHorizontal: spacing.lg },
@@ -309,7 +318,7 @@ const styleDefinitions = StyleSheet.create({
   sectionFirst: { paddingTop: spacing.sm },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.md },
   sectionCount: { ...typography.small, color: colors.textFaint },
-  group: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  group: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   sectionTitle: { ...typography.heading, color: colors.text },
   none: { gap: spacing.sm, paddingVertical: spacing.lg, alignItems: 'flex-start' },
   noneTitle: { ...typography.heading, color: colors.text },
@@ -318,10 +327,10 @@ const styleDefinitions = StyleSheet.create({
   // Room above and below so the cards' shadows are not cut off by the scroller.
   rail: { flexGrow: 0, marginHorizontal: -spacing.lg, marginVertical: -spacing.md },
   railRow: { gap: spacing.md, paddingHorizontal: spacing.lg, paddingTop: spacing.md + spacing.xs, paddingBottom: spacing.lg + spacing.xs },
-  coachCard: { ...lift, width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  coachCard: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   coachWords: { gap: 3 },
   coachName: { ...typography.bodyStrong, color: colors.text },
-  coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, ...(LESS_AI ? { marginTop: 'auto' } : { paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }) },
   priceTag: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   priceText: { ...typography.caption, color: colors.brand },
   name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
@@ -337,7 +346,7 @@ const styleDefinitions = StyleSheet.create({
   studioBitOn: { backgroundColor: colors.brand },
   studioCount: { minWidth: 24, height: 24, paddingHorizontal: 7, borderRadius: 12, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
   studioCountText: { ...typography.caption, letterSpacing: 0, color: colors.brandInk, fontVariant: ['tabular-nums'] },
-  ai: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  ai: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   aiMark: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
 });
 

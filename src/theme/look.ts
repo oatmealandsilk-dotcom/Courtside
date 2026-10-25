@@ -51,3 +51,12 @@ export const chipCorner = scale ? scale.chip : 999;
 export const inputCorner = (now: number) => (scale ? Math.min(now, scale.input) : now);
 /** The bar a row of chips or a segmented switch sits in: a pill today, the chip's corner plus its padding when less round. */
 export const trackCorner = (pad: number) => (scale ? scale.chip + pad : 999);
+
+/**
+ * LESS_AI (Oct 24, owner: "looks a bit too ai", "too much words") — one
+ * switch for the hand-made pass: icon tiles off list rows, explainer
+ * sentences and filler copy gone, quieter Follow buttons, flat cards with no
+ * glow, the court surface wherever a court is listed. false is the app
+ * exactly as it was; true turns the whole pass on at once.
+ */
+export const LESS_AI: boolean = false;

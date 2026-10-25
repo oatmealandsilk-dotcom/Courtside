@@ -72,7 +72,7 @@ import type { QuestionTopic } from '@/data/types';
 import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, useLargeText, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { corner, inputCorner } from '@/theme/look';
+import { LESS_AI, corner, inputCorner } from '@/theme/look';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -707,7 +707,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
                   accessibilityLabel={court ? `Post a hit at ${labelOf(court)}` : 'Post a hit'}
                   onPress={() => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'))}
-                  note={listedHits.length ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
+                  note={listedHits.length || LESS_AI ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
                 />
               );
             })()}
@@ -773,7 +773,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Places</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{placeSearch.failed ? 'Search isn’t working right now' : 'See the courts there on the map'}</Text>
+              {placeSearch.failed || !LESS_AI ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{placeSearch.failed ? 'Search isn’t working right now' : 'See the courts there on the map'}</Text> : null}
             </View>
             {placeMatches.map((p, index) => (
               <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`${p.title}${p.sub ? `, ${p.sub}` : ''}, see its courts on the map`} onPress={() => openPlace(p)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
@@ -793,7 +793,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Shared their spot within 30 miles</Text>
+              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Shared their spot within 30 miles</Text>}
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
@@ -821,7 +821,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>New on CourtSide</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? 'Joined in the last two weeks, in other cities' : 'Joined in the last two weeks'}</Text>
+              {LESS_AI && !newElsewhere ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? (LESS_AI ? 'In other cities' : 'Joined in the last two weeks, in other cities') : 'Joined in the last two weeks'}</Text>}
             </View>
             {/* Show all unfolds the rest, Fewer folds them away (Oct 22 sweep, item 7). */}
             <FoldList items={newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)} keyOf={userKey} render={(user, index) => (
@@ -882,7 +882,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                   <Pressable key={key} accessibilityRole="menuitem" accessibilityState={{ selected: sort === key }} onPress={() => { if (key !== sort) haptics.tick(); setSort(key); setSortOpen(false); }} style={({ pressed }) => [styles.sortItem, i > 0 && styles.sortItemLine, pressed && { backgroundColor: colors.bgElevated }]}>
                     <View style={{ flex: 1, gap: 1 }}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sortItemTitle, sort === key && { color: colors.brand }]}>{SORT_LABEL[key]}</Text>
-                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>
+                      {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sortItemBody}>{SORT_HINT[key]}</Text>}
                     </View>
                     {sort === key ? <Ionicons name="checkmark" size={16} color={colors.brand} /> : null}
                   </Pressable>
@@ -915,7 +915,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <EmptyState
           icon="help-circle-outline"
           title="No questions here"
-          body="Be the first to ask. Specific questions get specific answers."
+          body={LESS_AI ? undefined : 'Be the first to ask. Specific questions get specific answers.'}
           // Never a dead end (Oct 5): asking opens with this topic picked.
           action={{ label: 'Ask a question', onPress: () => router.push(topic === 'all' ? '/ask' : { pathname: '/ask', params: { topic } }) }}
         />
@@ -923,10 +923,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         <View style={styles.list}>
           {pinned ? (
             <View style={styles.pinned}>
-              <View style={styles.pinnedLabel} accessible accessibilityLabel="Question of the week, this week">
+              <View style={styles.pinnedLabel} accessible accessibilityLabel={LESS_AI ? 'Question of the week' : 'Question of the week, this week'}>
                 <Ionicons name="pin" size={13} color={colors.brand} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pinnedTitle}>Question of the week</Text>
-                <View style={styles.weekPill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.weekPillText}>This week</Text></View>
+                {LESS_AI ? null : <View style={styles.weekPill}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.weekPillText}>This week</Text></View>}
               </View>
               <QuestionCard
                 question={pinned}

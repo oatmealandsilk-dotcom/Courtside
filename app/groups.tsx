@@ -12,7 +12,7 @@ import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /*
  * Groups (migration 67): the ones you are in, the ones you asked to join,
@@ -32,7 +32,7 @@ export default function Groups() {
 
   return (
     <Screen title="Groups" compactTitle onBack={() => goBack()}>
-      <Text style={styles.intro}>A group’s feed shows everything its members post.</Text>
+      {LESS_AI ? null : <Text style={styles.intro}>A group’s feed shows everything its members post.</Text>}
 
       {off ? <Text style={styles.notice}>Groups aren’t switched on yet. Check back soon.</Text> : null}
 
@@ -40,12 +40,13 @@ export default function Groups() {
 
       <View style={styles.sectionRow}>
         <Text style={styles.section}>Your groups</Text>
+        {LESS_AI ? <Text style={styles.sectionCount} accessibilityLabel={`${count} of ${MAX_GROUPS} groups`}>{count} of {MAX_GROUPS}</Text> : null}
       </View>
       {count === 0 ? (
         <View style={[styles.card, styles.emptyCard]}>
           <Ionicons name="people-outline" size={22} color={colors.textFaint} />
           <Text style={styles.emptyTitle}>You’re not in a group yet</Text>
-          <Text style={styles.emptyBody}>Start one below, or open a group’s invite link.</Text>
+          {LESS_AI ? null : <Text style={styles.emptyBody}>Start one below, or open a group’s invite link.</Text>}
         </View>
       ) : (
         <View style={styles.card}>
@@ -79,7 +80,7 @@ export default function Groups() {
           })}
         </View>
       )}
-      <Text style={styles.footnote}>You can be in up to {MAX_GROUPS} groups · {count} of {MAX_GROUPS}</Text>
+      {LESS_AI ? (full ? <Text style={styles.footnote}>You can be in up to {MAX_GROUPS} groups.</Text> : null) : <Text style={styles.footnote}>You can be in up to {MAX_GROUPS} groups · {count} of {MAX_GROUPS}</Text>}
 
       {feedGroupsAsked.length ? (
         <>
@@ -126,6 +127,7 @@ const styleDefinitions = StyleSheet.create({
   notice: { ...typography.small, color: colors.textMuted, lineHeight: 19, paddingHorizontal: spacing.xs, paddingTop: spacing.md },
   sectionRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted },
+  sectionCount: { ...typography.small, color: colors.textFaint },
   sectionAlone: { paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },

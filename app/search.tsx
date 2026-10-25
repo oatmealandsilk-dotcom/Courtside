@@ -1,4 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
+import { LESS_AI } from '@/theme/look';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityInfo, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, View,
@@ -479,7 +480,7 @@ export default function Search() {
         ) : null}
         {nothing ? (findingFriend
           ? <EmptyState icon="person-add-outline" title="Find a friend" body="Type their name or @handle." />
-          : <EmptyState icon="search-outline" title="Search CourtSide" body="Find a player by name or @handle, a clip by #tag, a thread or a court." />
+          : <EmptyState icon="search-outline" title="Search CourtSide" body={LESS_AI ? undefined : 'Find a player by name or @handle, a clip by #tag, a thread or a court.'} />
         ) : null}
         {undo ? (
           <View style={styles.head}>
@@ -540,12 +541,12 @@ export default function Search() {
   };
   const none = (which: Tab) => (
     searching ? spinner : which !== 'people' && which !== 'all' && q.text.length < 2 ? (
-      <EmptyState icon="search-outline" title="Keep typing" body="Posts, threads and courts show from two letters." />
+      <EmptyState icon="search-outline" title="Keep typing" body={LESS_AI ? undefined : 'Posts, threads and courts show from two letters.'} />
     ) : (
       <EmptyState
         icon="search-outline"
         title={noneTitle(which)}
-        body={which === 'courts' ? 'Courts come from the map, about 15 miles around you.' : 'Check the spelling, or try a name, an @handle, a #tag or a court.'}
+        body={LESS_AI ? undefined : which === 'courts' ? 'Courts come from the map, about 15 miles around you.' : 'Check the spelling, or try a name, an @handle, a #tag or a court.'}
       />
     )
   );
@@ -568,7 +569,7 @@ export default function Search() {
         );
       })}
       {!tagRows.length ? (
-        <EmptyState icon="pricetag-outline" title={q.text ? `No tags starting “${q.text}”` : 'No tags yet'} body="Type a word after the # to find posts and threads tagged with it." />
+        <EmptyState icon="pricetag-outline" title={q.text ? `No tags starting “${q.text}”` : 'No tags yet'} body={LESS_AI ? undefined : 'Type a word after the # to find posts and threads tagged with it.'} />
       ) : null}
     </ScrollView>
   );
