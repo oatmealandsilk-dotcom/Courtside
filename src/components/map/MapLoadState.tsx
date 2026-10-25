@@ -162,8 +162,11 @@ function SoftSweep() {
 
 /** The band itself, made once the card's width is known (so nothing in its motion is guessed at first). */
 function SweepBand({ width }: { width: number }) {
-  const { theme } = useTheme();
+  const { theme, dark } = useTheme();
+  // The map's own road colour, the lightest thing on its ground; on a light page that is white over a near-white
+  // ground, so it is held stronger there than on a dark one, where the same colour stands out far more.
   const light = useMemo(() => lookFor(themes[theme]).highway_major_inner?.line ?? colors.surface, [theme]);
+  const peak = dark ? 0.28 : 0.75;
   const band = Math.round(width * 0.55);
   const at = useSharedValue(0);
   useEffect(() => {
@@ -177,7 +180,7 @@ function SweepBand({ width }: { width: number }) {
         <Defs>
           <LinearGradient id="cs-sweep" x1="0" y1="0" x2="1" y2="0">
             <Stop offset="0" stopColor={light} stopOpacity={0} />
-            <Stop offset="0.5" stopColor={light} stopOpacity={0.4} />
+            <Stop offset="0.5" stopColor={light} stopOpacity={peak} />
             <Stop offset="1" stopColor={light} stopOpacity={0} />
           </LinearGradient>
         </Defs>
