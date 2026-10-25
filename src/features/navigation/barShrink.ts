@@ -1,5 +1,7 @@
 import { Easing, makeMutable, withTiming } from 'react-native-reanimated';
 
+import { BAR_METRICS } from './tabBarLook';
+
 /**
  * The bottom bar ducks a little while you scroll down and comes back as soon
  * as you scroll up — 0 is full size, 1 is ducked. Any scroller can drive it;
@@ -14,7 +16,7 @@ export const BAR_DUCK_PX = DUCK * 2.5;
  * points. The words over a clip follow it down by the same amount, so they
  * keep the same small gap above the bar whether it is up or tucked.
  */
-export const BAR_TUCK = 12;
+export const BAR_TUCK = BAR_METRICS.tuck;
 
 /**
  * The feed's swipes move the bar in one steady glide, the same length
