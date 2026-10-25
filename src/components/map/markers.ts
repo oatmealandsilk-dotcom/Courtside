@@ -4,7 +4,7 @@ import { isClosedCourt, type Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
 import { colors, surfaceColorFor } from '@/theme';
-import { LESS_AI_COURTS } from '@/theme/look';
+import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
 
 /**
@@ -13,7 +13,7 @@ import { surfaceKind } from '@/features/places/courtSurface';
  * the map says nothing about keeps the court colour. Read on each draw, so it follows the theme.
  */
 export function courtTone(court: Court): string {
-  if (!LESS_AI_COURTS) return colors.court;
+  if (!LESS_AI) return colors.court;
   const kind = surfaceKind(court.surface);
   return kind === 'hard' ? colors.surfaceHard : kind === 'clay' ? colors.surfaceClay : kind === 'grass' ? colors.surfaceGrass : kind ? colors.surfaceOther : colors.court;
 }
