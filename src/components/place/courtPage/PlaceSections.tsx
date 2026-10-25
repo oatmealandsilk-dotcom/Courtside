@@ -68,6 +68,17 @@ export function ClipsSection({ view, quiet = false }: {
   const shown = all ? posts : posts.slice(0, FIRST);
   const measure = (next: number) => { const r = Math.floor(next); if (r > 0 && r !== w) setW(r); };
 
+  const postLink = view.onPost ? { label: 'Post', a11y: `Post a clip or photo from ${name}`, onPress: view.onPost } : null;
+  // The court page (quiet): while asked, the head and its one line held blank, the height of "No clips
+  // yet.", so an empty court (most) settles with nothing under it moving; posts, when they come, open below.
+  if (!posts.length && status === 'loading' && quiet) {
+    return (
+      <View style={styles.section} accessibilityLabel="Loading posts from here">
+        <SectionHead title="Clips" sub=" " link={postLink} />
+      </View>
+    );
+  }
+
   if (!posts.length && status === 'loading') {
     return (
       <View style={styles.section}>
@@ -91,7 +102,6 @@ export function ClipsSection({ view, quiet = false }: {
     );
   }
 
-  const postLink = view.onPost ? { label: 'Post', a11y: `Post a clip or photo from ${name}`, onPress: view.onPost } : null;
   if (!posts.length && quiet) {
     return (
       <View style={styles.section}>
