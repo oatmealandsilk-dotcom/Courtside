@@ -103,6 +103,20 @@ export function peekCardShot(key: string, _hash: string): CardShot | null {
   return e ? { uri: e.data, kind: 'streets' } : null;
 }
 
+/** Any picture kept of this person's card at this place (whatever its theme, size or look then), the theme now first: for MAP_LOADING 'D' (as on the phone). */
+export function peekPlaceShot(user: string, lat: number, lng: number, theme: string): string | null {
+  const now = Date.now();
+  const la = lat.toFixed(4);
+  const ln = lng.toFixed(4);
+  const here = entries.filter((e) => {
+    if (now - e.at >= PLACE_MAX_AGE_MS) return false;
+    const part = e.key.split('|');
+    return part[0] === user && part[3] === la && part[4] === ln;
+  });
+  const pick = here.find((e) => e.key.split('|')[1] === theme) ?? here[0];
+  return pick ? pick.data : null;
+}
+
 export function hasCardShot(key: string, kind: ShotKind): boolean {
   return kind === 'card' || entries.some((e) => e.key === key);
 }

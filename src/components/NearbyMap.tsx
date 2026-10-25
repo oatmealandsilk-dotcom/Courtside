@@ -12,8 +12,8 @@ import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, H
 import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
-import { MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
-import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
+import { MAP_LOADING, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, peekPlaceShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import { STYLE, cardLook, lookFor } from '@/components/map/look';
@@ -242,6 +242,9 @@ export function NearbyMap(props: NearbyMapProps) {
   // Never for a card centred on your own spot (far from any town the app knows): nothing of where you are is kept.
   const key = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardWidth, h: cardHeight ?? HEIGHT, scale, lock: lock ?? 'open', still }) : '';
   const markerHash = useMemo(() => (expanded ? '' : hashText(JSON.stringify({ items: markers, tpl }))), [expanded, markers, tpl]);
+  // The loading look's extras (MAP_LOADING): your face with Location on ('B'); any picture kept of this place, softened ('D').
+  const loadingMe = MAP_LOADING === 'B' && !expanded && place.locationOn && model.mePos ? me : null;
+  const loadingSoft = MAP_LOADING === 'D' && !expanded && model.city && !model.cityExact ? peekPlaceShot(me.id, model.city.lat, model.city.lng, theme) : null;
   const keyNow = useRef(key);
   const keepNoneNow = useRef(keepNone);
   keepNoneNow.current = keepNone;
@@ -480,7 +483,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* No picture (or not loaded yet): the loading sketch over all of it, the city's name and counts too (they come with the map), fading off it once. */}
         {!coverGone && (!cover.uri || !photoIn) && !(lostCover && cover.uri) ? (
           <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, coverFade]}>
-            <MapCardLoading />
+            <MapCardLoading me={loadingMe} soft={loadingSoft} />
           </Reanimated.View>
         ) : null}
         {/* Given up on: one quiet message over everything, which the card's tap tries again. */}
