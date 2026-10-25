@@ -12,7 +12,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /*
  * Weekly streaks with hitting partners (sweep R12, Oct 20, owner: yes).
@@ -29,6 +29,22 @@ const firstOf = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /** "Played together this week" or, while the week is open, the next week to make: an invitation, never a warning. */
 const weekWords = (p: PartnerStreak) => (p.thisWeek ? 'You’ve played together this week' : `Hit together this week to make it ${p.weeks + 1}`);
+/** The plain fact, for the hand-made look's rows (Oct 24): no nudge. */
+const weekFact = (p: PartnerStreak) => (p.thisWeek ? 'Played together this week' : 'Not yet this week');
+
+/**
+ * The hand-made look (Oct 24): your streak with them as one muted line under
+ * their follower counts, "🔥 2 weeks in a row with you", and "· hit this week
+ * to make it 3" only while this week is still open. Nothing with no streak.
+ */
+export function PartnerStreakLine({ userId }: { userId: ID }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const streaks = usePartnerStreaks();
+  const p = streaks?.find((s) => s.userId === userId);
+  if (!p) return null;
+  const said = `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you${p.thisWeek ? '' : ` · hit this week to make it ${p.weeks + 1}`}`;
+  return <Text style={styles.line} accessibilityLabel={`Partner streak: ${said}`}>🔥 {said}</Text>;
+}
 
 /**
  * Your streaks, asked for when shown and again whenever your tags change
@@ -149,7 +165,7 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
   const party = useCelebration(p, box);
   // The streaks load after the page has drawn: the card opens with a smooth height
   // change rather than dropping in and shoving everything below it (Oct 22).
-  if (!p) return <Collapse open={false} unclip>{null}</Collapse>;
+  if (!p || LESS_AI) return <Collapse open={false} unclip>{null}</Collapse>;
   const first = firstOf(name);
   const title = `${p.weeks}-week streak with ${first}`;
   const eyebrow = party ? `${party} weeks in a row!` : 'Partner streak';
@@ -192,7 +208,7 @@ export function PartnerStreaksBox({ gap = 0 }: {
     <Collapse open={rows.length > 0} unclip>
       {rows.length ? (
         <View style={{ paddingTop: gap }}>
-          <SectionHead title="Partner streaks" count={rows.length > 1 ? rows.length : undefined} />
+          <SectionHead title="Partner streaks" count={rows.length > 1 && !LESS_AI ? rows.length : undefined} />
           <Box>
             {rows.map((p, i) => <StreakRow key={p.userId} p={p} first={i === 0} />)}
           </Box>
@@ -223,7 +239,7 @@ function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
         }
         sub={
           <Text style={[styles.rowSub, party ? styles.rowSubOn : null]} numberOfLines={1}>
-            {party ? `${party} weeks in a row! Keep it going` : weekWords(p)}
+            {party ? `${party} weeks in a row! Keep it going` : LESS_AI ? weekFact(p) : weekWords(p)}
           </Text>
         }
         chevron
@@ -252,4 +268,5 @@ const styleDefinitions = StyleSheet.create({
   rowFlame: { fontSize: 15 },
   rowSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   rowSubOn: { ...font('600'), color: colors.brand },
+  line: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
 });

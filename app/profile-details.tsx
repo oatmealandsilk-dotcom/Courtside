@@ -372,7 +372,7 @@ function Waiting({ user }: { user: User }) {
     <View>
       {/* One for each row, as the mock counts them; each row says its own number ("4 workouts to log"). */}
       {/* "To do" (Oct 24, owner: "Rename to todo"), the name Your sessions already uses for the same list. */}
-      <SectionHead title="To do" count={(ask ? 1 : 0) + (w ? 1 : 0)} />
+      <SectionHead title="To do" count={LESS_AI ? undefined : (ask ? 1 : 0) + (w ? 1 : 0)} />
       <Box>
         {ask && tagger ? (
           <Row first
