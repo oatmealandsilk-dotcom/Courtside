@@ -17,6 +17,7 @@ import { postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha, wordmarkFont } from '@/theme';
+import { LESS_AI } from '@/theme/look';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
@@ -200,7 +201,9 @@ export const clearWordShade = (u: number): TextStyle => ({ textShadowColor: 'rgb
  * (with the cream box's hairline, unless `edge` is off for a picture drawn
  * edge to edge), or the brand's wash in the plain green box.
  */
-export function CardWash({ look, radius, edge = true }: { look: CardLook; radius: number; edge?: boolean }) {
+export function CardWash({ look, radius, edge = true, keepGlow = false }: { look: CardLook; radius: number; edge?: boolean; /** A picture made to share (the session stamp): it keeps its fade whatever the in-app look. */ keepGlow?: boolean }) {
+  // The hand-made look (Oct 24, owner: the glows "seem a bit ai"): the box's own flat fill, only its hairline kept.
+  if (LESS_AI && !keepGlow) return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
   if (look.wash === 'brand') return <BrandWash radius={radius} glow />;
   return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
 }
@@ -338,7 +341,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     />
   ) : (
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
-      {clear ? null : <CardWash look={look} radius={round} edge={round > 0} />}
+      {clear ? null : <CardWash look={look} radius={round} edge={round > 0} keepGlow={!!inset} />}
       {/* The faint court is tennis's: a run or the gym has none. Clear has none either: nothing behind the words. */}
       {clear || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>

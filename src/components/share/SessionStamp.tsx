@@ -69,7 +69,7 @@ export function SessionStamp({ session, width, eyebrow, place, hidden = [], clea
   const rule = { height: clear ? Math.max(1, 1.5 * u) : StyleSheet.hairlineWidth * 2 * density, backgroundColor: look.lines, marginVertical: 14 * u };
   return (
     <View style={[styles.card, { width, borderRadius: 20 * u, padding: 18 * u, backgroundColor: look.fill }]}>
-      {clear ? null : <CardWash look={look} radius={20 * u} />}
+      {clear ? null : <CardWash look={look} radius={20 * u} keepGlow />}
       <View style={styles.row}>
         <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.eyebrow, { fontSize: 10.5 * u, letterSpacing: 1.2 * u, color: look.eyebrow }, shade]}>{eyebrow}</Text>
         {result ? (
