@@ -11,7 +11,8 @@ import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
-import { courtSurfaceOf, surfaceAdjective, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
+import { courtSurfaceOf, surfaceAdjective, surfaceLabel } from '@/features/places/courtSurface';
+import { surfaceTint } from '@/components/place/SurfaceTag';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
@@ -56,10 +57,6 @@ const MOST = 8;
  * outlined tag, a dot in the surface's colour and its word ("Hard"), the status pill beside it.
  * When the map does not say what the court is played on, no tag and no icon.
  */
-/** A surface's colour, from the theme's surface slots (the same on every light court). */
-function surfaceTint(kind: SurfaceKind | null): string {
-  return kind === 'hard' ? colors.surfaceHard : kind === 'clay' ? colors.surfaceClay : kind === 'grass' ? colors.surfaceGrass : colors.surfaceOther;
-}
 
 /** The line under a card's name: how far, how many courts, lights. */
 function metaLine(miles: number, count: number, lit: boolean | undefined): string {

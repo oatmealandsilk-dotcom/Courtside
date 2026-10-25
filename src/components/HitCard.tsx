@@ -78,9 +78,11 @@ import { useLoadedSurface } from '@/features/players/courts';
  * `tipAt`: the page's address, for a list that leaves "its page on show" to
  * the tip (see useShownAt), so the page opening others is not redrawn.
  */
-export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey, atCourt = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
   /** Given: the tip also waits for the page to rest after any swipe, and after this changes (usePaneRested). */
-  restKey?: string }) {
+  restKey?: string;
+  /** On the court's own page (the court page's options): no line with the court's name, which the page already is. */
+  atCourt?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const rested = usePaneRested(!!tip && restKey !== undefined, restKey);
   const tipReady = listReady && (restKey === undefined || rested);
@@ -175,13 +177,13 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
       </View>
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
-        <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
+        {atCourt ? null : <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
           {LESS_AI_COURTS ? null : <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>}
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
-        </SwipePressable>
+        </SwipePressable>}
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
           {surface ? <View style={styles.surfaceLead} accessible accessibilityLabel={`${surfaceAdjective[surface]} court`}><View style={[styles.surfaceDot, { backgroundColor: surfaceTint(surface) }]} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.details}>{surfaceLabel[surface]} ·</Text></View> : null}

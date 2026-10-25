@@ -29,6 +29,8 @@ export interface CourtView {
   followers: number;
   /** What OpenStreetMap knows; null when no court was found there. */
   map: { count: number; surface?: string | null; lit: boolean } | null;
+  /** The map is still being asked: the facts line under the name keeps its line, so nothing under it jumps. */
+  mapPending: boolean;
   /** Players have said whether it has lights: then only "What players say" mentions lights. */
   playersOnLights: boolean;
   /**

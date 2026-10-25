@@ -57,13 +57,16 @@ function CourtPage() {
   const [mapCourt, setMapCourt] = useState<Court | null>(null);
   // A surface five players in a row named while this page was open (migration 186).
   const [named, setNamed] = useState<VotedSurface | null>(null);
+  // Until the map answers, the facts line under the name keeps its line, so nothing under it jumps when it lands.
+  const [mapDone, setMapDone] = useState(false);
   useEffect(() => {
     if (!place) return undefined;
     let on = true;
     setNamed(null);
     fetchCourts({ lat: place.lat, lng: place.lng }, 2000)
       .then((list) => { if (on) setMapCourt(list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null); })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => { if (on) setMapDone(true); });
     return () => { on = false; };
   }, [place]);
 
@@ -171,6 +174,7 @@ function CourtPage() {
     // A count, never names: who follows a court is theirs to know.
     followers: extras ? followers : 0,
     map: mapCourt ? { count: mapCourt.count, surface: surfaceWord, lit: !!mapCourt.lit } : null,
+    mapPending: !mapDone,
     playersOnLights,
     askSurface,
     onSurface: setNamed,
