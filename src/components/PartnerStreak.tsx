@@ -42,7 +42,7 @@ export function PartnerStreakLine({ userId, gap = 0, name, left = false }: {
   userId: ID;
   /** The page's own gap between its lines: the line carries it inside its fold, so while closed it takes no room at all. */
   gap?: number;
-  /** Their name: the line then reads "🔥 2-week streak with Dev" (Oct 25, "D all for less ai", item 12). */
+  /** Their name: the line then reads "🔥 2-week streak with Dev". Not on their own page, which says "with you" (it named Dev on Dev's page). */
   name?: string;
   /** Set at the left, under a left-aligned profile's counts. */
   left?: boolean;
@@ -50,7 +50,7 @@ export function PartnerStreakLine({ userId, gap = 0, name, left = false }: {
   const styles = useThemedStyles(styleDefinitions);
   const streaks = usePartnerStreaks();
   const p = streaks?.find((s) => s.userId === userId);
-  const said = !p ? '' : name ? `${p.weeks}-week streak with ${firstOf(name)}` : `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you`;
+  const said = !p ? '' : name ? `${p.weeks}-week streak with ${firstOf(name)}` : LESS_AI_ROUND2 ? `${p.weeks}-week streak with you` : `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you`;
   return (
     <View style={[styles.lineFold, { marginTop: -gap }]}>
       <Collapse open={!!p} unclip>

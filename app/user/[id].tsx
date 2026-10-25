@@ -223,7 +223,7 @@ function UserProfile() {
         </View>
         {/* gap: the identity block's own gap (10), carried inside the line's fold. */}
         {/* Your streak with them as one line (item 12), in place of the card under Head to head. */}
-        {(LESS_AI || LESS_AI_ROUND2) && !isMe && !blocked ? <PartnerStreakLine userId={user.id} name={LESS_AI_ROUND2 ? user.name : undefined} gap={LESS_AI_ROUND2 ? 12 : 10} left={LESS_AI_ROUND2} /> : null}
+        {(LESS_AI || LESS_AI_ROUND2) && !isMe && !blocked ? <PartnerStreakLine userId={user.id} gap={LESS_AI_ROUND2 ? 12 : 10} left={LESS_AI_ROUND2} /> : null}
         {blocked ? (
           <View style={styles.blockedBox}>
             <Ionicons name="ban-outline" size={18} color={colors.danger} />
