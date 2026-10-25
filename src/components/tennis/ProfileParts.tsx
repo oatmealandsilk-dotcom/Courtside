@@ -10,7 +10,7 @@ import { mixHex } from '@/features/activity/zones';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /*
  * The pieces the Tennis profile page is built from (Oct 5): a section's head,
@@ -164,7 +164,7 @@ export function Row({ lead, leadWidth, first = false, title, titleStyle, sub, su
 export function AddRow({ icon, title, sub, onPress, first = true }: { icon: IconName; title: string; sub?: string; onPress: () => void; first?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Row first={first} lead={<Tile icon={icon} brand />} title={<Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addTitle}>{title}</Text>} sub={sub} subLines={2} onPress={onPress} accessibilityLabel={sub ? `${title}. ${sub}` : title} />
+    <Row first={first} lead={LESS_AI ? undefined : <Tile icon={icon} brand />} title={<Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addTitle}>{title}</Text>} sub={LESS_AI ? undefined : sub} subLines={2} onPress={onPress} accessibilityLabel={sub ? `${title}. ${sub}` : title} />
   );
 }
 
@@ -247,6 +247,14 @@ export function EmptyRow({ icon, title, sub, action = 'Add', accessibilityLabel,
 }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
+  // The hand-made look (Oct 24): one line in the brand colour that says what to do ("Add a goal"). No tile, no selling sentence, no outlined pill; the whole row is still the button.
+  if (LESS_AI) {
+    return (
+      <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} style={({ pressed }) => [styles.emptyPlain, pressed && styles.pressed]}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.addTitle}>{accessibilityLabel}</Text>
+      </Pressable>
+    );
+  }
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityHint={sub} onPress={onPress} style={({ pressed }) => [styles.empty, pressed && styles.pressed]}>
       <View style={styles.emptyIcon}><Ionicons name={icon} size={20} color={colors.brand} /></View>
@@ -371,6 +379,7 @@ const styleDefinitions = StyleSheet.create({
   summaryTrack: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
   summaryFill: { height: 4, borderRadius: 2 },
   empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
+  emptyPlain: { minHeight: 52, justifyContent: 'center', paddingVertical: 14 },
   emptyIcon: { width: 44, height: 44, borderRadius: corner(14), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
   // The white outline button (the Share page's): the card's own white, a firm hairline, the page's ink.

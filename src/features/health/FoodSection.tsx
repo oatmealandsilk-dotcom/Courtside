@@ -1,4 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
+import { LESS_AI } from '@/theme/look';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useFocusEffect } from 'expo-router';
@@ -101,7 +102,8 @@ export function FoodSection({ userId }: { userId: string | null }) {
   const header = (
     <View style={styles.head}>
       <Text style={styles.title}>Food</Text>
-      <Text style={styles.private}>Only you see this</Text>
+      {/* Privacy is said once, in the Health page's footer, under the hand-made look (Oct 24). */}
+      {LESS_AI ? null : <Text style={styles.private}>Only you see this</Text>}
     </View>
   );
 
@@ -109,6 +111,18 @@ export function FoodSection({ userId }: { userId: string | null }) {
   // import rows on the Health page already cover food, so no "iPhone app" note.
   if (!healthHere && Platform.OS === 'android') return null;
   // The website, and an iPhone build without HealthKit (Expo Go).
+  // The website under the hand-made look: one plain row, not a banner (Oct 24).
+  if (!healthHere && LESS_AI && Platform.OS !== 'ios') {
+    return (
+      <View style={styles.section}>
+        {header}
+        <View style={[styles.card, styles.plainRow]} accessible accessibilityLabel="Food from Cronometer or MyFitnessPal: in the iPhone app only">
+          <Text style={styles.name} numberOfLines={1}>Cronometer or MyFitnessPal</Text>
+          <Text style={styles.caption}>iPhone only</Text>
+        </View>
+      </View>
+    );
+  }
   if (!healthHere) {
     // Expo Go can never have HealthKit; an App Store build without it needs the next app update, not a different app.
     const line = Platform.OS !== 'ios'
@@ -242,6 +256,7 @@ const styleDefinitions = StyleSheet.create({
   private: { ...typography.small, color: colors.textFaint },
   card: { gap: spacing.md, padding: spacing.lg, borderRadius: radius.xl, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   noteCard: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  plainRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md },
   note: { ...typography.small, color: colors.textMuted, lineHeight: 19, flex: 1 },
   connectRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   disc: { width: 42, height: 42, borderRadius: 21, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
