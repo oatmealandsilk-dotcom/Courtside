@@ -49,8 +49,8 @@ import { keptAvgHr, keptKcal, readManualStats, wholeNumber, type ManualRead } fr
 import { ManualStats } from '@/components/session/ManualStats';
 import { useHealthChoice } from '@/features/activity/useHealthChoice';
 import type { CardPerson } from '@/components/session/SessionCard';
-import { KIND_LABEL, activityDay, fromWho, loggedLabel } from '@/features/activity/format';
-import { inSentence, isTennisActivity, workoutName } from '@/features/activity/workouts';
+import { KIND_LABEL, activityDay, activityHour, fromWho, loggedLabel, sessionTitle } from '@/features/activity/format';
+import { isTennisActivity, workoutName } from '@/features/activity/workouts';
 import { canTagKind } from '@/features/activity/sessionTags';
 import { shareAction, showLogged, useTrackerSession } from '@/features/activity/useTrackerSession';
 import { openWhoPlayed } from '@/features/activity/whoPlayedPicker';
@@ -72,7 +72,7 @@ import type { TaggedCourt } from '@/data/types';
 import { colors, radius, spacing, typography, font } from '@/theme';
 import { challengeFor } from '@/features/challenge/weekly';
 import { goHome } from '@/lib/goBack';
-import { liveDay, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
+import { liveDay, liveHour, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
@@ -666,14 +666,14 @@ function Compose() {
   // The time it goes in your log when it isn't edited: the tracker's, or the clock's.
   const baseMinutes = opened?.type === 'tracker' ? opened.activity.minutes : liveMins;
   const cardSession = logMode ? sessionFor() : null;
+  // When it started, on the same clock as its day: the tracker's, or the live session's.
+  const logHour = opened?.type === 'tracker' ? activityHour(opened.activity) : liveOnly && fromLive ? liveHour(fromLive) : null;
   // "Practice — how did it go?": the hint follows what it was, never a time
-  // of day. Left empty, the post says the day instead ("Saturday match").
-  // A workout: "Run — how did it go?", and "Saturday run".
+  // of day. Left empty, the post says when it started instead (Oct 25,
+  // owner): "Morning match", "Evening practice"; a workout, "Morning run".
   const shownWhat = shownWorkout ? workoutName(shownWorkout) : KIND_LABEL[shownKind];
   const logHint = logDay ? shownWhat : '';
-  const logCaption = logDay
-    ? `${new Date(`${logDay}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(shownWhat)}`
-    : '';
+  const logCaption = logDay ? sessionTitle(shownWhat, { day: logDay, startHour: logHour }) : '';
   const logInput = () => ({
     kind,
     won: pickedWon,
