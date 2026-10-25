@@ -3,7 +3,8 @@ import { useSoundMuted } from '@/features/feed/sound';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, FadeOut, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { useRestKey } from '@/components/ui/restMotion';
@@ -52,6 +53,15 @@ function Pop({ on, children }: { on: boolean; children: React.ReactNode }) {
 }
 
 const POP_SHOWN = { opacity: 1, transform: [{ scale: 1 }] };
+
+/**
+ * How long a clip on screen may still be fetching before the loading disc shows over its cover.
+ * Until then its cover stands in for it, as on Instagram (Oct 25, owner: "I don't ever hit a video
+ * that's not loaded"); a clip with no cover shows the disc at once, as before.
+ */
+const SPIN_AFTER_MS = 1000;
+/** The cover leaves as the clip's own first frame takes its place: a short fade, never a cut. */
+const POSTER_OUT = FadeOut.duration(160);
 
 /**
  * A clip in the feed on a phone: plays itself when it is the page on screen,
@@ -129,6 +139,13 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   const setReady = (ok: boolean) => { setReadyState((was) => was || ok); if (ok) onReady?.(true); };
   // Its player was freed: a new one starts its fetch from nothing.
   const gone = () => { setReadyState(false); onReady?.(false); };
+  // The loading disc only for a wait you would notice: a clip with a cover shows that until then.
+  const [spin, setSpin] = useState(false);
+  useEffect(() => {
+    if (ready || !active) { setSpin(false); return undefined; }
+    const t = setTimeout(() => setSpin(true), poster ? SPIN_AFTER_MS : 0);
+    return () => clearTimeout(t);
+  }, [ready, active, poster]);
   // Sound on, the way a feed on a phone should be; a tap on the disc mutes it.
   // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
   const [muted, setMuted] = useSoundMuted();
@@ -215,20 +232,31 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
 
   // Pages either side stay mounted so their first frame is ready to go.
   if (!active && !preload) return <View style={StyleSheet.absoluteFill} />;
+  // The clip's cover, over the player and under everything else (the caption, the buttons, the
+  // disc), from the moment the page is built until the clip can play: a page whose clip is still
+  // fetching looks whole, never blank. The Feed fetches covers ten pages ahead (postersAhead), so
+  // it is already on the phone. Inside the crop, so it sits exactly where the picture will.
+  const posterLayer = !ready && poster ? (
+    <Animated.View key="poster" exiting={POSTER_OUT} pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit={letterbox ? 'contain' : fit} cachePolicy="memory-disk" />
+    </Animated.View>
+  ) : null;
   return (
     <View style={StyleSheet.absoluteFill}>
       {letterbox ? (
         <View style={styles.wideFrame}><View style={cropLayer(crop)}>
           <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit="contain" trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
+          {posterLayer}
         </View></View>
       ) : (
         <View style={cropLayer(crop)}>
           <ClipVideo uri={uri} poster={poster} active={active} muted={muted || silent || !active} paused={paused} fit={fit} trimStart={trimStart} trimEnd={trimEnd} speed={(speed ?? 1) * (fast ? 2 : 1)} volume={volume} onProgress={onProgress} onReady={setReady} onGone={gone} held={held} surfaceType={surfaceType} />
+          {posterLayer}
         </View>
       )}
       {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
       {discInk && !bare ? <LinearGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
-      {!ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
+      {spin && !ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + drop + 24 }]}>
         <Pop on={fast}>
           <View style={styles.fastPill}><Ionicons name="play-forward" size={13} color="white" /><Text style={styles.fastText}>2×</Text></View>

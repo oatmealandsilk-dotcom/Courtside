@@ -3,20 +3,25 @@ import { useApp } from '@/store/AppContext';
 import { primeClip, type PrimeLimits } from './clipPrimer';
 
 /**
- * Two more reels loaded ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre
- * load more maybe two more reels in advance. We can do only the very beginning too").
+ * More reels loaded ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre load
+ * more maybe two more reels in advance. We can do only the very beginning too", then, the same day:
+ * "I'm scrolling on Instagram as fast as I can and I don't ever hit a video that's not loaded" /
+ * "Can we make ours like that").
  *
  * The Feed already builds the next two pages with their players (each fetches its first three
  * seconds), and a third once the link has room for it (the lookahead, app/(tabs)/index.tsx). On
- * top of that, the next two clips past those get their first second or so fetched into the video
+ * top of that, the next five clips past those get their first second or so fetched into the video
  * player's own cache on the phone (`useCaching`, lib/videoSource): one short-lived player at a
- * time, with a buffer that small, freed the moment that second is in. When the page is built for
- * real a swipe or two later, its player reads that second from the phone instead of the network,
- * so it shows its first frame and can start at once (see clipPrimer).
+ * time, nearest first, with a buffer that small, freed the moment that second is in. When the page
+ * is built for real a swipe or two later, its player reads that second from the phone instead of
+ * the network, so it shows its first frame and can start sooner (see clipPrimer). Every page's
+ * cover is there before it arrives for everyone (postersAhead), so a page whose clip is still
+ * fetching shows its cover, never a blank page.
  *
  * Only on a quick link, with the Feed on show and playing, the app in front, and only once
  * everything nearer is in (the same gate as the lookahead's third page, one page further). Moving
- * on cancels it. Each clip's beginning costs at most about 1 MB, so the two about 2 MB.
+ * on cancels it. Each clip's beginning costs at most about 1 MB, so the five about 5 MB ahead of
+ * where you are, and each clip is fetched once a session.
  *
  * None of it can be tried on an iPhone before it ships (no simulator here), and the phone limits
  * how many video players can be live at once, so admins (@oatmealandsilk, @mrdinosaur62) get it
@@ -26,16 +31,16 @@ import { primeClip, type PrimeLimits } from './clipPrimer';
  */
 export const PRELOAD_MORE_FOR_EVERYONE = false;
 
-/** Whether this person's Feed loads the two extra beginnings. */
+/** Whether this person's Feed loads the extra beginnings. */
 export function usePreloadMore(): boolean {
   const { currentUser } = useApp();
   return PRELOAD_MORE_FOR_EVERYONE || !!currentUser?.isAdmin;
 }
 
 /** How many clips past the pages the Feed builds get their very beginning. */
-export const PRIME_CLIPS = 2;
+export const PRIME_CLIPS = 5;
 /** How many pages past the built ones are looked at for them (a written post or a tip in between is skipped). */
-export const PRIME_LOOK = 4;
+export const PRIME_LOOK = 7;
 
 /** What one clip's beginning may take: how much of it, the most it may cost, and how long it may try. */
 export const PRIME_LIMITS: PrimeLimits = {
@@ -43,7 +48,7 @@ export const PRIME_LIMITS: PrimeLimits = {
   seconds: 1.2,
   // Never less than this for a heavy clip: under it the first frame may not be in yet.
   minSeconds: 0.6,
-  // About 1 MB a clip, so the two together stay within about 2 MB.
+  // About 1 MB a clip, so the five together stay within about 5 MB.
   bytes: 1_000_000,
   // A link this slow is better left to the clips nearer: given up, and not tried again.
   giveUpMs: 8000,

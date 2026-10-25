@@ -1,8 +1,8 @@
 /**
  * How quickly clips have been loading on this phone lately, measured as
  * the time each one took to fetch its opening seconds. The feed uses it to
- * choose how to wait: on a quick connection a clip's own first frame with
- * the spinner, on a slow one the CourtSide loading page.
+ * choose how far ahead to fetch (the lookahead, the covers, the clips'
+ * beginnings) and how long a pull-to-refresh waits for the new first clip.
  */
 const recent: number[] = [];
 
