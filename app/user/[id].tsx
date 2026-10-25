@@ -306,7 +306,8 @@ const styleDefinitions = StyleSheet.create({
   tabs: { flexDirection: 'row', marginTop: 16, borderBottomWidth: 2, borderBottomColor: colors.border },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 18 },
   // Drawn over the row's grey rule, exactly where the selected tab's own green edge used to sit.
-  tabLine: { position: 'absolute', left: 0, bottom: -2, height: 2, backgroundColor: colors.brand },
+  // 3 pt, as on your own profile (Oct 24: the 2 pt line was too thin to see).
+  tabLine: { position: 'absolute', left: 0, bottom: -2, height: 3, backgroundColor: colors.brand, borderRadius: 1.5 },
   tabCount: { fontSize: 12, ...font('600'), color: colors.textFaint },
   grid: { flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: 0, minHeight: 120, paddingBottom: spacing.xl },
   tile: { borderWidth: 1, borderColor: colors.bg, backgroundColor: colors.surfaceAlt, overflow: 'hidden' },
