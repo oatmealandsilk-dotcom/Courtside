@@ -270,6 +270,22 @@ export function EmptyRow({ icon, title, sub, action = 'Add', accessibilityLabel,
   );
 }
 
+/**
+ * A session row's lead under the hand-made look (Oct 24): the weekday in small muted capitals over
+ * the day's number ("TUE" over "21"), no tile. `day` is a plain YYYY-MM-DD, read as that day.
+ */
+export function DayLead({ day, width = 34 }: { day: string; width?: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const d = new Date(day.length === 10 ? `${day}T12:00:00` : day);
+  if (Number.isNaN(d.getTime())) return null;
+  return (
+    <View style={[styles.dayLead, { width }]} accessible={false} importantForAccessibility="no-hide-descendants">
+      <Text style={styles.dayLeadWeek} maxFontSizeMultiplier={1.2}>{d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()}</Text>
+      <Text style={styles.dayLeadNum} maxFontSizeMultiplier={1.2}>{d.getDate()}</Text>
+    </View>
+  );
+}
+
 /** A day on the calendar as a small tile: the month in capitals over the day's number. For a row's lead. */
 export function DateTile({ iso }: { iso: string }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -380,6 +396,9 @@ const styleDefinitions = StyleSheet.create({
   summaryFill: { height: 4, borderRadius: 2 },
   empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
   emptyPlain: { minHeight: 52, justifyContent: 'center', paddingVertical: 14 },
+  dayLead: { alignItems: 'center' },
+  dayLeadWeek: { ...typography.caption, fontSize: 10, letterSpacing: 0.6, color: colors.textMuted },
+  dayLeadNum: { ...font('600'), fontSize: 17, lineHeight: 20, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   emptyIcon: { width: 44, height: 44, borderRadius: corner(14), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
   // The white outline button (the Share page's): the card's own white, a firm hairline, the page's ink.

@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { DayLead } from '@/components/tennis/ProfileParts';
 import { FlybyPill } from '@/components/flyby/FlybyPill';
 import { WeekSummary } from '@/components/recap/RecapCard';
 import Reanimated, { FadeIn } from 'react-native-reanimated';
@@ -43,6 +44,8 @@ const WEEKS = 8;
 /** A session row's top and bottom padding, and the height of its first line (the big number, and the button beside it). */
 const ROW_PAD = 14;
 const HERO_LINE = 32;
+/** The row's lead column: the icon (22), or the date under the hand-made look (34). */
+const LEAD = LESS_AI ? 34 : 22;
 
 /** The Monday a day's week starts on, as a day ("2026-09-28"). */
 function weekOf(day: string): string {
@@ -300,7 +303,8 @@ export default function YourSessions() {
             <View style={styles.weekHead}>
               <Text style={[styles.sectionTitle, styles.weekName]}>{weekLabel(start)}</Text>
               {records.week?.from === start ? <View style={styles.bestWeek}><RecordPill label="Best week" /></View> : null}
-              {onCourt ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
+              {/* This week's hours are the card's at the top: said once under the hand-made look (Oct 24). */}
+              {onCourt && !(LESS_AI && weekLabel(start) === 'This week') ? <Text style={styles.weekHours}>{duration(onCourt)} on court</Text> : null}
             </View>
             <SoftCard fill={fill}>
               {list.map((s, i) => {
@@ -347,7 +351,8 @@ export default function YourSessions() {
                     // A run from the Watch keeps its distance once logged: "Run · 3.1 mi", as it said while waiting.
                     far={activity && !isTennisActivity(activity) ? formatDistance(activity.distanceM) : null}
                     postId={postId}
-                    postable={checked && !postId && s.day >= firstPostable}
+                    // Post it only on the last 7 days' sessions under the hand-made look (Oct 24): an old one is quieter as it is.
+                    postable={checked && !postId && s.day >= firstPostable && (!LESS_AI || s.day >= localDay(new Date(Date.now() - 7 * 86400000)))}
                     onPost={() => router.push({ pathname: '/compose', params: pick.type === 'tracker' ? { activity: pick.activity.id } : { session: s.id } })}
                     onShare={share}
                     onRemove={() => confirm({ title: 'Remove this session?', message: 'It comes off your streak and totals.', confirmLabel: 'Remove', destructive: true, onConfirm: () => removeSession(s.id) })}
@@ -583,13 +588,17 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
   const board = canScore(s.kind) && !!s.sets?.length;
   const label = far ? `${loggedLabel(s, !board)} · ${far}` : loggedLabel(s, !board);
   const title = `${far ? `${loggedLabel(s)} · ${far}` : loggedLabel(s)}${people ? ` ${peopleText(people)}` : ''}`;
-  const shownNote = s.note && !hideNote ? s.note : '';
+  // A note that only says who it was with ("With Mira"), when the title already names them, is skipped under the hand-made look (Oct 24).
+  const names = people ? [...people.vs, ...people.with].map((w) => w.name.toLowerCase()) : [];
+  const onlyNames = LESS_AI && !!s.note && names.length > 0 && s.note.toLowerCase().replace(/\b(with|vs\.?|against|and)\b|[,.&!]/g, ' ').split(/\s+/).filter(Boolean).every((w) => names.some((n) => n.split(' ').includes(w)));
+  const shownNote = s.note && !hideNote && !onlyNames ? s.note : '';
   const place = shownNote.startsWith('At ') ? shownNote.slice(3) : '';
   const note = place ? '' : shownNote;
   // The day, and where it came from: "Sat Oct 3 · WHOOP".
-  const day = source ? `${dayWords(s.day)} · ${source}` : dayWords(s.day);
+  // The hand-made look leads the row with the date, so the line under it leaves the date out.
+  const day = LESS_AI ? source : source ? `${dayWords(s.day)} · ${source}` : dayWords(s.day);
   // Where, on the same line when it all fits on a phone ("Yesterday · Alder Park"), else on a line of its own.
-  const placeOnDay = !!place && `${day} · ${place}`.length <= 30;
+  const placeOnDay = !!place && !!day && `${day} · ${place}`.length <= 30;
   return (
     <View style={[styles.row, line && styles.line]}>
       {/* The row itself, beside its button rather than around it: a button inside a button is not allowed in a browser. */}
@@ -603,25 +612,25 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
         delayLongPress={450}
         style={({ pressed }) => [styles.rowMain, pressed && styles.pressed]}
       >
-        <View style={styles.icon}>
+        {LESS_AI ? <View style={styles.dayLead}><DayLead day={s.day} width={LEAD} /></View> : <View style={styles.icon}>
           {s.kind === 'match' ? <Ionicons name="trophy-outline" size={18} color={colors.textMuted} />
             : s.kind === 'fitness' ? <Ionicons name={s.workout ? workoutIcon(s.workout) : 'barbell-outline'} size={18} color={colors.textMuted} />
             : <CourtGlyph size={15} color={colors.textMuted} />}
-        </View>
+        </View>}
         <View style={styles.words}>
           {/* How long, big: the number you scan a week of sessions for. A record wears its gold pill beside it. */}
-          <View style={[styles.heroLine, styles.heroLineShare]}>
-            <Text style={styles.hero}>{duration(s.minutes)}</Text>
+          <View style={[styles.heroLine, LESS_AI ? styles.heroLinePost : styles.heroLineShare]}>
+            <Text style={[styles.hero, LESS_AI && styles.heroInk]}>{duration(s.minutes)}</Text>
             {record ? <RecordPill /> : null}
           </View>
           {/* A score is the small ScoreBoard at the right of the words, under the row's buttons. */}
           <View style={board ? styles.scoredLine : null}>
             <View style={board ? styles.scoredWords : null}>
               <LoggedTitle label={label} people={people} style={styles.title} faint={styles.waiting} numberOfLines={2} />
-              <Text style={styles.when}>
+              {day ? <Text style={styles.when}>
                 {day}
                 {placeOnDay ? <>{' · '}<Ionicons name="location-outline" size={13} color={colors.textFaint} />{` ${place}`}</> : null}
-              </Text>
+              </Text> : null}
             </View>
             {board ? <View style={styles.board}><ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /></View> : null}
           </View>
@@ -645,9 +654,9 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
       {/* Beside the big number, outside the row's own button. Post it / Posted keep a slot of the same width on every
           row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
+        {LESS_AI ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
           <Ionicons name="share-outline" size={16} color={colors.text} />
-        </Pressable>
+        </Pressable>}
         <View style={styles.postSlot}>
           {postId ? (
             <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
@@ -655,8 +664,8 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
               <Text style={styles.postedText}>Posted</Text>
             </Pressable>
           ) : postable ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={onPost} style={({ pressed }) => [styles.action, pressed && styles.pressed]}>
-              <Text style={styles.actionText}>Post it</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Post it: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={onPost} style={({ pressed }) => [LESS_AI ? styles.postWord : styles.action, pressed && styles.pressed]}>
+              <Text style={[styles.actionText, LESS_AI && styles.postWordText]}>Post it</Text>
             </Pressable>
           ) : null}
         </View>
@@ -668,7 +677,7 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
 const styleDefinitions = StyleSheet.create({
   // A card of rows (To do, a week of sessions): the Share card's cream and a lighter lay of its wash (SoftCard), no shadow, rows parted by a hairline.
   group: { borderRadius: corner(20), overflow: 'hidden', paddingHorizontal: spacing.lg },
-  notTennis: { alignSelf: 'flex-start', paddingLeft: 22 + spacing.md, paddingTop: 4, paddingBottom: spacing.sm },
+  notTennis: { alignSelf: 'flex-start', paddingLeft: LEAD + spacing.md, paddingTop: 4, paddingBottom: spacing.sm },
   notTennisText: { ...typography.small, color: colors.textMuted },
   sectionTitle: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.sm, paddingTop: spacing.xxl, paddingBottom: spacing.sm },
   weekHead: { flexDirection: 'row', alignItems: 'flex-end' },
@@ -690,7 +699,7 @@ const styleDefinitions = StyleSheet.create({
   // The figure in the brand's green, as on the Share card.
   hero: { fontSize: 19, lineHeight: 24, ...font('600'), letterSpacing: -0.2, color: colors.brand, fontVariant: ['tabular-nums'], flexShrink: 0 },
   // Flyby's pill, lined up with the words (past the icon and the gap).
-  flybyRow: { paddingLeft: 22 + spacing.md, paddingTop: 6 },
+  flybyRow: { paddingLeft: LEAD + spacing.md, paddingTop: 6 },
   title: { fontSize: 15, lineHeight: 20, ...font('500'), color: colors.text },
   when: { fontSize: 13.5, lineHeight: 18, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -699,6 +708,12 @@ const styleDefinitions = StyleSheet.create({
   // A logged session's share button sits before Post it / Posted; its big line keeps clear of both.
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroLineShare: { paddingRight: 116 },
+  heroLinePost: { paddingRight: 80 },
+  heroInk: { color: colors.text },
+  dayLead: { minHeight: HERO_LINE, justifyContent: 'center' },
+  // Post it as plain brand words (Oct 24), not an outlined pill.
+  postWord: { height: 32, justifyContent: 'center', paddingHorizontal: 4 },
+  postWordText: { color: colors.brand },
   // The Share page's buttons: white, round, a hairline round them.
   share: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   circle: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
