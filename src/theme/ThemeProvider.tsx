@@ -66,8 +66,8 @@ const cleanColors: Palette = {
  * Ground is the surround, not the court; the court blue is the accent.
  */
 const aoColors: Palette = {
-  bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#F8FCFF', surfaceAlt: '#C8DEEE',
-  border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
+  bg: '#EBF5FC', bgElevated: '#E3EEF6', surface: '#F2F9FE', surfaceAlt: '#DAE7F1',
+  border: '#CBDEEA', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
   brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', brandBright: '#7ED492', court: '#4179A8', clay: '#B97753',
   hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
@@ -94,8 +94,8 @@ const aoColors: Palette = {
  * full strength; the court orange carries the buttons.
  */
 const rolandGarrosColors: Palette = {
-  bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#FFFAF5', surfaceAlt: '#E6D2C0',
-  border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
+  bg: '#F8F0E9', bgElevated: '#F2E8E0', surface: '#FBF6F2', surfaceAlt: '#ECE1D8',
+  border: '#E5D6C9', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
   brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', brandBright: '#7ED492', court: '#9E432E', clay: '#C67443',
   hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
@@ -119,8 +119,8 @@ const rolandGarrosColors: Palette = {
  * green held back for accents, and the purple kept as the secondary.
  */
 const wimbledonColors: Palette = {
-  bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#FBFDF7', surfaceAlt: '#D7E3C9',
-  border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
+  bg: '#F2F6EC', bgElevated: '#EAEFE4', surface: '#F8FAF3', surfaceAlt: '#E3E8DB',
+  border: '#D8DFCC', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
   brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
   hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
@@ -145,8 +145,8 @@ const wimbledonColors: Palette = {
  * clearly apart from the Australian Open's paler blue.
  */
 const usOpenColors: Palette = {
-  bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
-  border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
+  bg: '#14283D', bgElevated: '#1B3149', surface: '#20374F', surfaceAlt: '#29415B',
+  border: '#334E6A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
   brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', brandBright: '#7ED492', court: '#4E87C4', clay: '#D08A5E',
   hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
   surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A948F',

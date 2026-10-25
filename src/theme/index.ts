@@ -4,8 +4,8 @@ import { chipCorner, corner } from './look';
 
 /** CourtSide: warm neutrals and muted court-green accents. */
 export const lightColors = {
-  bg: '#F8F7F2', bgElevated: '#F1EFE6', surface: '#FFFEFA', surfaceAlt: '#E9E6DA',
-  border: '#DCD6C8', borderStrong: '#B8AF9D',
+  bg: '#F8F7F2', bgElevated: '#F1F0E9', surface: '#FDFCF8', surfaceAlt: '#EBE9E0',
+  border: '#E1DED1', borderStrong: '#B8AF9D',
   text: '#24251F', textMuted: '#5D584C', textFaint: '#6C665A',
   brand: '#3F7049', brandInk: '#FAF8F0', brandDim: '#E3E7D9',
   // The logo laid over a photo on a share (Oct 9, owner): a brighter brand colour that reads on any court.
