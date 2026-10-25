@@ -30,7 +30,7 @@ import { TextScale } from '@/theme/textScale';
 import { LESS_AI, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { surfaceKind, surfaceLabel, surfaceAdjective } from '@/features/places/courtSurface';
-import { loadedSurface } from '@/features/players/courts';
+import { useLoadedSurface } from '@/features/players/courts';
 
 /**
  * A "Looking for a hit" post: who, when, where, what level and format, and
@@ -114,8 +114,9 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const theirs = !mine && !!currentUserId;
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
   const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
-  // The surface comes from the courts already loaded (a hit's saved place does not record it); none found, no tag.
-  const surface = LESS_AI ? surfaceKind(loadedSurface(hit.place.id)) : null;
+  // The surface comes from the courts on the phone (a hit's saved place does not record it), shown as soon as they load; none found, no tag.
+  const loaded = useLoadedSurface(LESS_AI ? hit.place.id : undefined);
+  const surface = LESS_AI ? surfaceKind(loaded) : null;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);

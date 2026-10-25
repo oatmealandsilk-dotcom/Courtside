@@ -203,7 +203,8 @@ function UserProfile() {
           ))}
           {muted ? <Text style={styles.meta}>· Muted</Text> : null}
         </View>
-        {LESS_AI && !isMe && !blocked ? <PartnerStreakLine userId={user.id} /> : null}
+        {/* gap: the identity block's own gap (10), carried inside the line's fold. */}
+        {LESS_AI && !isMe && !blocked ? <PartnerStreakLine userId={user.id} gap={10} /> : null}
         {blocked ? (
           <View style={styles.blockedBox}>
             <Ionicons name="ban-outline" size={18} color={colors.danger} />

@@ -664,6 +664,8 @@ export default function Notifications() {
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
                 accessibilityLabel={`${who} ${verb}`}
+                // The hand-made look drops "Tap to log it." from a found workout's row: a screen reader still hears what the tap does.
+                accessibilityHint={LESS_AI && group.kind === 'activity' && !dead && !verb ? 'Log it' : undefined}
                 disabled={dead}
                 onPress={() => {
                   const reply = replyAt(group);

@@ -4,6 +4,7 @@ import { StyleSheet, Text, View, type StyleProp, type TextStyle } from 'react-na
 import { surfaceKind, surfaceLabel, surfaceAdjective, type SurfaceKind } from '@/features/places/courtSurface';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { TextScale, type TextScaleCap } from '@/theme/textScale';
 
 /**
  * A court's surface wherever a court is listed (Oct 24, owner: "But also the
@@ -25,16 +26,17 @@ export function surfaceSaid(surface: string | null | undefined, count = 1): stri
 
 /**
  * A row's detail line led by the surface: "● Hard · 1.1 mi · lights". With no
- * known surface it is the detail line alone, exactly as before.
+ * known surface it is the detail line alone, exactly as before. It grows with
+ * the phone's Text Size as far as a list row's words do (`scale`, CARD).
  */
-export function SurfaceLine({ surface, rest, style, lines = 1 }: { surface: string | null | undefined; rest: string; style: StyleProp<TextStyle>; lines?: number }) {
+export function SurfaceLine({ surface, rest, style, lines = 1, scale = TextScale.CARD }: { surface: string | null | undefined; rest: string; style: StyleProp<TextStyle>; lines?: number; scale?: TextScaleCap }) {
   const styles = useThemedStyles(styleDefinitions);
   const kind = surfaceKind(surface);
-  if (!kind) return rest ? <Text style={style} numberOfLines={lines}>{rest}</Text> : null;
+  if (!kind) return rest ? <Text maxFontSizeMultiplier={scale} style={style} numberOfLines={lines}>{rest}</Text> : null;
   return (
     <View style={styles.line}>
       <View style={[styles.dot, { backgroundColor: surfaceTint(kind) }]} />
-      <Text style={[style, styles.text]} numberOfLines={lines}>{surfaceLabel[kind]}{rest ? ` · ${rest}` : ''}</Text>
+      <Text maxFontSizeMultiplier={scale} style={[style, styles.text]} numberOfLines={lines}>{surfaceLabel[kind]}{rest ? ` · ${rest}` : ''}</Text>
     </View>
   );
 }

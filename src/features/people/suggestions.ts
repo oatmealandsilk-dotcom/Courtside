@@ -67,7 +67,8 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
       const post = postById.get(comment.postId);
       if (post?.authorId === currentUserId) { interacted.add(comment.authorId); if (!did.has(comment.authorId)) did.set(comment.authorId, `Commented on your ${POST_WORD[post.kind] ?? 'post'}`); }
     }
-    for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
+    // Someone you have a chat with: "Messaged you", unless something they did was already found.
+    for (const conversation of conversations) conversation.participantIds.forEach((id) => { interacted.add(id); if (id !== currentUserId && !did.has(id)) did.set(id, 'Messaged you'); });
     const myTown = me ? townOf(me.location) : '';
     const theirTown = near ? townOf(near) : '';
     // Who each of `friendsOf` follows, so a friend of theirs reads "Followed by Om" (the first of them to follow).

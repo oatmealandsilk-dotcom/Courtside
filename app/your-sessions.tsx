@@ -244,7 +244,8 @@ export default function YourSessions() {
   if (summaryKey !== firstSummary.current) summaryLate.current = true;
 
   return (
-    <Screen title="Your sessions" subtitle={LESS_AI ? undefined : "Only you see this."} compactTitle onBack={() => goBack('/profile')} right={logButton}>
+    // "Only you see this." stays in the hand-made look too: a privacy fact, never filler.
+    <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
       {/* The first time ever (nothing read ahead yet) it still arrives a beat late: it fades in as the page below glides down. */}
       <HeightGlide duration={260}>

@@ -37,7 +37,9 @@ export function VoteControls({ item, userId, onVote }: {
 const styleDefinitions = StyleSheet.create({
   row: { flexDirection: 'row', gap: 6 },
   // The hand-made look (Oct 24): no grey pill behind the votes, a pale brand tint only once you vote.
-  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI ? 'transparent' : colors.bgElevated },
+  // A zero count is hidden there, so each button keeps room for a one-digit count (52): the first vote's number
+  // fills that room instead of widening the button and pushing what sits beside it.
+  button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI ? 'transparent' : colors.bgElevated, ...(LESS_AI ? { minWidth: 52 } : null) },
   active: { backgroundColor: colors.brandDim },
   count: { color: colors.textMuted, fontSize: 12, ...font('600') },
 });
