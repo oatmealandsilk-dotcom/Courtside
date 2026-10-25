@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useCallback, useSyncExternalStore } from 'react';
 
 import { supabase } from '@/lib/supabase';
 import { demoCourtsNamed, demoCourtsNear } from '@/data/mock/courts';
@@ -77,21 +78,50 @@ export function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[
   return ask;
 }
 
+/*
+ * Who is told when courts come onto the phone (Oct 24): a hit card drawn
+ * before its area's courts arrive asks again once they do, so its surface
+ * shows then instead of only on its next redraw. Told whenever an area is
+ * fetched, the kept courts are read or changed, or they are forgotten.
+ */
+const courtListeners = new Set<() => void>();
+/** Each court's surface once looked up, until the courts on the phone next change. */
+const surfaceFound = new Map<string, string | undefined>();
+function courtsChanged() {
+  surfaceFound.clear();
+  courtListeners.forEach((tell) => tell());
+}
+function subscribeCourts(tell: () => void): () => void {
+  courtListeners.add(tell);
+  return () => { courtListeners.delete(tell); };
+}
+
 /**
  * What a court already on the phone is played on, by its id: a hit's saved place does not record
  * its surface, so its card asks the courts already loaded (Oct 24). Undefined when not loaded or unknown.
  */
 export function loadedSurface(id: string | undefined): string | undefined {
   if (!id) return undefined;
+  if (surfaceFound.has(id)) return surfaceFound.get(id);
+  let found: string | undefined;
   for (const list of cache.values()) {
-    const c = list.find((x) => x.id === id);
-    if (c?.surface) return c.surface;
+    found ??= list.find((x) => x.id === id && x.surface)?.surface;
   }
   for (const list of Object.values(saved ?? {})) {
-    const c = list.find((x) => x.id === id);
-    if (c?.surface) return c.surface;
+    found ??= list.find((x) => x.id === id && x.surface)?.surface;
   }
-  return undefined;
+  surfaceFound.set(id, found);
+  return found;
+}
+
+/**
+ * loadedSurface for a card on screen: drawn again when that court's surface
+ * arrives later (its area's courts fetched, or the kept ones read). Only a
+ * change to this court's surface redraws it; no id, never.
+ */
+export function useLoadedSurface(id: string | undefined): string | undefined {
+  const look = useCallback(() => loadedSurface(id), [id]);
+  return useSyncExternalStore(subscribeCourts, look, look);
 }
 
 /** The courts around a spot if they are already on the phone, without waiting: a page can open on a full list. */
@@ -116,7 +146,8 @@ let savedRead: Promise<void> | null = null;
 export function loadSavedCourts(): Promise<void> {
   savedRead ??= AsyncStorage.getItem(SAVED_KEY)
     .then((raw) => { const v: unknown = raw ? JSON.parse(raw) : null; saved = v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, Court[]>) : {}; })
-    .catch(() => { saved = {}; });
+    .catch(() => { saved = {}; })
+    .then(courtsChanged);
   return savedRead;
 }
 /** The kept courts around a spot, once they are read (peekCourts has them after that too). */
@@ -133,12 +164,14 @@ function keepCourts(key: string, list: Court[]) {
     const keys = Object.keys(next);
     keys.slice(0, Math.max(0, keys.length - SAVED_AREAS)).forEach((k) => { delete next[k]; });
     saved = next;
+    courtsChanged();
     return AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next));
   }).catch(() => undefined);
 }
 /** Signing out: the kept courts go with the rest of what this phone held for the account. */
 export function forgetSavedCourts() {
   saved = {};
+  courtsChanged();
   void AsyncStorage.removeItem(SAVED_KEY).catch(() => undefined);
 }
 
@@ -157,6 +190,7 @@ async function loadCourts(center: LatLng, radiusMeters: number, key: string): Pr
   if (!rows || !rows.length) rows = await fromOpenStreetMap(center, radiusMeters);
   const out = fold(rows, center, radiusMeters);
   cache.set(key, out);
+  courtsChanged();
   // The demo's made-up parks are never kept.
   if (supabase) keepCourts(key, out);
   return out;

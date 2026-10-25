@@ -115,14 +115,14 @@ function QuestionCardInner({
         <Tappable
           accessibilityLabel={`${question.answerIds.length} replies`}
           onPress={onPress ?? (() => undefined)}
-          style={styles.action}
+          style={[styles.action, styles.counted]}
         >
           <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
           {LESS_AI && !(question.answerIds.length + (question.source?.replies ?? 0)) ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.answerIds.length + (question.source?.replies ?? 0)}</Text>}
         </Tappable>
 
         {onShare ? (
-          <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={styles.action}>
+          <Tappable accessibilityLabel="Share this discussion" onPress={onShare} style={[styles.action, styles.counted]}>
             <Ionicons name="arrow-redo-outline" size={20} color={colors.text} />
             {LESS_AI && !question.shares ? null : <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{question.shares ?? 0}</Text>}
           </Tappable>
@@ -166,6 +166,9 @@ const styleDefinitions = StyleSheet.create({
   // Bigger targets and full-strength ink: these were competing with body text
   // at 16px and textFaint, which read as decoration rather than buttons.
   action: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 7 },
+  // The hand-made look hides a zero reply or share count, so those two keep room for a one-digit count (56):
+  // the first one fills that room and never moves the buttons beside it.
+  counted: LESS_AI ? { minWidth: 56 } : {},
   actionLabel: { ...typography.smallStrong, color: colors.text },
   sourceBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.surfaceAlt },
   sourceText: { ...typography.caption, color: colors.textMuted, letterSpacing: 0 },

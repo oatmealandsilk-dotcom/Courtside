@@ -9,6 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-reanimated';
 
 import { Avatar, Button, Collapse, EmptyState, Field, Screen } from '@/components/ui';
+import { Fold } from '@/components/ui/Fold';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { Tappable } from '@/components/Tappable';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -205,11 +206,11 @@ export default function CoachDetail() {
       ) : null}
       {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
       {LESS_AI ? (() => {
-        // The hand-made look (Oct 24): the credentials as one plain line, leaving out what the bio or headline already says.
+        // The hand-made look (Oct 24): the credentials, what they coach and their years as one plain line, leaving out what the bio or headline already says.
         const said = `${user.bio ?? ''} ${coach.headline ?? ''}`.toLowerCase();
         const creds = coach.credentials.filter((c) => !said.includes(c.toLowerCase()));
         const years = coach.yearsCoaching && !coach.credentials.some((c) => /\byears?\b/i.test(c)) && !/\byears?\b/.test(said) ? `${coach.yearsCoaching} years coaching` : null;
-        const line = [...creds, years].filter(Boolean).join(' · ');
+        const line = [...creds, coach.specialties.map((x) => SPECIALTY_LABEL[x] ?? x).join(', ') || null, years].filter(Boolean).join(' · ');
         return line ? <Text style={[styles.factText, styles.credLine]}>{line}</Text> : null;
       })() : coach.credentials.length || coach.specialties.length ? (
         <View style={styles.facts}>
@@ -397,10 +398,20 @@ export default function CoachDetail() {
             ))}
           </View>
           </>}
-          {LESS_AI && !reviewStars ? null : <>
-          <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
-          <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} loading={posting} onPress={postReview} full />
-          </>}
+          {(() => {
+            const box = <>
+              <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
+              <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} loading={posting} onPress={postReview} full />
+            </>;
+            // The hand-made look: the box and Post review glide open under the stars on the first tap,
+            // so the reviews under them slide down rather than jump. The fold takes the form's gap with it,
+            // so nothing extra sits under the stars before a tap.
+            return LESS_AI ? (
+              <Fold open={reviewStars > 0} gap={spacing.md}>
+                <View style={styles.reviewBox}>{box}</View>
+              </Fold>
+            ) : box;
+          })()}
         </View>
         </Collapse>
       ) : null}
@@ -500,6 +511,7 @@ const styleDefinitions = StyleSheet.create({
   starPick: { flexDirection: 'row', gap: 6 },
   rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   credLine: { marginTop: spacing.md, marginBottom: spacing.md },
+  reviewBox: { gap: spacing.md },
   reviewsPlain: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   reviewPlain: { paddingHorizontal: 0 },
   review: { gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },

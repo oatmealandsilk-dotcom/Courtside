@@ -34,16 +34,30 @@ const weekFact = (p: PartnerStreak) => (p.thisWeek ? 'Played together this week'
 
 /**
  * The hand-made look (Oct 24): your streak with them as one muted line under
- * their follower counts, "🔥 2 weeks in a row with you", and "· hit this week
- * to make it 3" only while this week is still open. Nothing with no streak.
+ * their follower counts, "🔥 2 weeks in a row with you". Nothing with no streak.
+ * The streaks load after the profile has drawn, so the line opens with a
+ * smooth height change rather than popping in and shoving the profile down.
  */
-export function PartnerStreakLine({ userId }: { userId: ID }) {
+export function PartnerStreakLine({ userId, gap = 0 }: {
+  userId: ID;
+  /** The page's own gap between its lines: the line carries it inside its fold, so while closed it takes no room at all. */
+  gap?: number;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const streaks = usePartnerStreaks();
   const p = streaks?.find((s) => s.userId === userId);
-  if (!p) return null;
-  const said = `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you${p.thisWeek ? '' : ` · hit this week to make it ${p.weeks + 1}`}`;
-  return <Text style={styles.line} accessibilityLabel={`Partner streak: ${said}`}>🔥 {said}</Text>;
+  const said = p ? `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you` : '';
+  return (
+    <View style={[styles.lineFold, { marginTop: -gap }]}>
+      <Collapse open={!!p} unclip>
+        {p ? (
+          <View style={{ paddingTop: gap }}>
+            <Text style={styles.line} accessibilityLabel={`Partner streak: ${said}`}>🔥 {said}</Text>
+          </View>
+        ) : null}
+      </Collapse>
+    </View>
+  );
 }
 
 /**
@@ -269,4 +283,6 @@ const styleDefinitions = StyleSheet.create({
   rowSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   rowSubOn: { ...font('600'), color: colors.brand },
   line: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  // The streak line's fold spans the page, so its words sit centred under the follower counts.
+  lineFold: { alignSelf: 'stretch' },
 });

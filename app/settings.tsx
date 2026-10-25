@@ -214,7 +214,8 @@ export default function Settings() {
         ...(activityAlerts && autoLogLive ? [{
           icon: 'checkmark-done-outline' as const,
           label: 'Log tennis automatically',
-          detail: LESS_AI ? undefined : 'Private until you post it · keeps your streak',
+          // The hand-made look keeps the privacy fact and drops only the streak note.
+          detail: LESS_AI ? 'Private until you post it' : 'Private until you post it · keeps your streak',
           toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
         }] : []),
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see who is near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },

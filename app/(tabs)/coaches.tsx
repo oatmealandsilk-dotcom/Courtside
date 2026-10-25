@@ -176,7 +176,11 @@ function Coaching() {
                 <View style={styles.coachWords}>
                   {/* The whole card is the coach's page; the name is not a second door. */}
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.coachName} numberOfLines={1}>{user?.name}</Text>
-                  {LESS_AI && coach.headline ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={2}>{coach.headline}</Text> : <>
+                  {/* The hand-made look (Oct 24): their headline on one line, and what they coach on the muted line under it. */}
+                  {LESS_AI && coach.headline ? <>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.headline}</Text>
+                  {coach.specialties.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text> : null}
+                  </> : <>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.credentials[0]}</Text>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{coach.specialties.slice(0, 2).map((x) => x.charAt(0).toUpperCase() + x.slice(1)).join(' & ')}</Text>
                   </>}
