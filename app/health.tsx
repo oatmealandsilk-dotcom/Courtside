@@ -238,9 +238,9 @@ export default function Health() {
     return (
       // A row eases to its new height when its buttons or cards come and go (Oct 22 sweep).
       <Reanimated.View key={i.provider} layout={ROW_GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
-        <View style={[styles.disc, linked && styles.discOn]}>
+        {LESS_AI ? null : <View style={[styles.disc, linked && styles.discOn]}>
           <Ionicons name={about.icon} size={20} color={linked ? colors.brandInk : colors.text} />
-        </View>
+        </View>}
         <Words style={styles.wordsBox} contentStyle={styles.wordsInner}>
           <View style={styles.nameRow}>
             <Text style={styles.name}>{NAME[i.provider] ?? i.label}</Text>
@@ -265,7 +265,33 @@ export default function Health() {
             </Reanimated.View>
           ) : null}
           {tennisCard ? (
-            i.readsWorkouts ? (
+            i.readsWorkouts && LESS_AI ? (
+              // The hand-made look (Oct 24): a line, not a card in the card, and the offer as a link.
+              <Reanimated.View key="tennis-on-line" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.onLine}>
+                <View style={styles.onRow}>
+                  <Text style={styles.onText}>{allOn(i) ? 'Workouts on' : 'Tennis on'}</Text>
+                  <Text style={styles.onDot}>·</Text>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Turn off ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.untap(); run(i.provider, 'tennis-off'); }} hitSlop={10} style={({ pressed }) => pressed && styles.pressedDim}>
+                    <Text style={styles.smallGhostText}>Turn off</Text>
+                  </Pressable>
+                </View>
+                {i.provider === 'apple-health' && alertsOn && (allOn(i) || flags.apple) ? (
+                  <Text style={styles.line}>{allOn(i) ? 'You’ll get a notification after each workout.' : 'You’ll get a notification after each tennis session.'}</Text>
+                ) : null}
+                {allOn(i) && i.provider === 'apple-health' ? (
+                  <Pressable accessibilityRole="link" accessibilityLabel="See past workouts" hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.pastLinkBox, pressed && styles.pressedDim]}>
+                    <Text style={styles.pastLink}>See past workouts</Text>
+                    <Ionicons name="chevron-forward" size={13} color={colors.textMuted} />
+                  </Pressable>
+                ) : null}
+                {offer ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} hitSlop={10} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={({ pressed }) => [styles.offerLink, pressed && styles.pressedDim]}>
+                    {offerBusy ? <ActivityIndicator size="small" color={colors.brand} /> : null}
+                    <Text style={styles.offerLinkText}>{offerBusy ? 'Turning on…' : 'Add runs, rides and gym'}</Text>
+                  </Pressable>
+                ) : null}
+              </Reanimated.View>
+            ) : i.readsWorkouts ? (
               <>
                 {/* On: a plain tick in the brand colour springs in, the way iPhone's own
                     Settings confirms a choice, so switching on reads as something happening
@@ -328,8 +354,8 @@ export default function Health() {
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
           <Reanimated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
-              <Text style={[styles.connectText, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, LESS_AI && styles.connectSoft, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
+              <Text style={[styles.connectText, LESS_AI && styles.connectTextSoft, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
             </Pressable>
           </Reanimated.View>
         )}
@@ -344,7 +370,16 @@ export default function Health() {
         : 'Your sleep and recovery, from the sources you connect.'}</Text>}
 
       {/* A plain day ("2026-10-06") is read as that day here, at noon: read alone it is midnight in London, the day before in America. */}
-      {latest ? (
+      {latest && LESS_AI ? (
+        // The hand-made look (Oct 24): the numbers as two quiet lines, not a grid of boxes.
+        <View style={styles.today}>
+          <Text style={styles.todayTitle}>Latest<Text style={styles.todayDate}> · {new Date(latest.date.length === 10 ? `${latest.date}T12:00:00` : latest.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></Text>
+          {[
+            [latest.recovery ? `Recovery ${latest.recovery}%` : null, latest.sleepHours ? `Sleep ${hoursAndMinutes(latest.sleepHours)}` : null, latest.hrvMs ? `HRV ${latest.hrvMs}` : null, latest.restingHeartRate ? `RHR ${latest.restingHeartRate}` : null],
+            [latest.calories ? `${latest.calories.toLocaleString()} cal` : null, latest.proteinGrams ? `${latest.proteinGrams}g protein` : null, latest.steps ? `${latest.steps.toLocaleString()} steps` : null],
+          ].map((parts, k) => parts.some(Boolean) ? <Text key={k} style={k === 0 ? styles.numLine : styles.numLineSoft}>{parts.filter(Boolean).join('  ·  ')}</Text> : null)}
+        </View>
+      ) : latest ? (
         <View style={styles.today}>
           <Text style={styles.todayTitle}>Latest<Text style={styles.todayDate}> · {new Date(latest.date.length === 10 ? `${latest.date}T12:00:00` : latest.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</Text></Text>
           <View style={styles.stats}>
@@ -462,6 +497,17 @@ const styleDefinitions = StyleSheet.create({
   badgeText: { ...typography.caption, color: colors.textMuted },
   connect: { height: buttonShape.smallHeight, paddingHorizontal: 16, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', marginTop: 3 },
   connectOff: { backgroundColor: colors.surfaceAlt },
+  // The quiet Connect (Oct 24): the same pale brand fill as a list row's Follow.
+  connectSoft: { backgroundColor: colors.brandDim },
+  connectTextSoft: { color: colors.brand },
+  numLine: { ...typography.body, color: colors.text, fontVariant: ['tabular-nums'] },
+  numLineSoft: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'], marginTop: -spacing.sm },
+  onLine: { gap: 4, marginTop: spacing.xs },
+  onRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  onText: { ...typography.smallStrong, color: colors.text },
+  onDot: { ...typography.small, color: colors.textFaint },
+  offerLink: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4 },
+  offerLinkText: { ...typography.smallStrong, color: colors.brand },
   connectText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.brandInk },
   connectTextOff: { color: colors.textFaint },
   foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.lg },

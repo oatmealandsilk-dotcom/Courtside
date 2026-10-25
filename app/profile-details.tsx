@@ -19,7 +19,7 @@ import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
 import { SectionPager } from '@/components/SectionPager';
 import { WeekBars } from '@/components/tennis/WeekBars';
 import { Tappable } from '@/components/Tappable';
-import { BrandWash, EmptyState, Screen } from '@/components/ui';
+import { Avatar, BrandWash, EmptyState, Screen } from '@/components/ui';
 import type { PracticeSession, TournamentEntry, User } from '@/data/types';
 import { KIND_LABEL, activityDay, loggedLabel, spokenDuration } from '@/features/activity/format';
 import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
@@ -209,7 +209,7 @@ function ActivityTab({ user }: { user: User }) {
     <View style={styles.tabBody}>
       {year ? (
         <Box>
-          <Row first lead={<Tile><Ionicons name="sparkles-outline" size={18} color={colors.brand} /></Tile>} title={`Your ${year} in tennis`} chevron accessibilityRole="link" onPress={() => router.push('/wrapped')} />
+          <Row first lead={LESS_AI ? undefined : <Tile><Ionicons name="sparkles-outline" size={18} color={colors.brand} /></Tile>} title={`Your ${year} in tennis`} chevron accessibilityRole="link" onPress={() => router.push('/wrapped')} />
         </Box>
       ) : null}
       <ThisWeek user={user} />
@@ -376,9 +376,9 @@ function Waiting({ user }: { user: User }) {
       <Box>
         {ask && tagger ? (
           <Row first
-            lead={<Tile icon="pricetag-outline" />}
+            lead={LESS_AI ? <Avatar name={tagger.name} seed={tagger.avatarSeed} uri={tagger.avatarUrl} size={36} /> : <Tile icon="pricetag-outline" />}
             title={asking.length === 1 ? `${firstName(tagger.name)} tagged you` : `${asking.length} players tagged you`}
-            sub={asking.length === 1 ? `${taggedWhat(ask.kind, ask.day)} · Accept or decline` : 'Accept or decline'}
+            sub={LESS_AI ? (asking.length === 1 ? taggedWhat(ask.kind, ask.day) : undefined) : asking.length === 1 ? `${taggedWhat(ask.kind, ask.day)} · Accept or decline` : 'Accept or decline'}
             chevron
             accessibilityRole="link"
             onPress={() => router.push('/your-sessions')}
@@ -386,7 +386,7 @@ function Waiting({ user }: { user: User }) {
         ) : null}
         {w ? (
           <Row first={!ask}
-            lead={<Tile><LiveDot size={8} /></Tile>}
+            lead={LESS_AI ? undefined : <Tile><LiveDot size={8} /></Tile>}
             title={waiting.length === 1 ? `1 ${what} from ${pickSource({ type: 'tracker', activity: w })} to log` : `${waiting.length} workouts to log`}
             sub={waiting.length === 1 ? `${dayLabel(activityDay(w))} · ${shortLength(w.minutes)}` : `From ${sources || 'your trackers'}`}
             chevron
@@ -475,7 +475,7 @@ function Health() {
         <Box>
           {wearable || other ? (
             <Row first
-              lead={<Tile icon="pulse-outline" />}
+              lead={LESS_AI ? undefined : <Tile icon="pulse-outline" />}
               title={`${(wearable ?? other)!.label} connected`}
               sub={wearable
                 ? (appleElsewhere ? 'Read on your iPhone: open CourtSide there to bring it in.' : 'Recovery and sleep show here after its next sync.')
@@ -516,7 +516,7 @@ function Health() {
           {cells.map((c, i) => (
             <View key={c.label} accessible accessibilityLabel={c.spoken} style={[styles.healthCell, i > 0 && styles.healthDivide]}>
               <View style={styles.healthLabelRow}>
-                <Ionicons name={c.icon} size={12} color={colors.textMuted} />
+                {LESS_AI ? null : <Ionicons name={c.icon} size={12} color={colors.textMuted} />}
                 <Text style={styles.healthLabel}>{c.label}</Text>
               </View>
               <Text maxFontSizeMultiplier={1.25} style={styles.healthFigure}>
@@ -533,6 +533,7 @@ function Health() {
 
 /** What coaches plan around: injuries and time limits, only ever yours to see. */
 function Limits({ user }: { user: User }) {
+  const styles = useThemedStyles(styleDefinitions);
   const shown = user.profile.constraints.filter((c) => c.active);
   const add = () => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit' } });
   return (
@@ -540,7 +541,8 @@ function Limits({ user }: { user: User }) {
       <SectionHead title="Injuries and limits" line={shown.length && !LESS_AI ? 'Coaches plan around these.' : undefined} link={shown.length ? { label: 'Add', accessibilityLabel: 'Add an injury or a time limit', onPress: add } : undefined} />
       <Box>
         {shown.length ? shown.map((c, i) => (
-          <Row key={c.id} first={i === 0} lead={<Tile icon={c.kind === 'injury' ? 'bandage-outline' : 'calendar-outline'} />} title={c.label} sub={c.note} subLines={3}
+          <Row key={c.id} first={i === 0} lead={LESS_AI ? undefined : <Tile icon={c.kind === 'injury' ? 'bandage-outline' : 'calendar-outline'} />}
+            title={LESS_AI ? <Text style={styles.gearName} numberOfLines={2}><Text style={styles.kindWord}>{c.kind === 'injury' ? 'Injury' : 'Time limit'} · </Text>{c.label}</Text> : c.label} sub={c.note} subLines={3}
             onPress={() => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit', id: c.id } })}
             accessibilityLabel={`${c.kind === 'injury' ? 'Injury' : 'Limit'}: ${c.label}${c.note ? `. ${c.note}` : ''}. Edit or remove`}
           />
@@ -715,7 +717,8 @@ function Gear({ user, mine = false }: { user: User; mine?: boolean }) {
       {rows.length ? (
         <Box>
           {rows.map((r, i) => (
-            <Row key={r.key} first={i === 0} lead={<Tile icon={r.icon} />} title={<Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={r.sub}
+            <Row key={r.key} first={i === 0} lead={LESS_AI ? undefined : <Tile icon={r.icon} />}
+              title={LESS_AI ? <View style={styles.gearWords}><Text style={styles.kindWord} numberOfLines={1}>{r.sub}</Text><Text style={styles.gearName} numberOfLines={2}>{r.title}</Text></View> : <Text style={styles.gearName} numberOfLines={2}>{r.title}</Text>} sub={LESS_AI ? undefined : r.sub}
               onPress={mine ? edit : undefined}
               accessibilityLabel={`${r.sub.split(' · ')[0]}: ${r.title}${r.sub.includes(' · ') ? `, ${r.sub.split(' · ').slice(1).join(', ')}` : ''}`}
             />
@@ -813,4 +816,7 @@ const styleDefinitions = StyleSheet.create({
   goal: { ...typography.body, lineHeight: 20, color: colors.text },
   goalDone: { color: colors.textMuted },
   gearName: { ...font('500'), fontSize: 16, lineHeight: 21, color: colors.text },
+  // What a row is, in muted ink ("Racket", "Injury"), where the icon tile was (Oct 24).
+  kindWord: { ...typography.small, ...font('400'), color: colors.textMuted },
+  gearWords: { gap: 1 },
 });
