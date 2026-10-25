@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, runOnJS, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -27,8 +27,6 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
-/** The box's extras (Replying to, the emoji row) glide to their new place as the others come and go (Oct 22 sweep, item 17). */
-const COMPOSER_GLIDE = LinearTransition.duration(200);
 /** One tap drops these into the box, the way Instagram's row above the keyboard does. Tennis first. */
 const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️'];
 /**
@@ -222,7 +220,7 @@ export default function CommentsSheet() {
   useEffect(() => { openThread(atParent); }, [atParent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Replying: "@them " in the box and a "Replying to @them ×" strip above it.
-  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
+  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, cancel: cancelReply, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Something of your own to send: words beyond the "@them " Reply put in, or a photo.
   const canSend = exists && !takenDown && (!!words(draft).trim() || !!photo);
   // Kept for next time only if there is something of your own in it.
@@ -237,6 +235,23 @@ export default function CommentsSheet() {
   useEffect(() => { sheetOpen.current = true; return () => { sheetOpen.current = false; }; }, []);
   const latestPhoto = useRef(photo);
   latestPhoto.current = photo;
+  // Leaving the box with nothing of your own in it (only the "@them " Reply put
+  // there): the reply is let go, as on Instagram, and the box is a plain empty
+  // comment box again. Anything typed beyond the "@them " keeps the reply. Not
+  // while a photo is being picked: the library takes the keyboard away for a moment.
+  const picking = useRef(false);
+  const latestCancel = useRef(cancelReply);
+  latestCancel.current = cancelReply;
+  const letGoIfBare = () => {
+    if (picking.current || latestPhoto.current) return;
+    if (latestWords.current(latestDraft.current).trim()) return;
+    latestCancel.current();
+  };
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const sub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => letGoIfBare());
+    return () => sub.remove();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The comment being answered stays in sight just above the box, as on
   // Instagram, rather than sliding under the keyboard as it comes up. Measured
@@ -308,24 +323,29 @@ export default function CommentsSheet() {
     });
     input.current?.focus();
   };
+  // Your comment, once drawn, is brought into view only if it is not already
+  // in sight between the header and the box, and then only just enough: a
+  // reply under a comment on screen leaves the list where it is (Oct 25: it
+  // used to jump, cutting the caption off under the header).
   useEffect(() => {
     const before = justSent.current;
     const sent = before ? all.find((c) => !before.has(c.id) && c.authorId === currentUserId) : undefined;
     if (!sent) return;
     justSent.current = null;
     const go = (tries: number) => {
-      if (!sent.parentId) { list.current?.scrollToEnd({ animated: true }); return; }
-      const y = rowY.current[sent.id];
-      if (y !== undefined) list.current?.scrollTo({ y: Math.max(0, y - 160), animated: true });
+      if (rowY.current[sent.id] !== undefined) reveal(sent.id);
       else if (tries > 0) setTimeout(() => go(tries - 1), 120);
     };
     setTimeout(() => go(4), 80);
   }, [all.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const addPhoto = async () => {
+    picking.current = true;
     try {
       const got = await pickFromDevice('photo');
       if (got?.uri) { setPhoto(got.uri); haptics.tap(); }
-    } catch { /* the library was closed or refused: nothing to add */ }
+    } catch { /* the library was closed or refused: nothing to add */ } finally {
+      picking.current = false;
+    }
   };
   const addEmoji = (emoji: string) => {
     haptics.tap();
@@ -342,7 +362,11 @@ export default function CommentsSheet() {
   const onBoxBlur = () => {
     blurredAt.current = Date.now();
     if (blurTimer.current) clearTimeout(blurTimer.current);
-    blurTimer.current = setTimeout(() => setTyping(false), 250);
+    blurTimer.current = setTimeout(() => {
+      setTyping(false);
+      // A browser has no keyboard to listen to: the box left (and not taken back by an emoji or the strip's ×) lets a bare reply go.
+      if (Platform.OS === 'web' && !input.current?.isFocused?.()) letGoIfBare();
+    }, 250);
   };
   const quickRow = (
     <>
@@ -423,33 +447,31 @@ export default function CommentsSheet() {
           <View ref={composer} style={styles.composer}>
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
             {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
-            <Collapse show={!!replyingTo} gap={spacing.sm} pullTop={spacing.sm} style={styles.replyingWrap}>
-              {replyingTo ? (
-                <View style={styles.replying}>
-                  <Text style={styles.replyingText} numberOfLines={1}>
-                    Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
-                  </Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
-                    <Ionicons name="close" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              ) : null}
-            </Collapse>
-            {!staged ? <Animated.View style={styles.quick}>{quickRow}</Animated.View> : typing ? (
-              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View>
+            {/* Docked on the box's top edge while replying, the × on the right. Plain, never a
+                height animation: an iPhone kept the animation's first frame (no height) and the
+                strip never showed (Oct 25 recording). */}
+            {replyingTo ? (
+              <View style={styles.replying}>
+                <Text style={styles.replyingText} numberOfLines={1}>
+                  Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
+                  <Ionicons name="close" size={16} color={colors.textMuted} />
+                </Pressable>
+              </View>
             ) : null}
-            <Collapse show={!!photo} gap={spacing.sm}>
-              {photo ? (
-                <View style={styles.attached}>
-                  <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                  <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
-                    <View style={styles.attachedRemove}>
-                      <Ionicons name="close" size={13} color="#fff" />
-                    </View>
-                  </Pressable>
-                </View>
-              ) : null}
-            </Collapse>
+            {/* Part of the box, just above the words: it moves only with the box, never on its own (Oct 25). */}
+            {!staged || typing ? <View style={styles.quick}>{quickRow}</View> : null}
+            {photo ? (
+              <View style={styles.attached}>
+                <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
+                  <View style={styles.attachedRemove}>
+                    <Ionicons name="close" size={13} color="#fff" />
+                  </View>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
@@ -497,53 +519,6 @@ export default function CommentsSheet() {
  * pulled down and away from anywhere, as on Instagram; anywhere else it is
  * the list's own scroll. The list is held at its top while the sheet moves.
  */
-/**
- * One of the box's extras (Replying to, the attached photo) opening and
- * closing as a glide: its measured height grows from 0 (or shrinks to it)
- * with a fade, the box's top edge following it, and it stays drawn until it
- * has closed. `gap` is the box's own gap, given back while closed; `pullTop`
- * is a negative top margin it has while open (the strip sits flush with the
- * box's top edge). Oct 22 sweep, item 17.
- */
-function Collapse({ show, gap, pullTop = 0, style, children }: { show: boolean; gap: number; pullTop?: number; style?: object; children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(show);
-  const last = useRef<React.ReactNode>(children);
-  if (show) last.current = children;
-  const open = useSharedValue(show ? 1 : 0);
-  const height = useSharedValue(0);
-  // Open and still: see `resting` below.
-  const [rested, setRested] = useState(show);
-  const showRef = useRef(show);
-  showRef.current = show;
-  // Taken down once shut, and only then not at rest: the draw that starts a close keeps the plain open
-  // look (the close's own values win over it as they run). A close that landed just as it was shown
-  // again leaves it up.
-  const gone = useCallback(() => { if (showRef.current) return; setMounted(false); setRested(false); }, []);
-  useEffect(() => {
-    if (show) setMounted(true);
-    open.value = withTiming(show ? 1 : 0, { duration: 180 }, (done) => {
-      if (done && !show) runOnJS(gone)();
-      if (done && show) runOnJS(setRested)(true);
-    });
-  }, [show, open, gone]);
-  const look = useAnimatedStyle(() => ({
-    height: height.value * open.value,
-    opacity: open.value,
-    marginTop: -pullTop * open.value,
-    marginBottom: -gap * (1 - open.value),
-  }));
-  if (!mounted && !show) return null;
-  // Open and still, on a phone: its open look is said by a plain style as well, so a phone that drops the
-  // settled animation values (Reanimated keeps the first frame's: no height, clear) can never fold an open
-  // strip away on a later re-render.
-  const resting = Platform.OS !== 'web' && rested;
-  return (
-    <Animated.View style={[{ overflow: 'hidden' }, style, look, resting && { height: 'auto', opacity: 1, marginTop: -pullTop, marginBottom: 0 }]} pointerEvents={show ? 'auto' : 'none'}>
-      <View onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>{last.current}</View>
-    </Animated.View>
-  );
-}
-
 function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, children }: {
   listRef: AnimatedRef<Animated.ScrollView>;
   pull: boolean;
@@ -621,9 +596,8 @@ const styleDefinitions = StyleSheet.create({
   list: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: spacing.xl },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg, textAlign: 'center' },
   composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 10, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
-  // A slim strip across the top of the box while replying, the × on the right.
-  replyingWrap: { marginHorizontal: -spacing.lg },
-  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
+  // A slim strip across the top of the box while replying, the × on the right: edge to edge, flush with the box's top.
+  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, minHeight: 36, marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
   replyingText: { ...typography.small, color: colors.textMuted, flex: 1 },
   replyingHandle: { ...typography.smallStrong, color: colors.text },
   // Each emoji is a full-height target sharing the row's width; the row gives back the extra height around it.

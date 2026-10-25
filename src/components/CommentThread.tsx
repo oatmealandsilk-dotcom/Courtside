@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
+import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
@@ -83,6 +83,17 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
     // The × sits outside the box; tapping it must not close the keyboard.
     setTimeout(focus, 30);
   };
+  /**
+   * Left without writing anything (the keyboard went away with only "@them "
+   * in the box): the reply is let go, as on Instagram. The same as the ×, but
+   * with no tap and no keyboard brought back.
+   */
+  const cancel = () => {
+    if (!now.current) return;
+    const before = now.current.prefixed ? now.current.handle : null;
+    setDraft((d) => without(d, before));
+    set(null);
+  };
   /** After sending: the box is empty again and answers nobody. */
   const done = () => set(null);
   /** Sent words refused (migration 117): back in the box, answering whoever they answered. */
@@ -91,7 +102,7 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
     set(was);
   };
   const words = (text: string) => (replyingTo?.prefixed ? without(text, replyingTo.handle) : text);
-  return { replyingTo, start, change, stop, done, resume, words };
+  return { replyingTo, start, change, stop, cancel, done, resume, words };
 }
 
 /**
@@ -102,12 +113,17 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
  */
 /**
  * In the comments sheet (`glide`): replies shown with "View replies" fade in,
- * hidden ones and deleted comments fade out, and the rows below glide to
- * their new places rather than jumping (Oct 22 sweep, item 17).
+ * and in a browser hidden ones and deleted comments fade out and the rows
+ * below glide to their new places rather than jumping (Oct 22 sweep, item 17).
+ * Not on a phone: there a row left mid-glide could stay drawn over the next
+ * comment ("Hide replies" over a name, Oct 25 recording), so rows simply take
+ * their new places.
  */
 const ROW_GLIDE = LinearTransition.duration(220);
 const ROW_OUT = FadeOut.duration(160);
 const REPLY_IN = FadeIn.duration(200);
+/** A comment you just sent fades in where it lands, without moving (a slide up drew it over the row above for a moment). */
+const FRESH_IN = FadeIn.duration(220);
 
 export function CommentThread({ thread, big = false, open, onToggle, onReply, onPressBody, onRowLayout, isFresh, glide = false }: {
   thread: Thread;
@@ -127,6 +143,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   glide?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const moves = glide && Platform.OS === 'web';
   // Replies already open when the sheet first draws are simply there; ones opened later fade in.
   const drawn = useRef(false);
   useEffect(() => { drawn.current = true; }, []);
@@ -140,9 +157,9 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   const row = (c: Comment, reply: boolean) => (
     <Animated.View
       key={c.id}
-      entering={isFresh?.(c) ? FadeInDown.duration(260) : glide && reply && drawn.current ? REPLY_IN : undefined}
-      exiting={glide ? ROW_OUT : undefined}
-      layout={glide ? ROW_GLIDE : undefined}
+      entering={isFresh?.(c) ? FRESH_IN : glide && reply && drawn.current ? REPLY_IN : undefined}
+      exiting={moves ? ROW_OUT : undefined}
+      layout={moves ? ROW_GLIDE : undefined}
       onLayout={onRowLayout ? (e) => onRowLayout(c.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
     >
       {jump && jump.at === c.id ? <JumpFlash lit={jump.lit} inset={8} /> : null}
@@ -160,7 +177,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
       {row(thread.top, false)}
       {open ? thread.replies.map((c) => row(c, true)) : null}
       {count ? (
-        <Animated.View key={`${thread.top.id}:toggle`} layout={glide ? ROW_GLIDE : undefined} exiting={glide ? ROW_OUT : undefined} style={[styles.toggleWrap, { marginLeft: replyIndent(big) }]}>
+        <Animated.View key={`${thread.top.id}:toggle`} layout={moves ? ROW_GLIDE : undefined} exiting={moves ? ROW_OUT : undefined} style={[styles.toggleWrap, { marginLeft: replyIndent(big) }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
