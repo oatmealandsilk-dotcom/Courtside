@@ -11,7 +11,7 @@ import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
-import { CardWash, cardLook } from './SessionCard';
+import { CardWash, boxLook } from './SessionCard';
 import { spokenScore } from '@/features/activity/score';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneGlyph } from './ZoneGlyph';
@@ -78,8 +78,12 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   const spoken = [`${spokenDuration(session.minutes)}, ${(titleAs ?? what).toLowerCase()}`, scored ? `score ${spokenScore(session.sets)}` : null, far ? `${far.value} miles` : null, avg ? `average heart rate ${avg}` : null, hr ? `max ${session.maxHr}` : null, kcal ? `${kcal} calories` : null, sub ?? (lead ? `${vs} @${lead.handle}` : null), sub ? null : source].filter(Boolean).join(', ');
   const small = { fontSize: 13 * k, lineHeight: Math.round(17 * k) };
   // The session card's own look (Oct 4, owner: "looks a bit flat"): the court's shirt, its fade and its lettering (Oct 6),
-  // the cream with green numbers on the CourtSide court (Oct 5).
-  const look = cardLook(theme);
+  // the cream with green numbers on the CourtSide court (Oct 5). On Clean, the stats sheet's light box (Oct 24, owner:
+  // "On clean, the color card should not be green it should be like second screnshot"): one small capital line for
+  // what it was and where the numbers came from, the score in the sheet's colours, small capital labels, no shadow.
+  const look = boxLook(theme);
+  const plain = !!look.plain;
+  const eyebrow = [title, sub ?? (source ? source.replace(/^Data by /, '') : null)].filter(Boolean).join(' · ').toUpperCase();
   const stats = [
     kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
     avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
@@ -95,14 +99,25 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
       accessibilityHint={onPress ? 'Opens the stats' : undefined}
       disabled={!onPress}
       onPress={onPress}
-      style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, flat ? styles.flat : null, pressed && onPress ? styles.pressed : null]}
+      style={({ pressed }) => [styles.panel, { backgroundColor: look.fill, borderColor: look.border, borderRadius: 18 * k, paddingHorizontal: 16 * k, paddingVertical: 14 * k, gap: 12 * k }, flat || plain ? styles.flat : null, pressed && onPress ? styles.pressed : null]}
     >
       <CardWash look={look} radius={18 * k} />
       <View style={[styles.row, { gap: 8 * k }]}>
-        {LESS_AI ? null : <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
+        {LESS_AI || plain ? null : <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
           <ZoneGlyph size={14 * k} color={look.ink} />
         </View>}
-        <View style={[styles.flex, { gap: 1 * k }]}>
+        {plain ? (
+          <View style={[styles.flex, { gap: 3 * k }]}>
+            <Text style={[styles.eyebrow, { color: look.eyebrow, fontSize: 11 * k, lineHeight: Math.round(15 * k), letterSpacing: 0.88 * k }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{eyebrow}</Text>
+            {!sub && lead ? (
+              <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>
+                {vs}{' '}
+                <Text accessibilityRole="link" suppressHighlighting onPress={(e) => { e?.stopPropagation?.(); router.push(`/user/${lead.id}`); }} style={[styles.handle, { color: look.ink }]}>@{lead.handle}</Text>
+                {all.length > 1 ? ` +${all.length - 1}` : ''}
+              </Text>
+            ) : null}
+          </View>
+        ) : <View style={[styles.flex, { gap: 1 * k }]}>
           <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{title}</Text>
           {sub ? (
             <Text style={[styles.sub, small, { color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{sub}</Text>
@@ -119,20 +134,20 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
               {source ? source.replace(/^Data by /, '') : ''}
             </Text>
           ) : null}
-        </View>
+        </View>}
         {stats.length ? null : time}
         {onPress ? <Ionicons name="chevron-forward" size={15 * k} color={look.muted} /> : null}
       </View>
       {scored ? (
         <View style={{ marginTop: -2 * k }}>
-          <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} inks={boxInks(look)} />
+          <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} inks={plain ? undefined : boxInks(look)} />
         </View>
       ) : null}
       {stats.length ? (
         <View style={[styles.row, styles.columns, { paddingTop: 12 * k, borderTopColor: look.lines }]}>
           {[{ key: 'time', label: 'Time', node: time }, ...stats].map((st, i) => (
             <View key={st.key} style={[styles.col, i > 0 && [styles.colRule, { borderLeftColor: look.lines }], { gap: 2 * k, paddingLeft: i > 0 ? 12 * k : 0 }]}>
-              <Text style={[styles.label, { fontSize: 11 * k, color: look.muted }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{st.label}</Text>
+              <Text style={[styles.label, { fontSize: 11 * k, color: look.muted }, plain && [styles.capsLabel, { letterSpacing: 0.66 * k }]]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{st.label}</Text>
               {st.node}
             </View>
           ))}
@@ -161,6 +176,9 @@ const styleDefinitions = StyleSheet.create({
   source: { ...font('600'), color: colors.textFaint, letterSpacing: 0.1, flexShrink: 0 },
   flex: { flex: 1 },
   label: { ...font('500'), color: colors.textMuted, letterSpacing: 0.1 },
+  // Clean's light box (boxLook): the stats sheet's small capital line and labels (SessionSheet's eyebrow and label).
+  eyebrow: { ...font('600'), color: colors.textMuted },
+  capsLabel: { ...font('600'), textTransform: 'uppercase' },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', minWidth: 0 },
   whoText: { ...font('500'), color: colors.textMuted, flexShrink: 1 },
   handle: { ...font('600'), color: colors.text },

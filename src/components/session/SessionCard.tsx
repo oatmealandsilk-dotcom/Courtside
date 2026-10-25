@@ -29,8 +29,13 @@ export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent
 /** The colours of a session box (the card, the tile, the photo post's stats panel, the share stamp). */
 export type CardLook = {
   dark: boolean;
-  /** The fade laid inside the box: the court's shirt's, or the brand's own on the plain green box (Clean). */
-  wash: 'brand' | 'shirt';
+  /** The fade laid inside the box: the court's shirt's, the brand's own on the plain green box, or none (Clean's light box). */
+  wash: 'brand' | 'shirt' | 'none';
+  /**
+   * Drawn the way the stats sheet is (Clean's light box, Oct 24): the page's own inks, the score in
+   * the sheet's colours (your games green, theirs grey), small capital labels, no icon and no shadow.
+   */
+  plain?: boolean;
   /**
    * A full-colour box with light words on it (the city shirts, the green box): small marks on it take
    * the card's ink rather than their own colours, which would fight the fill.
@@ -57,6 +62,42 @@ export type CardLook = {
  * London back on its green box, as it was before Oct 6.)
  */
 const BRAND_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
+
+/**
+ * Courts whose session boxes in the app are drawn like the stats sheet
+ * rather than as the green box (Oct 24, owner: "On clean, the color card
+ * should not be green it should be like second screnshot", the sheet): the
+ * page's light surface with a hairline, no fade, the page's inks. The
+ * pictures made to share keep the green box (cardLook).
+ */
+const SHEET_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
+
+/**
+ * The colours of a session box in the app (a post's stats panel, a post's
+ * card, a profile grid's tile): the stats sheet's on the courts in SHEET_BOX,
+ * otherwise the box's own (cardLook).
+ */
+export function boxLook(theme: ThemeName): CardLook {
+  if (!SHEET_BOX.has(theme)) return cardLook(theme);
+  return {
+    dark: pageIsDark(),
+    wash: 'none',
+    plain: true,
+    filled: false,
+    fill: colors.surface,
+    border: 'transparent',
+    rim: colors.border,
+    figure: colors.text,
+    ink: colors.text,
+    muted: colors.textMuted,
+    faint: colors.textFaint,
+    eyebrow: colors.textMuted,
+    pillFill: colors.brand,
+    pillInk: colors.brandInk,
+    lines: colors.border,
+    zones: zoneColors('page'),
+  };
+}
 
 /**
  * How a session box is coloured on this court: as the court's shirt (Oct 6,
@@ -211,7 +252,8 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
   flat?: boolean;
 }) {
   // The hand-made look (Oct 24, owner: the glows "seem a bit ai"): the box's own flat fill, only its hairline kept.
-  if (flat && !keepGlow) return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
+  // Clean's light box (boxLook) never has a fade.
+  if ((flat && !keepGlow) || look.wash === 'none') return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
   if (look.wash === 'brand') return <BrandWash radius={radius} glow />;
   return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
 }
@@ -277,7 +319,8 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   accessibilityHint?: string;
 }) {
   const { theme } = useTheme();
-  const look = clear ? clearLook() : cardLook(theme);
+  // A picture made to share keeps the box's own colours; in the app, Clean's box is the stats sheet's (boxLook).
+  const look = clear ? clearLook() : picture ? cardLook(theme) : boxLook(theme);
   // Clear's soft shadow under every word and number; nothing on a filled card.
   const density = useShareDensity();
   const shade: TextStyle | undefined = clear ? clearShade(density) : undefined;
@@ -351,7 +394,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     <View collapsable={false} style={[styles.card, { width, aspectRatio: aspect, borderRadius: round, padding: pad, paddingTop: inset ? inset.top : pad, paddingBottom: inset ? inset.bottom : pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark && round > 0 ? 1 : 0 }]}>
       {clear ? null : <CardWash look={look} radius={round} edge={round > 0} keepGlow={!!inset} />}
       {/* The faint court is tennis's: a run or the gym has none. Clear has none either: nothing behind the words. */}
-      {clear || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+      {clear || look.plain || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>
         <Reanimated.Text key={shownTop} entering={picture ? undefined : FadeIn.duration(160)} style={{ ...font('600'), fontSize: small(11.5, 9), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1, ...shade }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {shownTop}
@@ -368,7 +411,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
         {score ? (
           // The ScoreBoard (T1, Oct 22) in the box's own lettering: the box already says Won or Lost.
           <View style={{ alignSelf: 'stretch', marginTop: 10 * k }}>
-            <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} still={picture} inks={boxInks(look, shade)} />
+            <ScoreBoard sets={session.sets!} {...boardSides(session, author ?? 'You', hidden, people)} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.8 * k} still={picture} inks={look.plain ? undefined : boxInks(look, shade)} />
           </View>
         ) : null}
         {far ? (
@@ -496,8 +539,8 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
   return (
     <View collapsable={false} style={[styles.card, { width, height, borderRadius: round, paddingHorizontal: Math.round(20 * k), paddingVertical: pad, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
       <CardWash look={look} radius={round} />
-      {/* The faint court is tennis's: a run or the gym has none. */}
-      {session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+      {/* The faint court is tennis's: a run or the gym has none. Clean's light box has none either, as the stats sheet. */}
+      {look.plain || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
       <View style={styles.top}>
         <Text style={{ ...font('600'), fontSize: small(11.5, 9), lineHeight: line(small(11.5, 9)), letterSpacing: Math.max(0.8, 1.1 * k), color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1.2}>
           {top}
@@ -514,15 +557,15 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
         {score ? (
           // The ScoreBoard (T1, Oct 22) in the box's own lettering, at the height the card measured.
           <View style={{ alignSelf: 'stretch', marginTop: 8 * k }}>
-            <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={BOARD * k} inks={boxInks(look)} />
+            <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={BOARD * k} inks={look.plain ? undefined : boxInks(look)} />
           </View>
         ) : null}
         {stats.length ? (
-          <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }]}>
+          <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }, look.plain && styles.hairTop]}>
             {stats.map((s) => (
               <View key={s.key} style={styles.stat}>
                 <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} />
-                <Text style={{ ...font('500'), fontSize: small(12, 10), lineHeight: line(small(12, 10)), color: look.muted, marginTop: 2 * k }} numberOfLines={1} maxFontSizeMultiplier={1.2}>{s.label}</Text>
+                <Text style={[{ ...font('500'), fontSize: small(12, 10), lineHeight: line(small(12, 10)), color: look.muted, marginTop: 2 * k }, look.plain && styles.capsLabel]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{s.label}</Text>
               </View>
             ))}
           </View>
@@ -566,6 +609,9 @@ const styles = StyleSheet.create({
   middle: { flex: 1 },
   sidewaysMiddle: { justifyContent: 'center', minHeight: 0 },
   statRow: { flexDirection: 'row', alignSelf: 'stretch', borderTopWidth: 1 },
+  // Clean's light box: the stats sheet's hairline and its small capital labels.
+  hairTop: { borderTopWidth: StyleSheet.hairlineWidth },
+  capsLabel: { ...font('600'), textTransform: 'uppercase', letterSpacing: 0.66 },
   stat: { flex: 1, minWidth: 0 },
   // Wraps rather than running off the card's clipped edge: a unit keeps a
   // readable floor (Figure in Duration.tsx), so on the share screen's small

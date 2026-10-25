@@ -6,7 +6,7 @@ import { resultWord, whatWord } from '@/features/activity/format';
 import { useTheme } from '@/theme/ThemeProvider';
 import { font } from '@/theme';
 import { Duration } from './Duration';
-import { CardWash, cardLook } from './SessionCard';
+import { CardWash, boxLook } from './SessionCard';
 
 /**
  * A session post with no photo, as a tile in a profile's grid: the session
@@ -15,7 +15,8 @@ import { CardWash, cardLook } from './SessionCard';
  */
 export function SessionTile({ session, width }: { session: SessionDetail; width: number }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  // The post's own box colours: on Clean the stats sheet's light box (boxLook), as the post's panel.
+  const look = boxLook(theme);
   const k = width / 120;
   const result = resultWord(session);
   return (
