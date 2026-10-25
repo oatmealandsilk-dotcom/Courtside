@@ -374,10 +374,13 @@ arrive with a new build, and the iPhone and Android builds must move to a
 new version together (bump `version` in app.config.js). None is needed for
 the closed test.
 
-- **Navigation-bar buttons that follow the Night and New York themes**
-  (`expo-navigation-bar`, Android code only). Today the bar under the app is
-  light with dark buttons, which suits the cream and the four city courts.
-  With it, the bar would turn dark on the two dark themes too.
+- **Navigation-bar buttons that follow the app's theme**
+  (`expo-navigation-bar`, Android code only). Since Oct 25 the bar under the
+  app follows the phone's own light or dark mode (`userInterfaceStyle:
+  'automatic'`, needed for Automatic dark mode and the dark launch screen), so
+  a phone in dark mode with a light court picked and Automatic dark mode off
+  gets a dark bar under a light page. With it, the bar would follow the
+  court on show instead.
 - **Saving a clip or picture to the gallery** (`expo-media-library`).
   Android's share sheet has no "save to gallery", so on Android a post's
   menu says **Share original**, and Share has no Save button. With it, both

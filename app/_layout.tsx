@@ -26,7 +26,7 @@ import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
-import { LaunchMark, launchGround } from '@/components/LaunchMark';
+import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark';
 import { NEW_SPLASH } from '@/lib/splashLook';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -65,11 +65,12 @@ export default function RootLayout() {
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
   const [fontsReady] = useFonts({ Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
+  useLaunchDark(!fontsReady);
   // While the fonts load, the launch look itself (splash C: the mark and line are drawn shapes, no
   // fonts needed), so the website's loader hands straight over to the same picture, not a blank screen.
   if (!fontsReady) {
     return (
-      <View style={[{ flex: 1, backgroundColor: lightColors.bg }, launchGround]}>
+      <View style={[{ flex: 1, backgroundColor: lightColors.bg }, launchGround()]}>
         {NEW_SPLASH ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} /> : null}
       </View>
     );
