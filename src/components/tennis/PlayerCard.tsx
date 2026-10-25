@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
-import { CardWash, cardLook, type CardLook } from '@/components/session/SessionCard';
+import { CardWash, boxLook, cardLook, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
 import { mixHex } from '@/features/activity/zones';
@@ -18,7 +18,7 @@ import {
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
@@ -44,7 +44,10 @@ export function PlayerCard({ user, variant, onPress }: {
   onPress?: () => void;
 }) {
   const { theme } = useTheme();
-  const look = cardLook(theme);
+  // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
+  // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
+  // The other courts keep their card; the full card heading the Tennis profile page keeps its own.
+  const look = variant === 'banner' && LESS_AI_ROUND2 ? boxLook(theme) : cardLook(theme);
   const reduced = useReducedMotion();
   const week = usePerWeek(user);
   const key = `${variant}:${user.id}`;
@@ -78,7 +81,7 @@ export function PlayerCard({ user, variant, onPress }: {
           <Swatch surface={p.preferredSurface} look={look} />
           <Text numberOfLines={1} style={[styles.small, styles.shrink, { color: look.muted }]}>{surfaceWord[p.preferredSurface]}</Text>
         </View>
-        {items.length ? <Strip items={items} look={look} size={20} filled={filled} /> : null}
+        {items.length ? <Strip items={items} look={look} size={20} filled={filled} caps={look.plain} /> : null}
       </SwipePressable>
     );
   }
@@ -163,7 +166,7 @@ export function Swatch({ surface, look, size = 9 }: { surface: SurfacePreference
  * them. With text set very large (past 1.3×) four no longer fit across, so
  * they sit two by two.
  */
-function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLook; size: number; filled: boolean }) {
+function Strip({ items, look, size, filled, caps = false }: { items: StripItem[]; look: CardLook; size: number; filled: boolean; /** The labels in small grey capitals, as on the stats sheet (Clean's banner). */ caps?: boolean }) {
   const { fontScale } = useWindowDimensions();
   const grid = items.length >= 4 && fontScale > 1.3;
   return (
@@ -179,7 +182,7 @@ function Strip({ items, look, size, filled }: { items: StripItem[]; look: CardLo
             <View style={styles.cellLabel}>
               {item.key === 'streak' ? <Ionicons name="flame" size={11} color={filled ? look.ink : colors.clay} /> : null}
               {item.key === 'next' ? <Ionicons name="trophy-outline" size={11} color={look.muted} /> : null}
-              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, styles.shrink, { color: look.muted }]}>{item.label}</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, caps && styles.capsLabel, styles.shrink, { color: look.muted }]}>{item.label}</Text>
             </View>
           </View>
         );
@@ -231,6 +234,8 @@ const styles = StyleSheet.create({
   cellGrid: { flexGrow: 0, flexBasis: '50%', width: '50%' },
   cellLower: { marginTop: 12 },
   label: { ...font('400'), fontSize: 12, lineHeight: 16 },
+  // The stats sheet's small capital label (SessionCard's capsLabel).
+  capsLabel: { ...font('600'), fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.6 },
   // A unit after a figure ("50 days"): smaller and lighter, on the figure's baseline, in its colour.
   unit: { ...font('500'), letterSpacing: 0 },
   tabular: { fontVariant: ['tabular-nums'] },

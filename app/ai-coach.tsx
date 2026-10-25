@@ -12,7 +12,7 @@ import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 const AI_SECTIONS: ('ask' | 'plan')[] = ['ask', 'plan'];
 import { TipComposer } from '@/components/TipComposer';
@@ -325,12 +325,17 @@ function Train() {
         <View style={styles.section}>
           {!lines.length ? (
             <View style={styles.intro}>
-              {LESS_AI ? null : <Text style={styles.lead}>Ask about your next session, a shot, or recovery. It answers from your profile and this week’s plan, and remembers what you talk about.</Text>}
-              <View style={styles.chips}>
+              {/* Oct 25 ("D all for less ai", item 9): no paragraph about itself, and one quiet suggestion in place of three bubbles. */}
+              {LESS_AI_ROUND2 ? null : <Text style={styles.lead}>Ask about your next session, a shot, or recovery. It answers from your profile and this week’s plan, and remembers what you talk about.</Text>}
+              {LESS_AI_ROUND2 ? (
+                <Pressable accessibilityRole="button" accessibilityLabel="Try: What should I work on today?" onPress={() => setDraft({ text: 'What should I work on today?', n: Date.now() })} hitSlop={8} style={({ pressed }) => [styles.tryLine, pressed && { opacity: PRESS_DIM }]}>
+                  <Text style={styles.tryText} numberOfLines={1}>Try “What should I work on today?”</Text>
+                </Pressable>
+              ) : <View style={styles.chips}>
                 {['What should I work on today?', 'How can I improve my serve?', 'Help me plan a lighter session'].map((text) => (
                   <Chip key={text} label={text} onPress={() => setDraft({ text, n: Date.now() })} />
                 ))}
-              </View>
+              </View>}
             </View>
           ) : null}
 
@@ -367,8 +372,9 @@ function Train() {
           <TipComposer
             key={draft?.n ?? 0}
             initial={draft?.text}
-            placeholder={LESS_AI ? 'Ask about your game' : 'What would you like help with?'}
+            placeholder={LESS_AI_ROUND2 ? 'Ask about your game' : 'What would you like help with?'}
             accessibilityLabel="Message the AI coach"
+            line={LESS_AI_ROUND2}
             onSubmit={(text) => { void ask(text); }}
           />
           <View style={styles.footRow}>
@@ -573,6 +579,8 @@ const styleDefinitions = StyleSheet.create({
   intro: { gap: spacing.md },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  tryLine: { alignSelf: 'flex-start' },
+  tryText: { ...typography.small, color: colors.textMuted },
   lineWrap: { gap: spacing.sm },
   report: { alignSelf: 'flex-start', paddingHorizontal: spacing.sm },
   reportText: { ...typography.caption, color: colors.textFaint },

@@ -30,7 +30,7 @@ import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { PartnerStreakCard, PartnerStreakLine } from '@/components/PartnerStreak';
-import { LESS_AI } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
 import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
@@ -179,7 +179,24 @@ function UserProfile() {
         )
       }
     >
-      <View style={styles.identity}>
+      <View style={[styles.identity, LESS_AI_ROUND2 && styles.identityLeft]}>
+        {LESS_AI_ROUND2 ? (
+          // Left-aligned like your own Profile (Oct 25, "D all for less ai", item 12): the picture at the left, the name
+          // and level beside it, the bio and counts under, rather than everything centred like a landing page.
+          <View style={styles.identityRow}>
+            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} ring={user.isCoach} style={{ backgroundColor: colors.brand }} />
+            <View style={styles.identityWords}>
+              <View style={styles.nameLine}>
+                <PlayerName userId={user.id} style={[styles.name, styles.nameLeft]}>{user.name}</PlayerName>
+                <StreakFlame days={shownStreak(user, currentUserId)} size="large" />
+              </View>
+              <View style={styles.levelRow}>
+                {user.isPrivate ? <Ionicons name="lock-closed" size={14} color={colors.textMuted} /> : null}
+                <LevelPill profile={profile} />
+              </View>
+            </View>
+          </View>
+        ) : <>
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: colors.brand, alignSelf: 'center' }} />
         <View style={styles.nameRow}>
           {/* The name and, close after it, their streak's flame (3 days or more). */}
@@ -190,7 +207,8 @@ function UserProfile() {
           {user.isPrivate ? <Ionicons name="lock-closed" size={14} color={colors.textMuted} /> : null}
           <LevelPill profile={profile} />
         </View>
-        {!!user.bio && <Text style={styles.bio}>{user.bio}</Text>}
+        </>}
+        {!!user.bio && <Text style={[styles.bio, LESS_AI_ROUND2 && styles.bioLeft]}>{user.bio}</Text>}
         {!!user.location && <Text style={styles.meta}>{user.location}</Text>}
         <View style={styles.followRow}>
           {([['followers', user.followers, 'followers'], ['following', user.following, 'following']] as const).map(([which, n, label], i) => (
@@ -204,7 +222,8 @@ function UserProfile() {
           {muted ? <Text style={styles.meta}>· Muted</Text> : null}
         </View>
         {/* gap: the identity block's own gap (10), carried inside the line's fold. */}
-        {LESS_AI && !isMe && !blocked ? <PartnerStreakLine userId={user.id} gap={10} /> : null}
+        {/* Your streak with them as one line (item 12), in place of the card under Head to head. */}
+        {(LESS_AI || LESS_AI_ROUND2) && !isMe && !blocked ? <PartnerStreakLine userId={user.id} name={LESS_AI_ROUND2 ? user.name : undefined} gap={LESS_AI_ROUND2 ? 12 : 10} left={LESS_AI_ROUND2} /> : null}
         {blocked ? (
           <View style={styles.blockedBox}>
             <Ionicons name="ban-outline" size={18} color={colors.danger} />
@@ -287,6 +306,13 @@ function UserProfile() {
 const styleDefinitions = StyleSheet.create({
   more: { padding: 4 },
   identity: { gap: 10, paddingTop: 10, paddingBottom: 20, paddingHorizontal: 12, alignItems: 'center' },
+  // Left-aligned, as your own Profile sets it (LESS_AI_ROUND2): its gaps, its row of picture and words.
+  identityLeft: { gap: 12, paddingTop: 16, paddingHorizontal: 0, alignItems: 'stretch' },
+  identityRow: { flexDirection: 'row', alignItems: 'center', gap: 16 },
+  identityWords: { flex: 1, gap: 6, minWidth: 0 },
+  levelRow: { flexDirection: 'row', gap: 10, alignItems: 'center', flexWrap: 'wrap' },
+  nameLeft: { fontSize: 22 },
+  bioLeft: { ...typography.body, lineHeight: 22, color: colors.text, textAlign: 'left', maxWidth: undefined },
   nameRow: { flexDirection: 'row', gap: 10, alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', marginTop: 4 },
   nameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1, minWidth: 0 },
   name: { fontSize: 20, ...font('700'), color: colors.text, flexShrink: 1 },

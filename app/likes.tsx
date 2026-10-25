@@ -15,6 +15,7 @@ import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { LESS_AI_ROUND2 } from '@/theme/look';
 
 /**
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
@@ -101,7 +102,7 @@ export default function Likes() {
                   {isMe ? <Text style={styles.you}>You</Text> : (
                     // The pill knows about an ask sent to a private account: it reads Requested, not Follow
                     // (a plain Button stayed "Follow" after the tap, so following looked broken).
-                    <FollowPill following={following} userId={user.id} name={user.name} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
+                    <FollowPill soft={LESS_AI_ROUND2} following={following} userId={user.id} name={user.name} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
                   )}
                 </Pressable>
               );

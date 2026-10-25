@@ -12,7 +12,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, spacing, typography } from '@/theme';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /*
  * Weekly streaks with hitting partners (sweep R12, Oct 20, owner: yes).
@@ -38,21 +38,25 @@ const weekFact = (p: PartnerStreak) => (p.thisWeek ? 'Played together this week'
  * The streaks load after the profile has drawn, so the line opens with a
  * smooth height change rather than popping in and shoving the profile down.
  */
-export function PartnerStreakLine({ userId, gap = 0 }: {
+export function PartnerStreakLine({ userId, gap = 0, name, left = false }: {
   userId: ID;
   /** The page's own gap between its lines: the line carries it inside its fold, so while closed it takes no room at all. */
   gap?: number;
+  /** Their name: the line then reads "🔥 2-week streak with Dev" (Oct 25, "D all for less ai", item 12). */
+  name?: string;
+  /** Set at the left, under a left-aligned profile's counts. */
+  left?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const streaks = usePartnerStreaks();
   const p = streaks?.find((s) => s.userId === userId);
-  const said = p ? `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you` : '';
+  const said = !p ? '' : name ? `${p.weeks}-week streak with ${firstOf(name)}` : `${p.weeks} ${p.weeks === 1 ? 'week' : 'weeks in a row'} with you`;
   return (
     <View style={[styles.lineFold, { marginTop: -gap }]}>
       <Collapse open={!!p} unclip>
         {p ? (
           <View style={{ paddingTop: gap }}>
-            <Text style={styles.line} accessibilityLabel={`Partner streak: ${said}`}>🔥 {said}</Text>
+            <Text style={[styles.line, left && styles.lineLeft]} accessibilityLabel={`Partner streak: ${said}`}>🔥 {said}</Text>
           </View>
         ) : null}
       </Collapse>
@@ -179,7 +183,8 @@ export function PartnerStreakCard({ userId, name }: { userId: ID; name: string }
   const party = useCelebration(p, box);
   // The streaks load after the page has drawn: the card opens with a smooth height
   // change rather than dropping in and shoving everything below it (Oct 22).
-  if (!p || LESS_AI) return <Collapse open={false} unclip>{null}</Collapse>;
+  // Under the hand-made look the streak is one line under their counts instead (PartnerStreakLine; item 12 for round 2).
+  if (!p || LESS_AI || LESS_AI_ROUND2) return <Collapse open={false} unclip>{null}</Collapse>;
   const first = firstOf(name);
   const title = `${p.weeks}-week streak with ${first}`;
   const eyebrow = party ? `${party} weeks in a row!` : 'Partner streak';
@@ -222,7 +227,8 @@ export function PartnerStreaksBox({ gap = 0 }: {
     <Collapse open={rows.length > 0} unclip>
       {rows.length ? (
         <View style={{ paddingTop: gap }}>
-          <SectionHead title="Partner streaks" count={rows.length > 1 && !LESS_AI ? rows.length : undefined} />
+          {/* No count circle beside the heading (Oct 25, "D all for less ai", item 10). */}
+          <SectionHead title="Partner streaks" count={rows.length > 1 && !LESS_AI_ROUND2 ? rows.length : undefined} />
           <Box>
             {rows.map((p, i) => <StreakRow key={p.userId} p={p} first={i === 0} />)}
           </Box>
@@ -248,12 +254,14 @@ function StreakRow({ p, first }: { p: PartnerStreak; first: boolean }) {
         lead={party ? <Flame size={40} celebrate /> : <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={40} />}
         title={
           <Text style={styles.rowTitle} numberOfLines={1}>
-            <Text style={styles.rowFlame}>🔥 </Text>{`${p.weeks}-week streak with ${name}`}
+            {/* One flame a streak (item 10): on a milestone the lead is the flame, so the title goes without its own. */}
+            {LESS_AI_ROUND2 && party ? null : <Text style={styles.rowFlame}>🔥 </Text>}{`${p.weeks}-week streak with ${name}`}
           </Text>
         }
         sub={
           <Text style={[styles.rowSub, party ? styles.rowSubOn : null]} numberOfLines={1}>
-            {party ? `${party} weeks in a row! Keep it going` : LESS_AI ? weekFact(p) : weekWords(p)}
+            {/* Plain words (item 10): "4 weeks in a row", and the plain fact otherwise, no nudge. */}
+            {party ? (LESS_AI_ROUND2 ? `${party} weeks in a row` : `${party} weeks in a row! Keep it going`) : LESS_AI || LESS_AI_ROUND2 ? weekFact(p) : weekWords(p)}
           </Text>
         }
         chevron
@@ -283,6 +291,7 @@ const styleDefinitions = StyleSheet.create({
   rowSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
   rowSubOn: { ...font('600'), color: colors.brand },
   line: { ...typography.small, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  lineLeft: { textAlign: 'left', marginTop: 0 },
   // The streak line's fold spans the page, so its words sit centred under the follower counts.
   lineFold: { alignSelf: 'stretch' },
 });

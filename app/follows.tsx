@@ -16,6 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
 import { compactNumber } from '@/lib/format';
 import { colors, spacing, typography } from '@/theme';
+import { LESS_AI_ROUND2 } from '@/theme/look';
 
 type Tab = 'followers' | 'following';
 const TABS: Tab[] = ['followers', 'following'];
@@ -123,7 +124,7 @@ export default function Follows() {
                 </View>
                 {isMe ? null : (
                   // The pill knows about a request sent to a private account: it says Requested, not Follow.
-                  <FollowPill following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
+                  <FollowPill soft={LESS_AI_ROUND2} following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
                 )}
               </Pressable>
             );

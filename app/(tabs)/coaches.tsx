@@ -28,7 +28,7 @@ import { TipBubble } from '@/components/TipBubble';
 import { forNewPlayer, learned, useTip } from '@/features/tips/tips';
 import { useShownAt } from '@/features/navigation/shownAt';
 import { TextScale } from '@/theme/textScale';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 function Coaching() {
   const styles = useThemedStyles(styleDefinitions);
@@ -126,16 +126,18 @@ function Coaching() {
       {/* No promise nobody can keep: until coaches are on, the note says what really happens.
           This is the one place the tab says asking is public (and, once coaches are on, that
           they are verified), so the header and the Coaches section don't repeat it. */}
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>
+      {/* Oct 25 ("D all for less ai", item 7): the line goes; the question page itself says "Free and public." */}
+      {LESS_AI_ROUND2 ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>}
       {/* A guest with no coach to show yet (only public adults' listings show signed out): the way in, in the page. */}
       {isGuest && !shown.length ? <GuestJoinCard title="Ask real coaches" body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <SwipePressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
-          {LESS_AI ? null : <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>}
+          {/* Just "AI coach" and a chevron (Oct 25, item 7): no sparkle tile, no sales line. */}
+          {LESS_AI_ROUND2 ? null : <View style={styles.aiMark}><Ionicons name="sparkles" size={16} color={colors.brand} /></View>}
           <View style={styles.rowWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footTitle}>AI coach</Text>
-            {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>}
+            {LESS_AI_ROUND2 ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>A weekly plan, and answers any time.</Text>}
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </SwipePressable>

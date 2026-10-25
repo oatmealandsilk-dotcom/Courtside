@@ -17,6 +17,7 @@ import { isMapCourtId } from '@/features/places/courtName';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { LESS_AI_ROUND2 } from '@/theme/look';
 
 /**
  * Flyby's list (owner, Oct 5: "Flyby is good"): who else was at a court on
@@ -90,7 +91,7 @@ export default function FlybySheet() {
                       <Text style={styles.meta} numberOfLines={1}>{what}</Text>
                     </View>
                   </Pressable>
-                  <FollowPill small following={following} userId={user.id} name={user.name}
+                  <FollowPill small soft={LESS_AI_ROUND2} following={following} userId={user.id} name={user.name}
                     onPress={() => { if (following) confirmUnfollow(user, () => actions.toggleFollow(user.id)); else actions.toggleFollow(user.id); }} />
                 </View>
               );

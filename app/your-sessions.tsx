@@ -14,7 +14,7 @@ import { Collapse } from '@/components/ui/Collapse';
 import { FOLD_AWAY_MS, FoldAway } from '@/components/ui/FoldAway';
 import { HeightGlide } from '@/components/ui/HeightGlide';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
-import { cardLook, creamFill } from '@/components/session/SessionCard';
+import { boxLook, cardLook, creamFill } from '@/components/session/SessionCard';
 import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
 import { Avatar, EmptyState, Screen, ShirtWash } from '@/components/ui';
@@ -37,7 +37,7 @@ import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
-import { LESS_AI_SESSIONS, corner } from '@/theme/look';
+import { LESS_AI_ROUND2, LESS_AI_SESSIONS, corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -196,7 +196,9 @@ export default function YourSessions() {
   const { theme } = useTheme();
   const fill = creamFill(theme);
   // The summary is one of the session boxes (Oct 6, owner: "they need the wash"): their look and wash, from cardLook.
-  const look = cardLook(theme);
+  // On Clean the summary is drawn like the stats sheet (Oct 25, "D all for less ai", item 4): the session boxes' in-app
+  // look (boxLook), light with a hairline and black figures. The other courts keep their flat card (cardLook).
+  const look = LESS_AI_ROUND2 ? boxLook(theme) : cardLook(theme);
   // A full-colour box (a city court's shirt, the green box): the records row takes the box's own ink.
   const onBrand = look.filled;
   // The summary is last week's recap while it is up (Monday to Wednesday, until put away), else this week so far.
