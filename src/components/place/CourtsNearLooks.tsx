@@ -30,7 +30,7 @@ import { TextScale } from '@/theme/textScale';
 export type CourtsLook = 'N' | 'O' | 'P';
 
 /** A card's width in each look. */
-export const LOOK_CARD_W: Record<CourtsLook, number> = { N: 168, O: 260, P: 168 };
+export const LOOK_CARD_W: Record<CourtsLook, number> = { N: 168, O: 260, P: 184 };
 /** The map on top of a Map peek card, inside its 1 pt outline. */
 const PEEK_W = LOOK_CARD_W.N - 2;
 const PEEK_H = 84;
@@ -213,7 +213,7 @@ const frames = StyleSheet.create({
   // The map runs to the card's edges, its top corners the card's.
   N: { width: LOOK_CARD_W.N, padding: 0, gap: 0, overflow: 'hidden' },
   O: { width: LOOK_CARD_W.O, padding: O_PAD, gap: spacing.md, flexDirection: 'row', alignItems: 'center' },
-  // More air than today's 14.
+  // More air than today's 14, and a little wider, so a 17 pt name like "Bellwood Recreation Center" still fits in two lines.
   P: { width: LOOK_CARD_W.P, padding: spacing.lg, gap: 0 },
 });
 
