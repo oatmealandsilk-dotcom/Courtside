@@ -9,7 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
 import { useStageMotion } from '@/features/feed/useStageMotion';
-import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut } from '@/features/feed/feedWindows';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut, windowsState } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
 import { useRestKey } from '@/components/ui/restMotion';
@@ -362,7 +362,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     onBlur={() => setFocusIn(false)}
                     onPressIn={onHoldStart ? () => { pressIn(); onHoldStart(); } : pressIn}
                     onPressOut={onHoldStart ? () => { pressOut(); noteFeedPressOut(); } : pressOut}
-                    onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
+                    onPress={() => { if (on || windowsState().phase !== 'closed') return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
                     // The hold itself is FeedHold's (it opens the windows with the finger still down); this only
                     // keeps a held word from also switching feeds (a browser's press is not cancelled by it).
                     onLongPress={onHold ? noop : undefined}

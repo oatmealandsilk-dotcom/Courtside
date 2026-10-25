@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -33,7 +33,7 @@ import {
   CARD_GAP, CARD_MAX, FOR_YOU, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
   cardAt, feedReadyAt, feedShot, feedSpot, registerShotNode, setWindowsController, setWindowsState, snapFeed,
   useWindowsClipped, useWindowsPhase, useWindowsRowSwitched, useWindowsTarget, windowsState,
-  winDrag, winF, winGeo, winLive, winOn, winP, winScrub, winSel, winStill, winTick,
+  winDrag, winF, winFinger, winGeo, winLive, winOn, winP, winScrub, winSel, winStill, winTick,
   type FeedKey, type ScrubEnd, type Spot,
 } from './feedWindows';
 
@@ -395,7 +395,10 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
         winP.value = withSpring(1, SPRING_OPEN, (done) => { 'worklet'; if (done) winP.value = 1; });
       }
       // The finger that held is still down: sliding it now moves between the cards (FeedHold).
-      winScrub.value = finger ? 1 : 0;
+      // Decided on the UI thread, in order with the finger's own lift: a finger already up (it lifted
+      // while this hop was on its way) leaves the cards up to swipe and tap, never waiting on a slide.
+      winScrub.value = 0;
+      if (finger) runOnUI(() => { 'worklet'; winScrub.value = winFinger.value ? 1 : 0; })();
       haptics.tap();
       learned('feed-windows');
       const faces = L.feeds.map((f) => faceOf(f.key, L.firstSpot));

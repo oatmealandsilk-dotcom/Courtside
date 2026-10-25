@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import * as haptics from '@/lib/haptics';
-import { HOLD_MS, SPRING_SCRUB, endFeedScrub, winDrag, winF, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
+import { HOLD_MS, SPRING_SCRUB, endFeedScrub, winDrag, winF, winFinger, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
 
 /*
  * The hold that opens the Feed's windows, and the slide after it, as one gesture (Oct 25, owner:
@@ -69,6 +69,7 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
       far.value = 0;
       stepped.value = 0;
       aim.value = -1;
+      winFinger.value = 1;
       runOnJS(onHold)(e.absoluteX);
     })
     .onUpdate((e) => {
@@ -106,6 +107,7 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
     })
     .onEnd((e, success) => {
       'worklet';
+      winFinger.value = 0;
       if (!winScrub.value) return;
       winScrub.value = 0;
       const sel = winSel.value;
@@ -119,6 +121,7 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
     })
     .onFinalize(() => {
       'worklet';
+      winFinger.value = 0;
       if (!winScrub.value) return;
       winScrub.value = 0;
       runOnJS(end)('stay', winSel.value);

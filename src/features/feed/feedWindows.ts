@@ -95,6 +95,11 @@ export const winTick = makeMutable(0);
  */
 export const winScrub = makeMutable(0);
 export const winSel = makeMutable(0);
+/**
+ * 1 while a held finger is down (FeedHold, UI thread). The windows open a hop later on the JS side;
+ * a finger lifted in that hop must not leave them waiting for a slide that never comes.
+ */
+export const winFinger = makeMutable(0);
 export interface WindowsGeo { W: number; H: number; S: number; dy: number; step: number; rDevice: number; rCard: number; n: number }
 export const winGeo = makeMutable<WindowsGeo>({ W: 1, H: 1, S: 1, dy: 0, step: 1, rDevice: 0, rCard: 0, n: 1 });
 
