@@ -221,7 +221,7 @@ const styles = StyleSheet.create({
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
     alignItems: 'center', justifyContent: 'center',
   },
-  badgeOnAvatar: { top: -4, left: 18 },
+  badgeOnAvatar: { top: -6, left: 21 },
   badgeText: { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
   veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 },
   veilRound: { borderRadius: PILL_RADIUS },
