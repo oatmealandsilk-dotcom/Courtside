@@ -19,6 +19,7 @@ import { directionsTo } from '@/features/players/openInMaps';
 import { finishLive } from '@/features/activity/finishLive';
 import { liveState } from '@/features/activity/liveSession';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { pressV2On } from '@/features/navigation/pressV2';
 import { relativeTime } from '@/lib/format';
 import { goBack } from '@/lib/goBack';
 import { useStillLoading } from '@/lib/useStillLoading';
@@ -27,6 +28,9 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { publicRoute } from '@/features/share/publicRoute';
 
 type Params = { id: string; name?: string; lat?: string; lng?: string };
+
+/** An answer landing as background work, with the quicker press feel only (pressV2: admins first); otherwise at once, as before. */
+const later = (fn: () => void) => { if (pressV2On()) startTransition(fn); else fn(); };
 
 /**
  * A court's own page, laid out the way Apple Maps shows a place (owner,
@@ -64,7 +68,7 @@ function CourtPage() {
     fetchCourts({ lat: place.lat, lng: place.lng }, 2000)
       // As background work: the page redraws for it, and a tap made as it lands (Follow, Directions,
       // Start a session here) goes first (Oct 24, owner: "Buttons need to be way more responsive").
-      .then((list) => { if (on) { const found = list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null; startTransition(() => setMapCourt(found)); } })
+      .then((list) => { if (on) { const found = list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null; later(() => setMapCourt(found)); } })
       .catch(() => undefined);
     return () => { on = false; };
   }, [place]);
@@ -78,7 +82,7 @@ function CourtPage() {
     let town: string | null = null;
     try { town = await areaOf(place); } catch { /* the distance stands alone */ }
     // The town and "asked" land as one redraw, as background work (a tap goes first).
-    startTransition(() => {
+    later(() => {
       if (town != null) setArea(town);
       setAreaDone(true);
     });

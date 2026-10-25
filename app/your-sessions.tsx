@@ -34,6 +34,7 @@ import { computeRecords, RECORD_ICON, recordSessionIds, weekStart } from '@/feat
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -176,7 +177,9 @@ export default function YourSessions() {
   // page, enough to fill the screen (FIRST_ROWS), and the rest once it has slid in, as background
   // work, below the first screen; the foot of the page (Show earlier weeks, the hint, Past
   // workouts) waits with them, so nothing is seen moving down.
-  const arrived = useArrived();
+  // That wait is the quicker press feel's (pressV2: admins first): on a tall phone the rows after
+  // the first ten could be seen coming in, so everyone else gets every week with the page.
+  const arrived = useArrived(usePressV2());
   const firstWeeks = useMemo(() => {
     let rows = 0;
     let n = 0;

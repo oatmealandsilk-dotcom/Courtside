@@ -13,6 +13,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { slidePagesTo } from '@/features/navigation/pageSlide';
+import { pressV2On } from '@/features/navigation/pressV2';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
@@ -172,7 +173,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       if (!previewSection) takeAskedSection('/discuss');
       // Put back on Discussions once left (TabsPager): this whole tab is redrawn for it, out of
       // sight, so as background work. A later ask (the bar's Find Players) still wins over it.
-      if (background) startTransition(() => setLocalSection(asSection(value)));
+      // With the quicker press feel only (pressV2: admins first); otherwise at once, as before.
+      if (background && pressV2On()) startTransition(() => setLocalSection(asSection(value)));
       else setLocalSection(asSection(value));
     });
     if (!previewSection) { const late = takeAskedSection('/discuss'); if (late) setLocalSection(asSection(late)); }

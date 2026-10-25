@@ -20,6 +20,7 @@ import { useCourtHits } from '@/features/places/useCourtHits';
 import { openCourtNow } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
@@ -94,7 +95,9 @@ export function PlaceCard({ view }: { view: CourtView }) {
   // they are under the bar on every phone, out of sight; with fewer they can show on the first
   // screen, and come with the page as before. A computer or an iPad can show them at once: always.
   // Once built, they stay (posts landing later never take them away again).
-  const arrived = useArrived();
+  // With the quicker press feel only (pressV2: admins first): the court's picture then comes about
+  // a third of a second later on a first visit, a change he sees, so everyone else keeps it all at once.
+  const arrived = useArrived(usePressV2());
   const belowBuilt = useRef(false);
   const below = belowBuilt.current || arrived || !isPhone || view.posts.length <= 3;
   belowBuilt.current = below;

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 
 import type { ID } from '@/data/types';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { useActions } from '@/store/AppContext';
 
 /**
@@ -14,12 +15,17 @@ import { useActions } from '@/store/AppContext';
  * The rules are the same ones, decided the same way: for someone still locked (a teen who does
  * not follow you, a stranger who is not open), the tap still asks the server itself and that
  * answer is the final word. Asked once per visit, and only when the app cannot already tell.
+ *
+ * With the quicker press feel only (pressV2: admins first): it is new server traffic on every
+ * such page, and its answers redraw the app while the page is still sliding in, which no web
+ * check can time, so everyone else keeps asking on the tap, as before.
  */
 export function useMessageReady(userId: ID | null | undefined) {
   const { canMessage, reachNow } = useActions();
+  const quick = usePressV2();
   useEffect(() => {
-    if (!userId || canMessage(userId)) return;
+    if (!quick || !userId || canMessage(userId)) return;
     void reachNow(userId).catch(() => undefined);
     // Once per page, for this person: not again on every change of the app's state.
-  }, [userId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [userId, quick]); // eslint-disable-line react-hooks/exhaustive-deps
 }

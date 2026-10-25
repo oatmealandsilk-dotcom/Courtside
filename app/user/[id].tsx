@@ -36,6 +36,7 @@ import { buttonShape, colors, radius, spacing, typography, font } from '@/theme'
 import { TextScale, oneLine } from '@/theme/textScale';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { useMessageReady } from '@/features/messages/useMessageReady';
 import type { Post } from '@/data/types';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
@@ -112,7 +113,9 @@ function UserProfile() {
 
   // The grid you open on is built with the page; the other three once it has slid in (useArrived),
   // off screen beside it, so nothing shows filling in. Each stays built once it has been.
-  const arrived = useArrived();
+  // That wait is the quicker press feel's (pressV2: admins first): a swipe to another grid right as
+  // the page lands could find it still filling in, so everyone else gets all four with the page.
+  const arrived = useArrived(usePressV2());
   const built = useRef(new Set<(typeof TABS)[number]>()).current;
   built.add(tab);
   if (arrived) TABS.forEach((t) => built.add(t));

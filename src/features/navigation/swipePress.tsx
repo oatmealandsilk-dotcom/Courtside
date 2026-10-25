@@ -1,6 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { Platform, type GestureResponderEvent } from 'react-native';
 
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 
 /**
@@ -23,13 +24,17 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  *   - a quick tap still flashes its look (shown on release, held FLASH_MS)
  *     and fires exactly as before;
  *   - a finger that rests longer and then swipes shows the look, and it is
- *     dropped as soon as the finger has moved MOVE_SLOP, before the page
- *     swipe starts (and again when it starts), not 130 ms later.
+ *     dropped in the very moment the page swipe starts, not 130 ms later
+ *     (with the quicker feel, pressV2, already once the finger has moved
+ *     MOVE_SLOP, before the page swipe starts).
  * Everywhere else (pushed pages, sheets, a desktop browser) nothing changes; a
  * sheet opened from a tab says so with <SwipeArea on={false}>, and so does the
  * clip handle (StatsPill), which keeps its own press.
  */
+/** The Oct 23 wait: what everyone has, and what an admin's drifting finger still gets (DRIFT_LOOK_DELAY). */
+export const PRESS_LOOK_DELAY = 120;
 /**
+ * The quicker press feel (pressV2: admins first, everyone once PRESS_V2_FOR_EVERYONE is on).
  * 80 ms, down from 120 (Oct 24, owner: "Buttons need to be way more responsive. They are way to
  * delayed when I click them"). A finger resting on a button stays down about 80 to 120 ms, so at
  * 120 ms almost every tap showed nothing until it lifted, and on a tap that opens a page the look
@@ -44,11 +49,11 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  *     tab row (14 pt) or a section row (11 pt) can take the finger and move the page, so a card is
  *     never seen down while the page slides (the Oct 23 rule).
  */
-export const PRESS_LOOK_DELAY = 80;
-/** How far a finger may have drifted by PRESS_LOOK_DELAY and still count as resting on the button. */
+export const PRESS_LOOK_DELAY_V2 = 80;
+/** How far a finger may have drifted by PRESS_LOOK_DELAY_V2 and still count as resting on the button. */
 const STILL_SLOP = 4;
 /** The wait (from touch-down) for a finger that has drifted past STILL_SLOP: the Oct 23 wait. */
-const DRIFT_LOOK_DELAY = 120;
+const DRIFT_LOOK_DELAY = PRESS_LOOK_DELAY;
 /**
  * How far a finger may drift before the press counts as the start of a swipe or a scroll. A thumb
  * tap rolls 4 to 8 points and still gets its look; 8 is still under every sideways swipe's take-over
@@ -89,18 +94,19 @@ const dropListeners = new Set<() => void>();
 export const dropPressLooks = () => { dropListeners.forEach((fn) => fn()); };
 
 /**
- * The Pressable props that hold a press back by PRESS_LOOK_DELAY, with the
+ * The Pressable props that hold a press back by PRESS_LOOK_DELAY (PRESS_LOOK_DELAY_V2 with `quick`), with the
  * long-press wait shortened by the same amount so a hold still takes as long
  * as it did. React Native calls the delay `unstable_pressDelay`,
  * react-native-web calls it `delayPressIn`.
  */
-export function pressDelayProps(delayLongPress: number | undefined): { delayLongPress?: number } {
+export function pressDelayProps(delayLongPress: number | undefined, quick = false): { delayLongPress?: number } {
+  const wait = quick ? PRESS_LOOK_DELAY_V2 : PRESS_LOOK_DELAY;
   if (Platform.OS === 'web') {
     const total = (delayLongPress ?? WEB_LONG_PRESS) + WEB_PRESS_DELAY;
-    return { delayPressIn: PRESS_LOOK_DELAY, delayLongPress: Math.max(10, total - PRESS_LOOK_DELAY) } as { delayLongPress?: number };
+    return { delayPressIn: wait, delayLongPress: Math.max(10, total - wait) } as { delayLongPress?: number };
   }
   // Left unset, React Native already takes the delay off its own 500 ms default.
-  return { unstable_pressDelay: PRESS_LOOK_DELAY, delayLongPress: delayLongPress === undefined ? undefined : Math.max(10, delayLongPress - PRESS_LOOK_DELAY) } as { delayLongPress?: number };
+  return { unstable_pressDelay: wait, delayLongPress: delayLongPress === undefined ? undefined : Math.max(10, delayLongPress - wait) } as { delayLongPress?: number };
 }
 
 /**
@@ -113,6 +119,9 @@ export function pressDelayProps(delayLongPress: number | undefined): { delayLong
  */
 export function useSwipePressLook(look: (on: boolean) => void, { enabled = true, delayLongPress }: { enabled?: boolean; delayLongPress?: number } = {}) {
   const inSwipe = useContext(SwipeAreaContext) && enabled;
+  // The quicker feel (pressV2): the 80 ms look for a resting finger, the drifting finger's wait and
+  // the drop at MOVE_SLOP. Off, every press here behaves exactly as it did before Oct 24.
+  const quick = usePressV2();
   const lookRef = useRef(look);
   lookRef.current = look;
   // When the look went on (0 while it is off), and a quick tap's pending hide.
@@ -162,6 +171,7 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (far > drift.current) drift.current = far;
     if (far <= MOVE_SLOP) return;
     moved.current = true;
+    if (!quick) return;
     // A look already on goes now: the finger is swiping or scrolling, and this is before any page
     // or list can take it, so the card is back up before anything moves (it used to stay down
     // until React Native let the press go, up to 130 ms into a scroll).
@@ -180,7 +190,7 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (isPageDragging() || moved.current) return;
     // Drifting, not resting: it may be a slow swipe or scroll starting, so it waits the Oct 23 wait.
     const left = DRIFT_LOOK_DELAY - (Date.now() - downAt.current);
-    if (drift.current > STILL_SLOP && downAt.current && left > 0) {
+    if (quick && drift.current > STILL_SLOP && downAt.current && left > 0) {
       clearLater();
       later.current = setTimeout(show, left);
       return;
@@ -198,5 +208,5 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (left > 0) hide.current = setTimeout(() => { hide.current = null; drop(); }, left);
     else drop();
   };
-  return { inSwipe, touchStart, pressMove, pressIn, pressOut, delay: inSwipe ? pressDelayProps(delayLongPress) : undefined };
+  return { inSwipe, touchStart, pressMove, pressIn, pressOut, delay: inSwipe ? pressDelayProps(delayLongPress, quick) : undefined };
 }

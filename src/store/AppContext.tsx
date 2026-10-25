@@ -13,6 +13,7 @@ import React, {
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
+import { setPressV2Admin } from '@/features/navigation/pressV2';
 import { computeStats, localDay, publicStreak, streakAtRisk } from '@/features/practice/stats';
 import { streakSeen } from '@/features/practice/streakFlame';
 import { planStreakReminder } from '@/features/practice/reminder';
@@ -3205,6 +3206,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => state.users.find((u) => u.id === state.currentUserId) ?? null,
     [state.users, state.currentUserId],
   );
+  // The quicker press feel goes to admins first (features/navigation/pressV2): it is told who is
+  // signed in here, so presses and gestures outside React can read it when they act.
+  const meAdmin = !!currentUser?.isAdmin;
+  useEffect(() => { setPressV2Admin(meAdmin); }, [meAdmin]);
 
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
