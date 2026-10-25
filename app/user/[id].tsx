@@ -76,6 +76,10 @@ function UserProfile() {
   // Message's server check, asked as the page opens, so the tap is not kept waiting on it (useMessageReady).
   useMessageReady(otherId && !blockedIds.includes(otherId) ? otherId : null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // The ⋯ menu's sheet is built the first time it opens, not with the page (the quicker press feel's):
+  // it is never on screen as the page slides in.
+  const [menuBuilt, setMenuBuilt] = useState(false);
+  if (menuOpen && !menuBuilt) setMenuBuilt(true);
   // Message waits on a server check; a second tap meanwhile must not open the chat twice.
   const opening = useRef(false);
   const [openingChat, setOpeningChat] = useState(false);
@@ -83,11 +87,16 @@ function UserProfile() {
   const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   const [notice, setNotice] = useState('');
   const [tab, setTab] = useState<typeof TABS[number]>('Posts');
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  // On a phone the page's column is the window less its two side margins, known before anything is
+  // laid out: the tab row and the grid start at that width, so measuring them on arriving changes
+  // nothing and the page is not drawn a second time as it slides in (Oct 25, owner: "The response
+  // times here take way way way way way tooo long"). Anywhere wider, measured as before.
+  const column = windowWidth < 600 ? Math.floor(windowWidth - spacing.lg * 2) : 0;
   // The green line under Posts / Clips / Tagged rides with the swipe and glides on a tap, as on your own profile (Oct 22).
-  const [tabWidth, setTabWidth] = useState(0);
+  const [tabWidth, setTabWidth] = useState(column / TABS.length);
   const underline = useTabUnderline(TABS.indexOf(tab), TABS.length, tabWidth);
-  const { width: windowWidth } = useWindowDimensions();
-  const [gridW, setGridW] = useState(0);
+  const [gridW, setGridW] = useState(column);
   const tileW = Math.floor((gridW || windowWidth - spacing.lg * 2) / 3);
   const tileH = Math.round((tileW * 4) / 3);
 
@@ -115,14 +124,19 @@ function UserProfile() {
   // off screen beside it, so nothing shows filling in. Each stays built once it has been.
   // That wait is the quicker press feel's (pressV2: admins first): a swipe to another grid right as
   // the page lands could find it still filling in, so everyone else gets all four with the page.
-  const arrived = useArrived(usePressV2());
+  const quick = usePressV2();
+  const arrived = useArrived(quick);
   const built = useRef(new Set<(typeof TABS)[number]>()).current;
   built.add(tab);
   if (arrived) TABS.forEach((t) => built.add(t));
   const builtKey = TABS.filter((t) => built.has(t)).join();
 
+  // The first grid's tiles that can be on screen as the page slides in (it starts at least half a
+  // screen down), with the page; the rest once it has slid in, below the screen's edge, so the page
+  // never waits on tiles nobody can see yet (the quicker press feel's, like the other grids).
+  const firstTiles = (Math.ceil(windowHeight / 2 / Math.max(tileH, 1)) + 1) * 3;
   const grid = (section: (typeof TABS)[number]) => {
-    const items = lists[section];
+    const items = arrived ? lists[section] : lists[section].slice(0, firstTiles);
     return (
         <View style={{ minHeight: 320 }}>
             <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
@@ -142,14 +156,14 @@ function UserProfile() {
                 </Pressable>
               ))}
             </View>
-            {!items.length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
+            {!lists[section].length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
         </View>
     );
   };
   // Built again only when what they show changes, not on every redraw of the page (a Follow, the menu).
   const panes = useMemo(
     () => TABS.map((section) => (built.has(section) ? grid(section) : <View style={{ minHeight: 320 }} />)),
-    [lists, builtKey, gridW, tileW, tileH, styles, userId], // eslint-disable-line react-hooks/exhaustive-deps
+    [lists, builtKey, arrived, firstTiles, gridW, tileW, tileH, styles, userId], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   if (!user) {
@@ -291,7 +305,8 @@ function UserProfile() {
       {/* Your record against them, from scored matches you are both confirmed on (migration 91); nothing with none, or with a block. */}
       {!isMe && !blocked ? <HeadToHeadCard userId={user.id} name={user.name} /> : null}
       {/* Your weekly streak with them (sweep R12, migration 180): only the two of you see it, and only while the teen rules let you see each other. */}
-      {!isMe && !blocked ? <PartnerStreakCard userId={user.id} name={user.name} /> : null}
+      {/* Under the hand-made look the streak is PartnerStreakLine, above, and this card never shows: not built at all then. */}
+      {!isMe && !blocked && !(LESS_AI || LESS_AI_ROUND2) ? <PartnerStreakCard userId={user.id} name={user.name} /> : null}
 
       {blocked ? null : locked ? (
         <>
@@ -322,7 +337,7 @@ function UserProfile() {
         </>
       )}
 
-      <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
+      {menuBuilt || !quick ? <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
           <View style={styles.grabber} />
           <Text style={styles.sheetTitle}>{user.name}</Text>
           {menu.map((item, index) => (
@@ -336,7 +351,7 @@ function UserProfile() {
               <Text style={[styles.menuLabel, item.danger && { color: colors.danger }]}>{item.label}</Text>
             </Pressable>
           ))}
-      </RisingSheet>
+      </RisingSheet> : null}
     </Screen>
   );
 }

@@ -10,6 +10,14 @@ import { useNavigation } from 'expo-router/build/react-navigation/core/useNaviga
  */
 export const TabOnShowContext = createContext<boolean | undefined>(undefined);
 
+/**
+ * The same answer for the parts that have nothing urgent to do when a page
+ * opens over their tab (a map, court pictures, a tip): on show again at once,
+ * but covered only once that page has slid in (TabFocus in the phone's row,
+ * each tab's OffScreenLater in a browser). Undefined anywhere else.
+ */
+export const TabOnShowLaterContext = createContext<boolean | undefined>(undefined);
+
 const always = () => true;
 const quiet = () => () => undefined;
 
@@ -36,7 +44,12 @@ const quiet = () => () => undefined;
  * router's own answer, read the way the router's useIsFocused reads it.
  */
 export function useIsFocused(): boolean {
-  const onShow = use(TabOnShowContext);
+  return useOnShow(TabOnShowContext);
+}
+
+/** useIsFocused's answer, read in the tab row from `row` (TabOnShowContext, or TabOnShowLaterContext). */
+function useOnShow(row: typeof TabOnShowContext): boolean {
+  const onShow = use(row);
   const inRow = onShow !== undefined;
   // `use` may be skipped (unlike the other hooks): in the row the router's focus is never read, so it never redraws this.
   // Whether a part is in the row never changes while it is mounted.
@@ -53,4 +66,17 @@ export function useIsFocused(): boolean {
   const read = inRow ? always : navigation.isFocused;
   const fallback = useSyncExternalStore(subscribe, read, read);
   return inRow ? onShow : routerSays ?? fallback;
+}
+
+/**
+ * useIsFocused for a part that only stands down when covered (a map pausing,
+ * court pictures waiting their turn, a tip): inside the tab row, a page opened
+ * over the tab counts as covering it only once that page has slid in, so the
+ * tap that opens a player or a court never waits on this tab redrawing those
+ * parts first (Oct 25, owner: "The response times here take way way way way
+ * way tooo long"). On show again, it says so at once. Anywhere else, the same
+ * answer as useIsFocused. Never for a clip: covered, it must stop at once.
+ */
+export function useIsFocusedLater(): boolean {
+  return useOnShow(TabOnShowLaterContext);
 }

@@ -3276,7 +3276,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // it and the server decides when you act.
     const answers: Record<ID, Openness> = Object.fromEntries(want.map((id) => [id, got?.[id] ?? { chat: null }]));
     if (stateRef.current.currentUserId !== me) return stateRef.current.openness;
-    setState((prev) => (prev.currentUserId === me ? { ...prev, openness: { ...prev.openness, ...answers } } : prev));
+    // The same answers as already held (asked again as a player's page opens): the app is left as it is.
+    const same = (prev: AppState) => want.every((id) => JSON.stringify(prev.openness[id]) === JSON.stringify(answers[id]));
+    setState((prev) => (prev.currentUserId === me && !same(prev) ? { ...prev, openness: { ...prev.openness, ...answers } } : prev));
     return { ...stateRef.current.openness, ...answers };
   }, []);
   /** Someone a screen is showing: asked about a moment later, with whoever else came up meanwhile. Nothing if asked lately. */
@@ -4074,14 +4076,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!plans || stateRef.current.currentUserId !== me) return;
     // Your own come with your settings and your own edits: left as they are.
     const same = (a: TournamentEntry[], b: TournamentEntry[]) => JSON.stringify(a) === JSON.stringify(b);
-    setState((prev) => ({
-      ...prev,
-      users: prev.users.map((u) => {
+    setState((prev) => {
+      let changed = false;
+      const users = prev.users.map((u) => {
         if (u.id === me) return u;
         const next = plans.get(u.id) ?? [];
-        return same(u.profile.tournaments, next) ? u : { ...u, profile: { ...u.profile, tournaments: next } };
-      }),
-    }));
+        if (same(u.profile.tournaments, next)) return u;
+        changed = true;
+        return { ...u, profile: { ...u.profile, tournaments: next } };
+      });
+      // Asked again on every player's page as it opens: with nothing new, the app is left as it is, so
+      // the page sliding in (and every tab under it) is not drawn again for nothing (Oct 25).
+      return changed ? { ...prev, users } : prev;
+    });
   }, []);
 
   const loadNewOnCourtside = useCallback(async () => {

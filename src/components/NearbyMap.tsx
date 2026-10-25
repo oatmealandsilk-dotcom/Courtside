@@ -37,7 +37,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useAndroidBack } from '@/lib/androidBack';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedLater } from '@/lib/useIsFocused';
 import { colors, radius, spacing } from '@/theme';
 
 const HEIGHT = CARD_HEIGHT;
@@ -126,7 +126,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // The picture covering it (cardShot) has loaded and is on screen.
   const [photoIn, setPhotoIn] = useState(false);
   // Off screen, the map's load clocks wait (useMapLoad).
-  const onScreen = useIsFocused();
+  const onScreen = useIsFocusedLater();
   // Scrolled off the screen (reading the list under it) counts as out of view too.
   const spot = useCardOnScreen();
   /** Whether the card is in view right now: the curtain not over it, its tab and section on show, on the screen, the app in front. */
