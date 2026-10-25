@@ -4,9 +4,11 @@ import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, 
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
+import { Glass } from '@/components/ui/Glass';
 import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
+import { getStage } from '@/features/feed/commentStage';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -34,9 +36,16 @@ export interface LookItem {
 
 /**
  * The phone's tab bar as a quiet pill (src/features/navigation/tabBarLook.ts):
- * today's bar in a new shape. NavBar keeps everything it does (the rise on a
- * fresh open, the tuck as you scroll, the Create box's dim, the tutorial's
- * targets); this only draws the bar.
+ * today's bar in a new shape, on the old bar's Liquid Glass (Oct 25, owner:
+ * "Te bottom bar should be Liquid Glass like Strava and instagram"). NavBar
+ * keeps everything it does (the rise on a fresh open, the tuck as you scroll,
+ * the Create box's dim, the tutorial's targets); this only draws the bar.
+ *
+ * The glass bar's rules, kept here: nothing that holds the glass ever fades
+ * (the rise and the tuck only move it; the fading copies are solid and laid
+ * over it, never around it); its hairline edge is a plain layer, not a border
+ * on the glass; its shadow sits on the rounded layer around it, as on the old
+ * glass bar for weeks.
  */
 export function LookBar({
   items, activeRoute, feedUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
@@ -72,11 +81,25 @@ export function LookBar({
   // snaps from light to dark under a top row that eases, and nothing rests on an animated value.
   const [shownMedia, setShownMedia] = useState(media);
   const [mediaLayers, setMediaLayers] = useState<readonly MediaLayer[]>([]);
+  // The glass's own dark or light: `media`, except for two frames after a clip's comments were up.
+  const [glassHeld, setGlassHeld] = useState<boolean | null>(null);
   if (shownMedia !== media) {
     const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
     setShownMedia(media);
     setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+    // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
+    // to nothing), and a page opened over them (a profile, a court) flips `media` in the same redraw that
+    // lets the fade go, which reaches the screen only a frame later. Glass re-tinted under a parent at
+    // nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole again,
+    // under the solid copy fading over it. Anywhere else it re-tints at once, as before.
+    if (glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
   }
+  useEffect(() => {
+    if (glassHeld === null) return undefined;
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setGlassHeld(null)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [glassHeld]);
   const begun = useRef(new Set<number>());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   useEffect(() => {
@@ -101,7 +124,7 @@ export function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
-    <Face palette={palette} media={overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
+    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
       onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
   );
   return (
@@ -109,12 +132,12 @@ export function LookBar({
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
         <View style={styles.pillShadow}>
           {face(themes[theme], true)}
-          {/* The bar as it was before a clip came or went, fading out over the live one. */}
+          {/* The bar as it was before a clip came or went, solid, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
           ))}
-          {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one and
-              fading with the page (ThemeFade). Nothing here is glass, so nothing under a fade can go see-through. */}
+          {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one (beside
+              the glass, never holding it) and fading with the page (ThemeFade). The glass re-tints at the tap, under it. */}
           <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
           ))} />
@@ -125,8 +148,9 @@ export function LookBar({
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
-  palette: Palette; media: boolean; live: boolean;
+function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
+  /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
+  palette: Palette; media: boolean; glassMedia: boolean; live: boolean;
   items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
@@ -136,9 +160,12 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
   const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
-  // Over a picture: a dark ground (the page's own where it is dark already, as on New York) and white marks.
+  // The ground: the old glass bar's Liquid Glass, tinted with the page's own colour (NavBar's 'now'),
+  // and on a fading copy that colour solid. Over a picture: dark glass (the page's own colour where it
+  // is dark already, as on New York) and white marks, the glass told so too, so the two always agree.
   const darkPage = inkOn(c.bg) === '#FFFFFF';
-  const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.surface;
+  const groundOf = (overMedia: boolean) => (overMedia ? (darkPage ? c.bg : darkColors.bg) : c.bg);
+  const ground = groundOf(media);
   const line = media ? withAlpha(c.onMedia, 0.14) : c.border;
   const idleIcon = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
   const idleLabel = media ? withAlpha(c.onMedia, 0.6) : c.textFaint;
@@ -195,17 +222,29 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
     );
   });
 
-  return (
-    <View style={[styles.pill, { backgroundColor: ground }]}>
+  const inside = (
+    <>
       {row}
-      {/* The hairline edge is a layer of its own under the Create box's dim, so it darkens with the rest. */}
+      {/* The hairline edge is a plain layer of its own, never a border on the glass, and under the
+          Create box's dim, so it darkens with the rest (Oct 17, owner: "outer edge not brighter"). */}
       <View pointerEvents="none" style={[styles.rim, { borderColor: line }]} />
       {live ? (
         <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[styles.veil, { backgroundColor: colors.overlay }, veilStyle]}>
           <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
         </Animated.View>
       ) : null}
-    </View>
+    </>
+  );
+  // A fading copy is never glass: it is the one thing here whose opacity moves, and glass under a
+  // fade can go see-through and stay that way (Oct 17). Solid, it reads as the glass it stands for.
+  if (!live) return <View style={[styles.pill, { backgroundColor: ground }]}>{inside}</View>;
+  // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
+  // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
+  // under the solid copy fading over it; nothing that holds it ever fades.
+  return (
+    <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={PILL_RADIUS} style={styles.pill}>
+      {inside}
+    </Glass>
   );
 }
 
@@ -228,6 +267,7 @@ const styles = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
   // As far in from each side as today's pill (the tutorial's lit tab keeps inside it: TourOverlay's BAR_SIDE).
   pillWrap: { width: '100%', paddingHorizontal: 14 },
+  // The shadow on a rounded layer of its own around the glass (no fill, never faded), as the old glass bar's.
   pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
   rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },

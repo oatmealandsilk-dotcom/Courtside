@@ -774,7 +774,9 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.xl,
+    // A touch higher (Oct 25, owner: "The top here should be a tiny tiny bit higher, which will also let the map be
+    // bigger. And on coaching and profile tab"): 6 off the top on every big-title page, the same on each tab.
+    paddingTop: spacing.xl - 6,
     paddingBottom: spacing.lg,
     gap: spacing.md,
   },

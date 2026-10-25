@@ -37,6 +37,7 @@ import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts, usePeekLook } from '@/components/place/CourtsNear';
+import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -1121,7 +1122,8 @@ const styleDefinitions = StyleSheet.create({
   // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
   // place the page first opened on). There it stays put, laid over nothing, unseen and untouchable.
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
-  mapStandIn: { height: 330, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  // The map card's own height, so nothing jumps when the card takes its place.
+  mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
   playersTitle: { ...typography.title, color: colors.text },
   playersBody: { ...typography.small, color: colors.textMuted },

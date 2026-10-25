@@ -14,6 +14,8 @@ const EASE = 'cubic-bezier(.22,.61,.36,1)';
 const SHEET_CURVE = 'cubic-bezier(.32,.72,0,1)';
 const OPEN_MS = 380;
 const SETTLE_MS = 220;
+/** slideOpen: how far past the screen's foot the card starts and leaves, so its shadow is never seen there (as the native twin). */
+const SLIDE_PAST = 48;
 /** Faster than this, in px per ms, and a drag counts as a flick regardless of distance. */
 const FLICK = 0.7;
 
@@ -81,6 +83,7 @@ export function DragSheet({
   beforeClose,
   handOverSignal = 0,
   plain = false,
+  slideOpen = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -116,6 +119,8 @@ export function DragSheet({
   keyboardSync?: boolean;
   /** The stage's calm open on a phone (see the native twin); a browser's stage already glides. Ignored. */
   smoothOpen?: boolean;
+  /** A phone's sheet slides up whole and back down, an iPhone's new-post sheet (see the native twin). The box, the side panel and the stage ignore it. */
+  slideOpen?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
@@ -123,7 +128,7 @@ export function DragSheet({
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
   if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen}>{children}</Sheet>;
 }
 
 /** The latest beforeClose, and whether a close the person started may go ahead now. */
@@ -310,6 +315,7 @@ function Sheet({
   beforeClose,
   handOverSignal = 0,
   plain = false,
+  slideOpen = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -322,6 +328,7 @@ function Sheet({
   beforeClose?: () => boolean;
   handOverSignal?: number;
   plain?: boolean;
+  slideOpen?: boolean;
 }) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
@@ -353,12 +360,18 @@ function Sheet({
    * Moves the sheet (and dims the backdrop to match); 0 ms means "follow the
    * finger, no easing". The sheet is a card of height (fullHeight − y) pinned
    * to the bottom edge, not a full card slid down, so the bottom of its body
-   * — a comment box, a send button — is always on screen.
+   * — a comment box, a send button — is always on screen. With slideOpen,
+   * below its opening height the card keeps that height and slides instead.
    */
   const place = (y: number, ms: number, curve = SHEET_CURVE) => {
     current.current = y;
     const transition = ms ? `${ms}ms ${curve}` : 'none';
-    if (sheet.current) {
+    if (sheet.current && slideOpen) {
+      const rest = Math.min(geometry.current.openOffset, geometry.current.fullHeight);
+      sheet.current.style.transition = ms ? `height ${transition}, transform ${transition}` : 'none';
+      sheet.current.style.height = `${Math.max(0, geometry.current.fullHeight - Math.min(y, rest))}px`;
+      sheet.current.style.transform = y > rest ? `translateY(${y - rest}px)` : '';
+    } else if (sheet.current) {
       sheet.current.style.transition = ms ? `height ${transition}` : 'none';
       sheet.current.style.height = `${Math.max(0, geometry.current.fullHeight - y)}px`;
     }
@@ -384,7 +397,7 @@ function Sheet({
     measure();
     takeHandOver();
     const from = arriving.current;
-    place(from ? Math.max(0, geometry.current.fullHeight - from) : geometry.current.fullHeight, 0);
+    place(from ? Math.max(0, geometry.current.fullHeight - from) : geometry.current.fullHeight + (slideOpen ? SLIDE_PAST : 0), 0);
     if (from) {
       // The browser settles that height (and the dim) now, so the glide below starts from it rather than from nothing.
       void sheet.current?.getBoundingClientRect();
@@ -422,7 +435,7 @@ function Sheet({
     if (leaving.current) return;
     leaving.current = true;
     touched.current = true;
-    place(geometry.current.fullHeight, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
+    place(geometry.current.fullHeight + (slideOpen ? SLIDE_PAST : 0), SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
   const outside = useBackdropPress(() => { if (mayClose()) close(); });

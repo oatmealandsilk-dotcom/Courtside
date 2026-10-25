@@ -21,6 +21,15 @@ const SPRING = { damping: 24, stiffness: 240, mass: 0.9, overshootClamping: fals
 const FLICK_PX_PER_S = 700;
 /** How long the plain sheet takes to slide away. */
 const PLAIN_CLOSE_MS = 230;
+/**
+ * slideOpen: the rise of a new-post sheet on an iPhone, a critically damped
+ * spring (no settle past the top), the whole card travelling as one piece.
+ */
+const SLIDE_SPRING = { damping: 30, stiffness: 240, mass: 0.9, overshootClamping: true } as const;
+/** slideOpen: how far past the screen's foot the card starts and leaves, so its shadow is never seen there. */
+const SLIDE_PAST = 48;
+/** slideOpen, once it has risen: its resting place said as a plain style too (components/ui/restMotion). */
+const SLID_AT_REST = { transform: [{ translateY: 0 }] };
 
 /**
  * The comments stage's own drag, for a list inside it that hands a pull down
@@ -205,6 +214,15 @@ export function DragSheet(props: {
   keyboardSync?: boolean;
   /** The stage rises as one calm glide once it has drawn, its clip's words fading on their own short clock (COMMENTS_V2). The plain sheet ignores it. */
   smoothOpen?: boolean;
+  /**
+   * Opens and closes the way an iPhone's new-post sheet does (Oct 25, owner, of
+   * "Looking for a hit?": "the animation looks to AI"): the whole card, at its
+   * opening height, slides up from below the screen and back down, its header,
+   * form and button travelling together. Without it the card grows from the
+   * bottom edge, its button already in place while the rest unrolls above it.
+   * A drag up from there still grows it to full. Opt-in; the stage ignores it.
+   */
+  slideOpen?: boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -225,6 +243,7 @@ function PlainSheet({
   handOverSignal = 0,
   plain = false,
   keyboardSync = false,
+  slideOpen = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -238,6 +257,7 @@ function PlainSheet({
   handOverSignal?: number;
   plain?: boolean;
   keyboardSync?: boolean;
+  slideOpen?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
@@ -262,7 +282,15 @@ function PlainSheet({
   // already up where that sheet stood, the dim already there, and only its
   // contents come in (sheetHandOver).
   const [arriving] = useState(arrivingHeight);
-  const translateY = useSharedValue(arriving ? Math.max(0, fullHeight - arriving) : fullHeight);
+  // slideOpen: where it starts and leaves to, a little past the screen's foot.
+  const gone = slideOpen ? fullHeight + SLIDE_PAST : fullHeight;
+  const translateY = useSharedValue(arriving ? Math.max(0, fullHeight - arriving) : gone);
+  // slideOpen: the opening height's top edge (as translateY). Below it the card keeps that height
+  // and slides; above it (a drag up, the keyboard) the card grows, as every sheet does.
+  const restY = useSharedValue(openOffset);
+  // slideOpen: risen, and from then on its resting place is said by a plain style as well.
+  const [risen, setRisen] = useState(false);
+  const landed = (finished?: boolean) => { 'worklet'; if (finished && slideOpen) runOnJS(setRisen)(true); };
   const backdropOpacity = useSharedValue(arriving ? 1 : 0);
   const contentOpacity = useSharedValue(arriving ? HAND_IN_FROM : 1);
   const dismissedRef = useRef(false);
@@ -289,13 +317,15 @@ function PlainSheet({
     // Settled however the opening ends: at rest, or cut short by the keyboard
     // taking it up ("Add a comment") or a finger on the handle.
     restAt.current = openOffset;
+    restY.value = openOffset;
     takeHandOver();
     backdropOpacity.value = withTiming(1, { duration: 260, easing: EASE });
     const rise = () => {
       if (sent.current || touched.current || closing.value) return;
       sent.current = true;
       restAt.current = latestOpen.current;
-      translateY.value = withSpring(latestOpen.current, SPRING, () => { runOnJS(settled)(); });
+      restY.value = latestOpen.current;
+      translateY.value = withSpring(latestOpen.current, slideOpen ? SLIDE_SPRING : SPRING, (finished) => { landed(finished); runOnJS(settled)(); });
     };
     if (!arriving) { rise(); return undefined; }
     // Handed over: it waits where it is for its contents' height (the effect
@@ -317,7 +347,8 @@ function PlainSheet({
     if (touched.current || dismissedRef.current || closing.value || openOffset === restAt.current) return;
     sent.current = true;
     restAt.current = openOffset;
-    translateY.value = withSpring(openOffset, SPRING);
+    restY.value = openOffset;
+    translateY.value = withSpring(openOffset, slideOpen ? SLIDE_SPRING : SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitted]);
 
@@ -335,7 +366,7 @@ function PlainSheet({
     Keyboard.dismiss();
     // Whatever happens to the animation, the page is not left open behind it (as the stage's close).
     fallback.current = setTimeout(finish, PLAIN_CLOSE_MS + 200);
-    translateY.value = withTiming(fullHeight, { duration: PLAIN_CLOSE_MS, easing: EASE_OUT_OF_VIEW }, (done) => {
+    translateY.value = withTiming(gone, { duration: PLAIN_CLOSE_MS, easing: EASE_OUT_OF_VIEW }, (done) => {
       if (done) runOnJS(finish)();
     });
     backdropOpacity.value = withTiming(0, { duration: 210, easing: EASE });
@@ -343,13 +374,13 @@ function PlainSheet({
   const openFull = () => {
     if (closing.value) return;
     touched.current = true;
-    translateY.value = withSpring(0, SPRING);
+    translateY.value = withSpring(0, SPRING, landed);
     backdropOpacity.value = withTiming(1, { duration: 240, easing: EASE });
   };
   const returnTo = (origin: number) => {
     if (closing.value) return;
     touched.current = true;
-    translateY.value = withSpring(origin, SPRING);
+    translateY.value = withSpring(origin, SPRING, landed);
     backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
   // A close the person started (a drag down, a tap outside): the page may say not yet.
@@ -449,7 +480,11 @@ function PlainSheet({
       }
     });
 
-  const sheetStyle = useAnimatedStyle(() => ({ height: Math.max(0, fullHeight - translateY.value) }));
+  const sheetStyle = useAnimatedStyle(() => {
+    if (!slideOpen) return { height: Math.max(0, fullHeight - translateY.value) };
+    const rest = Math.min(restY.value, fullHeight);
+    return { height: Math.max(0, fullHeight - Math.min(translateY.value, rest)), transform: [{ translateY: Math.max(0, translateY.value - rest) }] };
+  });
   // Clear of the home bar when the keyboard is down; on top of the keyboard when it is up.
   const bodyStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboard.height.value, insets.bottom) }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
@@ -459,7 +494,7 @@ function PlainSheet({
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
-      <Animated.View style={[styles.sheet, sheetStyle]}>
+      <Animated.View style={[styles.sheet, sheetStyle, risen && SLID_AT_REST]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         {plain ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
