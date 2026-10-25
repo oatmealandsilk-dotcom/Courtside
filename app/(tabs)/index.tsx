@@ -53,6 +53,7 @@ import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { markFeedSwiped } from '@/features/feed/firstSwipe';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
+import { setFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
@@ -2616,6 +2617,8 @@ function GroupedFeed() {
   useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
+  // A plain tab bar (tabBarLook) turns dark over a picture, as the glass one does by itself.
+  useEffect(() => { setFeedOnPicture(chrome.picture); }, [chrome.picture]);
   const insets = useSafeAreaInsets();
   // Android's Back on a group's feed goes back to For you rather than leaving
   // the Feed. A feed pinched in is let out first (its own Back, in Home).

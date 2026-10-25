@@ -28,6 +28,8 @@ import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
+import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
+import { LookBar } from './TabBarLooks';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -197,6 +199,28 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const tuck = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
+  // A look picked in place of today's glass pill (tabBarLook, Oct 24): the same bar, drawn plainer.
+  if (isPhone && TAB_BAR_LOOK !== 'now') {
+    return (
+      <LookBar
+        items={ITEMS}
+        activeRoute={activeRoute}
+        profileAlerts={profileAlerts}
+        me={currentUser}
+        onTab={(route) => navigation.navigate(route)}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        bottom={Math.max(insets.bottom, 12)}
+        outerStyle={[lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}
+        tuckStyle={tuck}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={() => { closeCreateMenu(); }}
+      />
+    );
+  }
   if (isPhone) {
     return (
       <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}>
