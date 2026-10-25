@@ -196,7 +196,8 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
             >
               {/* The surface's tag with what's on there beside it (a hit first, else its posts), so the card stays short. */}
               <View style={styles.top}>
-                {kind ? <View style={styles.tag}><View style={[styles.tagDot, { backgroundColor: surfaceTint(kind) }]} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.tagText} numberOfLines={1}>{surfaceLabel[kind]}</Text></View> : null}
+                {/* Beside an open hit, the surface is its dot alone: the hit's time must read whole (the card's label still says the surface). */}
+                {kind ? <View style={[styles.tag, badge?.hit ? styles.tagDotOnly : null]}><View style={[styles.tagDot, { backgroundColor: surfaceTint(kind) }]} />{badge?.hit ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.tagText} numberOfLines={1}>{surfaceLabel[kind]}</Text>}</View> : null}
                 {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
                   : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
               </View>
@@ -257,6 +258,7 @@ const styleDefinitions = StyleSheet.create({
   tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 7, paddingRight: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, flexShrink: 0 },
   tagDot: { width: 7, height: 7, borderRadius: 4 },
   tagText: { ...typography.caption, letterSpacing: 0, color: colors.text },
+  tagDotOnly: { paddingLeft: 7, paddingRight: 7 },
   name: { ...typography.bodyStrong, fontSize: 16, letterSpacing: -0.2, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
