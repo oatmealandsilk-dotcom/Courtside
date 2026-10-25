@@ -123,10 +123,11 @@ export function useNearCourts(center: LatLng | null): { rows: CourtRow[]; neares
  * court the map or players say is members only or private never shows here,
  * nor one you follow: Your courts already shows it, with the same news.
  */
-export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
+export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }: {
   center: LatLng | null;
   /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number;
   /** The gap above it in its list, which the held strip takes with it as it folds shut. */ foldGap?: number;
+  /** False in a picture of the page sliding in (a swipe back from a thread): only maps kept from before show, nothing new is drawn mid-swipe. */ pictures?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const near = useNearCourts(center);
@@ -157,11 +158,19 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
   // Map peek: how many cards from the left have been on screen, so only those draw their maps
   // (2–3 at first, then each one as the strip is swiped to it), and not while the app is opening.
-  const picturesGo = useCourtPicturesGo();
+  const picturesGo = useCourtPicturesGo() && pictures;
   const { width: screenW } = useWindowDimensions();
   const step = (LOOK === 'now' ? CARD : PEEK_CARD_W) + spacing.sm;
   const [seen, setSeen] = useState(() => Math.ceil((screenW - 2 * spacing.lg) / step));
-  const sawTo = (right: number) => { const n = Math.ceil(right / step); if (n > seen) setSeen(n); };
+  // Counted once the strip comes to rest, so a new map is never started (on a phone, a web view
+  // made) while a finger or a fling is moving the strip.
+  const rest = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (rest.current) clearTimeout(rest.current); }, []);
+  const sawTo = (right: number) => {
+    const n = Math.ceil(right / step);
+    if (rest.current) clearTimeout(rest.current);
+    rest.current = setTimeout(() => { rest.current = null; setSeen((was) => Math.max(was, n)); }, 250);
+  };
   if (!rows.length && (holding || heldShown)) {
     const held = (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
