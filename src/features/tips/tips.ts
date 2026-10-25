@@ -114,6 +114,18 @@ export function learned(key: TipKey) {
 
 const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
 
+/**
+ * Tips added after people had already learned every tip there was (Oct 25: the Feed's windows, an
+ * admins-first hint). Someone who has learned all the others reads as Tips Off in Settings, and Off
+ * means a tip added later never shows (see OFF_MARK), so these never show for them either, and never
+ * turn Settings → Tips back On by being new. Everyone else gets them as usual.
+ */
+const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['feed-windows']);
+const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k));
+const baseAllDone = () => BASE_TIPS.every((k) => done.has(k));
+/** This tip will not show: Tips are off, it is done, or it came later than everything they had learned. */
+const quiet = (key: TipKey) => off || done.has(key) || (LATE_TIPS.has(key) && baseAllDone());
+
 /** Settings → Tips, when they are on: every tip counts as known, so none shows (Oct 5, owner). */
 export function turnOffTips() {
   ALL_TIPS.forEach((k) => done.add(k));
@@ -125,7 +137,7 @@ export function turnOffTips() {
 
 /** Whether any tip can still show: Settings says On or Off from this. */
 export function useTipsOn(): boolean {
-  return useSyncExternalStore(subscribe, () => !off && ALL_TIPS.some((k) => !done.has(k)));
+  return useSyncExternalStore(subscribe, () => !off && BASE_TIPS.some((k) => !done.has(k)));
 }
 
 /** Settings → Reset tips. */
@@ -147,12 +159,12 @@ function subscribe(l: () => void) { listeners.add(l); return () => { listeners.d
  * the noti goes away").
  */
 export function useTipWaiting(key: TipKey): boolean {
-  return useSyncExternalStore(subscribe, () => loaded && !off && !done.has(key));
+  return useSyncExternalStore(subscribe, () => loaded && !quiet(key));
 }
 
 /** Whether this tip could still show (tips are on, and it is not done): a caller with work to do before asking (watching for its card to come into view) can skip it. */
 export function tipWaiting(key: TipKey): boolean {
-  return !off && !done.has(key);
+  return !quiet(key);
 }
 
 /**
@@ -165,7 +177,7 @@ export function tipWaiting(key: TipKey): boolean {
  * even after another tip this visit, though still never over one.
  */
 export function useTip(key: TipKey, ready: boolean, answers = false): { shown: boolean; close: () => void } {
-  const snapshot = useSyncExternalStore(subscribe, () => `${loaded}:${showing}:${done.has(key) || off}`);
+  const snapshot = useSyncExternalStore(subscribe, () => `${loaded}:${showing}:${quiet(key)}`);
   const [settled, setSettled] = useState(false);
   // A beat after the moment arrives, so the tip never jumps in mid-gesture.
   useEffect(() => {
@@ -174,11 +186,11 @@ export function useTip(key: TipKey, ready: boolean, answers = false): { shown: b
     return () => clearTimeout(t);
   }, [ready]);
   useEffect(() => {
-    if (!settled || !loaded || off || done.has(key) || showing || (shownThisVisit && !answers)) return;
+    if (!settled || !loaded || quiet(key) || showing || (shownThisVisit && !answers)) return;
     showing = key;
     shownThisVisit = true;
     emit();
   }, [settled, key, snapshot, answers]);
   useEffect(() => () => { if (showing === key) { showing = null; emit(); } }, [key]);
-  return { shown: showing === key && !done.has(key) && !off, close: () => learned(key) };
+  return { shown: showing === key && !quiet(key), close: () => learned(key) };
 }

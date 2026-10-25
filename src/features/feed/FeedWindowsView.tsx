@@ -1,29 +1,40 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { FeedTopRow } from '@/features/groups/FeedTopRow';
 import { TipBubble } from '@/components/TipBubble';
+import { Avatar } from '@/components/ui';
+import { LevelPill } from '@/components/LevelPill';
+import { StreakFlame } from '@/components/StreakFlame';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { LIKE_RED } from '@/components/Heart';
+import { postKindMeta } from '@/components/PostCard';
+import { shownStreak } from '@/features/practice/streakFlame';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { BAR_METRICS } from '@/features/navigation/tabBarLook';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { learned, useTip } from '@/features/tips/tips';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { compactNumber, relativeTime } from '@/lib/format';
 import * as haptics from '@/lib/haptics';
-import { colors, font, typography, withAlpha } from '@/theme';
-import { darkColors, useTheme } from '@/theme/ThemeProvider';
+import { useApp } from '@/store/AppContext';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { useTheme } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
 import {
-  CARD_GAP, FOR_YOU, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
-  cardAt, feedShot, feedSpot, registerShotNode, setWindowsController, setWindowsState, snapFeed,
+  CARD_GAP, CARD_MAX, FOR_YOU, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
+  cardAt, feedReadyAt, feedShot, feedSpot, registerShotNode, setWindowsController, setWindowsState, snapFeed,
   useWindowsClipped, useWindowsPhase, useWindowsRowSwitched, useWindowsTarget, windowsState,
-  winDrag, winF, winGeo, winLive, winOn, winP, winStill, winTick,
-  type FeedKey, type Spot,
+  winDrag, winF, winGeo, winLive, winOn, winP, winScrub, winSel, winStill, winTick,
+  type FeedKey, type ScrubEnd, type Spot,
 } from './feedWindows';
 
 /*
@@ -33,17 +44,18 @@ import {
  * The pieces, each a small component of its own so the Feed and its pages never redraw for them:
  *  - WindowsStack: wraps the built feeds (For you and the kept ones). It is the card you came from:
  *    the real feed, held still, shrunk with the same sums as every other card.
- *  - WindowsGround: the dark ground the cards sit on, there only while the windows are up.
- *  - WindowsRow: the top row, put away while they are up (its own 180 ms fade; nothing in it is glass).
+ *  - WindowsGround: the ground the cards sit on (the middle card's picture, softened), only while they are up.
+ *  - WindowsRow: the top row, riding with the real feed's card and fading as it shrinks.
  *  - FeedWindows: the other cards (stills), their names, the swipes and taps, Back, the keys in a
- *    browser, and the one-time hint.
+ *    browser, the hand-over to a picked feed, and the one-time hint.
+ *  - FeedHold (its own file): the hold that opens them, and the slide after it with the finger still down.
  */
 
 /** What a card that is not the real feed shows. */
 type Face =
   | { kind: 'shot'; uri: string }
   | { kind: 'poster'; uri: string; contain: boolean }
-  | { kind: 'text'; author?: string; text: string }
+  | { kind: 'text'; author?: string; text: string; postId?: string }
   | { kind: 'name'; empty: boolean };
 
 function faceOf(key: FeedKey, firstSpot: (key: FeedKey) => Spot | null): Face {
@@ -53,9 +65,45 @@ function faceOf(key: FeedKey, firstSpot: (key: FeedKey) => Spot | null): Face {
   if (spot?.page && shot && shot.page === spot.page) return { kind: 'shot', uri: shot.uri };
   const s = spot ?? firstSpot(key) ?? undefined;
   if (s?.poster) return { kind: 'poster', uri: s.poster, contain: s.landscape };
-  if (s?.text) return { kind: 'text', author: s.author, text: s.text };
+  if (s?.text) return { kind: 'text', author: s.author, text: s.text, postId: s.postId };
   return { kind: 'name', empty: !s || !s.page };
 }
+
+/** The picture a card's ground is made of (its poster or photo; never a page of words). */
+function groundOf(key: FeedKey, firstSpot: (key: FeedKey) => Spot | null): string | null {
+  const s = feedSpot(key) ?? firstSpot(key) ?? undefined;
+  return s?.poster ?? null;
+}
+
+/** A palette colour taken part of the way to black. */
+function towardBlack(hex: string, t: number): string {
+  const h = hex.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(h)) return hex;
+  const c = [0, 2, 4].map((i) => Math.round(parseInt(h.slice(i, i + 2), 16) * (1 - t)));
+  return `#${c.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
+/** The theme's own dark: the ground where a card has no picture (Clean's ink, New York's navy deepened). */
+function deepOf(): string {
+  return pageIsDark() ? towardBlack(colors.bg, 0.38) : colors.text;
+}
+
+/** Under each card but the one you came from: who posted, and how many you have not seen. */
+export interface WindowMeta {
+  avatars: { id: string; name: string; seed: string; uri?: string }[];
+  /** Posts in that feed this phone has not shown you. */
+  fresh: number;
+  /** When its newest post went up (shown when nothing is new). */
+  newestAt?: string;
+}
+
+// The ground's pictures, one per card, while the windows are up (read by WindowsGround only).
+interface GroundData { uris: (string | null)[]; deep: string }
+let ground: GroundData | null = null;
+const groundListeners = new Set<() => void>();
+const setGround = (g: GroundData | null) => { if (g === ground) return; ground = g; groundListeners.forEach((fn) => fn()); };
+const subscribeGround = (fn: () => void) => { groundListeners.add(fn); return () => { groundListeners.delete(fn); }; };
+const useGround = () => useSyncExternalStore(subscribeGround, () => ground, () => ground);
 
 const IDENTITY = { transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }], borderRadius: 0 };
 
@@ -90,11 +138,48 @@ export function SnapFrame({ feed, children }: { feed: FeedKey; children: React.R
   return <View ref={ref} collapsable={false} style={StyleSheet.absoluteFill}>{children}</View>;
 }
 
-/** The dark ground behind the cards, only while they are up. */
+/**
+ * The ground behind the cards, only while they are up: the middle card's own picture, softened, the
+ * way the iPhone's app switcher sits on the wallpaper. One layer per card, each as strong as its card
+ * is near the middle, so the ground follows a swipe frame by frame (plain pictures, never glass or a
+ * blur view: fading them is safe). A card with no picture (words, an empty feed) has the theme's own
+ * dark. Up at full strength from the first frame: the shrinking feed uncovers it.
+ */
 export function WindowsGround() {
   const phase = useWindowsPhase();
-  if (phase === 'closed') return null;
-  return <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: darkColors.bg }]} />;
+  const g = useGround();
+  if (phase === 'closed' || !g) return null;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: g.deep, overflow: 'hidden' }]}>
+      {g.uris.map((uri, i) => <GroundLayer key={i} i={i} uri={uri} deep={g.deep} />)}
+      <View style={[StyleSheet.absoluteFill, styles.shade]} />
+      <Vignette />
+    </View>
+  );
+}
+
+function GroundLayer({ i, uri, deep }: { i: number; uri: string | null; deep: string }) {
+  const look = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, 1 - Math.abs(winF.value - i))) }));
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: deep }, look]}>
+      {uri ? <ExpoImage source={{ uri }} style={[StyleSheet.absoluteFill, styles.groundPicture]} contentFit="cover" blurRadius={30} transition={0} cachePolicy="memory-disk" /> : null}
+    </Animated.View>
+  );
+}
+
+/** Darker towards the corners: black at nothing in the middle, 0.30 at the corners. One still drawing. */
+function Vignette() {
+  return (
+    <Svg style={StyleSheet.absoluteFill} width="100%" height="100%" preserveAspectRatio="none" viewBox="0 0 100 100">
+      <Defs>
+        <RadialGradient id="windows-vignette" cx="50" cy="50" r="71" gradientUnits="userSpaceOnUse">
+          <Stop offset="0.35" stopColor="#000000" stopOpacity={0} />
+          <Stop offset="1" stopColor="#000000" stopOpacity={0.3} />
+        </RadialGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100" height="100" fill="url(#windows-vignette)" />
+    </Svg>
+  );
 }
 
 /** Shows its children only while the windows are down (a tip never sits over the cards). */
@@ -103,14 +188,34 @@ export function WindowsClosedOnly({ children }: { children: React.ReactNode }) {
   return phase === 'closed' ? <>{children}</> : null;
 }
 
-/** The Feed's top row, put away while the windows are up; a card picked moves its word there at once. */
+/**
+ * The Feed's top row. While the windows are up it rides with the real feed's card (the same sums)
+ * and fades in the first part of the zoom, so nothing of it is left floating over the shrinking card;
+ * coming back, it fades in over the last part, on the picked feed already, and sits above the cards
+ * meanwhile. Nothing in the row is glass, so its fade is safe.
+ */
 export function WindowsRow(props: React.ComponentProps<typeof FeedTopRow>) {
   const phase = useWindowsPhase();
   const target = useWindowsTarget();
   const up = phase !== 'closed';
   const selected = target === null ? props.selected : target === FOR_YOU ? null : target;
-  return <FeedTopRow {...props} selected={selected} hidden={props.hidden || up} pinched={!!props.pinched || up} />;
+  const look = useAnimatedStyle(() => {
+    if (!winOn.value || winStill.value) return ROW_REST;
+    void winTick.value;
+    // The card in the middle: the real feed as it shrinks, the picked one as it grows back.
+    const c = cardAt(winF.value, winP.value, winF.value, winGeo.value);
+    return {
+      opacity: interpolate(winP.value, [0, 0.3], [1, 0], 'clamp'),
+      transform: [{ translateX: 0 }, { translateY: c.y + winDrag.value }, { scale: c.s }],
+    };
+  });
+  return (
+    <Animated.View pointerEvents={up ? 'none' : 'box-none'} style={[StyleSheet.absoluteFill, { zIndex: phase === 'closing' ? 10 : 8 }, look]}>
+      <FeedTopRow {...props} selected={selected} />
+    </Animated.View>
+  );
 }
+const ROW_REST = { opacity: 1, transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }] };
 
 export interface WindowFeed { key: FeedKey; name: string }
 
@@ -119,11 +224,26 @@ interface Opened {
   origin: number;
   faces: Face[];
   names: string[];
+  metas: (WindowMeta | null)[];
   /** Reduce Motion: every card a picture, faded in over the feed, nothing zooms. */
   still: boolean;
   W: number;
   H: number;
   S: number;
+}
+
+interface Choosing {
+  key: FeedKey;
+  t: number;
+  face: Face;
+  /** The real feed has been switched to the picked one (under its card). */
+  switched: boolean;
+  switchAt: number;
+  /** The picked card has grown back to the whole screen. */
+  landed: boolean;
+  /** A written card: its cover follows the last of the grow out (so it is gone as the card lands). */
+  follow: boolean;
+  fading: boolean;
 }
 
 const READER_ACTIONS = [{ name: 'activate' }];
@@ -135,22 +255,32 @@ const READER_ACTIONS = [{ name: 'activate' }];
 const SWIPE_IGNORE = (Platform.OS === 'web' ? { dataSet: { swipeIgnore: 'true' } } : {}) as object;
 const NO_BROWSER_PAN = (Platform.OS === 'web' ? { touchAction: 'none' } : {}) as object;
 const EASE_OUT = Easing.out(Easing.quad);
+/** Where the grow back hands over to the picked feed: by then the card you came from is off the screen. */
+const SWITCH_AT_P = 0.15;
+/** The longest a picked card's cover waits for its feed to draw, before it fades anyway. */
+const READY_WAIT_MS = 600;
+/** How long the middle card rests before its feed is built behind the cards, ready to be picked. */
+const PREPARE_AFTER_MS = 150;
 
 /**
  * The windows themselves. Mounted on the Feed (For you and its groups) only while they are
  * switched on for this person; with them off, nothing here exists.
  */
-export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
+export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firstSpot, metaOf }: {
   /** Activities, For you, then each group: the top row's order. */
   feeds: WindowFeed[];
   /** The feed on show. */
   current: FeedKey;
   /** A card was picked: show that feed (under the card, which then gives way to it). */
   onChoose: (key: FeedKey) => void;
+  /** A card has rested in the middle: build its feed behind the cards (hidden), so a pick is instant. */
+  onPrepare: (key: FeedKey) => void;
   /** Pinched in, or a clip's comments up: no windows. */
   blocked: boolean;
   /** For a feed not built: where it would start (its newest post). */
   firstSpot: (key: FeedKey) => Spot | null;
+  /** The line under a card's name. */
+  metaOf: (key: FeedKey) => WindowMeta | null;
 }) {
   useTheme();
   const insets = useSafeAreaInsets();
@@ -162,18 +292,24 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [opened, setOpened] = useState<Opened | null>(null);
   const openedRef = useRef<Opened | null>(null);
-  openedRef.current = opened;
-  const latest = useRef({ feeds, current, onChoose, blocked, firstSpot, focused, tourOpen, reduceMotion, size, insets });
-  latest.current = { feeds, current, onChoose, blocked, firstSpot, focused, tourOpen, reduceMotion, size, insets };
-  // The card being uncovered after a pick, and how the overlay fades (Reduce Motion only).
+  openedRef.current = opened ?? openedRef.current;
+  const latest = useRef({ feeds, current, onChoose, onPrepare, blocked, firstSpot, metaOf, focused, tourOpen, reduceMotion, size, insets });
+  latest.current = { feeds, current, onChoose, onPrepare, blocked, firstSpot, metaOf, focused, tourOpen, reduceMotion, size, insets };
+  // The picked card's cover over its feed: which card, how strong, and (a written card) the last of
+  // the grow it follows out (from that p down to 0).
   const coverIdx = useSharedValue(-1);
   const coverO = useSharedValue(1);
+  const coverFrom = useSharedValue(0);
+  // 1 from a pick until the grow has handed over to the picked feed (SWITCH_AT_P).
+  const switchArmed = useSharedValue(0);
+  // How the overlay fades (Reduce Motion only).
   const fade = useSharedValue(1);
   // Swipes and taps count only while the windows are up (not while a card grows back).
   const interactive = useSharedValue(0);
-  const choosing = useRef<{ key: FeedKey; t: number; face: Face; landed: boolean } | null>(null);
+  const choosing = useRef<Choosing | null>(null);
   const raf = useRef(0);
   const guard = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prepareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cardRefs = useRef<(View | null)[]>([]);
 
   const ctl = useMemo(() => {
@@ -184,8 +320,12 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
     const finish = (liveIdx: number) => {
       clearGuard();
       cancelAnimationFrame(raf.current);
+      if (prepareTimer.current) clearTimeout(prepareTimer.current);
+      prepareTimer.current = null;
       choosing.current = null;
       interactive.value = 0;
+      winScrub.value = 0;
+      switchArmed.value = 0;
       cancelAnimation(winTick);
       winOn.value = 0;
       winP.value = 0;
@@ -195,8 +335,11 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       winStill.value = 0;
       coverIdx.value = -1;
       coverO.value = 1;
+      coverFrom.value = 0;
       fade.value = 1;
+      openedRef.current = null;
       setOpened(null);
+      setGround(null);
       setWindowsState({ phase: 'closed', target: null, held: false, clipped: false });
       lockPageSwipe(false);
     };
@@ -210,27 +353,30 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       cancelAnimation(fade);
       cancelAnimation(coverO);
       const c = choosing.current;
-      finish(c?.landed ? c.t : openedRef.current?.origin ?? 0);
+      finish(c?.switched ? c.t : openedRef.current?.origin ?? 0);
     };
 
-    const open = () => {
+    const open = (finger: boolean) => {
       const L = latest.current;
       if (windowsState().phase !== 'closed' || !L.focused || L.blocked || L.tourOpen || !L.size) return;
       const origin = L.feeds.findIndex((f) => f.key === L.current);
       if (origin < 0 || L.feeds.length < 2) return;
       const { w: W, h: H } = L.size;
       const barTop = H - (Math.max(L.insets.bottom, 12) + BAR_METRICS.height + 10);
-      const top = L.insets.top + 12;
+      const top = L.insets.top + 8;
       const room = barTop - LABEL_SPACE - top;
-      const S = Math.max(0.3, Math.min(0.64, room / H));
+      const S = Math.max(0.3, Math.min(CARD_MAX, room / H));
       const dy = top + room / 2 - H / 2;
-      winGeo.value = { W, H, S, dy, step: W * S + CARD_GAP, rDevice: L.insets.bottom > 0 ? 44 : 0, rCard: L.insets.bottom > 0 ? 28 : 16, n: L.feeds.length };
+      winGeo.value = { W, H, S, dy, step: W * S + CARD_GAP, rDevice: L.insets.bottom > 0 ? 44 : 0, rCard: L.insets.bottom > 0 ? 24 : 16, n: L.feeds.length };
       const still = !!L.reduceMotion;
       coverIdx.value = -1;
       coverO.value = 1;
+      coverFrom.value = 0;
+      switchArmed.value = 0;
       winDrag.value = 0;
       winLive.value = origin;
       winF.value = origin;
+      winSel.value = origin;
       winOn.value = 1;
       interactive.value = 1;
       cancelAnimation(winTick);
@@ -248,10 +394,19 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
         // The zoom starts here, before any of React's work below.
         winP.value = withSpring(1, SPRING_OPEN, (done) => { 'worklet'; if (done) winP.value = 1; });
       }
+      // The finger that held is still down: sliding it now moves between the cards (FeedHold).
+      winScrub.value = finger ? 1 : 0;
       haptics.tap();
       learned('feed-windows');
       const faces = L.feeds.map((f) => faceOf(f.key, L.firstSpot));
-      setOpened({ origin, faces, names: L.feeds.map((f) => f.name), still, W, H, S });
+      const o: Opened = {
+        origin, faces, still, W, H, S,
+        names: L.feeds.map((f) => f.name),
+        metas: L.feeds.map((f, i) => (i === origin ? null : L.metaOf(f.key))),
+      };
+      openedRef.current = o;
+      setOpened(o);
+      setGround({ uris: L.feeds.map((f) => groundOf(f.key, L.firstSpot)), deep: deepOf() });
       setWindowsState({ phase: 'open', origin: L.current, target: null, held: true, clipped: !still });
       lockPageSwipe(true);
     };
@@ -261,6 +416,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       const o = openedRef.current;
       if (!o || windowsState().phase !== 'open') return;
       interactive.value = 0;
+      winScrub.value = 0;
       setWindowsState({ phase: 'closing', target: null });
       armGuard(2500);
       if (o.still) {
@@ -273,38 +429,52 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       winP.value = withSpring(0, SPRING_BACK, (done) => { 'worklet'; if (done) runOnJS(finishOrigin)(); });
     };
 
-    // The picked card's picture stays over the new feed until that feed has drawn its page.
-    const uncover = () => {
+    // The picked feed is up under its card: the cover goes. A picture card is the same picture as the
+    // feed's first frame, so it is a cut; a written card follows the grow out, or fades quickly.
+    const settle = () => {
       const c = choosing.current;
       const o = openedRef.current;
-      if (!c || !o) return;
-      armGuard(1000);
-      if (o.still) { fade.value = withTiming(0, { duration: 200, easing: EASE_OUT }, (done) => { 'worklet'; if (done) runOnJS(finishChosen)(); }); return; }
-      // A still of the very page now under it: a cut. A poster or words: a short fade.
-      if (c.face.kind === 'shot') { finishChosen(); return; }
-      coverO.value = withTiming(0, { duration: 140, easing: EASE_OUT }, (done) => { 'worklet'; if (done) runOnJS(finishChosen)(); });
+      if (!c || !o || c !== choosing.current || windowsState().phase !== 'closing') return;
+      const now = Date.now();
+      const ready = feedReadyAt(c.key) >= c.switchAt;
+      if (c.switched && ready && !c.follow && !c.landed && !o.still && (c.face.kind === 'text' || c.face.kind === 'name')) {
+        const p = winP.value;
+        if (p > 0.02) { c.follow = true; coverFrom.value = Math.min(SWITCH_AT_P, p); }
+      }
+      if (c.landed && c.switched && !c.fading) {
+        const timedOut = now - c.switchAt >= READY_WAIT_MS;
+        if (ready || timedOut) {
+          if (o.still) {
+            c.fading = true;
+            fade.value = withTiming(0, { duration: 200, easing: EASE_OUT }, (done) => { 'worklet'; if (done) runOnJS(finishChosen)(); });
+            return;
+          }
+          if (ready && (c.face.kind === 'shot' || c.face.kind === 'poster' || c.follow)) { finishChosen(); return; }
+          c.fading = true;
+          coverO.value = withTiming(0, { duration: 120, easing: EASE_OUT }, (done) => { 'worklet'; if (done) runOnJS(finishChosen)(); });
+          return;
+        }
+      }
+      raf.current = requestAnimationFrame(settle);
     };
 
-    const land = () => {
+    // The grow has gone far enough that the card you came from is off the screen: the real feed
+    // becomes the picked one, under its card, which stays until that feed has drawn (settle).
+    const handOver = () => {
       const c = choosing.current;
-      if (!c || c.landed || windowsState().phase !== 'closing') return;
-      c.landed = true;
+      if (!c || c.switched || windowsState().phase !== 'closing') return;
+      c.switched = true;
+      c.switchAt = Date.now();
       winLive.value = c.t;
       latest.current.onChoose(c.key);
-      armGuard(2500);
-      const t0 = Date.now();
-      // A feed built only now reports its page once it is up, and its own 220 ms fade-in starts then:
-      // counted from that moment, so the feed you came from never shows through it as the picture goes.
-      let seen = feedSpot(c.key) !== undefined ? t0 : 0;
-      const wait = () => {
-        if (choosing.current !== c || windowsState().phase !== 'closing') return;
-        const now = Date.now();
-        if (!seen && feedSpot(c.key) !== undefined) seen = now;
-        // Its page reported, and the feed's own fade-in done (two frames to spare); never past 1.5 s.
-        if ((seen && now - seen >= 313) || now - t0 >= 1500) { uncover(); return; }
-        raf.current = requestAnimationFrame(wait);
-      };
-      raf.current = requestAnimationFrame(wait);
+      cancelAnimationFrame(raf.current);
+      raf.current = requestAnimationFrame(settle);
+    };
+    const landed = () => {
+      const c = choosing.current;
+      if (!c) return;
+      c.landed = true;
+      if (!c.switched) handOver();
     };
 
     const choose = (t: number) => {
@@ -315,11 +485,15 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       const key = L.feeds[t]?.key;
       if (!key) return;
       interactive.value = 0;
-      choosing.current = { key, t, face: o.faces[t], landed: false };
+      winScrub.value = 0;
+      choosing.current = { key, t, face: o.faces[t], switched: false, switchAt: 0, landed: false, follow: false, fading: false };
       setWindowsState({ phase: 'closing', target: key });
       armGuard(2500);
-      if (o.still) { land(); return; }
+      if (o.still) { landed(); return; }
       coverIdx.value = t;
+      coverO.value = 1;
+      coverFrom.value = 0;
+      switchArmed.value = 1;
       winDrag.value = withSpring(0, SPRING_BACK);
       winF.value = withSpring(t, SPRING_BACK);
       winP.value = withSpring(0, SPRING_BACK, (done) => {
@@ -328,9 +502,8 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
         winP.value = 0;
         winF.value = t;
         winDrag.value = 0;
-        // The real feed comes to rest under the picked card's picture, at full size.
-        winLive.value = t;
-        runOnJS(land)();
+        if (switchArmed.value) { switchArmed.value = 0; winLive.value = t; runOnJS(handOver)(); }
+        runOnJS(landed)();
       });
     };
 
@@ -343,6 +516,33 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       winF.value = o.still ? withTiming(to, { duration: 220, easing: EASE_OUT }) : withSpring(to, SPRING_SNAP, (done) => { 'worklet'; if (done) winF.value = to; });
     };
 
+    // The held finger lifted (FeedHold).
+    const scrubEnd = (how: ScrubEnd, sel: number) => {
+      if (windowsState().phase !== 'open') return;
+      if (how === 'choose') { choose(sel); return; }
+      if (how === 'close') { dismiss(); return; }
+      // Left up: they settle on the card pointed at, to swipe and tap as before.
+      const o = openedRef.current;
+      winDrag.value = o?.still ? withTiming(0, { duration: 220, easing: EASE_OUT }) : withSpring(0, SPRING_DRAG, (done) => { 'worklet'; if (done) winDrag.value = 0; });
+      winF.value = o?.still ? withTiming(sel, { duration: 220, easing: EASE_OUT }) : withSpring(sel, SPRING_SNAP, (done) => { 'worklet'; if (done) winF.value = sel; });
+    };
+
+    // A card that has rested in the middle: its feed is built (hidden) and its poster fetched, so a pick is instant.
+    const restAt = (idx: number) => {
+      if (prepareTimer.current) clearTimeout(prepareTimer.current);
+      prepareTimer.current = null;
+      if (idx < 0) return;
+      prepareTimer.current = setTimeout(() => {
+        prepareTimer.current = null;
+        const L = latest.current;
+        const key = L.feeds[idx]?.key;
+        if (!key || windowsState().phase !== 'open') return;
+        const face = openedRef.current?.faces[idx];
+        if (face?.kind === 'poster' && /^https?:/.test(face.uri)) void ExpoImage.prefetch([face.uri], 'memory-disk').catch(() => undefined);
+        if (key !== L.current && key !== FOR_YOU) L.onPrepare(key);
+      }, PREPARE_AFTER_MS);
+    };
+
     const pressIn = () => {
       const L = latest.current;
       if (windowsState().phase !== 'closed' || !L.focused) return;
@@ -350,7 +550,6 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       // The cards' posters, fetched while the finger rests.
       const uris: string[] = [];
       for (const f of L.feeds) {
-        if (f.key === L.current) continue;
         const s = feedSpot(f.key) ?? L.firstSpot(f.key);
         if (s?.poster && /^https?:/.test(s.poster)) uris.push(s.poster);
       }
@@ -358,7 +557,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
     };
 
     return {
-      open, dismiss, choose, step, snapClose, pressIn,
+      open, dismiss, choose, step, snapClose, pressIn, scrubEnd, restAt, handOver,
       close: () => {
         const p = windowsState().phase;
         if (p === 'closed') return false;
@@ -370,20 +569,36 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
 
   // The row, the bar, Back and AppShell reach the windows through the store.
   useEffect(() => {
-    setWindowsController({ open: () => ctl.open(), close: ctl.close, pressIn: ctl.pressIn });
+    setWindowsController({ open: (_from, finger) => ctl.open(finger), close: ctl.close, pressIn: ctl.pressIn, scrubEnd: ctl.scrubEnd });
     return () => {
       setWindowsController(null);
       if (guard.current) clearTimeout(guard.current);
+      if (prepareTimer.current) clearTimeout(prepareTimer.current);
       cancelAnimationFrame(raf.current);
       // Taken down while up (signed out, the layout changed): everything back at once.
       if (windowsState().phase !== 'closed') {
         [winP, winF, winDrag, winStill, winTick].forEach((v) => cancelAnimation(v));
-        winOn.value = 0; winP.value = 0; winDrag.value = 0; winStill.value = 0; winF.value = winLive.value;
+        winOn.value = 0; winP.value = 0; winDrag.value = 0; winStill.value = 0; winScrub.value = 0; winF.value = winLive.value;
+        setGround(null);
         setWindowsState({ phase: 'closed', target: null, held: false, clipped: false });
         lockPageSwipe(false);
       }
     };
   }, [ctl]);
+
+  // The grow back hands over to the picked feed once the card you came from is off the screen.
+  useAnimatedReaction(() => switchArmed.value === 1 && winP.value < SWITCH_AT_P, (now, before) => {
+    if (!now || before) return;
+    switchArmed.value = 0;
+    winLive.value = coverIdx.value;
+    runOnJS(ctl.handOver)();
+  }, [ctl]);
+  // The middle card at rest (a lingering slide, a settled swipe): its feed gets built behind the cards.
+  useAnimatedReaction(() => {
+    if (!interactive.value && !winScrub.value) return -1;
+    const r = Math.round(winF.value);
+    return Math.abs(winF.value - r) < 0.2 ? r : -1;
+  }, (now, before) => { if (now !== before) runOnJS(ctl.restAt)(now); }, [ctl]);
 
   // Gone at once when the Feed is left (another tab, a page opened over it), the groups change, or the window does.
   const feedsKey = feeds.map((f) => f.key).join('|');
@@ -448,14 +663,14 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       .onStart(() => {
         'worklet';
         axis.value = 0;
-        // Never while a card grows back: its own motion is left alone.
-        if (!interactive.value) return;
+        // Never while a card grows back (or the held finger is still sliding): their own motion is left alone.
+        if (!interactive.value || winScrub.value) return;
         cancelAnimation(winF);
         from.value = winF.value;
       })
       .onUpdate((e) => {
         'worklet';
-        if (!interactive.value) return;
+        if (!interactive.value || winScrub.value) return;
         // The way it goes is settled once it has gone somewhere (a browser reports a first move of nothing).
         if (axis.value === 0) {
           if (Math.max(Math.abs(e.translationX), Math.abs(e.translationY)) < 6) return;
@@ -475,7 +690,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       })
       .onEnd((e) => {
         'worklet';
-        if (!interactive.value) return;
+        if (!interactive.value || winScrub.value) return;
         const g = winGeo.value;
         if (axis.value === 1) {
           const to = Math.max(0, Math.min(g.n - 1, Math.round(winF.value - (e.velocityX / g.step) * 0.18)));
@@ -491,7 +706,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       .maxDistance(10)
       .onEnd((e, success) => {
         'worklet';
-        if (!success || !interactive.value) return;
+        if (!success || !interactive.value || winScrub.value) return;
         const g = winGeo.value;
         const w = g.W * g.S;
         const h = g.H * g.S;
@@ -507,7 +722,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
 
   const tip = useTip('feed-windows', focused && phase === 'closed' && feeds.length >= 3 && rowSwitched && !blocked);
   const fadeLook = useAnimatedStyle(() => ({ opacity: fade.value }));
-  const hairline = withAlpha(colors.onMedia, 0.1);
+  const hairline = withAlpha(colors.onMedia, 0.16);
 
   return (
     <>
@@ -523,7 +738,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
         >
           <StatusBar style="light" />
           <Animated.View style={[StyleSheet.absoluteFill, fadeLook]}>
-            {opened.still ? <View style={[StyleSheet.absoluteFill, { backgroundColor: darkColors.bg }]} /> : null}
+            {opened.still ? <View style={[StyleSheet.absoluteFill, { backgroundColor: deepOf() }]} /> : null}
             {/* First for a screen reader, out of sight above the cards (a tap there goes back too, as anywhere off a card). */}
             <Pressable
               accessibilityRole="button"
@@ -545,13 +760,13 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
                     hairline={hairline}
                     coverIdx={coverIdx}
                     coverO={coverO}
-                    topInset={insets.top}
+                    coverFrom={coverFrom}
                     onActivate={() => ctl.choose(i)}
                     cardRef={(node) => { cardRefs.current[i] = node; }}
                   />
                 ))}
                 {opened.names.map((name, i) => (
-                  <Label key={`l${i}`} i={i} W={opened.W} S={opened.S} name={name} origin={i === opened.origin} />
+                  <Label key={`l${i}`} i={i} W={opened.W} S={opened.S} name={name} origin={i === opened.origin} meta={opened.metas[i]} />
                 ))}
               </View>
             </GestureDetector>
@@ -563,26 +778,33 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
 }
 
 /** One card: a full-screen view, shrunk with the shared sums. Its look and words live on plain views inside. */
-function Card({ i, W, H, face, name, origin, hairline, coverIdx, coverO, topInset, onActivate, cardRef }: {
+function Card({ i, W, H, face, name, origin, hairline, coverIdx, coverO, coverFrom, onActivate, cardRef }: {
   i: number; W: number; H: number; face: Face | null; name: string; origin: boolean; hairline: string;
-  coverIdx: SharedValue<number>; coverO: SharedValue<number>; topInset: number;
+  coverIdx: SharedValue<number>; coverO: SharedValue<number>; coverFrom: SharedValue<number>;
   onActivate: () => void; cardRef: (node: View | null) => void;
 }) {
-  const picture = face?.kind === 'shot' || face?.kind === 'poster';
   const look = useAnimatedStyle(() => {
     const c = cardAt(i, winP.value, winF.value, winGeo.value);
+    let opacity = 1;
+    if (coverIdx.value === i) {
+      opacity = coverO.value;
+      // A written card's cover follows the last of the grow out, over its feed already up beneath it.
+      if (coverFrom.value > 0) opacity = Math.min(opacity, Math.max(0, Math.min(1, winP.value / coverFrom.value)));
+    }
     return {
       transform: [{ translateX: c.x }, { translateY: c.y + winDrag.value }, { scale: c.s }],
       borderRadius: c.r,
       // The hairline only on a card, never on the picture covering the whole screen.
       borderColor: interpolateColor(winP.value, [0, 1], ['rgba(255, 255, 255, 0)', hairline]),
-      opacity: coverIdx.value === i ? coverO.value : 1,
+      // Half a point on the card as it stands (the card is drawn at full size, then shrunk).
+      borderWidth: 0.5 / Math.max(0.3, c.s),
+      opacity,
     };
   });
   const onAction = (e: AccessibilityActionEvent) => { if (e.nativeEvent.actionName === 'activate') onActivate(); };
   return (
-    <Animated.View pointerEvents="box-none" style={[styles.card, { width: W, height: H }, picture ? styles.edge : null, look]}>
-      {face ? <CardFace face={face} name={name} topInset={topInset} /> : null}
+    <Animated.View pointerEvents="box-none" style={[styles.card, { width: W, height: H }, look]}>
+      {face ? <CardFace face={face} name={name} H={H} /> : null}
       <View
         ref={cardRef}
         accessible
@@ -598,46 +820,112 @@ function Card({ i, W, H, face, name, origin, hairline, coverIdx, coverO, topInse
   );
 }
 
-function CardFace({ face, name, topInset }: { face: Face; name: string; topInset: number }) {
+function CardFace({ face, name, H }: { face: Face; name: string; H: number }) {
   if (face.kind === 'shot') {
     return <ExpoImage source={{ uri: face.uri }} style={StyleSheet.absoluteFill} contentFit="cover" transition={0} cachePolicy="none" />;
   }
   if (face.kind === 'poster') {
     return (
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: face.contain ? darkColors.bg : colors.bg }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: face.contain ? '#000000' : colors.bg }]}>
         <ExpoImage source={{ uri: face.uri }} style={StyleSheet.absoluteFill} contentFit={face.contain ? 'contain' : 'cover'} transition={0} cachePolicy="memory-disk" />
       </View>
     );
   }
-  if (face.kind === 'text') {
-    return (
-      <View style={[StyleSheet.absoluteFill, styles.textFace, { backgroundColor: colors.bg, paddingTop: topInset + 64 }]}>
-        {face.author ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[typography.smallStrong, { color: colors.text }]}>{face.author}</Text> : null}
-        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={12} style={[typography.body, styles.textBody, { color: colors.text }]}>{face.text}</Text>
-      </View>
-    );
-  }
+  if (face.kind === 'text') return <WrittenFace face={face} H={H} />;
   return (
     <View style={[StyleSheet.absoluteFill, styles.nameFace, { backgroundColor: colors.bg }]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[typography.title, { color: colors.textMuted }]}>{name}</Text>
-      {face.empty ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[typography.body, styles.nameEmpty, { color: colors.textMuted }]}>No posts yet</Text> : null}
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[typography.title, { color: colors.text }]}>{name}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[typography.body, styles.nameEmpty, { color: colors.textMuted }]}>{face.empty ? 'No posts yet' : ' '}</Text>
     </View>
   );
 }
 
-/** A card's name, under it, coming in as the cards settle. */
-function Label({ i, W, S, name, origin }: { i: number; W: number; S: number; name: string; origin: boolean }) {
+/**
+ * A written post's card: its page, with the words set large (at the card's size they read at about
+ * 22 points): the post's own header and label, the words, then its buttons, centred a little above
+ * the middle. Drawn, not live: nothing on it can be pressed.
+ */
+function WrittenFace({ face, H }: { face: Extract<Face, { kind: 'text' }>; H: number }) {
+  const { posts, users, currentUserId } = useApp();
+  const post = face.postId ? posts.find((p) => p.id === face.postId) : undefined;
+  const author = post ? users.find((u) => u.id === post.authorId) : undefined;
+  const kind = post ? postKindMeta(post) : null;
+  const likes = post?.likedBy.length ?? 0;
+  const liked = !!post && !!currentUserId && post.likedBy.includes(currentUserId);
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]}>
+      <View style={[styles.writtenBlock, { height: H * 0.8 }]}>
+        {author ? (
+          <View style={styles.writtenHeader}>
+            <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={44} />
+            <View style={styles.writtenWho}>
+              <View style={styles.writtenNameRow}>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.writtenName, { color: colors.text }]}>{author.name}</Text>
+                <StreakFlame days={shownStreak(author, currentUserId)} silent />
+              </View>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[typography.small, { color: colors.textFaint }]}>@{author.handle}{post ? ` · ${relativeTime(post.createdAt)}` : ''}</Text>
+            </View>
+            <LevelPill profile={author.profile} small />
+          </View>
+        ) : face.author ? (
+          <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.writtenName, { color: colors.text }]}>{face.author}</Text>
+        ) : null}
+        {kind ? (
+          <View style={[styles.kindRow, { borderColor: withAlpha(kind.tint, 0.33) }]}>
+            {kind.icon === 'court'
+              ? <View style={styles.kindGlyph}><CourtGlyph size={10.4} color={kind.tint} /></View>
+              : <Ionicons name={kind.icon} size={13} color={kind.tint} />}
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.kindLabel, { color: kind.tint }]}>{kind.label}</Text>
+          </View>
+        ) : null}
+        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={8} style={[styles.writtenWords, { color: colors.text }]}>{face.text}</Text>
+        {post ? (
+          <View style={styles.writtenActions}>
+            <Ionicons name={liked ? 'heart' : 'heart-outline'} size={26} color={liked ? LIKE_RED : colors.text} />
+            {likes ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.writtenCount, { color: colors.text }]}>{compactNumber(likes)}</Text> : null}
+            <Ionicons name="chatbubble-outline" size={25} color={colors.text} style={styles.writtenAction} />
+            <Ionicons name="arrow-redo-outline" size={26} color={colors.text} style={styles.writtenAction} />
+            <View style={styles.writtenEnd} />
+            <Ionicons name="bookmark-outline" size={25} color={colors.text} />
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A card's name under it, brightest on the middle card, coming in as the cards settle. Under the
+ * card you came from, the row's own mark; under the others, who posted and how many you have not seen.
+ */
+function Label({ i, W, S, name, origin, meta }: { i: number; W: number; S: number; name: string; origin: boolean; meta: WindowMeta | null }) {
   const look = useAnimatedStyle(() => {
     const g = winGeo.value;
     const c = cardAt(i, winP.value, winF.value, g);
+    const near = Math.max(0, Math.min(1, 1 - Math.abs(winF.value - i)));
     return {
-      opacity: interpolate(winP.value, [0.55, 1], [0, 1], 'clamp'),
-      transform: [{ translateX: c.x }, { translateY: g.H / 2 + c.y + (g.H * c.s) / 2 + 8 + winDrag.value }],
+      opacity: (0.55 + 0.45 * near) * interpolate(winP.value, [0.55, 1], [0, 1], 'clamp'),
+      transform: [{ translateX: c.x }, { translateY: g.H / 2 + c.y + (g.H * c.s) / 2 + 10 + winDrag.value }],
     };
   });
+  const fresh = meta ? (meta.fresh > 9 ? '9+ new' : meta.fresh > 0 ? `${meta.fresh} new` : meta.newestAt ? relativeTime(meta.newestAt) : '') : '';
   return (
     <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.label, { width: W }, look]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.labelText, { maxWidth: W * S, color: origin ? colors.onMedia : withAlpha(colors.onMedia, 0.7) }]}>{name}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.labelText, { maxWidth: W * S, color: colors.onMedia }]}>{name}</Text>
+      {origin ? (
+        <View style={[styles.labelMark, { backgroundColor: colors.onMedia }]} />
+      ) : meta && (meta.avatars.length || fresh) ? (
+        <View style={styles.labelMeta}>
+          {meta.avatars.length ? (
+            <View style={[styles.labelFaces, { width: 16 + (meta.avatars.length - 1) * 11 }]}>
+              {meta.avatars.map((a, k) => (
+                <Avatar key={a.id} name={a.name} seed={a.seed} uri={a.uri} size={16} style={[styles.labelFace, { left: k * 11, zIndex: 3 - k }]} />
+              ))}
+            </View>
+          ) : null}
+          {fresh ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.labelFresh, { color: withAlpha(colors.onMedia, 0.78) }]}>{fresh}</Text> : null}
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -646,12 +934,31 @@ const styles = StyleSheet.create({
   clipped: { overflow: 'hidden' },
   overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 },
   card: { position: 'absolute', left: 0, top: 0, overflow: 'hidden' },
-  edge: { borderWidth: 1.5 },
+  shade: { backgroundColor: 'rgba(0, 0, 0, 0.45)' },
+  // A little larger than the page, so the softened picture's edges never show.
+  groundPicture: { transform: [{ scale: 1.12 }] },
   label: { position: 'absolute', left: 0, top: 0, alignItems: 'center' },
-  labelText: { fontSize: 13, lineHeight: 18, ...font('600') },
-  textFace: { padding: 20 },
-  textBody: { marginTop: 8 },
+  labelText: { fontSize: 15, lineHeight: 20, ...font('600') },
+  // The row's own mark, its top 24 points under the name's.
+  labelMark: { marginTop: 4, width: 18, height: 2.5, borderRadius: 1.25 },
+  labelMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 },
+  labelFaces: { height: 16 },
+  labelFace: { position: 'absolute', top: 0 },
+  labelFresh: { fontSize: 12.5, lineHeight: 16, ...font('500') },
   nameFace: { alignItems: 'center', justifyContent: 'center', padding: 20 },
   nameEmpty: { marginTop: 8 },
+  writtenBlock: { position: 'absolute', top: 0, left: 0, right: 0, justifyContent: 'center', paddingHorizontal: 20 },
+  writtenHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  writtenWho: { flex: 1, minWidth: 0 },
+  writtenNameRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  writtenName: { fontSize: 16, lineHeight: 21, ...font('600'), flexShrink: 1 },
+  kindRow: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderWidth: 1, borderRadius: radius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3, marginTop: 12 },
+  kindGlyph: { width: 13, alignItems: 'center' },
+  kindLabel: { ...typography.caption, fontSize: 12, letterSpacing: 0 },
+  writtenWords: { fontSize: 32, lineHeight: 41, letterSpacing: -0.5, ...font('600'), marginTop: 14 },
+  writtenActions: { flexDirection: 'row', alignItems: 'center', marginTop: 18 },
+  writtenCount: { fontSize: 15, ...font('600'), marginLeft: 5 },
+  writtenAction: { marginLeft: 18 },
+  writtenEnd: { flex: 1 },
   back: { position: 'absolute', left: 0, width: 44, height: 44 },
 });

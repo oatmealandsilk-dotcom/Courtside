@@ -23,7 +23,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
-import Reanimated, { Easing, FadeOut, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, cancelAnimation, FadeOut, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
 import * as haptics from '@/lib/haptics';
 
 import { Avatar, Button, EmptyState } from '@/components/ui';
@@ -70,8 +70,8 @@ import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
-import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedSpot, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, type Spot } from '@/features/feed/feedWindows';
-import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsRow, WindowsStack } from '@/features/feed/FeedWindowsView';
+import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedReady, noteFeedSpot, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, windowsState, type Spot } from '@/features/feed/feedWindows';
+import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsRow, WindowsStack, type WindowMeta } from '@/features/feed/FeedWindowsView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { warmOpenOutside } from '@/features/share/openOutside';
@@ -1245,6 +1245,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const windowKey = topRow ? FOR_YOU : scope?.activities ? ACTIVITIES_KEY : scope?.groupId ?? null;
   useEffect(() => { if (windowKey) noteFeedSpot(windowKey, spotOf(feed[active], activeKey, (id) => usersById.get(id)?.name)); }, [windowKey, activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (windowKey) noteFeedSpot(windowKey, null); }, [windowKey]);
+  // On show and drawn (two frames after it was un-paused, built, or moved on): a picked card's cover may go.
+  useEffect(() => {
+    if (!windowKey || paused) return undefined;
+    let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => noteFeedReady(windowKey)); });
+    return () => cancelAnimationFrame(id);
+  }, [windowKey, paused, activeKey]);
   // The posts an admin pushed to the bottom, arriving (or changing) after this feed was dealt: any of them
   // below the page on screen go to the very end. Nothing at or above the page on screen moves. For you, a
   // group's feed and Activities only; one person's posts keep the grid's order.
@@ -2561,7 +2567,7 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
  * animated fade inside always rests at 1, so a settled value Reanimated drops
  * unsynced on a phone can never leave a chosen feed invisible (Oct 23).
  */
-function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactNode }) {
+function FeedLayer({ shown, cut = false, children }: { shown: boolean; cut?: boolean; children: React.ReactNode }) {
   const [vis, setVis] = useState(0);
   const visRef = useRef(0);
   const shownRef = useRef(shown);
@@ -2580,6 +2586,14 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
   }, [o]);
   useEffect(() => {
     const ease = { duration: 220, easing: Easing.out(Easing.quad) };
+    // Handed over from the Feed's windows: shown or hidden at once, under the picked card (no cross-fade).
+    if (cut) {
+      cancelAnimation(o);
+      o.value = 1;
+      visRef.current = shown ? 1 : 0;
+      setVis(shown ? 1 : 0);
+      return;
+    }
     if (shown) {
       if (visRef.current) { o.value = withTiming(1, ease); return; }
       // From hidden: the fade goes to 0 behind React's 0 first, then React shows it and it fades in.
@@ -2587,7 +2601,7 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
     } else {
       o.value = withTiming(0, ease, (done) => { 'worklet'; if (done) runOnJS(hidden)(); });
     }
-  }, [shown, o, hidden, reveal]);
+  }, [shown, o, hidden, reveal]); // eslint-disable-line react-hooks/exhaustive-deps
   // Hidden by React now: the fade inside goes back to its rest (1) behind it (unless it has been
   // chosen again meanwhile, and is on its way in from 0).
   useEffect(() => {
@@ -2600,7 +2614,7 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
   const glassFade = useDerivedValue(() => visV.value * o.value);
   // Its clips' glass (the sound disc, the level pill, See stats) is a plain fill while it cross-fades (Oct 22 sweep, item 5).
   return (
-    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: vis }]}>
+    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: cut ? (shown ? 1 : 0) : vis }]}>
       <Reanimated.View style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={glassFade}>{children}</GlassFadeScope></Reanimated.View>
     </View>
   );
@@ -2610,26 +2624,48 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
 const ACTIVITIES = 'activities';
 
 /**
- * For the Feed's windows: where a feed not built yet would start (its newest post), for its card.
- * Activities without the players near a new player (only the Activities feed itself knows them).
+ * For the Feed's windows: the posts a feed would show, newest first (For you: everything you can
+ * reach; a group: its own; Activities: your friends' sessions). Activities without the players near a
+ * new player (only the Activities feed itself knows them).
  */
-function firstSpotOf(key: string, app: ReturnType<typeof useApp>): Spot | null {
+function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
   const me = app.currentUserId;
   const hidden = new Set([...app.blockedIds, ...app.mutedIds]);
   const follows = new Set(app.followingIds);
   const none = new Set<string>();
-  const group = key === ACTIVITIES ? undefined : app.feedGroups.find((g) => g.id === key);
-  let best: Post | undefined;
-  let bestAt = -Infinity;
+  const group = key === ACTIVITIES || key === FOR_YOU ? undefined : app.feedGroups.find((g) => g.id === key);
+  const out: Post[] = [];
   for (const p of app.posts) {
     if (hidden.has(p.authorId) || unfinishedClip(p, me)) continue;
-    if (key === ACTIVITIES ? !isActivity(p, me, follows, none) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
-    const at = Date.parse(p.createdAt);
-    if (at > bestAt) { best = p; bestAt = at; }
+    if (key === ACTIVITIES ? !isActivity(p, me, follows, none) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
+    out.push(p);
   }
+  return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/** For the Feed's windows: where a feed not built yet would start (its newest post), for its card. */
+function firstSpotOf(key: string, app: ReturnType<typeof useApp>): Spot | null {
+  const best = feedPostsOf(key, app)[0];
   if (!best) return null;
   const authorId = best.authorId;
   return spotOfPost(best, `p:${best.id}`, app.users.find((u) => u.id === authorId)?.name);
+}
+
+/** For the Feed's windows: the line under a card's name (who posted, and how many this phone has not shown you). */
+function windowMetaOf(key: string, app: ReturnType<typeof useApp>): WindowMeta | null {
+  const me = app.currentUserId;
+  const posts = feedPostsOf(key, app).filter((p) => p.authorId !== me);
+  if (!posts.length) return null;
+  const seen = seenOnPhone(me);
+  const fresh = posts.filter((p) => !seen.has(`p:${p.id}`));
+  const avatars: WindowMeta['avatars'] = [];
+  for (const p of fresh.length ? fresh : posts) {
+    if (avatars.length >= 3) break;
+    if (avatars.some((a) => a.id === p.authorId)) continue;
+    const u = app.users.find((x) => x.id === p.authorId);
+    if (u) avatars.push({ id: u.id, name: u.name, seed: u.avatarSeed, uri: u.avatarUrl });
+  }
+  return { avatars, fresh: fresh.length, newestAt: posts[0]?.createdAt };
 }
 
 function GroupedFeed() {
@@ -2650,6 +2686,25 @@ function GroupedFeed() {
   const [kept, setKept] = useState<string[]>([]);
   useEffect(() => { if (groupId) setKept((k) => (k.includes(groupId) ? k : [...k.slice(-2), groupId])); }, [groupId]);
   useEffect(() => { setKept((k) => k.filter((key) => key === ACTIVITIES || feedGroups.some((g) => g.id === key))); }, [feedGroups]);
+  // The Feed's windows: a card resting in the middle has its feed built behind the cards (hidden), so
+  // picking it is instant. Never at the cost of the feed on show; the oldest other one goes instead.
+  const groupIdRef = useRef(groupId);
+  groupIdRef.current = groupId;
+  const prepareFeed = useCallback((key: string) => {
+    setKept((k) => {
+      if (k.includes(key)) return k;
+      const next = [...k, key];
+      while (next.length > 3) {
+        const drop = next.findIndex((x) => x !== groupIdRef.current && x !== key);
+        if (drop < 0) break;
+        next.splice(drop, 1);
+      }
+      return next;
+    });
+  }, []);
+  // Handed over from the windows (a card picked): the kept feeds show and hide at once, under the
+  // picked card, rather than with their own cross-fade (FeedLayer). Read as this draws for the switch.
+  const handover = windowsState().phase === 'closing' && windowsState().target !== null;
   const forYouChrome = useCallback((c: FeedChrome) => { if (!groupId) setChrome(c); }, [groupId]);
   const groupChrome = useCallback((c: FeedChrome) => setChrome(c), []);
   // The quiet pill (tabBarLook) turns dark over a picture, as the glass one does by itself.
@@ -2673,7 +2728,7 @@ function GroupedFeed() {
         {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
             is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
         {kept.map((key) => (
-          <FeedLayer key={key} shown={key === groupId}>
+          <FeedLayer key={key} shown={key === groupId} cut={handover}>
             <SnapFrame feed={key}>
               <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
             </SnapFrame>
@@ -2704,8 +2759,10 @@ function GroupedFeed() {
           feeds={[{ key: ACTIVITIES_KEY, name: 'Activities' }, { key: FOR_YOU, name: 'For you' }, ...feedGroups.map((g) => ({ key: g.id, name: g.name }))]}
           current={groupId ?? FOR_YOU}
           onChoose={(key) => setGroupId(key === FOR_YOU ? null : key)}
+          onPrepare={prepareFeed}
           blocked={chrome.hidden}
           firstSpot={(key) => firstSpotOf(key, app)}
+          metaOf={(key) => windowMetaOf(key, app)}
         />
       ) : null}
     </View>
@@ -2713,6 +2770,6 @@ function GroupedFeed() {
 }
 
 /** A hold on the Feed's top row. */
-const showWindowsFromRow = () => requestFeedWindows('row');
+const showWindowsFromRow = (finger = false) => requestFeedWindows('row', finger);
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(FeedTab, '/');

@@ -10,6 +10,7 @@ import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
 import { useStageMotion } from '@/features/feed/useStageMotion';
 import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut } from '@/features/feed/feedWindows';
+import { FeedHold } from '@/features/feed/FeedHold';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
@@ -90,13 +91,16 @@ interface Props {
    */
   row?: SharedValue<number>;
   /**
-   * A hold on any word (HOLD_MS): the Feed's windows (features/feed/feedWindows). Given only while
+   * A hold on any word (HOLD_MS): the Feed's windows (features/feed/feedWindows), `finger` true when the
+   * finger that held is still down (it can then slide between the cards, FeedHold). Given only while
    * they are on for this person; without it a word behaves exactly as before. A tap still picks.
    */
-  onHold?: () => void;
+  onHold?: (finger?: boolean) => void;
   /** A finger landed on a word: the windows get their stills and posters ready. */
   onHoldStart?: () => void;
 }
+
+const noop = () => undefined;
 
 /** How far the row rides up as it goes: past its own top, into the clock's strip, gone by the time it gets there. */
 const AWAY_LIFT = TOP_BAND_TOP + TOP_BAND_HEIGHT - 10;
@@ -247,6 +251,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // whole new feed mid-glide froze the screen for a few frames (Oct 4, owner: "smoother, by a lot").
   // A hold mid-glide (a tap just picked a feed) is let go: the feed under it is about to change.
   const glidedAt = useRef(0);
+  const holdRef = useRef(onHold);
+  holdRef.current = onHold;
+  const holdWord = useCallback(() => { if (Date.now() - glidedAt.current > 360) holdRef.current?.(true); }, []);
   const glideTo = (key: string, then: () => void) => {
     glidedAt.current = Date.now();
     const at = layout?.at.get(key);
@@ -345,6 +352,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                       onLayout={(e) => { const width = e.nativeEvent.layout.width; setDotW((d) => (d === width ? d : width)); }}
                     >·</Animated.Text>
                   ) : null}
+                  <FeedHold onHold={onHold ? holdWord : undefined}>
                   <Pressable
                     accessibilityRole="tab"
                     accessibilityState={{ selected: on }}
@@ -355,7 +363,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     onPressIn={onHoldStart ? () => { pressIn(); onHoldStart(); } : pressIn}
                     onPressOut={onHoldStart ? () => { pressOut(); noteFeedPressOut(); } : pressOut}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
-                    onLongPress={onHold ? () => { if (Date.now() - glidedAt.current > 360) onHold(); } : undefined}
+                    // The hold itself is FeedHold's (it opens the windows with the finger still down); this only
+                    // keeps a held word from also switching feeds (a browser's press is not cancelled by it).
+                    onLongPress={onHold ? noop : undefined}
                     delayLongPress={onHold ? HOLD_MS : undefined}
                     accessibilityActions={onHold ? SHOW_ALL_FEEDS : undefined}
                     onAccessibilityAction={onHold ? (e) => { if (e.nativeEvent.actionName === 'showAllFeeds') onHold(); } : undefined}
@@ -365,6 +375,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                   >
                     <Word name={w.name} at={layout?.at.get(key)} shift={shift} viewW={viewW} style={onHold ? [styles.word, NO_CALLOUT] : styles.word} tone={inkLook} />
                   </Pressable>
+                  </FeedHold>
                 </React.Fragment>
               );
             })}

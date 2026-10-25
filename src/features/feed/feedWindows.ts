@@ -5,6 +5,7 @@ import { makeMutable } from 'react-native-reanimated';
 import type { Post } from '@/data/types';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
+import { statsLine } from '@/features/activity/format';
 import { dropFeedShot, takeFeedShot } from './feedSnapshot';
 import type { FeedItem } from './rankFeed';
 
@@ -44,15 +45,23 @@ export function useFeedWindowsOn(): boolean {
 /** How long a finger rests on a word (or the Feed tab) before the windows open. */
 export const HOLD_MS = 400;
 /** The air between two cards. */
-export const CARD_GAP = 18;
-/** Room kept under the cards for their names. */
-export const LABEL_SPACE = 34;
+export const CARD_GAP = 14;
+/** Room kept under the cards for their names (and the line under each name). */
+export const LABEL_SPACE = 46;
+/** The biggest a card gets: on a 390-point phone about 273 points wide, with 44 of each neighbour showing. */
+export const CARD_MAX = 0.7;
 
 /** The motion, all springs (mass 1), each landing written plainly afterwards. */
 export const SPRING_OPEN = { mass: 1, stiffness: 260, damping: 28 };
-export const SPRING_BACK = { mass: 1, stiffness: 320, damping: 33 };
+/**
+ * Lands once what is left of the grow is under half a point (energyThreshold, relative): Reanimated's
+ * default waits ~0.3 s longer for the invisible tail, and the feed is not usable until it lands.
+ */
+export const SPRING_BACK = { mass: 1, stiffness: 320, damping: 33, energyThreshold: 1e-5 };
 export const SPRING_SNAP = { mass: 1, stiffness: 280, damping: 30 };
 export const SPRING_DRAG = { mass: 1, stiffness: 400, damping: 36 };
+/** A finger still down after the hold, sliding between the cards: one card per step, quick and calm. */
+export const SPRING_SCRUB = { mass: 1, stiffness: 420, damping: 40 };
 
 /** 'activities', 'for-you', or a group's id: one card each, in the top row's order. */
 export type FeedKey = string;
@@ -79,6 +88,13 @@ export const winOn = makeMutable(0);
  * full-screen rest is dropped (the app sent away, JS busy) can never bring the feed back shrunk.
  */
 export const winTick = makeMutable(0);
+/**
+ * 1 while the finger that held the row (or the Feed tab) is still down after the windows opened:
+ * sliding it moves between the cards, lifting it opens the one picked (FeedHold). `winSel` is the
+ * card it points at.
+ */
+export const winScrub = makeMutable(0);
+export const winSel = makeMutable(0);
 export interface WindowsGeo { W: number; H: number; S: number; dy: number; step: number; rDevice: number; rCard: number; n: number }
 export const winGeo = makeMutable<WindowsGeo>({ W: 1, H: 1, S: 1, dy: 0, step: 1, rDevice: 0, rCard: 0, n: 1 });
 
@@ -148,12 +164,26 @@ export function noteRowSwitch() { if (!state.rowSwitched) setWindowsState({ rowS
 // The bus: the row, the bar and AppShell ask; the Feed's windows (FeedWindows) answer.
 // ---------------------------------------------------------------------------
 
-interface WindowsController { open: (from: 'row' | 'bar' | 'reader') => void; close: () => boolean; pressIn: () => void }
+/** How a hold-and-slide ended: open the card pointed at, go back (a flick down), or leave the cards up. */
+export type ScrubEnd = 'choose' | 'close' | 'stay';
+interface WindowsController {
+  open: (from: 'row' | 'bar' | 'reader', finger: boolean) => void;
+  close: () => boolean;
+  pressIn: () => void;
+  scrubEnd: (how: ScrubEnd, sel: number) => void;
+}
 let controller: WindowsController | null = null;
 export function setWindowsController(c: WindowsController | null) { controller = c; }
 
-/** A hold on the row or the Feed tab: open, if the Feed can (ignored otherwise). */
-export function requestFeedWindows(from: 'row' | 'bar' | 'reader') { controller?.open(from); }
+/**
+ * A hold on the row or the Feed tab: open, if the Feed can (ignored otherwise). `finger`: the finger
+ * that held is still down, so sliding it moves between the cards (FeedHold); a screen reader's action has none.
+ */
+export function requestFeedWindows(from: 'row' | 'bar' | 'reader', finger = false) { controller?.open(from, finger); }
+/** A hold on the bar's Feed tab with the finger still down (FeedHold). */
+export const holdFeedTab = () => requestFeedWindows('bar', true);
+/** The held finger lifted (FeedHold). */
+export function endFeedScrub(how: ScrubEnd, sel: number) { controller?.scrubEnd(how, sel); }
 /** Back, or the Feed tab: true if the windows were up (they now go back to the feed you were on). */
 export function closeFeedWindows(): boolean { return controller?.close() ?? false; }
 /**
@@ -185,6 +215,8 @@ export interface Spot {
   poster?: string;
   text?: string;
   author?: string;
+  /** The post on show, for a written card drawn as its page (header, words, buttons). */
+  postId?: string;
 }
 const spots = new Map<FeedKey, Spot>();
 
@@ -192,7 +224,9 @@ const spots = new Map<FeedKey, Spot>();
 export function spotOfPost(post: Post, page: string, author: string | undefined): Spot {
   const clip = post.kind === 'clip' || !!post.videoUrl;
   const poster = post.thumbnailUrl ?? post.imageUrl ?? post.imageUrls?.[0];
-  return { page, clip, landscape: post.orientation === 'landscape', poster, text: post.body?.trim() || undefined, author };
+  // A session posted with no photo: its one line of numbers when it has no words.
+  const text = post.body?.trim() || (post.session ? statsLine(post.session) : '') || undefined;
+  return { page, clip, landscape: post.orientation === 'landscape', poster, text, author, postId: post.id };
 }
 
 export function spotOf(item: FeedItem | undefined, page: string | undefined, nameOf: (id: string) => string | undefined): Spot {
@@ -214,6 +248,14 @@ export function noteFeedSpot(key: FeedKey, spot: Spot | null) {
   if (shot) { shots.delete(key); dropFeedShot(shot.uri); }
 }
 export const feedSpot = (key: FeedKey): Spot | undefined => spots.get(key);
+
+/**
+ * A feed on show has drawn its page (its Home, two frames after it was last un-paused or moved):
+ * the windows take their cover off a picked feed only then, so nothing half-built is ever seen.
+ */
+const readyAt = new Map<FeedKey, number>();
+export function noteFeedReady(key: FeedKey) { readyAt.set(key, Date.now()); }
+export const feedReadyAt = (key: FeedKey) => readyAt.get(key) ?? 0;
 
 // ---------------------------------------------------------------------------
 // Stills: one per built feed at most, taken a moment into a press (noteFeedPressIn), of the feed on show.

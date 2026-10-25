@@ -30,10 +30,12 @@ import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withA
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { LookBar } from './TabBarLooks';
-import { HOLD_MS, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
+import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
+import { FeedHold } from '@/features/feed/FeedHold';
 
 /** A hold on the Feed tab while on the Feed: the Feed's windows. */
 const holdFeed = () => requestFeedWindows('bar');
+const noopHold = () => undefined;
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -243,10 +245,12 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
               return (
                 <React.Fragment key={item.route}>
                 {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
+                <FeedHold onHold={item.route === 'index' && onFeedHold ? holdFeedTab : undefined}>
                 <Pressable
                   ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
-                  onLongPress={item.route === 'index' ? onFeedHold : undefined}
+                  // The hold is FeedHold's (the finger can then slide between the cards); this keeps it from also pressing the tab.
+                  onLongPress={item.route === 'index' && onFeedHold ? noopHold : undefined}
                   delayLongPress={item.route === 'index' && onFeedHold ? HOLD_MS : undefined}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
@@ -269,6 +273,7 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
                   <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.bottomLabel, active && { color: item.route === 'coaches' ? colors.info : item.route === 'discuss' ? colors.warning : colors.brand }, labelFade]}>{item.label}</Animated.Text>
                   </Animated.View>
                 </Pressable>
+                </FeedHold>
                 </React.Fragment>
               );
             })}

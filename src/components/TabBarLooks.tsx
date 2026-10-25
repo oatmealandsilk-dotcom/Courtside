@@ -10,7 +10,8 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
-import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressIn, noteFeedPressOut } from '@/features/feed/feedWindows';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, holdFeedTab, noteFeedPressIn, noteFeedPressOut } from '@/features/feed/feedWindows';
+import { FeedHold } from '@/features/feed/FeedHold';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -151,6 +152,8 @@ export function LookBar({
   );
 }
 
+const holdNoop = () => undefined;
+
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
 function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
@@ -199,13 +202,15 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
     const hold = item.route === 'index' ? onFeedHold : undefined;
     row.push(
       <View style={styles.slot} key={item.route}>
+        <FeedHold onHold={hold ? holdFeedTab : undefined}>
         <Pressable
           disabled={!live}
           accessible={live}
           onPress={() => onTab(item.route)}
           onPressIn={hold ? noteFeedPressIn : undefined}
           onPressOut={hold ? noteFeedPressOut : undefined}
-          onLongPress={hold}
+          // The hold is FeedHold's (the finger can then slide between the cards); this keeps it from also pressing the tab.
+          onLongPress={hold ? holdNoop : undefined}
           delayLongPress={hold ? HOLD_MS : undefined}
           accessibilityRole="tab"
           accessibilityState={{ selected: active }}
@@ -230,6 +235,7 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
             </Animated.View>
           </View>
         </Pressable>
+        </FeedHold>
       </View>,
     );
   });

@@ -98,6 +98,17 @@ const KIND_META: Record<Post['kind'], KindMeta> = {
   milestone: { label: 'Milestone', icon: 'flag-outline', tint: 'warning' },
 };
 const TENNIS_META: KindMeta = { label: 'Tennis', icon: 'court', tint: 'court' };
+
+/**
+ * The label over a post's words, as its card shows it (null where the card shows none): for a page
+ * drawn without the card, the Feed's windows (features/feed/FeedWindowsView). Read as the card draws.
+ */
+export function postKindMeta(post: Post): { label: string; icon: KindIcon; tint: string } | null {
+  const sessionCard = !!post.session && hasSessionStats(post.session) && !post.imageUrl && !post.videoUrl && post.kind !== 'clip';
+  if (sessionCard || LESS_AI) return null;
+  const kind = post.session?.activityId || (post.session?.sessionId && post.session.kind !== 'fitness') ? TENNIS_META : KIND_META[post.kind];
+  return { ...kind, tint: colors[kind.tint] };
+}
 /** The buttons' one size and ink: the same set as under a photo post (MediaPostPage). */
 const ICON = 26;
 /**

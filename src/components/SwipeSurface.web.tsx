@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { withTiming, type SharedValue } from 'react-native-reanimated';
 import { useResponsive } from '@/lib/useResponsive';
 import { SwipeArea, dropPressLooks } from '@/features/navigation/swipePress';
+import { isPageSwipeLocked } from '@/features/navigation/swipeLock';
 
 export interface SwipeSurfaceProps {
   children: React.ReactNode;
@@ -230,6 +231,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
         return;
       }
       if (!point.horizontal) {
+        // Something else has the finger (the Feed's windows, opened by a hold on it): never the page swipe.
+        if (isPageSwipeLocked()) { start.current = null; return; }
         if (Math.abs(dy) > 12 && Math.abs(dy) > Math.abs(dx)) { start.current = null; return; }
         if (Math.abs(dx) < 10 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
         point.horizontal = true;
