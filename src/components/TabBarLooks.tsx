@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, { Easing, makeMutable, runOnJS, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui/Avatar';
@@ -15,6 +15,12 @@ import type { User } from '@/data/types';
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
 type AnimStyle = React.ComponentProps<typeof Animated.View>['style'];
+
+/** The bar going dark over a clip, or light again: the Feed's top row's own 180 ms, so the two change together. */
+const MEDIA_FADE_MS = 180;
+let mediaSeq = 0;
+/** The bar as it was before a clip came or went (`media`), laid over the live bar and fading out. */
+interface MediaLayer { key: number; media: boolean; op: SharedValue<number> }
 
 export interface LookItem {
   route: string;
@@ -56,16 +62,54 @@ export function LookBar({
   // Over a clip on the Feed the bar turns dark, as today's glass does over a picture.
   const onPicture = useFeedOnPicture();
   const media = activeRoute === 'index' && onPicture;
-  const face = (palette: Palette, live: boolean) => (
-    <Face palette={palette} media={media} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts} me={me}
+  // A clip coming or going (or the Feed being left) changes the bar's ground: the look being left is
+  // laid over the new one in the same redraw and fades out, then is taken away, so the bar never
+  // snaps from light to dark under a top row that eases, and nothing rests on an animated value.
+  const [shownMedia, setShownMedia] = useState(media);
+  const [mediaLayers, setMediaLayers] = useState<readonly MediaLayer[]>([]);
+  if (shownMedia !== media) {
+    const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
+    setShownMedia(media);
+    setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+  }
+  const begun = useRef(new Set<number>());
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const drop = (key: number) => {
+      const timer = timers.current.get(key);
+      if (timer) clearTimeout(timer);
+      timers.current.delete(key);
+      begun.current.delete(key);
+      setMediaLayers((layers) => layers.filter((l) => l.key !== key));
+    };
+    for (const layer of mediaLayers) {
+      if (begun.current.has(layer.key)) continue;
+      begun.current.add(layer.key);
+      const { key } = layer;
+      layer.op.value = withTiming(0, { duration: MEDIA_FADE_MS, easing: Easing.out(Easing.quad) }, (finished) => {
+        'worklet';
+        if (finished) runOnJS(drop)(key);
+      });
+      // Whatever the animation reports, the copy goes.
+      timers.current.set(key, setTimeout(() => drop(key), MEDIA_FADE_MS + 300));
+    }
+  }, [mediaLayers]);
+  useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
+  const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
+    <Face palette={palette} media={overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts} me={me}
       onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} bottom={bottom} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
   );
   // A theme picked on the Theme page: the bar in the court being left, laid over the live one and
   // fading with the page (ThemeFade). Nothing here is glass, so nothing under a fade can go see-through.
   const copies = (
+    <>
+    {mediaLayers.map((layer) => (
+      <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media)}</FadeCopy>
+    ))}
     <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
       <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
     ))} />
+    </>
   );
   if (BAR_DOCKED) {
     return (
@@ -107,7 +151,10 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, me, 
   const lit = TAB_BAR_LOOK === 'B' && !media ? c.brand : ink;
   // C draws every icon in ink, filled when lit, as Instagram does.
   const idle = TAB_BAR_LOOK === 'C' ? ink : muted;
-  const brandMark = media ? c.brandBright : c.brand;
+  // A's +: the court's own colour. Over a clip on a light court (its ground gone near-black) it is lifted
+  // toward white so it still reads, in that court's own hue: never another court's green (New York's
+  // + stays yellow, Paris's terracotta, Melbourne's blue).
+  const brandMark = media && !darkPage ? toward(c.brand, c.onMedia, 0.35) : c.brand;
 
   const badge = profileAlerts > 0 ? (
     <View style={[styles.badge, TAB_BAR_LOOK === 'C' && styles.badgeOnAvatar, { backgroundColor: c.danger }]}>
@@ -189,6 +236,15 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, me, 
       {veil}
     </View>
   );
+}
+
+/** `hex` moved part of the way (`t`, 0 to 1) toward `to`; both `#RRGGBB`, anything else comes back as it was. */
+function toward(hex: string, to: string, t: number): string {
+  const a = hex.replace('#', '');
+  const b = to.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(a) || !/^[0-9a-f]{6}$/i.test(b)) return hex;
+  const mixed = [0, 2, 4].map((i) => Math.round(parseInt(a.slice(i, i + 2), 16) * (1 - t) + parseInt(b.slice(i, i + 2), 16) * t));
+  return `#${mixed.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
 const PILL_RADIUS = 18;
