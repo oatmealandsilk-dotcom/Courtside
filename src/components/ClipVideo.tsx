@@ -296,10 +296,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       if (!wantPlay.current) wantedAt.current = Date.now();
       wantPlay.current = true;
       if (readyRef.current) begin.current();
-    } else if (active || !onTop) {
+    } else if (active || !onTop || leaving) {
       // Paused by the viewer, or covered: a page pushed over the feed (the
       // comments, a profile) or its tab slid away. Neither is a swipe, so it
       // holds right here and picks up from this spot however long that took.
+      // So does a swipe decided away from it (pageLeaving) until the feed has
+      // landed elsewhere: turned round, however slowly, it carries on from
+      // here (and a pause the viewer chose stays); landed elsewhere, the
+      // swipe rule below takes over from then.
       if (started.current) playFromHere.current = true;
       wantPlay.current = false;
       started.current = false;
@@ -320,7 +324,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       // never take the pause down with it, or the clip plays on after the swipe.
       safely(() => player.pause());
     }
-  }, [player, active, paused, trimStart, onTop]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [player, active, paused, trimStart, onTop, leaving]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { livePlayers.add(player); return () => { livePlayers.delete(player); }; }, [player]);
   // The app leaves the front (home, lock, the app switcher, Control Centre, a
   // call): the clip stops right there, picture and sound, where it stood.
