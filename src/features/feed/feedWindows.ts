@@ -72,6 +72,13 @@ export const winDrag = makeMutable(0);
 export const winStill = makeMutable(0);
 /** 1 from the moment they open until they have closed: at 0 the real feed is drawn exactly as it is. */
 export const winOn = makeMutable(0);
+/**
+ * Runs every frame while the windows are up (and only then), read by the real feed's card. Reanimated
+ * 4.5 hands a look that has been still for 1–2 s back to React and drops it unsynced after 2 s
+ * (components/ui/restMotion). Kept moving, the shrunk card is never handed back, so a close whose
+ * full-screen rest is dropped (the app sent away, JS busy) can never bring the feed back shrunk.
+ */
+export const winTick = makeMutable(0);
 export interface WindowsGeo { W: number; H: number; S: number; dy: number; step: number; rDevice: number; rCard: number; n: number }
 export const winGeo = makeMutable<WindowsGeo>({ W: 1, H: 1, S: 1, dy: 0, step: 1, rDevice: 0, rCard: 0, n: 1 });
 
@@ -149,8 +156,22 @@ export function setWindowsController(c: WindowsController | null) { controller =
 export function requestFeedWindows(from: 'row' | 'bar' | 'reader') { controller?.open(from); }
 /** Back, or the Feed tab: true if the windows were up (they now go back to the feed you were on). */
 export function closeFeedWindows(): boolean { return controller?.close() ?? false; }
-/** A finger just landed on the row or the Feed tab: the still and the posters are got ready. */
-export function noteFeedPressIn() { controller?.pressIn(); }
+/**
+ * A finger just landed on the row or the Feed tab: once it has stayed a moment (a tap is gone by
+ * then), the still and the posters are got ready. A still holds the phone's drawing for a moment,
+ * so a plain tap (switching feeds, back to the top) never pays for one.
+ */
+const PREPARE_AFTER_MS = 180;
+let preparing: ReturnType<typeof setTimeout> | null = null;
+export function noteFeedPressIn() {
+  noteFeedPressOut();
+  preparing = setTimeout(() => { preparing = null; controller?.pressIn(); }, PREPARE_AFTER_MS);
+}
+/** The finger lifted (or the press was taken by a swipe): nothing gets ready. */
+export function noteFeedPressOut() {
+  if (preparing) clearTimeout(preparing);
+  preparing = null;
+}
 
 // ---------------------------------------------------------------------------
 // Where each feed stands: the page it is on, reported by its Home.
@@ -195,7 +216,7 @@ export function noteFeedSpot(key: FeedKey, spot: Spot | null) {
 export const feedSpot = (key: FeedKey): Spot | undefined => spots.get(key);
 
 // ---------------------------------------------------------------------------
-// Stills: one per built feed at most, taken at a press-in, of the feed on show.
+// Stills: one per built feed at most, taken a moment into a press (noteFeedPressIn), of the feed on show.
 // ---------------------------------------------------------------------------
 
 const nodes = new Map<FeedKey, unknown>();

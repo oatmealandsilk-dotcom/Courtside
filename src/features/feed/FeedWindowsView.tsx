@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
-import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import { AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
+import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Image as ExpoImage } from 'expo-image';
 import { StatusBar } from 'expo-status-bar';
@@ -22,7 +22,7 @@ import {
   CARD_GAP, FOR_YOU, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
   cardAt, feedShot, feedSpot, registerShotNode, setWindowsController, setWindowsState, snapFeed,
   useWindowsClipped, useWindowsPhase, useWindowsRowSwitched, useWindowsTarget, windowsState,
-  winDrag, winF, winGeo, winLive, winOn, winP, winStill,
+  winDrag, winF, winGeo, winLive, winOn, winP, winStill, winTick,
   type FeedKey, type Spot,
 } from './feedWindows';
 
@@ -68,6 +68,8 @@ export function WindowsStack({ children }: { children: React.ReactNode }) {
   const look = useAnimatedStyle(() => {
     // Closed (or Reduce Motion): exactly the feed, whatever the other values say.
     if (!winOn.value || winStill.value) return IDENTITY;
+    // Read so this look is worked out afresh every frame while they are up (winTick: never handed back to React).
+    void winTick.value;
     const c = cardAt(winLive.value, winP.value, winF.value, winGeo.value);
     return { transform: [{ translateX: c.x }, { translateY: c.y + winDrag.value }, { scale: c.s }], borderRadius: c.r };
   });
@@ -184,6 +186,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       cancelAnimationFrame(raf.current);
       choosing.current = null;
       interactive.value = 0;
+      cancelAnimation(winTick);
       winOn.value = 0;
       winP.value = 0;
       winDrag.value = 0;
@@ -230,6 +233,10 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       winF.value = origin;
       winOn.value = 1;
       interactive.value = 1;
+      cancelAnimation(winTick);
+      winTick.value = 0;
+      // A phone only (a browser hands nothing back), and only while the real feed is a moving card.
+      if (!still && Platform.OS !== 'web') winTick.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear }), -1, true);
       if (still) {
         winStill.value = 1;
         winP.value = 1;
@@ -286,11 +293,15 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       latest.current.onChoose(c.key);
       armGuard(2500);
       const t0 = Date.now();
+      // A feed built only now reports its page once it is up, and its own 220 ms fade-in starts then:
+      // counted from that moment, so the feed you came from never shows through it as the picture goes.
+      let seen = feedSpot(c.key) !== undefined ? t0 : 0;
       const wait = () => {
         if (choosing.current !== c || windowsState().phase !== 'closing') return;
-        const gone = Date.now() - t0;
-        // Its page reported, and the feed's own 220 ms fade-in done (two frames to spare); never past 1.5 s.
-        if ((feedSpot(c.key) !== undefined && gone >= 313) || gone >= 1500) { uncover(); return; }
+        const now = Date.now();
+        if (!seen && feedSpot(c.key) !== undefined) seen = now;
+        // Its page reported, and the feed's own fade-in done (two frames to spare); never past 1.5 s.
+        if ((seen && now - seen >= 313) || now - t0 >= 1500) { uncover(); return; }
         raf.current = requestAnimationFrame(wait);
       };
       raf.current = requestAnimationFrame(wait);
@@ -366,7 +377,7 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
       cancelAnimationFrame(raf.current);
       // Taken down while up (signed out, the layout changed): everything back at once.
       if (windowsState().phase !== 'closed') {
-        [winP, winF, winDrag, winStill].forEach((v) => cancelAnimation(v));
+        [winP, winF, winDrag, winStill, winTick].forEach((v) => cancelAnimation(v));
         winOn.value = 0; winP.value = 0; winDrag.value = 0; winStill.value = 0; winF.value = winLive.value;
         setWindowsState({ phase: 'closed', target: null, held: false, clipped: false });
         lockPageSwipe(false);
@@ -377,6 +388,11 @@ export function FeedWindows({ feeds, current, onChoose, blocked, firstSpot }: {
   // Gone at once when the Feed is left (another tab, a page opened over it), the groups change, or the window does.
   const feedsKey = feeds.map((f) => f.key).join('|');
   useEffect(() => { if (!focused) ctl.snapClose(); }, [focused, ctl]);
+  // The app sent away: back on the feed you were on when you return (and nothing rests shrunk meanwhile, see winTick).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'background') ctl.snapClose(); });
+    return () => sub.remove();
+  }, [ctl]);
   const shape = useRef({ feedsKey, w: size?.w, h: size?.h });
   useEffect(() => {
     const was = shape.current;

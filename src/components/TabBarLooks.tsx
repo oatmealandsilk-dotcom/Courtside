@@ -9,7 +9,7 @@ import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
-import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressIn } from '@/features/feed/feedWindows';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressIn, noteFeedPressOut } from '@/features/feed/feedWindows';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -203,6 +203,7 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
           accessible={live}
           onPress={() => onTab(item.route)}
           onPressIn={hold ? noteFeedPressIn : undefined}
+          onPressOut={hold ? noteFeedPressOut : undefined}
           onLongPress={hold}
           delayLongPress={hold ? HOLD_MS : undefined}
           accessibilityRole="tab"

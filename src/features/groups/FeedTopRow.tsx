@@ -9,7 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { showRow } from '@/features/feed/topRowScroll';
 import { useStageMotion } from '@/features/feed/useStageMotion';
-import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS } from '@/features/feed/feedWindows';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut } from '@/features/feed/feedWindows';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
@@ -353,7 +353,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
                     onFocus={(e) => { if (keyFocus(e)) setFocusIn(true); }}
                     onBlur={() => setFocusIn(false)}
                     onPressIn={onHoldStart ? () => { pressIn(); onHoldStart(); } : pressIn}
-                    onPressOut={pressOut}
+                    onPressOut={onHoldStart ? () => { pressOut(); noteFeedPressOut(); } : pressOut}
                     onPress={() => { if (on) return; haptics.tap(); const id = w.id; glideTo(key, () => onSelect(id)); }}
                     onLongPress={onHold ? () => { if (Date.now() - glidedAt.current > 360) onHold(); } : undefined}
                     delayLongPress={onHold ? HOLD_MS : undefined}
