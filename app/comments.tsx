@@ -8,7 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
@@ -381,8 +381,15 @@ export default function CommentsSheet() {
       picking.current = false;
     }
   };
-  // Where the caret is in the box (COMMENTS_V2: an emoji goes in there, as typing would put it).
-  const selection = useRef<{ start: number; end: number } | null>(null);
+  // Where the caret is in the box (COMMENTS_V2: an emoji goes in there, as typing would put it), and the
+  // words it was in. An iPhone says nothing when the page itself changes the words (Reply's "@them ", the
+  // strip's ×, a tap out, sending): the caret it last gave is then stale, and an emoji put there would land
+  // inside "@them" and drop the reply. So it counts only while the words are still the ones it was given in.
+  const selection = useRef<{ start: number; end: number; text: string } | null>(null);
+  const typed = (text: string) => {
+    latestDraft.current = text;
+    changeDraft(text);
+  };
   const addEmoji = (emoji: string) => {
     haptics.tap();
     if (!v2) {
@@ -393,12 +400,14 @@ export default function CommentsSheet() {
     // At the caret while typing (a browser takes the focus away for the press itself); at the end otherwise.
     const typingNow = !!input.current?.isFocused?.() || Date.now() - blurredAt.current < 400;
     const d = latestDraft.current;
-    const sel = typingNow && selection.current ? selection.current : { start: d.length, end: d.length };
+    const at = selection.current;
+    const sel = typingNow && at && at.text === d ? at : { start: d.length, end: d.length };
     const start = Math.min(sel.start, d.length);
     const end = Math.min(Math.max(sel.end, start), d.length);
-    changeDraft(d.slice(0, start) + emoji + d.slice(end));
+    const next = d.slice(0, start) + emoji + d.slice(end);
+    typed(next);
     const caret = start + emoji.length;
-    selection.current = { start: caret, end: caret };
+    selection.current = { start: caret, end: caret, text: next };
     // Opens the keyboard if it was down.
     input.current?.focus();
     // The caret after the emoji once the new words have landed.
@@ -559,7 +568,7 @@ export default function CommentsSheet() {
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
-                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} onSelectionChange={v2 ? (sel) => { selection.current = sel; } : undefined} mentions compact maxLength={COMMENT_MAX} />
+                <Field inputRef={input} value={draft} onChangeText={v2 ? typed : changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} onSelectionChange={v2 ? (sel) => { selection.current = { start: sel.start, end: sel.end, text: latestDraft.current }; } : undefined} mentions compact maxLength={COMMENT_MAX} />
               </View>
               {crossFade ? (
                 <View style={styles.action}>
@@ -671,6 +680,7 @@ function CommentList({ listRef, pull, tapsPutKeyboardAway = false, scrollYValue,
       scrollYValue.value = e.contentOffset.y;
     },
   });
+  const hideKeyboard = () => Keyboard.dismiss();
   // Made once: the sheet re-draws as you type, and the pull must not be re-made under a finger.
   const gesture = useMemo(() => {
     if (!pull || !drag) return null;
@@ -688,11 +698,19 @@ function CommentList({ listRef, pull, tapsPutKeyboardAway = false, scrollYValue,
         'worklet';
         const t = e.allTouches[0];
         if (!t) return;
-        // The keyboard is up and rides with the sheet: a pull down is the keyboard's (it follows the finger), never the sheet's.
-        if (drag.keyboardUp()) { manager.fail(); return; }
         const dy = t.absoluteY - touchStart.value.y;
         const dx = Math.abs(t.absoluteX - touchStart.value.x);
-        if (listY.value <= 0 && dy > 6 && dx < 12) manager.activate();
+        const pullDown = listY.value <= 0 && dy > 6 && dx < 12;
+        // The keyboard up and riding with the sheet (keyboardSync on an iPhone): the sheet never takes the pull.
+        // At the very top, where the list cannot move, a pull down puts the keyboard away and the sheet comes
+        // down with it (nothing would move until the finger reached the keyboard, past the box); scrolled
+        // down, it is the list's own scroll, the keyboard following the finger once it gets there.
+        if (drag.keyboardUp()) {
+          if (pullDown) { runOnJS(hideKeyboard)(); manager.fail(); }
+          else if (dy < -2 || listY.value > 0 || dx >= 12) manager.fail();
+          return;
+        }
+        if (pullDown) manager.activate();
         else if (dy < -2 || listY.value > 0 || dx >= 12) manager.fail();
       })
       .onStart(() => { 'worklet'; pulling.value = true; drag.start(); })
