@@ -1,4 +1,5 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
+import { LESS_AI } from '@/theme/look';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -246,10 +247,10 @@ export default function Health() {
             {linked ? <View style={styles.dot} /> : null}
           </View>
           <Text style={styles.line}>{about.line}</Text>
-          <Text style={styles.how}>
+          {LESS_AI && !(i.connected && i.lastSyncedAt) && !blocked && !loading && !(wrongPhone && i.connected) ? null : <Text style={styles.how}>
             {wrongPhone && i.connected && Platform.OS === 'android' ? 'Connected on your iPhone. It syncs from there.'
               : i.connected && i.lastSyncedAt ? `Synced ${syncedWhen(i.lastSyncedAt)}.` : blocked ? (wrongPhone ? 'iPhone only.' : inExpoGo() ? 'Available in the App Store version of CourtSide.' : 'Coming in the next app update.') : about.how}
-          </Text>
+          </Text>}
           {i.connected ? (
             <Reanimated.View entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.actions}>
               {/* Android cannot read Apple Health: syncing it is the iPhone's job. */}
@@ -338,9 +339,9 @@ export default function Health() {
 
   return (
     <Screen title="Health" compactTitle onBack={() => goBack()}>
-      <Text style={styles.lead}>{coachOn
+      {LESS_AI ? null : <Text style={styles.lead}>{coachOn
         ? (connected ? 'If you use the AI coach, it plans around these.' : 'Connect a source and, if you use the AI coach, it plans around how recovered you are.')
-        : 'Your sleep and recovery, from the sources you connect.'}</Text>
+        : 'Your sleep and recovery, from the sources you connect.'}</Text>}
 
       {/* A plain day ("2026-10-06") is read as that day here, at noon: read alone it is midnight in London, the day before in America. */}
       {latest ? (

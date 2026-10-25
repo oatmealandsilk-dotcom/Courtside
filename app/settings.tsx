@@ -28,7 +28,7 @@ import { notKnownAdult } from '@/features/players/age';
 import { HitGlyph } from '@/components/HitGlyph';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
@@ -79,7 +79,7 @@ export default function Settings() {
     return () => { on = false; };
   }, [actions, admin]));
   // One tap flips them, and the row says which way they are (Oct 5, owner: no switch, just say On or Off).
-  const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: 'A hint on first use', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
+  const tipsRow: Row = { icon: 'bulb-outline', label: 'Tips', detail: LESS_AI ? undefined : 'A hint on first use', value: tipsOn ? 'On' : 'Off', flip: true, onPress: () => {
     haptics.tap();
     if (tipsOn) { turnOffTips(); showToast({ title: 'Tips are off', icon: 'bulb-outline' }); }
     else { resetTips(); showToast({ title: 'Tips will show again', icon: 'bulb-outline' }); }
@@ -143,12 +143,12 @@ export default function Settings() {
     {
       title: 'Account',
       rows: [
-        { icon: 'person-circle-outline', label: 'Account center', detail: 'Password and sign-in', onPress: () => router.push('/account') },
+        { icon: 'person-circle-outline', label: 'Account center', detail: LESS_AI ? undefined : 'Password and sign-in', onPress: () => router.push('/account') },
         { icon: 'shield-checkmark-outline', label: 'Privacy center', onPress: () => router.push('/privacy') },
         // Oct 5 (owner: "Do word feature like how Instagram does"): Instagram's Hidden words (migration 117).
-        { icon: 'eye-off-outline', label: 'Hidden words', detail: 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
+        { icon: 'eye-off-outline', label: 'Hidden words', detail: LESS_AI ? undefined : 'Offensive comments and messages', onPress: () => router.push('/hidden-words') },
         // Oct 4 (owner): link a number so friends can find you, and find friends from your contacts.
-        { icon: 'link-outline', label: 'Invites', detail: 'Your link', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
+        { icon: 'link-outline', label: 'Invites', detail: LESS_AI ? undefined : 'Your link', value: joined ? `${joined} joined` : undefined, onPress: () => router.push('/invite') },
         // Hidden until texting codes is switched on (lib/phoneLinking).
         ...(PHONE_LINKING ? [{ icon: 'call-outline' as const, label: 'Phone number', detail: 'So friends can find you', onPress: () => router.push('/link-phone') }] : []),
         ...(Platform.OS === 'web' ? [] : [{ icon: 'people-outline' as const, label: 'Find friends from contacts', onPress: () => router.push('/find-contacts') }]),
@@ -214,10 +214,10 @@ export default function Settings() {
         ...(activityAlerts && autoLogLive ? [{
           icon: 'checkmark-done-outline' as const,
           label: 'Log tennis automatically',
-          detail: 'Private until you post it · keeps your streak',
+          detail: LESS_AI ? undefined : 'Private until you post it · keeps your streak',
           toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
         }] : []),
-        { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : 'Off. Turn on to see who is near you'), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
+        { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see who is near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
       ],
     },

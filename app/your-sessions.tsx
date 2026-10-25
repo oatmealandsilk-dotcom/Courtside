@@ -36,7 +36,7 @@ import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
@@ -241,7 +241,7 @@ export default function YourSessions() {
   if (summaryKey !== firstSummary.current) summaryLate.current = true;
 
   return (
-    <Screen title="Your sessions" subtitle="Only you see this." compactTitle onBack={() => goBack('/profile')} right={logButton}>
+    <Screen title="Your sessions" subtitle={LESS_AI ? undefined : "Only you see this."} compactTitle onBack={() => goBack('/profile')} right={logButton}>
       {/* 1. One summary: the week's time on court, big, with your records folded into its foot. */}
       {/* The first time ever (nothing read ahead yet) it still arrives a beat late: it fades in as the page below glides down. */}
       <HeightGlide duration={260}>

@@ -24,7 +24,7 @@ import { BLOCKED_WORDS_NOTE } from '@/features/hiddenWords/hiddenWords';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { confirmBlock, confirmReport } from '@/lib/confirm';
 import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /**
  * A coach's page: who they are, what they offer, and booking one of their
@@ -220,17 +220,17 @@ export default function CoachDetail() {
           the free ways to reach the coach instead. The coach still sees their own services. */}
       {!isOwner && !paidBooking ? (
         <>
-          <Text style={styles.sectionTitle}>Ask {first}</Text>
+          {LESS_AI ? null : <Text style={styles.sectionTitle}>Ask {first}</Text>}
           <View style={styles.freeRow}>
             <View style={{ flex: 1 }}><Button label={`Message ${first}`} variant="secondary" onPress={() => { void message(); }} full /></View>
             <View style={{ flex: 1 }}><Button label="Ask for free" variant="secondary" onPress={() => router.push('/ask-coach')} full /></View>
           </View>
-          <Text style={styles.muted}>Questions are public and free: a verified coach answers, usually within a day.</Text>
+          {LESS_AI ? null : <Text style={styles.muted}>Questions are public and free: a verified coach answers, usually within a day.</Text>}
         </>
       ) : null}
       {isOwner || paidBooking ? <Text style={styles.sectionTitle}>{isOwner ? 'Your services' : `Book ${first}`}</Text> : null}
       {!isOwner && !paidBooking ? null : services.length === 0 ? (
-        <Text style={styles.muted}>{isOwner ? 'Add a service in your studio so players can book you.' : 'No services on offer right now.'}</Text>
+        <Text style={styles.muted}>{isOwner ? (LESS_AI ? 'No services yet.' : 'Add a service in your studio so players can book you.') : 'No services on offer right now.'}</Text>
       ) : (
         <View style={styles.group}>
           {services.map((s, index) => {
@@ -347,7 +347,7 @@ export default function CoachDetail() {
         </Collapse>
       ) : null}
       {results.length === 0 ? (
-        <Text style={styles.muted}>{isOwner ? 'Show players what changed for the people you coach.' : 'None shared yet.'}</Text>
+        <Text style={styles.muted}>{isOwner && !LESS_AI ? 'Show players what changed for the people you coach.' : 'None shared yet.'}</Text>
       ) : (
         <Reanimated.View entering={ARRIVE} style={styles.group}>
           {results.map((r, index) => (
@@ -382,7 +382,7 @@ export default function CoachDetail() {
         </Collapse>
       ) : null}
       {reviews.length === 0 ? (
-        <Text style={styles.muted}>No reviews yet. Only players {first} has answered can leave one.</Text>
+        <Text style={styles.muted}>{LESS_AI ? 'No reviews yet.' : `No reviews yet. Only players ${first} has answered can leave one.`}</Text>
       ) : (
         <Reanimated.View entering={ARRIVE} style={styles.group}>
           {reviews.map((r, index) => {

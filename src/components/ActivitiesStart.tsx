@@ -25,7 +25,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /** People offered to follow on the page. */
 const PICKS = 3;
@@ -99,14 +99,14 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
       <Wash height={300} strength={0.6} />
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{!logs ? 'Start logging' : few ? 'Follow more players' : 'Your activities'}</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{logs && few ? 'Their sessions show up here, with yours.' : 'Your sessions and the people you follow show up here.'}</Text>
+        {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{logs && few ? 'Their sessions show up here, with yours.' : 'Your sessions and the people you follow show up here.'}</Text>}
       </View>
 
       <View style={styles.card}>
         {offer ? (
           <View style={styles.connect}>
             <SwipePressable accessibilityRole="button" accessibilityLabel={`Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`} disabled={busy} onPress={() => { void connect(); }} style={({ pressed }) => [styles.row, styles.connectTap, pressed && styles.pressed]}>
-              <View style={styles.tile}><Ionicons name="pulse" size={18} color={colors.brand} /></View>
+              {LESS_AI ? null : <View style={styles.tile}><Ionicons name="pulse" size={18} color={colors.brand} /></View>}
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText} numberOfLines={2}>{busy ? 'Connecting…' : `Connect ${source === 'whoop' ? 'WHOOP' : 'Apple Health'} to log automatically`}</Text>
             </SwipePressable>
             {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}
@@ -121,12 +121,12 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
           onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
           style={({ pressed }) => [styles.row, offer && styles.rowLine, pressed && styles.pressed]}
         >
-          <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>
+          {LESS_AI && !liveNow ? null : <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText}>{!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </SwipePressable>
         <SwipePressable accessibilityRole="button" accessibilityLabel="Log a session" onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && styles.pressed]}>
-          <View style={styles.tile}><Ionicons name="add" size={20} color={colors.brand} /></View>
+          {LESS_AI ? null : <View style={styles.tile}><Ionicons name="add" size={20} color={colors.brand} /></View>}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText}>Log a session</Text>
           <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
         </SwipePressable>
@@ -146,12 +146,12 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
                     <View style={styles.personMeta}><LevelPill profile={user.profile} small /><Text style={styles.reason} numberOfLines={1}>{reason}</Text></View>
                   </View>
                 </Pressable>
-                <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
+                <FollowPill small soft={LESS_AI} following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
               </View>
             ))}
             {/* Where to find the people you already know (owner, Oct 6). The teen rules are the Find friends page's own. */}
             <SwipePressable accessibilityRole="link" accessibilityLabel={contacts ? CONTACTS_LABEL : 'Share your invite link'} onPress={() => router.push(contacts ? '/find-contacts' : '/invite')} style={({ pressed }) => [styles.row, people.length > 0 && styles.rowLine, pressed && styles.pressed]}>
-              <View style={styles.tile}><Ionicons name={contacts ? 'people' : 'paper-plane'} size={18} color={colors.brand} /></View>
+              {LESS_AI ? null : <View style={styles.tile}><Ionicons name={contacts ? 'people' : 'paper-plane'} size={18} color={colors.brand} /></View>}
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText} numberOfLines={1}>{contacts ? 'Find friends from contacts' : 'Share your invite link'}</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
             </SwipePressable>
@@ -159,10 +159,10 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
         </View>
       ) : null}
 
-      <View style={styles.more}>
-        <Ionicons name="chevron-down" size={16} color={colors.textFaint} />
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>{nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : 'Sessions you and they post show up here'}</Text>
-      </View>
+      {LESS_AI && !nearCount && !sessions ? null : <View style={styles.more} accessible={LESS_AI} accessibilityLabel={LESS_AI ? (nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : undefined) : undefined}>
+        <Ionicons name="chevron-down" size={LESS_AI ? 20 : 16} color={colors.textFaint} />
+        {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>{nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : 'Sessions you and they post show up here'}</Text>}
+      </View>}
     </View>
   );
 }
@@ -191,7 +191,7 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: 4, paddingHorizontal: spacing.xs },
   title: { ...typography.title, color: colors.text },
   lead: { ...typography.small, color: colors.textMuted },
-  card: { ...lift, borderRadius: corner(18), backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(18), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 12, minHeight: 56 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },

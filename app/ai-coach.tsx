@@ -12,7 +12,7 @@ import Reanimated, { Easing, FadeIn, LayoutAnimationConfig } from 'react-native-
 
 import { Avatar, Chip, EmptyState, Screen, SegmentedControl, Toggle } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 const AI_SECTIONS: ('ask' | 'plan')[] = ['ask', 'plan'];
 import { TipComposer } from '@/components/TipComposer';
@@ -139,7 +139,7 @@ export default function AiCoachRoute() {
     return (
       <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
         <View style={introStyles.card}>
-          <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+          {LESS_AI ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
           <Text style={introStyles.title}>Two quick questions first</Text>
           <Text style={introStyles.body}>How fit you are, how often you can play, and what you’re working toward. The coach plans your week around them.</Text>
           <Pressable accessibilityRole="button" onPress={() => { setLater(true); router.push({ pathname: '/onboarding', params: { from: 'coach', step: '3' } }); }} style={({ pressed }) => [introStyles.go, pressed && { opacity: PRESS_DIM }]}>
@@ -178,13 +178,13 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
   return (
     <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
       <View style={introStyles.card}>
-        <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>
+        {LESS_AI ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
         <Text style={introStyles.title}>Before you use the AI coach</Text>
         <Text style={introStyles.body}>The AI coach is powered by Claude, an AI made by Anthropic. To answer you and plan your week, CourtSide sends Anthropic:</Text>
         <View style={introStyles.list}>
           {sent.map((line) => (
             <View key={line} style={introStyles.item}>
-              <Ionicons name="checkmark" size={16} color={colors.brand} />
+              {LESS_AI ? null : <Ionicons name="checkmark" size={16} color={colors.brand} />}
               <Text style={introStyles.itemText}>{line}</Text>
             </View>
           ))}
@@ -325,7 +325,7 @@ function Train() {
         <View style={styles.section}>
           {!lines.length ? (
             <View style={styles.intro}>
-              <Text style={styles.lead}>Ask about your next session, a shot, or recovery. It answers from your profile and this week’s plan, and remembers what you talk about.</Text>
+              {LESS_AI ? null : <Text style={styles.lead}>Ask about your next session, a shot, or recovery. It answers from your profile and this week’s plan, and remembers what you talk about.</Text>}
               <View style={styles.chips}>
                 {['What should I work on today?', 'How can I improve my serve?', 'Help me plan a lighter session'].map((text) => (
                   <Chip key={text} label={text} onPress={() => setDraft({ text, n: Date.now() })} />
@@ -367,7 +367,7 @@ function Train() {
           <TipComposer
             key={draft?.n ?? 0}
             initial={draft?.text}
-            placeholder="What would you like help with?"
+            placeholder={LESS_AI ? 'Ask about your game' : 'What would you like help with?'}
             accessibilityLabel="Message the AI coach"
             onSubmit={(text) => { void ask(text); }}
           />
@@ -482,7 +482,7 @@ function Train() {
                 {day.restDay && !day.blocks.length ? <Text style={styles.blockDetail}>Nothing scheduled. Sleep, eat, walk.</Text> : null}
               </Reanimated.View>
             ))}
-            {openDay === null ? <Text style={styles.fine}>Tap a day to see the session.</Text> : null}
+            {openDay === null && !LESS_AI ? <Text style={styles.fine}>Tap a day to see the session.</Text> : null}
           </View>
           {planRemindersSupported ? (
             <View style={styles.remind}>

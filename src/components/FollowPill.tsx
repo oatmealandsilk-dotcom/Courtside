@@ -20,7 +20,7 @@ const EASE = Easing.bezier(0.22, 1, 0.36, 1);
  * does exactly the same and reads "Requested" until they accept; tapping
  * it again takes the ask back.
  */
-export function FollowPill({ following, onPress, small = false, name, userId, wide = false }: { following: boolean; onPress: () => void; small?: boolean; name?: string; userId?: string; /** Fills the width it is given (a suggestion card's button). */ wide?: boolean }) {
+export function FollowPill({ following, onPress, small = false, name, userId, wide = false, soft = false }: { following: boolean; onPress: () => void; small?: boolean; name?: string; userId?: string; /** Fills the width it is given (a suggestion card's button). */ wide?: boolean; /** The quiet look for a list row (Oct 24): a pale brand fill with the word in the brand colour, no wash. Same size and tap area. */ soft?: boolean }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
   const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
@@ -34,15 +34,17 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   // The theme's colours are read here, on each draw, and handed to the animation as plain values.
   // Read inside it, they were copied once, from whichever theme the pill first drew in (it stayed
   // Paris orange in every other theme until the app restarted).
-  const { surfaceAlt, brand, borderStrong, text, brandInk } = colors;
+  const { surfaceAlt, brand, borderStrong, text, brandInk, brandDim } = colors;
+  const rest = soft ? brandDim : brand;
+  const restInk = soft ? brand : brandInk;
   // Follow is the coloured one, the thing to tap; once you follow (or have asked to), the pill
   // goes quiet, the way Instagram does it (Oct 2, William: reverse the colours).
   const pill = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], [brand, surfaceAlt]),
-    borderColor: interpolateColor(on.value, [0, 1], [brand, surfaceAlt]),
+    backgroundColor: interpolateColor(on.value, [0, 1], [rest, surfaceAlt]),
+    borderColor: interpolateColor(on.value, [0, 1], [rest, surfaceAlt]),
     transform: [{ scale: bump.value }],
-  }), [surfaceAlt, brand, borderStrong]);
-  const label = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [brandInk, text]) }), [text, brandInk]);
+  }), [surfaceAlt, rest, borderStrong]);
+  const label = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [restInk, text]) }), [text, restInk]);
   const wash = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
 
   const press = () => {
@@ -55,7 +57,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>
+        {soft ? null : <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>}
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
         <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
       </Animated.View>

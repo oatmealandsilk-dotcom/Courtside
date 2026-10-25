@@ -44,7 +44,7 @@ import { useStillLoading } from '@/lib/useStillLoading';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -261,7 +261,7 @@ function Theirs({ user }: { user: User }) {
     <>
       <View style={styles.cardSpot}><PlayerCard user={user} variant="full" /></View>
       {parts.length ? <View style={styles.theirBody}>{parts}</View> : null}
-      <Text style={styles.allShared}>{parts.length ? `That’s everything ${first} shares.` : `That’s everything ${first} has shared so far.`}</Text>
+      {LESS_AI ? null : <Text style={styles.allShared}>{parts.length ? `That’s everything ${first} shares.` : `That’s everything ${first} has shared so far.`}</Text>}
     </>
   );
 }
@@ -537,7 +537,7 @@ function Limits({ user }: { user: User }) {
   const add = () => router.push({ pathname: '/tennis-sheet', params: { kind: 'limit' } });
   return (
     <View>
-      <SectionHead title="Injuries and limits" line={shown.length ? 'Coaches plan around these.' : undefined} link={shown.length ? { label: 'Add', accessibilityLabel: 'Add an injury or a time limit', onPress: add } : undefined} />
+      <SectionHead title="Injuries and limits" line={shown.length && !LESS_AI ? 'Coaches plan around these.' : undefined} link={shown.length ? { label: 'Add', accessibilityLabel: 'Add an injury or a time limit', onPress: add } : undefined} />
       <Box>
         {shown.length ? shown.map((c, i) => (
           <Row key={c.id} first={i === 0} lead={<Tile icon={c.kind === 'injury' ? 'bandage-outline' : 'calendar-outline'} />} title={c.label} sub={c.note} subLines={3}
