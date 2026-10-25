@@ -4,6 +4,10 @@ import type { User } from '@/data/types';
 import { useFindable } from '@/features/people/findable';
 import { notKnownAdult } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
+import { LESS_AI } from '@/theme/look';
+
+/** What a post is, said in a reason line: "Liked your clip". */
+const POST_WORD: Record<string, string> = { clip: 'clip', match: 'match', session: 'session', note: 'post', gear: 'post', milestone: 'post' };
 
 export interface Suggestion { user: User; reason: string }
 
@@ -52,14 +56,16 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
     const kept = new Set(keepKey ? keepKey.split(',') : []);
     const left = new Set(excludeKey ? excludeKey.split(',') : []);
     const interacted = new Set<string>();
+    // What they actually did, for the reason line (Oct 24: "Interacted with you" read as a robot's words); the first thing found wins.
+    const did = new Map<string, string>();
     for (const post of posts) {
-      if (post.authorId === currentUserId) post.likedBy.forEach((id) => interacted.add(id));
+      if (post.authorId === currentUserId) post.likedBy.forEach((id) => { interacted.add(id); if (!did.has(id)) did.set(id, `Liked your ${POST_WORD[post.kind] ?? 'post'}`); });
       else if (post.likedBy.includes(currentUserId)) interacted.add(post.authorId);
     }
     const postById = new Map(posts.map((p) => [p.id, p]));
     for (const comment of comments) {
       const post = postById.get(comment.postId);
-      if (post?.authorId === currentUserId) interacted.add(comment.authorId);
+      if (post?.authorId === currentUserId) { interacted.add(comment.authorId); if (!did.has(comment.authorId)) did.set(comment.authorId, `Commented on your ${POST_WORD[post.kind] ?? 'post'}`); }
     }
     for (const conversation of conversations) conversation.participantIds.forEach((id) => interacted.add(id));
     const myTown = me ? townOf(me.location) : '';
@@ -78,7 +84,7 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
         const local = !!town && town === myTown;
         const sameAsThem = !!town && town === theirTown;
         const friendName = via.get(user.id);
-        const reason = interacted.has(user.id) ? 'Interacted with you'
+        const reason = interacted.has(user.id) ? (LESS_AI ? did.get(user.id) ?? 'Knows you' : 'Interacted with you')
           : friendName ? `Followed by ${friendName}`
           : user.isCoach ? 'Coach on CourtSide'
           : local || sameAsThem ? `Plays in ${town}`
