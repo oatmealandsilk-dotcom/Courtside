@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """
 The logo-only launch screen (Oct 24, "splash C"): the app icon's thin mark in the icon's green,
-centred on the icon's own cream, and "GROWING THE GAME" small and quiet low down, the way
-Instagram, WhatsApp and Threads open (mark on the icon's background, a quiet line at the foot).
+centred, and "GROWING THE GAME" small and quiet low down, the way Instagram, WhatsApp and Threads
+open (the mark alone, a quiet line at the foot). Oct 25: on white, the Clean theme's own ground
+(Clean is what the app opens in since Oct 24; on the icon's cream the launch then turned white,
+owner: "Think the loading screen color is off"), the line in Clean's muted grey.
 
 Writes, from one set of shapes, so the phone's launch picture and the app's drawn copy of it
 are the same pixels:
@@ -31,9 +33,10 @@ from fontTools.ttLib import TTFont
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.environ.get('INTER_SEMIBOLD') or os.path.join(ROOT, 'node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf')
 
-CREAM = (0xF6, 0xEF, 0xE4)   # the icon's cream (assets/icon-thin.png)
+ICON_CREAM = (0xF6, 0xEF, 0xE4)  # the icon's cream (assets/icon-thin.png): only to measure the mark against the icon
+GROUND = (0xFF, 0xFF, 0xFF)  # the launch screen's ground: the Clean theme's bg (src/theme/ThemeProvider.tsx), white
 GREEN = (0x2E, 0x7E, 0x4B)   # the icon's green
-LINE_INK = (0xA0, 0x98, 0x88)  # the quiet line: a warm grey a step lighter than the old launch line
+LINE_INK = (0x53, 0x64, 0x71)  # the quiet line: Clean's muted ink (textMuted), 6.1:1 on white
 PIC_W, PIC_H = 1284, 2778
 MARK_FRAC = 0.22             # the mark's width, as a share of the screen's
 THIN = 0.016                 # the Oct 22 thinning, as a share of the refined mark's width
@@ -161,7 +164,7 @@ def mark_polys(d, left, top, width):
 def check_against_icon(d):
     """How far this drawing of the mark is from assets/icon-thin.png (placed as that icon places it)."""
     icon = np.asarray(Image.open(os.path.join(ROOT, 'assets/icon-thin.png')).convert('RGB')).astype(np.float32)
-    ink = np.clip((CREAM[1] - icon[..., 1]) / (CREAM[1] - GREEN[1]), 0, 1)
+    ink = np.clip((ICON_CREAM[1] - icon[..., 1]) / (ICON_CREAM[1] - GREEN[1]), 0, 1)
     shapes = thin_mark(d); x0, y0, x1, y1 = bbox(shapes)
     w = 0.68 * 1024; h = w * (y1 - y0) / (x1 - x0)
     polys, _, _ = mark_polys(d, 512 - w / 2, 0.494 * 1024 - h / 2, w)
@@ -254,7 +257,7 @@ def main():
     lw = max(PIC_W / 2 - line_box[0], line_box[0] + line_box[2] - PIC_W / 2)
     line_view = [PIC_W / 2 - lw, line_box[1], 2 * lw, line_box[3]]
 
-    pic = Image.new('RGB', (PIC_W, PIC_H), CREAM)
+    pic = Image.new('RGB', (PIC_W, PIC_H), GROUND)
     paint(pic, mark_poly, mark_box, GREEN)
     paint(pic, line_poly, line_box, LINE_INK)
     pic.save(os.path.join(ROOT, 'assets/splash-c.png'), optimize=True)
@@ -270,7 +273,7 @@ def main():
     Image.fromarray(rgba, 'RGBA').save(os.path.join(ROOT, 'assets/splash-c-android.png'), optimize=True)
 
     hexc = lambda c: '#%02X%02X%02X' % c
-    ts = TS.format(W=PIC_W, H=PIC_H, cream=hexc(CREAM), green=hexc(GREEN), line=hexc(LINE_INK),
+    ts = TS.format(W=PIC_W, H=PIC_H, ground=hexc(GROUND), green=hexc(GREEN), line=hexc(LINE_INK),
                    mbox=[round(v, 2) for v in mark_view], mw=f'{mw:.2f}', cx=PIC_W / 2, cy=PIC_H / 2, md=mark_d,
                    text=LINE_TEXT, size=f'{LINE_SIZE:g}', track=LINE_TRACK, base=f'{LINE_BASELINE:g}',
                    lbox=[round(v, 2) for v in line_view], ld=line_d, apt=ANDROID_PT, apx=f'{aw:.2f}')
@@ -284,7 +287,7 @@ def main():
     u = f'calc(min({MARK_FRAC * 100:g}vw, 96px) / {mw:.2f})'
     block = (
         '<!-- launch:start (written by scripts/make-splash-c.py; the app\'s first screen replaces it) -->\n'
-        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;background:{hexc(CREAM)};--u:{u}">\n'
+        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;background:{hexc(GROUND)};--u:{u}">\n'
         f'        <svg viewBox="{vb(mark_view)}" style="position:absolute;left:50%;top:50%;width:calc(var(--u) * {mark_view[2]:g});height:calc(var(--u) * {mark_view[3]:g});transform:translate(-50%,-50%)">'
         f'<path fill="{hexc(GREEN)}" fill-rule="evenodd" d="{mark_d}"/></svg>\n'
         f'        <svg viewBox="{vb(line_view)}" style="position:absolute;left:50%;bottom:calc(var(--u) * {PIC_H - line_view[1] - line_view[3]:g});width:calc(var(--u) * {line_view[2]:g});height:calc(var(--u) * {line_view[3]:g});transform:translateX(-50%)">'
@@ -309,8 +312,8 @@ TS = '''/*
 /** The picture's size, in its own pixels (the same as the old launch picture's). */
 export const PICTURE_C = {{ width: {W}, height: {H} }};
 
-/** Its colours: the icon's own cream and green, and the quiet line's grey. */
-export const SPLASH_C_COLORS = {{ cream: '{cream}', green: '{green}', line: '{line}' }};
+/** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
+export const SPLASH_C_COLORS = {{ ground: '{ground}', green: '{green}', line: '{line}' }};
 
 /** The mark: its box (x, y, width, height), its own width, the middle it is centred on, and its outline (even-odd: the windows are holes). */
 export const MARK_C = {{

@@ -8,8 +8,8 @@
 /** The picture's size, in its own pixels (the same as the old launch picture's). */
 export const PICTURE_C = { width: 1284, height: 2778 };
 
-/** Its colours: the icon's own cream and green, and the quiet line's grey. */
-export const SPLASH_C_COLORS = { cream: '#F6EFE4', green: '#2E7E4B', line: '#A09888' };
+/** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
+export const SPLASH_C_COLORS = { ground: '#FFFFFF', green: '#2E7E4B', line: '#536471' };
 
 /** The mark: its box (x, y, width, height), its own width, the middle it is centred on, and its outline (even-odd: the windows are holes). */
 export const MARK_C = {

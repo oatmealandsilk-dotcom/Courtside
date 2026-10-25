@@ -204,10 +204,12 @@ function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
 
 /*
  * Splash C (Oct 24): the logo-only look, as Instagram, WhatsApp and Threads open: the icon's thin mark
- * in the icon's green on the icon's own cream, and "GROWING THE GAME" small and quiet at the foot.
- * Always in those colours (the launch picture's own, whatever the theme): the curtain's fade into the
- * app carries you into your theme, as before. Shapes from launchPictureC.ts (scripts/make-splash-c.py,
- * written with assets/splash-c.png from the same outlines). Drawn only where the launch picture is the
+ * in the icon's green, and "GROWING THE GAME" small and quiet at the foot. On white since Oct 25 (the
+ * Clean theme's ground: on the icon's cream, the app then turned white; owner: "Think the loading
+ * screen color is off"), the line in Clean's muted grey. Always in those colours (the launch picture's
+ * own, whatever the theme): the curtain's fade into the app carries you into your theme, as before.
+ * Shapes from launchPictureC.ts (scripts/make-splash-c.py, written with assets/splash-c.png from the
+ * same outlines). Drawn only where the launch picture is the
  * new one (NEW_SPLASH, src/lib/splashLook.ts); older iPhone builds keep the look above.
  */
 const C = SPLASH_C_COLORS;
@@ -304,8 +306,8 @@ export const LaunchMark: (props: { ink: string; faint: string; line?: string }) 
   ? (Platform.OS === 'web' ? WebLaunchMarkC : Platform.OS === 'android' ? AndroidLaunchMarkC : PhoneLaunchMarkC)
   : (Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark);
 
-/** Splash C is drawn on the icon's cream (whatever the theme); today's look keeps the screen's own colour. */
-export const launchGround = NEW_SPLASH ? { backgroundColor: C.cream } : null;
+/** Splash C is drawn on its own white (whatever the theme); today's look keeps the screen's own colour. */
+export const launchGround = NEW_SPLASH ? { backgroundColor: C.ground } : null;
 
 const styles = StyleSheet.create({
   centre: { alignItems: 'center', justifyContent: 'center' },

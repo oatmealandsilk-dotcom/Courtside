@@ -32,7 +32,10 @@ module.exports = {
     orientation: 'portrait',
     scheme: 'courtside',
     userInterfaceStyle: 'dark',
-    backgroundColor: '#F8F7F2',
+    // The root behind the app (expo-system-ui): white, the launch screen's own ground and the Clean
+    // theme's (Oct 25), so a frame between the launch screen and the app's first draw is never a third
+    // colour. Native: the next store build. On Android the app sets it to the theme's own once running.
+    backgroundColor: '#FFFFFF',
     // Android only reads this (its "primary" colour: the app's card in the recent-apps
     // view, and the edge glow on older phones), which was Expo's default navy. The
     // brand's green, as on the icon (Oct 5). The iPhone app and the website ignore it.
@@ -44,7 +47,7 @@ module.exports = {
     // Oct 22: "Do thin large for logo": the same mark with thinner strokes at 68% of the tile,
     // flat green on cream (no gradient or glow). icon-refined*.png stay in assets/.
     icon: green ? './assets/icon.png' : './assets/icon-thin.png',
-    splash: { image: './assets/splash-c.png', resizeMode: 'cover', backgroundColor: '#F6EFE4' },
+    splash: { image: './assets/splash-c.png', resizeMode: 'cover', backgroundColor: '#FFFFFF' },
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
@@ -129,9 +132,11 @@ module.exports = {
       // the zoom from the icon has no colour step), "GROWING THE GAME" small at the foot. Made, with the
       // app's drawn copy of it, by scripts/make-splash-c.py; the app draws that copy only on builds newer
       // than 18 (src/lib/splashLook.ts), so phones on 18 keep matching splash.png. Android: the mark
-      // alone (its launch screen is an icon), 90 points wide on the same cream.
-      ['expo-splash-screen', { image: './assets/splash-c.png', backgroundColor: '#F6EFE4', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#F6EFE4' } }],
-      // Dark status-bar icons on the cream launch screen (Info.plist UIStatusBarStyleDarkContent), so they do not
+      // alone (its launch screen is an icon), 90 points wide on the same ground.
+      // Oct 25: on white, not the icon's cream: the Clean theme's ground, what the app opens in since Oct 24
+      // (owner: "Think the loading screen color is off"); the line in Clean's muted grey.
+      ['expo-splash-screen', { image: './assets/splash-c.png', backgroundColor: '#FFFFFF', resizeMode: 'cover', enableFullScreenImage_legacy: true, android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#FFFFFF' } }],
+      // Dark status-bar icons on the white launch screen (Info.plist UIStatusBarStyleDarkContent), so they do not
       // flip from white to dark when the app takes over; once the app runs, ThemedStatusBar sets them per theme.
       ['expo-status-bar', { style: 'dark' }],
       'expo-router',

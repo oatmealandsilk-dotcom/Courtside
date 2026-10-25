@@ -8,8 +8,8 @@ import Constants from 'expo-constants';
  * App Store build, while the app's code (and so its drawn copy of that picture: the loading
  * screen and the curtain) arrives by over-the-air update. The two must always match, or the
  * hand-over from one to the other jumps. So the new look (splash C: the icon's thin mark alone on
- * the icon's cream, "GROWING THE GAME" small at the foot; assets/splash-c.png) is drawn only on an
- * iPhone build newer than LAST_OLD_SPLASH_BUILD, the last one built with the old picture
+ * white, Clean's ground since Oct 25, "GROWING THE GAME" small at the foot; assets/splash-c.png)
+ * is drawn only on an iPhone build newer than LAST_OLD_SPLASH_BUILD, the last one built with the old picture
  * (assets/splash.png: the old mark, "CourtSide" and the line). Older builds keep today's look.
  *
  * The build number is the installed app's own (its CFBundleVersion, read by expo-constants from

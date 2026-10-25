@@ -206,7 +206,7 @@ export default function Index() {
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
         // nothing moving, on any size of phone (Oct 4, owner: theme fade back, no blip).
         // Splash C (NEW_SPLASH: a build whose launch picture is the new one, and the website, whose
-        // loader is): the mark and line on the icon's cream, in their own colours (Oct 24).
+        // loader is): the mark and line on white, in their own colours (Oct 24; white, not cream, Oct 25).
         <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
       ) : (
         <>
