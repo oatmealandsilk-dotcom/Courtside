@@ -230,7 +230,7 @@ export default function NewHit() {
   const openMenu = () => { Keyboard.dismiss(); setMenuOpen(true); };
 
   return (
-    <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86}
+    <DragSheet closeSignal={closeSignal} onDismissed={done} peekFraction={0.86} slideOpen
       header={<SheetTitle title={asked.length ? (params.rematch === '1' && asked.length === 1 ? `Rematch with ${askedNames}?` : `Ask ${askedNames} to hit`) : 'Looking for a hit'} line={summary} lines={2} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <View style={styles.body}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" scrollEventThrottle={32}
