@@ -760,7 +760,8 @@ export async function fetchSharePreview(kind: ShareKind, id: string): Promise<Sh
     if (!h || !shareable(h.authorId)) return answer(locked);
     return answer({ kind, open: true, gone: !!h.cancelled || Date.parse(h.startsAt) < Date.now() - 3_600_000, author: person(h.authorId), hit: {
       id: h.id, startsAt: h.startsAt, format: h.format, spots: h.spots, spotsLeft: Math.max(0, h.spots - h.joinedIds.length),
-      levelMin: h.levelMin, levelMax: h.levelMax, note: h.note, place: h.place,
+      // As the server's (share_preview): the court's id, name and spot only. A hit with no court yet sends just its name, never its area.
+      levelMin: h.levelMin, levelMax: h.levelMax, note: h.note, place: { id: h.place.id, name: h.place.name, lat: h.place.lat, lng: h.place.lng },
     } });
   }
   if (kind === 'question') {
@@ -822,7 +823,8 @@ export async function fetchPeekHits(near?: { lat: number; lng: number } | null, 
   const known = (userId: ID) => users.find((x) => x.id === userId)?.ageGroup === 'adult';
   const shareable = (userId: ID) => { const u = users.find((x) => x.id === userId); return !!u && !u.isPrivate && !u.suspended && u.ageGroup === 'adult'; };
   const found = demoHits
-    .filter((h) => !h.cancelled && h.authorId !== CURRENT_USER_ID && shareable(h.authorId)
+    // Never a hit with no court yet (Flexible): signed out, the server's peek shows only hits at a real court.
+    .filter((h) => !h.cancelled && !h.place.flexible && h.authorId !== CURRENT_USER_ID && shareable(h.authorId)
       && Date.parse(h.startsAt) > now && Date.parse(h.startsAt) < now + 7 * 86_400_000
       && h.spots - h.joinedIds.length > 0 && h.joinedIds.every(known))
     .map((h): PeekHit => {

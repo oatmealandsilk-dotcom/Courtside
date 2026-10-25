@@ -31,6 +31,7 @@ import { TERMS_VERSION } from '@/lib/legal';
 import { CAROUSEL_MAX } from '@/features/compose/carousel';
 import { readinessOf, sessionTagNamesLive, sessionToSend, setSessionTagNamesLive, trustedSession } from './sessionTagGate';
 import { isMapCourtId } from '@/features/places/courtName';
+import { flexibleName, nearWord } from '@/features/hits/flexible';
 import type { Openness } from '@/features/players/age';
 import { asHitMiles } from '@/features/players/openToHit';
 import { lookFrom } from '@/features/groups/look';
@@ -628,7 +629,14 @@ const toActivity = (r: ActivityRow): DetectedActivity => ({
 const activitiesQuery = (me: ID, days = 14, limit = 150) => need().from('detected_activities').select('*').eq('user_id', me)
   .gte('ended_at', new Date(Date.now() - days * 86_400_000).toISOString()).order('started_at', { ascending: false }).limit(limit);
 
-interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null; joined_count?: number | null }
+interface HitRow { id: string; author_id: string; starts_at: string; place: { id?: string; name?: string; lat?: number; lng?: number; flexible?: unknown; near?: unknown; area?: unknown } | null; level_min: number | null; level_max: number | null; format: HitRequest['format']; spots: number; note: string | null; conversation_id: string | null; cancelled: boolean; created_at: string; hit_joins?: { user_id: string }[]; audience?: string | null; opens_at?: string | null; include_groups?: boolean | null; joined_count?: number | null }
+/** A flexible hit's place as saved (migration 187 rebuilds it on the server): its town and its rough area, nothing else. */
+const flexibleFrom = (p: Record<string, unknown>): HitRequest['place'] => {
+  const near = nearWord(p.near);
+  const a = p.area as { lat?: unknown; lng?: unknown } | null | undefined;
+  const area = a && typeof a.lat === 'number' && typeof a.lng === 'number' && Number.isFinite(a.lat) && Number.isFinite(a.lng) ? { lat: a.lat, lng: a.lng } : undefined;
+  return { flexible: true, name: flexibleName(near), ...(near ? { near } : {}), ...(area ? { area } : {}) };
+};
 const toHit = (r: HitRow): HitRequest => {
   const joinedIds = (r.hit_joins ?? []).map((j) => j.user_id);
   // How many are in that this account is not shown (migration 95's count, kept by the server); none before it.
@@ -636,7 +644,9 @@ const toHit = (r: HitRow): HitRequest => {
   return {
     id: r.id, authorId: r.author_id, startsAt: r.starts_at,
     // The court's map id when it was picked from the courts list (kept only if it is one), so the hit lands on that court's page.
-    place: { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
+    // "Flexible" (no court yet, migration 187): never an id or a spot, only its town and rough area (features/hits/flexible).
+    place: r.place?.flexible === true ? flexibleFrom(r.place)
+      : { id: isMapCourtId(r.place?.id) ? r.place.id : undefined, name: String(r.place?.name ?? 'A court').slice(0, 120), lat: typeof r.place?.lat === 'number' ? r.place.lat : undefined, lng: typeof r.place?.lng === 'number' ? r.place.lng : undefined },
     levelMin: r.level_min ?? undefined, levelMax: r.level_max ?? undefined, format: r.format, spots: r.spots, note: r.note ?? undefined,
     conversationId: r.conversation_id ?? undefined, cancelled: r.cancelled, createdAt: r.created_at, joinedIds,
     ...(hiddenJoins ? { hiddenJoins } : {}),

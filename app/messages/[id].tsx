@@ -40,6 +40,7 @@ import { GROUP_CAP, GroupAvatar, eventText, groupName, isGroupChat, isMuted, lea
 import { HitGlyph } from '@/components/HitGlyph';
 import { joinedCount } from '@/features/hits/audience';
 import { hitWhen } from '@/features/hits/format';
+import { isFlexibleHit } from '@/features/hits/flexible';
 import { goBack } from '@/lib/goBack';
 import { VoiceNote } from '@/components/VoiceNote';
 import { EmojiKeyboard } from '@/components/EmojiKeyboard';
@@ -409,6 +410,10 @@ export default function Thread() {
   const blockedHere = chatBlocked || (!group && !!other && blockedIds.includes(other.id));
   // Nothing can be written here (nor reacted with): the box gives way to a note.
   const canWrite = !removed && !blockedHere;
+  // A hit's chat whose hit has no court yet (Flexible, features/hits/flexible), still ahead and not called off:
+  // one line at the top says so, with Send a court, the way it gets picked.
+  const noCourtYet = useMemo(() => !!conversation?.id && hitRequests.some((h) => h.conversationId === conversation.id && !h.cancelled
+    && isFlexibleHit(h) && Date.parse(h.startsAt) > Date.now() - 3_600_000), [hitRequests, conversation?.id]);
 
   // Reaching the top of the list loads the page of messages before the
   // oldest here, like Instagram. The list is upside down, so they go in at
@@ -995,6 +1000,16 @@ export default function Thread() {
       </View>
 
       <View style={styles.listArea}>
+        {noCourtYet && canWrite && thread.length ? (
+          <View style={styles.noCourt}>
+            <Ionicons name="chatbubbles-outline" size={16} color={colors.brand} />
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noCourtText} numberOfLines={2}>No court picked yet.</Text>
+            <Tappable accessibilityLabel="Send a court to pick it together" onPress={openCourtPicker} style={styles.noCourtChip}>
+              <Ionicons name="location-outline" size={15} color={colors.text} />
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Send a court</Text>
+            </Tappable>
+          </View>
+        ) : null}
         {!thread.length && !olderLoading ? (
           // A new chat with nobody's words in it yet: who it is with, and a first hello one tap away (Instagram's wave).
           <Reanimated.View entering={FadeIn.duration(280)} style={styles.hello}>
@@ -2950,6 +2965,10 @@ const styleDefinitions = StyleSheet.create({
   helloChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, minHeight: 38, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   helloWave: { fontSize: 16 },
   helloChipText: { ...typography.smallStrong, color: colors.text },
+  // A hit with no court yet: one quiet line under the header, its Send a court beside it.
+  noCourt: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border, backgroundColor: colors.bg, maxWidth: 700, width: '100%', alignSelf: 'center' },
+  noCourtText: { ...typography.small, color: colors.textMuted, flex: 1, minWidth: 0 },
+  noCourtChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, minHeight: 34, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
   // The bar: on the page's own colour, the messages fading into it above.
   dock: { backgroundColor: colors.bg },
   dockFade: { position: 'absolute', left: 0, right: 0, top: -22, height: 22 },

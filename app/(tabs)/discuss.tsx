@@ -52,6 +52,7 @@ import { IN_TOWN_MILES, measureFrom } from '@/features/players/mapModel';
 import { agoLabel } from '@/components/map/markers';
 import { confirmUnfollow } from '@/lib/confirm';
 import { NEAR_HIT_MILES, canSeeHitAt, hitSpot, openHits as openHitsOf } from '@/features/hits/visible';
+import { hitArea } from '@/features/hits/flexible';
 import { hitListOrder, isMyHit } from '@/features/hits/order';
 import { hitTipCard, useJustPosted } from '@/features/hits/hitTips';
 import { labelOf, looksPublic } from '@/features/places/courtName';
@@ -352,7 +353,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     const farTyped: typeof near = [];
     const usersById = new Map(users.map((u) => [u.id, u]));
     for (const hit of seenHits) {
-      const spot = hitSpot(hit);
+      // A flexible hit (no court yet) is measured to its rough area, the same way: near, further, or too far.
+      const spot = hitSpot(hit) ?? hitArea(hit);
       if (!spot) {
         const seen = lastSeen[hit.authorId];
         const author = usersById.get(hit.authorId);

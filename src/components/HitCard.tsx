@@ -13,12 +13,13 @@ import { TipBubble } from '@/components/TipBubble';
 import type { HitRequest } from '@/data/types';
 import { audienceLine, isHitOpen, joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
+import { FLEXIBLE_COURT, isFlexibleHit, placeLabel } from '@/features/hits/flexible';
 import type { HitTip } from '@/features/hits/hitTips';
 import { learned, tipWaiting, useTip } from '@/features/tips/tips';
 import { useShownAt } from '@/features/navigation/shownAt';
 import { useOnScreen } from '@/lib/useOnScreen';
 import { openCourt } from '@/features/players/courtLink';
-import { formatMiles } from '@/features/players/geo';
+import { formatMiles, formatSpotMiles } from '@/features/players/geo';
 import { confirm, confirmReport } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
@@ -115,7 +116,14 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   // Someone else's: their profile from their picture and name, and a flag to report the hit.
   const theirs = !mine && !!currentUserId;
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
-  const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
+  // "Flexible" (no court yet, features/hits/flexible): plain words, not a link, with how far its rough area is said roughly.
+  const flex = isFlexibleHit(hit);
+  const canOpenCourt = !flex && hit.place.lat !== undefined && hit.place.lng !== undefined;
+  const milesText = miles === undefined ? null : flex ? formatSpotMiles(miles, true) : formatMiles(miles);
+  const roughMiles = miles === undefined ? 0 : Math.max(1, Math.round(miles));
+  const placeA11y = flex
+    ? `${FLEXIBLE_COURT}${hit.place.near ? `, near ${hit.place.near}` : ''}${miles !== undefined ? `, about ${roughMiles} ${roughMiles === 1 ? 'mile' : 'miles'}` : ''}. You pick the court together in the chat.`
+    : `${hit.place.name}${milesText ? `, ${milesText}` : ''}. See the court`;
   // The surface comes from the courts on the phone (a hit's saved place does not record it), shown as soon as they load; none found, no tag.
   // On the court's own page the facts line under its name says the surface already: no second dot here.
   const loaded = useLoadedSurface(LESS_AI_COURTS && !atCourt ? hit.place.id : undefined);
@@ -178,12 +186,12 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
       </View>
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
-        {atCourt ? null : <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
-          {LESS_AI_COURTS ? null : <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>}
+        {atCourt ? null : <SwipePressable accessibilityRole={flex ? 'text' : 'link'} accessibilityLabel={placeA11y} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (canOpenCourt && hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
+          {LESS_AI_COURTS ? null : <View style={styles.placeTile}>{flex ? <Ionicons name="chatbubbles-outline" size={13} color={colors.brand} /> : <CourtGlyph size={12} color={colors.brand} />}</View>}
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{hit.place.name}{miles !== undefined ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${formatMiles(miles).replace(/ /g, ' ')}`}</Text> : null}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{placeLabel(hit.place)}{milesText ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${milesText.replace(/ /g, ' ')}`}</Text> : null}</Text>
         </SwipePressable>}
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
