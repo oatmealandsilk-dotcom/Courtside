@@ -293,6 +293,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
   const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  // The page the phone's bar sits over: the one on show, or, while a page that takes the bar away is
+  // up (the Create box and a clip's comments among them, which leave the bar under them), the one it
+  // was over. The quiet pill turns dark over a clip only on the Feed itself (TabBarLooks): a page
+  // opened from a clip (its player, its court) is a light page, and the bar there is too.
+  const barOver = useRef(pathname);
+  if (!phoneOnlyHide) barOver.current = pathname;
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();
@@ -448,7 +454,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     sentTo.current = detour;
     router.replace(detour);
   }, [detour]);
-  const nav = <NavBar state={{ index: selected.current, routes }} navigation={{ navigate: name => {
+  const nav = <NavBar state={{ index: selected.current, routes }} feedUnder={barOver.current === paths.index} navigation={{ navigate: name => {
     const destination = paths[name as keyof typeof paths];
     if (!destination) return;
     // Community opens on its map, from the top, whenever the bar takes you there.

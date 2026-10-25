@@ -3,10 +3,11 @@ import { Platform } from 'react-native';
 import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useResponsive } from '@/lib/useResponsive';
+import { BAR_METRICS } from './tabBarLook';
 
-/** The floating tab bar: a pill this tall, this far above the bottom edge. */
-export const TAB_BAR_H = 62;
-export const TAB_BAR_GAP = 10;
+/** The floating tab bar: a pill this tall, this far above the bottom edge (each look's own: tabBarLook). */
+export const TAB_BAR_H = BAR_METRICS.height;
+export const TAB_BAR_GAP = BAR_METRICS.gap;
 /**
  * What a page keeps clear at the bottom on a phone, near enough for styles
  * that cannot ask: the pill, its gap, and a home-indicator inset (an

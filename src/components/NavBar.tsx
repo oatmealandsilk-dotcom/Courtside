@@ -28,6 +28,8 @@ import { unseenCount } from '@/features/activity/found';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
+import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
+import { LookBar } from './TabBarLooks';
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -58,6 +60,8 @@ const RISE_GRACE_MS = 1000;
 export interface NavBarProps {
   state: { index: number; routes: { key: string; name: string }[] };
   navigation: { navigate: (name: string) => void };
+  /** Whether the page under the phone's bar is the Feed itself (AppShell): the quiet pill is dark over a clip only there. */
+  feedUnder?: boolean;
 }
 
 interface NavItem {
@@ -81,7 +85,7 @@ const ITEMS: NavItem[] = [
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
-export function NavBar({ state, navigation }: NavBarProps) {
+export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds, isGuest } = useApp();
@@ -197,6 +201,28 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const tuck = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
+  // The quiet pill in place of the glass one (tabBarLook, Oct 25): the same bar, drawn plainer.
+  if (isPhone && TAB_BAR_LOOK !== 'now') {
+    return (
+      <LookBar
+        items={ITEMS}
+        activeRoute={activeRoute}
+        feedUnder={feedUnder}
+        profileAlerts={profileAlerts}
+        onTab={(route) => navigation.navigate(route)}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        bottom={Math.max(insets.bottom, 12)}
+        outerStyle={[lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}
+        tuckStyle={tuck}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={() => { closeCreateMenu(); }}
+      />
+    );
+  }
   if (isPhone) {
     return (
       <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom: Math.max(insets.bottom, 12) }, lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}>
