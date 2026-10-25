@@ -16,6 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { LESS_AI } from '@/theme/look';
 
 /**
  * One person in a list, the way Instagram's search shows them: picture
@@ -75,6 +76,7 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
         {follow ? (
           <FollowPill
             small
+            soft={LESS_AI}
             following={following}
             userId={user.id}
             name={user.name}
