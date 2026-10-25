@@ -18,9 +18,17 @@ const SETTLE_MS = 220;
 const FLICK = 0.7;
 
 /** The phone's sheet has a drag for a list inside it to hand a pull over to; a browser's list keeps its own scroll. */
-export interface SheetDrag { start: () => void; to: (translationY: number) => void; release: (velocityY: number) => void }
+export interface SheetDrag { start: () => void; to: (translationY: number) => void; release: (velocityY: number) => void; keyboardUp: () => boolean }
 const DragSheetContext = createContext<SheetDrag | null>(null);
 export const useSheetDrag = () => useContext(DragSheetContext);
+
+/**
+ * The phone's keyboardSync word on where the comments start once the keyboard
+ * is up (see the native twin). A browser reports no keyboard frame by frame,
+ * so it never has one: the page measures on screen instead.
+ */
+export interface SheetKeyboard { bodyTopWithKeyboard: () => number }
+export const useSheetKeyboard = (): SheetKeyboard | null => null;
 
 /**
  * Escape closes whichever sheet is up, with its own animation, and goes no
