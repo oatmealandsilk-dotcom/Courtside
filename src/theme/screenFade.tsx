@@ -162,8 +162,10 @@ function drawn(key: number) {
     if (waiting.held()) { reset(); waiting.retry(); return; }
     stage = 'landing';
     if (!counted) { counted = true; fadeStarted(); }
-    if (!waiting.land()) { reset(); return; } // nothing to change by now (the phone went back)
+    // The latest the fade may start, set before the change itself: should putting the new look on
+    // ever throw, the picture still fades and goes, never left frozen over the screen.
     timer = setTimeout(() => startFade(key), LAND_LIMIT_MS);
+    if (!waiting.land()) { reset(); return; } // nothing to change by now (the phone went back)
   }));
 }
 
