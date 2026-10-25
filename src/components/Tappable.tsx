@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
 
+import { pressV2On } from '@/features/navigation/pressV2';
 import { useSwipePressLook } from '@/features/navigation/swipePress';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 
@@ -64,7 +65,12 @@ export function Tappable({
   const fade = useRef(new Animated.Value(1)).current;
 
   // Quick: the dip is a short straight run, the release a fast spring, so a
-  // tap reads as instant rather than as an animation you watch.
+  // tap reads as instant rather than as an animation you watch. With the
+  // quicker press feel (pressV2: admins first) the dip lands in the very next
+  // frame instead (no 60 ms run to watch, the way iPhone's own buttons answer):
+  // the run left a press's first frames looking unanswered (Oct 24, owner:
+  // "Buttons need to be way more responsive. They are way to delayed when I
+  // click them").
   const spring = (to: number) => {
     // A dimming control: down at once on the press, back up over a beat on release (and any hover lift undone).
     if (dim && to <= 1) {
@@ -73,7 +79,7 @@ export function Tappable({
       return;
     }
     (to < 1
-      ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
+      ? Animated.timing(scale, { toValue: to, duration: pressV2On() ? 0 : 60, useNativeDriver: true })
       : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 160, bounciness: 4 })
     ).start();
   };

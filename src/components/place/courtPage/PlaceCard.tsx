@@ -20,6 +20,7 @@ import { useCourtHits } from '@/features/places/useCourtHits';
 import { openCourtNow } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
@@ -95,12 +96,16 @@ export function PlaceCard({ view }: { view: CourtView }) {
   // The page (look.ts: 'final', or the one before it, 'now').
   const look = courtPageLook();
   const nowOK = canSayNow(view);
-  // On a phone the page can only start to slide in once all of it is built, so the sections under the
-  // clips (King of the Court, what players say, the credit) are built once it has slid in (useArrived).
-  // Only with two rows of posts or more: then they are under the bar on every phone, out of sight, and
-  // nothing on screen moves; with fewer they can show on the first screen, and come with the page. A
-  // computer or an iPad shows them at once. Once built, they stay (posts landing later never take them away).
-  const arrived = useArrived();
+  // On a phone the page can only start to slide in once all of it is built (Oct 24, owner: "Buttons
+  // need to be way more responsive. They are way to delayed when I click them"). So the sections
+  // under the posts (King of the Court, what players say, the credit; the old page's open hits too)
+  // are built once it has slid in (useArrived), as notifications and messages do. Only with two rows
+  // of posts or more: then they are under the bar on every phone, out of sight; with fewer they can
+  // show on the first screen, and come with the page as before. A computer or an iPad can show them
+  // at once: always. Once built, they stay (posts landing later never take them away again).
+  // With the quicker press feel only (pressV2: admins first): the court's picture then comes about
+  // a third of a second later on a first visit, a change he sees, so everyone else keeps it all at once.
+  const arrived = useArrived(usePressV2());
   const belowBuilt = useRef(false);
   const below = belowBuilt.current || arrived || !isPhone || view.posts.length <= 3;
   belowBuilt.current = below;
@@ -109,7 +114,7 @@ export function PlaceCard({ view }: { view: CourtView }) {
   return (
     <View style={styles.root}>
       <Screen bleedTop wash={false} padded={false} onRefresh={view.onRefresh} offsetY={offsetY}>
-        <PlaceHero lat={view.here.lat} lng={view.here.lng} top={top} height={heroH} name={view.name} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone} />
+        <PlaceHero lat={view.here.lat} lng={view.here.lng} top={top} height={heroH} name={view.name} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone} drawMap={arrived || !isPhone} />
         <View testID="court-sheet" style={[styles.sheet, !isPhone && styles.sheetWide]}>
           <View style={styles.gutter}>
             {look === 'final' ? <View style={styles.nameRow}>{nameText}<NameHeart view={view} /></View> : nameText}
@@ -158,11 +163,11 @@ export function PlaceCard({ view }: { view: CourtView }) {
               {view.askSurface ? <SurfaceAsk courtId={view.askSurface} onRegistered={view.onSurface} /> : null}
               <View style={[styles.gutter, styles.sections, short && styles.sectionsShort]}>
                 <ClipsSection view={view} />
-                <HitsSection view={view} count={hits.length} />
+                {below ? <HitsSection view={view} count={hits.length} /> : null}
                 {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). */}
-                {view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} /> : null}
-                {view.extras && view.factsId ? <SaysSection courtId={view.factsId} name={view.name} /> : null}
-                {view.factsLine ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>Court details from OpenStreetMap</Text> : null}
+                {below && view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} /> : null}
+                {below && view.extras && view.factsId ? <SaysSection courtId={view.factsId} name={view.name} /> : null}
+                {below && view.factsLine ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>Court details from OpenStreetMap</Text> : null}
               </View>
             </>
           )}
@@ -182,9 +187,11 @@ export function PlaceCard({ view }: { view: CourtView }) {
  * there, and "See on map" says so. Scrolling, it drifts up slower than the
  * page; pulled down on a phone, it stretches to fill the gap.
  */
-function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rounded }: {
+function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rounded, drawMap }: {
   lat: number; lng: number; top: number; height: number; name: string; onOpenMap: () => void;
   offsetY: SharedValue<number>; strip: number; rounded: boolean;
+  /** Whether the hidden web view that draws a court's picture may start: on a phone, once the page has slid in. */
+  drawMap: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const [w, setW] = useState(0);
@@ -205,7 +212,8 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
     <View style={[styles.hero, { height }, rounded && styles.heroRounded]} onLayout={(e) => { const next = Math.round(e.nativeEvent.layout.width); if (next && next !== w) setW(next); }}>
       <Animated.View style={[styles.heroMap, rounded && styles.heroRounded, drift]}>
         {/* First, so the map covers it: where a phone draws the map's picture (a browser needs nothing here). */}
-        <CourtMapSnapshots />
+        {/* Its web view is started once the page has slid in (drawMap), not mid-slide; the map's stand-in shows until the picture comes, as before. */}
+        {drawMap ? <CourtMapSnapshots /> : null}
         {w ? <View style={{ position: 'absolute', left: 0, top: mapTop }}><CourtMapThumb lat={lat} lng={lng} width={w} height={mapH} zoom={MAP_ZOOM} /></View> : null}
         {/* The status bar's words keep their ground at the very top. */}
         {top ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0.92), withAlpha(colors.bg, 0)]} style={[styles.heroTopFade, { height: top + 30 }]} /> : null}
