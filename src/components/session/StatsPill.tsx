@@ -17,7 +17,7 @@ import { GlassFill, liquidGlass, useGlassSteady } from '@/components/ui/Glass';
 import { BrandWash } from '@/components/ui';
 import { colors, font, pageIsDark, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
-import { boxLook } from './SessionCard';
+import { sheetBox } from './SessionCard';
 import { ZoneGlyph } from './ZoneGlyph';
 
 /** Small words over video wear a crisp dark edge (see ReelCaption); white over media is the one exception to the theme's colours. */
@@ -47,7 +47,8 @@ export function StatsPill({ session, hidden = [], onPress, scale = 1, active = f
   // The neutral dark glass, white words: the dark courts, and Clean, whose session box is no longer
   // green (Oct 25, owner: "clean theme is no longer this green for the card"). Clean's other things
   // over a clip (the level pill) are the same neutral frost, as Instagram's chips over video are.
-  const neutral = pageIsDark() || !!boxLook(theme).plain;
+  // Only Clean's: the quiet light box on the other courts (Oct 25) leaves their pill in the court's colour.
+  const neutral = pageIsDark() || sheetBox(theme);
   const p = pillPieces(session, hidden);
   const result = resultWord(session);
   // The pill shows a match's score beside the result (pillPieces, migration 91); said here as "6 to 4".
