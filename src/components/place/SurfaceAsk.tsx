@@ -184,14 +184,16 @@ function RunLine({ run, reduced, onWon }: { run: Run; reduced: boolean; onWon: (
     return () => { timers.forEach(clearTimeout); };
   }, [run, reduced]);
   const tint = surfaceTint(run.surface);
-  const words = run.registered ? `${surfaceLabel[run.surface]} — added for everyone` : run.agree > 1 ? `${run.agree} of ${RUN} agree` : `1 of ${RUN} so far`;
+  // A registering tap reads "5 of 5 agree" while the dots fill, then "Hard — added for everyone" as they pulse.
+  const added = run.registered && (reduced || beat > 0);
+  const words = added ? `${surfaceLabel[run.surface]} — added for everyone` : run.agree > 1 ? `${run.agree} of ${RUN} agree` : `1 of ${RUN} so far`;
   return (
     <View style={styles.runLine} accessible accessibilityLabel={run.registered ? `${surfaceLabel[run.surface]} added for everyone` : `${run.agree} of ${RUN} players in a row agree`}>
       <View style={styles.dots}>
         {Array.from({ length: RUN }, (_, i) => <RunDot key={i} on={i < lit} color={tint} index={i} beat={beat} reduced={reduced} />)}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.runText, run.registered && styles.runWon]} numberOfLines={1} accessibilityLiveRegion="polite">{words}</Text>
-      {run.registered ? <Ionicons name="checkmark-circle" size={15} color={colors.brand} /> : null}
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.runText, added && styles.runWon]} numberOfLines={1} accessibilityLiveRegion="polite">{words}</Text>
+      {added ? <Ionicons name="checkmark-circle" size={15} color={colors.brand} /> : null}
     </View>
   );
 }

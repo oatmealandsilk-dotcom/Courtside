@@ -117,8 +117,9 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
   const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
   // The surface comes from the courts on the phone (a hit's saved place does not record it), shown as soon as they load; none found, no tag.
-  const loaded = useLoadedSurface(LESS_AI_COURTS ? hit.place.id : undefined);
-  const surface = LESS_AI_COURTS ? surfaceKind(loaded) : null;
+  // On the court's own page the facts line under its name says the surface already: no second dot here.
+  const loaded = useLoadedSurface(LESS_AI_COURTS && !atCourt ? hit.place.id : undefined);
+  const surface = LESS_AI_COURTS && !atCourt ? surfaceKind(loaded) : null;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);
