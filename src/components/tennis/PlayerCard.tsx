@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar } from '@/components/ui';
-import { CardWash, boxLook, cardLook, type CardLook } from '@/components/session/SessionCard';
+import { CardWash, boxLook, cardLook, quietBox, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
 import { mixHex } from '@/features/activity/zones';
@@ -55,8 +55,11 @@ export function PlayerCard({ user, variant, onPress }: {
   const { theme } = useTheme();
   // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
   // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
-  // The other courts keep their card; the full card heading the Tennis profile page keeps its own.
-  const look = variant === 'banner' && LESS_AI_ROUND2 ? boxLook(theme) : cardLook(theme);
+  // On the other courts but Night both cards are the quiet box near the page (Oct 25, owner: "I meant the tennis
+  // profile card and the activity cards"), as the session boxes are: boxLook. Clean's full card and Night's keep their own.
+  const look = (variant === 'banner' && LESS_AI_ROUND2) || quietBox(theme) ? boxLook(theme) : cardLook(theme);
+  // The rating in the court's accent on a light card drawn as the stats sheet (the quiet box; Clean's banner below).
+  const ratingInk = look.plain ? colors.brand : look.figure;
   const reduced = useReducedMotion();
   const week = usePerWeek(user);
   const key = `${variant}:${user.id}`;
@@ -80,8 +83,8 @@ export function PlayerCard({ user, variant, onPress }: {
     return (
       <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift], pressed && styles.pressed]}>
         <CardWash look={look} radius={corner(16)} />
-        {/* A: a soft wash of the court's pale green from the top corner, fading to the card by the middle. */}
-        {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+        {/* A: a soft wash of the court's pale accent from the top corner (the quiet box's own tint), fading to the card by the middle. */}
+        {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
         {/* B: a green edge down the left side. C: a thin green line along the top. */}
         {pop === 'B' ? <View pointerEvents="none" style={[styles.popEdge, { backgroundColor: colors.brand }]} /> : null}
         {pop === 'C' ? <View pointerEvents="none" style={[styles.popTop, { backgroundColor: colors.brand }]} /> : null}
@@ -122,11 +125,11 @@ export function PlayerCard({ user, variant, onPress }: {
           <Text numberOfLines={1} style={[styles.name, { color: look.ink }]}>{user.name}</Text>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
         </View>
-        {LESS_AI ? null : <View style={styles.mark}><BrandMark size={22} color={look.figure} /></View>}
+        {LESS_AI ? null : <View style={styles.mark}><BrandMark size={22} color={ratingInk} /></View>}
       </View>
 
       <View style={[styles.heroRow, styles.hero]}>
-        <CountUp value={Number(ratingText(p))} part={system === 'ITF' ? 'int' : 'dec1'} play={play} duration={700} maxFontSizeMultiplier={1.3} style={[styles.figure, { color: look.figure }]} />
+        <CountUp value={Number(ratingText(p))} part={system === 'ITF' ? 'int' : 'dec1'} play={play} duration={700} maxFontSizeMultiplier={1.3} style={[styles.figure, { color: ratingInk }]} />
         <Text maxFontSizeMultiplier={1.3} style={[styles.system, styles.heroSystem, { color: systemInk }]}>{system}</Text>
       </View>
 

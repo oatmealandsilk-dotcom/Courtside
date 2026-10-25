@@ -4,6 +4,7 @@ import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 
 import { BrandMark } from '@/components/BrandMark';
 import { ShadedMark } from '@/components/share/ShadedMark';
@@ -13,7 +14,7 @@ import type { ID, SessionDetail } from '@/data/types';
 import { onCourtWord, resultWord, scoreLine, sessionEyebrow, sourceLabel, spokenDuration } from '@/features/activity/format';
 import { spokenScore } from '@/features/activity/score';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { postZones, zoneColors } from '@/features/activity/zones';
+import { mixHex, postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, withAlpha, wordmarkFont } from '@/theme';
@@ -29,11 +30,18 @@ export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent
 /** The colours of a session box (the card, the tile, the photo post's stats panel, the share stamp). */
 export type CardLook = {
   dark: boolean;
-  /** The fade laid inside the box: the court's shirt's, the brand's own on the plain green box, or none (Clean's light box). */
-  wash: 'brand' | 'shirt' | 'none';
   /**
-   * Drawn the way the stats sheet is (Clean's light box, Oct 24): the page's own inks, the score in
-   * the sheet's colours (your games green, theirs grey), small capital labels, no icon and no shadow.
+   * The fade laid inside the box: the court's shirt's, the brand's own on the plain green box, a soft
+   * wash of the court's pale accent from the top corner (the quiet light box, QUIET_BOX), or none (Clean's light box).
+   */
+  wash: 'brand' | 'shirt' | 'soft' | 'none';
+  /** The soft wash's top corner ('soft'): a little of the court's pale accent on the box's own fill. */
+  tint?: string;
+  /** How far the shirt's corners are taken toward the page's surface ('shirt', ShirtWash's lift): the quiet dark box's. */
+  lift?: number;
+  /**
+   * Drawn the way the stats sheet is (Clean's light box, Oct 24; the quiet light box, Oct 25): the page's own inks,
+   * the score in the sheet's colours (your games in the court's accent, theirs grey), small capital labels, no icon and no shadow.
    */
   plain?: boolean;
   /**
@@ -73,12 +81,66 @@ const BRAND_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
 const SHEET_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['clean']);
 
 /**
+ * Courts whose session boxes and Tennis profile card in the app sit close to
+ * the page, the way Clean's and Night's do (Oct 25, owner: "All the cards for
+ * all themes now should be more closer to the background color. Clean and
+ * dark mode is good, us open is a little too light blue", then "I meant the
+ * tennis profile card and the activity cards"). See quietLook. The pictures
+ * made to share keep each court's box (cardLook).
+ */
+const QUIET_BOX: ReadonlySet<ThemeName> = new Set<ThemeName>(['default', 'ao', 'roland-garros', 'wimbledon', 'us-open']);
+
+/** Clean's light box (SHEET_BOX): the stats pill over a clip keys off it. */
+export const sheetBox = (theme: ThemeName) => SHEET_BOX.has(theme);
+/** A court whose cards in the app are the quiet box near its page (QUIET_BOX). */
+export const quietBox = (theme: ThemeName) => QUIET_BOX.has(theme);
+
+/**
+ * How much of the court's pale accent (brandDim) the quiet light box's soft
+ * wash starts from: as far from the card as Clean's banner wash is from its
+ * card (OKLab 0.035; 0.033 to 0.039 on the four light courts).
+ */
+const QUIET_TINT = 0.42;
+/**
+ * How far the quiet dark box's shirt corners are taken toward the page's
+ * surface: New York's then sit about as far from its card as Night's do from
+ * Night's (OKLab 0.08 to 0.10).
+ */
+const QUIET_GLOW_LIFT = 0.4;
+
+/**
  * The colours of a session box in the app (a post's stats panel, a post's
  * card, a profile grid's tile): the stats sheet's on the courts in SHEET_BOX,
- * otherwise the box's own (cardLook).
+ * the quiet box near the page on the courts in QUIET_BOX, otherwise the box's
+ * own (cardLook).
  */
 export function boxLook(theme: ThemeName): CardLook {
+  if (QUIET_BOX.has(theme)) return quietLook(theme);
   if (!SHEET_BOX.has(theme)) return cardLook(theme);
+  return sheetLook();
+}
+
+/**
+ * The quiet box (Oct 25): on a light court the stats sheet's light box (the
+ * page's surface a step from the page, its hairline, ink numbers, the score
+ * and the result in the court's accent) with a soft wash of the court's pale
+ * accent from the top corner; Melbourne's result pill a fifth deeper, as its
+ * light blue holds white at only 4.0:1. On New York's navy page, Night's box:
+ * the page's surface a step lighter than the page with the shirt's corners
+ * brought toward it, the yellow lettering, the page's hairline.
+ */
+function quietLook(theme: ThemeName): CardLook {
+  if (pageIsDark()) return { ...cardLook(theme), fill: colors.surface, lift: QUIET_GLOW_LIFT };
+  return {
+    ...sheetLook(),
+    wash: 'soft',
+    tint: mixHex(colors.surface, colors.brandDim, QUIET_TINT),
+    pillFill: theme === 'ao' ? mixHex(colors.brand, colors.text, 0.2) : colors.brand,
+  };
+}
+
+/** The stats sheet's light box (Clean's, SHEET_BOX). */
+function sheetLook(): CardLook {
   return {
     dark: pageIsDark(),
     wash: 'none',
@@ -253,9 +315,19 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
 }) {
   // The hand-made look (Oct 24, owner: the glows "seem a bit ai"): the box's own flat fill, only its hairline kept.
   // Clean's light box (boxLook) never has a fade.
-  if ((flat && !keepGlow) || look.wash === 'none') return edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
+  const rim = edge && look.rim ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, borderWidth: StyleSheet.hairlineWidth, borderColor: look.rim }]} /> : null;
+  if ((flat && !keepGlow) || look.wash === 'none') return rim;
   if (look.wash === 'brand') return <BrandWash radius={radius} glow />;
-  return <ShirtWash radius={radius} rim={edge ? look.rim : null} />;
+  // The quiet light box: the court's pale accent in the top corner, gone into the fill by three quarters of the way.
+  if (look.wash === 'soft') {
+    return (
+      <>
+        <LinearGradient pointerEvents="none" colors={[look.tint ?? look.fill, look.fill]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
+        {rim}
+      </>
+    );
+  }
+  return <ShirtWash radius={radius} rim={edge ? look.rim : null} lift={look.lift} />;
 }
 
 

@@ -14,7 +14,7 @@ import { Collapse } from '@/components/ui/Collapse';
 import { FOLD_AWAY_MS, FoldAway } from '@/components/ui/FoldAway';
 import { HeightGlide } from '@/components/ui/HeightGlide';
 import { PersonalRecords, RecordPill } from '@/components/records/PersonalRecords';
-import { boxLook, cardLook, creamFill } from '@/components/session/SessionCard';
+import { boxLook, cardLook, creamFill, quietBox } from '@/components/session/SessionCard';
 import { ScoreBoardCompact } from '@/components/session/ScoreBoard';
 import { LoggedTitle, type PeopleLine } from '@/components/LoggedTitle';
 import { Avatar, EmptyState, Screen, ShirtWash } from '@/components/ui';
@@ -249,8 +249,9 @@ export default function YourSessions() {
   const fill = creamFill(theme);
   // The summary is one of the session boxes (Oct 6, owner: "they need the wash"): their look and wash, from cardLook.
   // On Clean the summary is drawn like the stats sheet (Oct 25, "D all for less ai", item 4): the session boxes' in-app
-  // look (boxLook), light with a hairline and black figures. The other courts keep their flat card (cardLook).
-  const look = LESS_AI_ROUND2 ? boxLook(theme) : cardLook(theme);
+  // look (boxLook), light with a hairline and black figures. Every court but Night is the quiet box near the page
+  // (Oct 25, owner: "I meant the tennis profile card and the activity cards"): boxLook too.
+  const look = LESS_AI_ROUND2 || quietBox(theme) ? boxLook(theme) : cardLook(theme);
   // A full-colour box (a city court's shirt, the green box): the records row takes the box's own ink.
   const onBrand = look.filled;
   // The summary is last week's recap while it is up (Monday to Wednesday, until put away), else this week so far.
