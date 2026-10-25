@@ -27,6 +27,12 @@ const OUTLINE: Record<RailIcon, readonly [Name, Name]> = {
 const FILLED: Record<RailIcon, Name> = { heart: 'heart', comment: 'chatbubble-ellipses', share: 'arrow-redo', save: 'bookmark', more: 'ellipsis-horizontal' };
 /** B's shadow: soft and wide rather than a hard edge, so solid white lifts off a bright court without a dark rim. */
 const SOFT_SHADOW = { textShadowColor: 'rgba(0, 0, 0, 0.35)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 } as const;
+/**
+ * Room round B's glyph for that shadow: an iPhone draws a text's shadow only
+ * inside the text's own box, which hugs the glyph, so a wide shadow would end
+ * in a straight line. The margin takes the room back, so nothing moves.
+ */
+const SHADOW_ROOM = { padding: 6, margin: -6 } as const;
 
 /**
  * A: today's shapes, drawn here so the line can be heavier. They are the
@@ -51,14 +57,8 @@ const SHAPES: Record<Exclude<RailIcon, 'more'>, { d: string; cap?: 'round'; join
 const BOLD_LINE = 2.4;
 /** A's dots, their radius on the 512 grid (today's 48): a touch fuller, to sit with the heavier lines. */
 const DOT = 54;
-/** Room around a drawing for its edge, so the edge is never cut off; the button's box stays the font's. */
+/** Room around a drawing for its edge, so the edge is never cut off; the button's box stays the font's (below). */
 const PAD = 3;
-/**
- * The icon font's line, as a share of its size: the box an outline took, with
- * the drawing centred in it (the font's own room above and below). A drawn
- * icon takes the same box, so the count under the heart stays where it was.
- */
-const LINE = 1.1;
 /**
  * A's edge: the outline's crisp dark edge (GLYPH_EDGE's black, a point low),
  * drawn as two dark copies under the white, a wide faint one and a close
@@ -94,10 +94,13 @@ function BoldGlyph({ icon, on, size, ink, edge }: { icon: RailIcon; on: boolean;
       </G>
     );
   };
-  const box = size * LINE;
+  // The box is today's outline itself, unseen: the font's own room above and below, which an iPhone
+  // and a browser measure differently (a browser adds the font's line gap). Any fixed share of the
+  // size is right on one and off on the other, and the count under the heart would move.
   return (
-    <View style={{ width: size, height: box }}>
-      <Svg width={size + PAD * 2} height={size + PAD * 2} viewBox={`${-room} ${-room} ${512 + room * 2} ${512 + room * 2}`} style={{ position: 'absolute', left: -PAD, top: (box - size) / 2 - PAD }}>
+    <View>
+      <Ionicons name={OUTLINE[icon][0]} size={size} color="transparent" />
+      <Svg width={size + PAD * 2} height={size + PAD * 2} viewBox={`${-room} ${-room} ${512 + room * 2} ${512 + room * 2}`} style={{ position: 'absolute', left: -PAD, top: '50%', marginTop: -(size / 2 + PAD) }}>
         {edge ? EDGE.map(([extra, drop, strength], i) => draw(`edge${i}`, 'black', line + extra * unit, drop * unit, strength)) : null}
         {draw('glyph', ink, line)}
       </Svg>
@@ -117,7 +120,7 @@ export function RailGlyph({ icon, on = false, size, ink = 'white', style }: { ic
   if (RAIL_ICONS_LOOK === 'B') {
     // Read when drawn: the same bright green on every court (the logo's on a photo).
     const color = red ? LIKE_RED : on && icon === 'save' ? colors.brandBright : ink;
-    return <Ionicons name={FILLED[icon]} size={size} color={color} style={style ? SOFT_SHADOW : undefined} />;
+    return <Ionicons name={FILLED[icon]} size={size} color={color} style={style ? [SOFT_SHADOW, SHADOW_ROOM] : undefined} />;
   }
   return <Ionicons name={OUTLINE[icon][on ? 1 : 0]} size={size} color={red ? LIKE_RED : ink} style={style} />;
 }
