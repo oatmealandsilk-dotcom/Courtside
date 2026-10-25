@@ -48,13 +48,14 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
   const wasOn = useRef(like.on);
   wasOn.current = like.on;
   const seen = useRef(pop);
+  const playSparks = sparks.play;
   useEffect(() => {
     if (pop && pop !== seen.current && !isGuest) {
       motion.celebrate();
-      if (!wasOn.current) sparks.play();
+      if (!wasOn.current) playSparks();
     }
     seen.current = pop;
-  }, [pop, motion, sparks, isGuest]);
+  }, [pop, motion, playSparks, isGuest]);
   const press = () => {
     if (isGuest) motion.tap();
     else if (like.on) motion.settle();

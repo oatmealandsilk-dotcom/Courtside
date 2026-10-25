@@ -55,7 +55,7 @@ const EDGE_ROOM = 3;
  * fills the heart and the bookmark. The dots stay the font's three dots, as
  * they were: they are solid already.
  */
-export function RailGlyph({ name, size, color = 'white', filled = false, edge = true }: { name: RailGlyphName; size: number; color?: string; filled?: boolean; edge?: boolean }) {
+function Glyph({ name, size, color = 'white', filled = false, edge = true }: { name: RailGlyphName; size: number; color?: string; filled?: boolean; edge?: boolean }) {
   if (name === 'dots') return <Ionicons name="ellipsis-horizontal" size={size} color={color} style={edge ? GLYPH_EDGE : undefined} />;
   const unit = 512 / size;
   // The font's own line is 32 units (1/16 of the icon); the extra line takes it to RAIL_STROKE.
@@ -82,3 +82,6 @@ export function RailGlyph({ name, size, color = 'white', filled = false, edge = 
     </View>
   );
 }
+
+/** Plain values in, so a feed redraw that changes nothing here skips the drawing (four shapes per icon, five icons a clip). */
+export const RailGlyph = React.memo(Glyph);

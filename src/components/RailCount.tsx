@@ -17,6 +17,9 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
  * nothing else on the rail. The figures are tabular (the rail's label style),
  * so "9" to "10" does not shift sideways either.
  *
+ * A browser has its own twin, RailCount.web.tsx (the same roll in CSS: these
+ * Keyframes break there); a change here wants the same change there.
+ *
  * Done with entering and exiting animations on the animation thread: the new
  * number is drawn in its starting place from its very first frame (no flash of
  * it at rest first), and at rest both are plain text, nothing animated left
