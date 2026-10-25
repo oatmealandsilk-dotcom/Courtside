@@ -8,6 +8,7 @@ import { isPageSwipeLocked, sectionPan, setPageDragging, subscribePageSwipeLock 
 import { useResponsive } from '@/lib/useResponsive';
 import { useTabActive } from '@/features/navigation/tabFocus';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { pressV2Shared } from '@/features/navigation/pressV2';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** How far in from the left edge a touch counts as the phone's own back swipe (iOS takes about this much). */
@@ -238,6 +239,13 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       // Never more than one pane from where the swipe began.
       const from = Math.round(startPosition.value);
       dest = Math.max(0, Math.min(c.last, Math.max(from - 1, Math.min(from + 1, dest))));
+      // The pane it is settling on takes taps from now, the way a tapped section's does (the
+      // effect above), not only once the spring has finished: that comes about 0.6 s after the
+      // finger lifts, the last 0.2 s of it with the page already looking still, and every tap in
+      // that time was dropped (Oct 24, owner: "Buttons need to be way more responsive"). Nothing
+      // on screen changes: the clip, the landing and onIndex still wait for land(). With the
+      // quicker press feel only (pressV2: admins first), read here as the finger lifts.
+      if (pressV2Shared.value) runOnJS(setShown)(dest);
       position.value = withSpring(dest, { ...SETTLE, velocity: -velocityX / strideValue.value }, (finished) => {
         if (!finished) return;
         // The page is moved to the pane's own spot in this same frame; only

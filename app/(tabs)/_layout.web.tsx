@@ -140,14 +140,15 @@ function TabsLayoutBody() {
     if (!TAB_PATHS.includes(pathname)) return;
     if (lastTab.current === '/discuss' && pathname !== '/discuss') {
       requestScrollToTop('/discuss', true);
-      if (swipes.current) requestSection('/discuss', 'discussions');
+      // Out of sight, as background work: the tab you are going to is drawn first (as the phone's row).
+      if (swipes.current) requestSection('/discuss', 'discussions', { background: true });
     }
     lastTab.current = pathname;
   }, [pathname]);
   // Opened on another tab (a link straight to the Feed): Community was never left, so it is put
   // on Discussions now, the section a swipe from the Feed brings in. Not when a page asked for one.
   useEffect(() => {
-    if (swipes.current && TAB_PATHS.includes(pathname) && pathname !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions');
+    if (swipes.current && TAB_PATHS.includes(pathname) && pathname !== '/discuss' && askedSection('/discuss') === undefined) requestSection('/discuss', 'discussions', { background: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.

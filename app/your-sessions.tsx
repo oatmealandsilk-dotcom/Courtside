@@ -33,6 +33,8 @@ import { putRecapAway as storeRecapAway, readRecapAway, recapAwayKnown } from '@
 import { computeRecords, RECORD_ICON, recordSessionIds, weekStart } from '@/features/records/records';
 import { confirm } from '@/lib/confirm';
 import { goBack } from '@/lib/goBack';
+import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import { duration } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -41,6 +43,11 @@ import { LESS_AI_ROUND2, LESS_AI_SESSIONS, corner } from '@/theme/look';
 
 /** Weeks shown at first; "Show earlier weeks" adds as many again. */
 const WEEKS = 8;
+/**
+ * Sessions built with the page (whole weeks, at least this many rows: more than a screenful under
+ * the summary); the rest of the weeks once the page has slid in (useArrived).
+ */
+const FIRST_ROWS = 10;
 /** A session row's top and bottom padding, and the height of its first line (the big number, and the button beside it). */
 const ROW_PAD = 14;
 const HERO_LINE = 32;
@@ -164,6 +171,51 @@ export default function YourSessions() {
     }
     return byWeek;
   }, [sessions, currentUserId]);
+  // A page can only start to slide in once all of it is built, and eight weeks of rows held the
+  // tap on the streak pill or "See your sessions" up (Oct 24, owner: "Buttons need to be way more
+  // responsive. They are way to delayed when I click them"). So the first weeks come with the
+  // page, enough to fill the screen (FIRST_ROWS), and the rest once it has slid in, as background
+  // work, below the first screen; the foot of the page (Show earlier weeks, the hint, Past
+  // workouts) waits with them, so nothing is seen moving down.
+  // That wait is the quicker press feel's (pressV2: admins first): on a tall phone the rows after
+  // the first ten could be seen coming in, so everyone else gets every week with the page.
+  const arrived = useArrived(usePressV2());
+  const firstWeeks = useMemo(() => {
+    let rows = 0;
+    let n = 0;
+    while (n < groups.length && rows < FIRST_ROWS) { rows += groups[n].list.length; n += 1; }
+    return n;
+  }, [groups]);
+  const shownWeeks = arrived ? weeks : Math.min(weeks, firstWeeks);
+  const allBuilt = shownWeeks >= Math.min(weeks, groups.length);
+  // What each row looks up, found once rather than by searching every list for every row.
+  const lookups = useMemo(() => {
+    // The first of each id wins, as the old search (find) found it, should a list ever hold one twice.
+    const firstById = <T extends { id: string }>(list: readonly T[]) => {
+      const byId = new Map<string, T>();
+      list.forEach((item) => { if (!byId.has(item.id)) byId.set(item.id, item); });
+      return byId;
+    };
+    const activityById = firstById(detectedActivities);
+    const postById = firstById(posts);
+    const userById = firstById(users);
+    // A copy from someone's tag: its tag is the first of yours (in the list's order) whose copy is
+    // this session, or whose session this one came from.
+    const byCopy = new Map<string, { tag: SessionTag; at: number }>();
+    const bySource = new Map<string, { tag: SessionTag; at: number }>();
+    sessionTags.forEach((tag, at) => {
+      if (tag.taggedId !== currentUserId) return;
+      if (tag.mirroredSessionId && !byCopy.has(tag.mirroredSessionId)) byCopy.set(tag.mirroredSessionId, { tag, at });
+      if (!bySource.has(tag.sessionId)) bySource.set(tag.sessionId, { tag, at });
+    });
+    const tagOf = (s: PracticeSession): SessionTag | undefined => {
+      if (!s.fromSessionId) return undefined;
+      const a = byCopy.get(s.id);
+      const b = bySource.get(s.fromSessionId);
+      return a && b ? (a.at <= b.at ? a.tag : b.tag) : (a ?? b)?.tag;
+    };
+    return { activityById, postById, userById, tagOf };
+  }, [detectedActivities, posts, users, sessionTags, currentUserId]);
   // Old enough that its tracker numbers are gone (30 days, migration 58) is too old to post: the same two weeks "Add session stats" offers.
   const firstPostable = localDay(Date.now() - ATTACH_DAYS * 86_400_000);
 
@@ -298,7 +350,7 @@ export default function YourSessions() {
       ) : null}
 
       {/* 3. Your sessions, a week at a time. */}
-      {groups.slice(0, weeks).map(({ start, list }) => {
+      {groups.slice(0, shownWeeks).map(({ start, list }) => {
         const onCourt = list.filter((s) => s.kind !== 'fitness').reduce((sum, s) => sum + s.minutes, 0);
         return (
           // A week whose last session is removed folds shut as a whole, heading and all.
@@ -311,21 +363,21 @@ export default function YourSessions() {
             </View>
             <SoftCard fill={fill}>
               {list.map((s, i) => {
-                const found = s.activityId ? detectedActivities.find((a) => a.id === s.activityId) : undefined;
+                const found = s.activityId ? lookups.activityById.get(s.activityId) : undefined;
                 // A tracker's session posts with its tracker numbers, and is named for its tracker, only while its source is switched on; otherwise as you logged it.
                 const activity = found && sourceOn(found, flags) ? found : undefined;
                 const pick: SessionPick = activity ? { type: 'tracker', activity, session: s } : { type: 'logged', session: s };
                 const postId = postOf(pick, posted);
                 // A copy from someone's tag reads as yours, a session shared with you: "with Mira" beside its length
                 // ("Match · Lost vs Mira" when she was across the net), Post it to post it as your own, and a tap opens the tag.
-                const from = s.fromSessionId ? sessionTags.find((t) => t.taggedId === currentUserId && (t.mirroredSessionId === s.id || t.sessionId === s.fromSessionId)) : undefined;
-                const fromWho = from ? users.find((u) => u.id === from.taggerId) : undefined;
+                const from = lookups.tagOf(s);
+                const fromWho = from ? lookups.userById.get(from.taggerId) : undefined;
                 const fromFirst = fromWho ? firstName(fromWho.name) : '';
                 const people: PeopleLine | null = from && fromFirst
                   ? (s.kind === 'match' && from.role === 'opponent' ? { vs: [{ name: fromFirst, state: 'typed' }], with: [], allWaiting: false } : null)
                   : peopleWords(s, sessionTags, users);
                 // Where it was played: the log's own court, else the court on its post (migration 130).
-                const itsPost = postId ? posts.find((p) => p.id === postId) : undefined;
+                const itsPost = postId ? lookups.postById.get(postId) : undefined;
                 const courtId = s.courtId ?? itsPost?.court?.id;
                 const courtName = s.note?.startsWith('At ') ? s.note.slice(3).split(' · ')[0] : itsPost?.court?.name ?? 'this court';
                 const flyby = courtId && flybyDays.includes(s.day) && s.kind !== 'fitness'
@@ -373,16 +425,16 @@ export default function YourSessions() {
         );
       })}
 
-      {groups.length > weeks ? (
+      {allBuilt && groups.length > weeks ? (
         <Pressable accessibilityRole="button" onPress={() => setWeeks((n) => n + WEEKS)} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
           <Text style={styles.moreText}>Show earlier weeks</Text>
         </Pressable>
       ) : null}
       {/* The one place that says how a session comes off the log (a hold, here or on the Tennis profile). */}
-      {groups.length ? <Text style={styles.holdHint}>Hold a session to remove it.</Text> : null}
+      {allBuilt && groups.length ? <Text style={styles.holdHint}>Hold a session to remove it.</Text> : null}
 
       {/* 4. Older workouts, a quiet link at the foot: browsing never outranks the things to do. */}
-      {pastOn ? (
+      {allBuilt && pastOn ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`Past workouts: the last 30 days from ${pastFrom}`} onPress={() => router.push('/workouts')} style={({ pressed }) => [styles.pastRow, pressed && styles.pressed]}>
           <Ionicons name="fitness-outline" size={17} color={colors.textMuted} />
           <View style={styles.words}>
@@ -392,7 +444,7 @@ export default function YourSessions() {
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </Pressable>
       ) : null}
-      {offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} fill={fill} /> : null}
+      {allBuilt && offerOn && currentUserId ? <WorkoutsOffer me={currentUserId} fill={fill} /> : null}
     </Screen>
   );
 }

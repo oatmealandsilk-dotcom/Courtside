@@ -17,8 +17,17 @@ import {
 } from '@/features/players/tennisProfile';
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
-import { colors, font } from '@/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, font, lift } from '@/theme';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
+
+
+/**
+ * How Clean's light Tennis profile banner stands out: 'now' as it is; 'A' soft green wash; 'B' green edge + green rating;
+ * 'C' lifted with a thin green top line + green rating; 'D' in between A and C (owner, Oct 25: "For card in between a and c"):
+ * A's soft wash, lifted a little off the page, the rating in green, no hard line.
+ */
+const BANNER_POP = 'D' as 'now' | 'A' | 'B' | 'C' | 'D';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
@@ -62,18 +71,26 @@ export function PlayerCard({ user, variant, onPress }: {
   const filled = look.filled;
 
   if (variant === 'banner') {
+    // Clean's light banner, made to stand out a little more (Oct 25, owner: "For the tennis card. Give it a slight
+    // maybe gradient or just something to make it pop more"). BANNER_POP picks how; only where the banner is light.
+    const pop = look.plain ? BANNER_POP : 'now';
     const next = upcoming(user)[0];
     const items: StripItem[] = next ? [...stripItems(user, 2, week), nextItem(next)] : stripItems(user, 3, week);
     const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
-      <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, pressed && styles.pressed]}>
+      <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift], pressed && styles.pressed]}>
         <CardWash look={look} radius={corner(16)} />
+        {/* A: a soft wash of the court's pale green from the top corner, fading to the card by the middle. */}
+        {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+        {/* B: a green edge down the left side. C: a thin green line along the top. */}
+        {pop === 'B' ? <View pointerEvents="none" style={[styles.popEdge, { backgroundColor: colors.brand }]} /> : null}
+        {pop === 'C' ? <View pointerEvents="none" style={[styles.popTop, { backgroundColor: colors.brand }]} /> : null}
         <View style={styles.headRow}>
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
           <Ionicons name="chevron-forward" size={15} color={look.muted} />
         </View>
         <View style={[styles.heroRow, styles.bannerHero]}>
-          <Text maxFontSizeMultiplier={1.3} style={[styles.bannerFigure, { color: look.figure }]}>{ratingText(p)}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={[styles.bannerFigure, { color: pop === 'now' || pop === 'A' ? look.figure : colors.brand }]}>{ratingText(p)}</Text>
           <Text maxFontSizeMultiplier={1.3} style={[styles.system, styles.bannerSystem, { color: systemInk }]}>{system}</Text>
         </View>
         <View style={styles.inline}>
@@ -195,6 +212,9 @@ const styles = StyleSheet.create({
   card: { borderRadius: corner(20), padding: 20, overflow: 'hidden' },
   // The session box's edge: a 1-point line on a dark page, none on a light one.
   bordered: { borderWidth: 1 },
+  popEdge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
+  popTop: { position: 'absolute', left: 0, right: 0, top: 0, height: 3 },
+  popLift: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.10)' },
   banner: { borderRadius: corner(16), paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
