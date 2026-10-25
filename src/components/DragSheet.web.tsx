@@ -27,7 +27,7 @@ export const useSheetDrag = () => useContext(DragSheetContext);
  * is up (see the native twin). A browser reports no keyboard frame by frame,
  * so it never has one: the page measures on screen instead.
  */
-export interface SheetKeyboard { bodyTopWithKeyboard: () => number }
+export interface SheetKeyboard { bodyTopWithKeyboard: () => number; bodyTopAtRest: () => number; bodyBottomAtRest: () => number }
 export const useSheetKeyboard = (): SheetKeyboard | null => null;
 
 /**

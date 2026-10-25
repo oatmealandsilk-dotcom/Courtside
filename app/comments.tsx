@@ -11,7 +11,7 @@ import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
-import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
+import { CommentThread, threadOf, threadsOf, useReplyDraft, type Thread } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
 import { CommentsCaption } from '@/components/CommentsCaption';
 import { CommentRow } from '@/components/CommentRow';
@@ -34,6 +34,16 @@ import { colors, radius, spacing, typography } from '@/theme';
 const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️'];
 /** COMMENTS_V2's row: tennis first, then the warm ones; no 💯 (it reads as a red stamp at this size). */
 const QUICK_V2 = ['🎾', '❤️', '🔥', '🙌', '👏', '😍', '😮', '😂'];
+/**
+ * COMMENTS_V2's row, the way Instagram's sits (Oct 25, owner: "Emoji bar
+ * should be smaller like instagrams"): a compact 40-point strip of small
+ * glyphs, tight on the box, there only while you type.
+ */
+const QUICK_ROW_H = 40;
+/** What the row adds to the box when it shows: its height, less the 4 it tucks into the gap under it, plus that gap. */
+const QUICK_ROW_BLOCK = QUICK_ROW_H - 4 + spacing.sm;
+/** The Replying strip's height before it has ever been drawn (it is measured after that). */
+const STRIP_GUESS = 36;
 /**
  * On the stage, how many threads come in with the sheet: about what fills
  * it at half. The rest follow once it has come to rest, so the comments are
@@ -125,7 +135,16 @@ export default function CommentsSheet() {
   const composer = useRef<View>(null);
   // The box's height (strip, emoji row, words), and the sheet's word on where its comments start once the keyboard is up (keyboardSync).
   const composerH = useRef(0);
+  // What the box held when it was last measured ('r' the emoji row, 's' the Replying strip, 'p' a photo), its
+  // height at rest (the words on one line, nothing above them) and the strip's own height: so where its top will
+  // be is known the moment the keyboard starts, drawn yet or not.
+  const composerShape = useRef('');
+  const restComposerH = useRef(0);
+  const stripH = useRef(STRIP_GUESS);
   const sheetKeyboard = useRef<SheetKeyboard | null>(null);
+  // The emoji row shows only while you type (on the stage; with COMMENTS_V2 everywhere, as on Instagram),
+  // giving its room back to the comments otherwise (see onBoxFocus).
+  const [typing, setTyping] = useState(false);
   const heading = useRef<Text>(null);
   // It lights up for a moment as it comes into view (the same light as a reported reply's in its thread).
   const [atLit, setAtLit] = useState(0);
@@ -139,7 +158,13 @@ export default function CommentsSheet() {
     }, 420);
     return () => clearTimeout(t);
   }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
-  const jumpCtx = useMemo(() => (at ? { at, ref: () => undefined, onLayout: () => undefined, lit: atLit } : null), [at, atLit]);
+  // COMMENTS_V2: the comment you just posted gets the same soft light once, as the list brings it into view.
+  const [fresh, setFresh] = useState<{ id: ID; lit: number } | null>(null);
+  const jumpCtx = useMemo(() => (
+    at ? { at, ref: () => undefined, onLayout: () => undefined, lit: atLit }
+      : fresh ? { at: fresh.id, ref: () => undefined, onLayout: () => undefined, lit: fresh.lit }
+        : null
+  ), [at, atLit, fresh]);
   useEffect(() => {
     if (!focus) return;
     const t = setTimeout(() => input.current?.focus(), 380);
@@ -156,16 +181,17 @@ export default function CommentsSheet() {
   // Taken down by an admin (migration 108): its author and admins can still read it, but nothing new can be added.
   const takenDown = !!(kind === 'hit' ? stories.find((st) => st.id === id)?.removed : post?.removed);
   const author = post ? users.find((u) => u.id === post.authorId) : undefined;
+  // Comments made while the sheet is open fade in; the ones already there just appear.
+  const openedAt = useRef(Date.now());
   // Every comment and reply here (the count), and the same laid out as threads.
   // One hidden by the owner's Hidden words (migration 117), or a reply under it, is neither shown nor
   // counted for the owner, who finds it under "Hidden comments" at the end.
   // Worked out again only when the comments change, not on each keystroke in the box.
   const all = useMemo(() => listedComments(comments, id, currentUserId), [comments, id, currentUserId]);
-  const threads = useMemo(() => threadsOf(comments, id, 'oldest', currentUserId), [comments, id, currentUserId]);
+  // Oldest first, like a conversation; what you write here lands at the bottom (see sentLast).
+  const threads = useMemo(() => sentLast(threadsOf(comments, id, 'oldest', currentUserId), currentUserId, openedAt.current), [comments, id, currentUserId]);
   const ownerId = kind === 'hit' ? stories.find((st) => st.id === id)?.authorId : post?.authorId;
-  const hidden = hiddenCommentsOn(comments, id, currentUserId, ownerId);
-  // Comments made while the sheet is open slide in; the ones already there just appear.
-  const openedAt = useRef(Date.now());
+  const hidden = useMemo(() => hiddenCommentsOn(comments, id, currentUserId, ownerId), [comments, id, currentUserId, ownerId]);
   // On the stage the first few threads rise with the sheet; the rest are drawn
   // once it is at rest. Opened at a comment, or as the plain sheet, all of them at once.
   const [allThreads, setAllThreads] = useState(!!at || !staged);
@@ -282,8 +308,26 @@ export default function CommentsSheet() {
     if (rowY.current[commentId] === undefined) return;
     frame.current?.measureInWindow((_x, top) => composer.current?.measureInWindow((_x2, boxTop) => showIn(commentId, boxTop - top)));
   };
+  /** The box's height with the keyboard up while replying (COMMENTS_V2): the emoji row and the strip in it, drawn yet or not. */
+  const typingComposerH = () => {
+    const s = composerShape.current;
+    return composerH.current + (s.includes('r') ? 0 : QUICK_ROW_BLOCK) + (s.includes('s') ? 0 : stripH.current);
+  };
+  /**
+   * How much of the list will show between the header and the box once the
+   * keyboard is down and the box is back to one empty line (COMMENTS_V2), or
+   * undefined when the sheet cannot say.
+   */
+  const restSeen = () => {
+    const sk = sheetKeyboard.current;
+    if (!sk || !(restComposerH.current > 0)) return undefined;
+    const seen = sk.bodyBottomAtRest() - restComposerH.current - sk.bodyTopAtRest();
+    return seen > 0 ? seen : undefined;
+  };
   const replyTo = (comment: Comment) => {
     startReply(comment);
+    // COMMENTS_V2: the emoji row comes in the same drawing as the strip, not a beat later with the keyboard.
+    if (v2) setTyping(true);
     if (Platform.OS === 'web') { setTimeout(() => reveal(comment.id), 350); return; }
     if (v2 && Platform.OS === 'ios' && sheetKeyboard.current) {
       // Already typing: the box only gains its strip; the comment comes up just above it once that is drawn.
@@ -293,15 +337,16 @@ export default function CommentsSheet() {
       const coming = Keyboard.addListener('keyboardWillShow', (e) => {
         coming.remove();
         const top = sheetKeyboard.current?.bodyTopWithKeyboard();
-        if (top !== undefined) showIn(comment.id, e.endCoordinates.screenY - composerH.current - top);
+        if (top !== undefined) showIn(comment.id, e.endCoordinates.screenY - typingComposerH() - top);
       });
       setTimeout(() => coming.remove(), 1500);
       return;
     }
-    // Now (the keyboard may already be up), and again once it has finished coming up.
-    setTimeout(() => reveal(comment.id), 120);
-    const shown = Keyboard.addListener('keyboardDidShow', () => { shown.remove(); setTimeout(() => reveal(comment.id), 60); });
-    setTimeout(() => shown.remove(), 1500);
+    // One scroll, not two: at once if the keyboard is already up; otherwise once it has come up
+    // (a first scroll part way up, then a second to correct it, read as a jump).
+    if (Keyboard.isVisible()) { setTimeout(() => reveal(comment.id), 60); return; }
+    const shown = Keyboard.addListener('keyboardDidShow', () => { shown.remove(); clearTimeout(late); setTimeout(() => reveal(comment.id), 60); });
+    const late = setTimeout(() => { shown.remove(); reveal(comment.id); }, 1200);
   };
   // Opened from "Reply" on the post page: already replying as the sheet lands.
   const replyStarted = useRef(false);
@@ -323,6 +368,9 @@ export default function CommentsSheet() {
   // push, the comment lands, and the list slides to it once it is drawn: to
   // the bottom for a comment, to the reply itself (its thread unfolded) for a reply.
   const justSent = useRef<Set<ID> | null>(null);
+  // Whether the keyboard was put away as it went (COMMENTS_V2 on a phone): the list then works out where
+  // things will be once it is down, and brings the comment into view as they get there.
+  const sentHiding = useRef(false);
   const send = () => {
     const text = draft.trim();
     if (!canSend || takenDown) return;
@@ -333,6 +381,7 @@ export default function CommentsSheet() {
     setPhoto(null);
     doneReplying();
     justSent.current = new Set(all.map((c) => c.id));
+    sentHiding.current = v2Phone && Keyboard.isVisible();
     // A slight dip and a settle with no wobble, as the Follow button answers (Oct 20 sweep: the deeper pop read as a bounce).
     sendPop.value = withSequence(withTiming(0.96, { duration: 60 }), withSpring(1, { damping: 20, stiffness: 320 }));
     if (answering) openThread(threadOf(comments, answering));
@@ -361,17 +410,28 @@ export default function CommentsSheet() {
     const sent = before ? all.find((c) => !before.has(c.id) && c.authorId === currentUserId) : undefined;
     if (!sent) return;
     justSent.current = null;
-    const go = (tries: number) => {
-      if (rowY.current[sent.id] !== undefined) reveal(sent.id);
-      else if (tries > 0) setTimeout(() => go(tries - 1), 120);
-    };
-    // The keyboard on its way down after sending (COMMENTS_V2): measured once it, and the sheet, are at rest.
-    if (v2Phone && Keyboard.isVisible()) {
-      const hidden = Keyboard.addListener('keyboardDidHide', () => { hidden.remove(); clearTimeout(late); setTimeout(() => go(4), 30); });
-      const late = setTimeout(() => { hidden.remove(); go(4); }, 900);
+    if (!v2) {
+      const go = (tries: number) => {
+        if (rowY.current[sent.id] !== undefined) reveal(sent.id);
+        else if (tries > 0) setTimeout(() => go(tries - 1), 120);
+      };
+      setTimeout(() => go(4), 80);
       return;
     }
-    setTimeout(() => go(4), 80);
+    // COMMENTS_V2 (Oct 25, v3: "way smoother"): one glide, started the frame the comment is drawn. With the
+    // keyboard on its way down it is aimed at where the box and the sheet will be once it is down, so it runs
+    // with them rather than after them (it used to wait for the keyboard, then move the list: two moves).
+    // Then a moment of soft light on it.
+    const hiding = sentHiding.current;
+    let frames = 0;
+    const go = () => {
+      if (!sheetOpen.current) return;
+      if (rowY.current[sent.id] === undefined) { if (frames++ < 30) requestAnimationFrame(go); return; }
+      const seen = hiding ? restSeen() : undefined;
+      if (seen !== undefined) showIn(sent.id, seen); else reveal(sent.id);
+      setFresh({ id: sent.id, lit: Date.now() });
+    };
+    requestAnimationFrame(go);
   }, [all.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const addPhoto = async () => {
     picking.current = true;
@@ -418,13 +478,21 @@ export default function CommentsSheet() {
       else box?.setSelectionRange?.(caret, caret);
     }, 0);
   };
-  // On the stage the emoji row shows only while you type, giving its room
-  // back to the comments at half. A moment's grace on blur: pressing an emoji
-  // takes the focus away for an instant, and the row must not go under the finger.
-  const [typing, setTyping] = useState(false);
+  // The emoji row while you type (typing, above). A moment's grace on blur: pressing an emoji takes the focus
+  // away for an instant in a browser, and the row must not go under the finger.
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
   const onBoxFocus = () => { if (blurTimer.current) clearTimeout(blurTimer.current); setTyping(true); };
+  // COMMENTS_V2 on a phone: the row goes the moment the keyboard starts down, not a beat later part way
+  // down (the box stepping down under it), and comes back with it (Android's Back can put the keyboard
+  // away and leave the box focused).
+  useEffect(() => {
+    if (!v2Phone) return undefined;
+    const ios = Platform.OS === 'ios';
+    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => { if (input.current?.isFocused?.()) setTyping(true); });
+    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => { if (blurTimer.current) clearTimeout(blurTimer.current); setTyping(false); });
+    return () => { show.remove(); hide.remove(); };
+  }, [v2Phone]);
   const onBoxBlur = () => {
     blurredAt.current = Date.now();
     if (blurTimer.current) clearTimeout(blurTimer.current);
@@ -435,10 +503,11 @@ export default function CommentsSheet() {
     }, 250);
   };
   const quickRow = v2 ? (
-    // COMMENTS_V2: always there, edge to edge and evenly spaced, no bubble; a press gives a small squeeze.
+    // COMMENTS_V2: Instagram's row: small glyphs evenly spaced in a compact strip (not stretched across a wide
+    // screen), tight on the box, no bubble; a press gives a small squeeze.
     <View style={styles.quickV2}>
       {QUICK_V2.map((e) => (
-        <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickSlot, pressed && styles.quickSqueeze]}>
+        <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} hitSlop={{ top: 4, bottom: 4 }} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickSlot, pressed && styles.quickSqueeze]}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.quickGlyph}>{e}</Text>
         </Pressable>
       ))}
@@ -491,6 +560,44 @@ export default function CommentsSheet() {
     />
   )), [threads, allThreads, openThreads, canReply]); // eslint-disable-line react-hooks/exhaustive-deps
   const count = all.length;
+  // The header, the small rail and the whole list, made again only when what they show changes: a keystroke
+  // (the draft lives here) redraws the box alone, never the caption, the comments or the sheet's header under
+  // a finger that is typing (Oct 25, v3: "way smoother").
+  const header = useMemo(() => (
+    <View style={styles.headerRow}>
+      <Text ref={heading} accessibilityRole="header" accessibilityLabel={count ? `Comments, ${count}` : 'Comments'} style={styles.heading}>Comments{count ? ` · ${count}` : ''}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} style={styles.closeButton}>
+        <Ionicons name="close" size={22} color={colors.textMuted} />
+      </Pressable>
+    </View>
+  ), [styles, count, close]);
+  const rail = useMemo(() => (staged ? <StageRail kind={kind} id={id} /> : undefined), [staged, kind, id]);
+  const listEl = useMemo(() => (
+    <CommentList
+      listRef={list}
+      pull={staged && LIST_PULL && Platform.OS !== 'web'}
+      tapsPutKeyboardAway={v2Phone}
+      scrollYValue={scrollY}
+      contentContainerStyle={styles.list}
+    >
+      {/* The post itself first: who, the whole caption, its small line. */}
+      <CommentsCaption kind={kind} id={id} />
+      <JumpProvider value={jumpCtx}>
+        {threadEls}
+      </JumpProvider>
+      {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
+      {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? (LESS_AI || LESS_AI_ROUND2 ? 'No comments yet.' : 'No comments yet. Start the conversation.') : looked ? 'This is no longer available.' : ''}</Text> : null}
+      <HiddenComments count={hidden.length}>
+        {hidden.map((c) => (
+          <CommentRow key={c.id} comment={c} big onUnhide={() => actions.unhideByWords(kind === 'hit' ? 'hit-comment' : 'comment', c.id)} />
+        ))}
+      </HiddenComments>
+    </CommentList>
+  ), [list, staged, v2Phone, scrollY, styles, kind, id, jumpCtx, threadEls, threads.length, exists, hidden, looked, actions]);
+  // The emoji row: COMMENTS_V2 only while typing, as on Instagram; otherwise always on the plain sheet, and while typing on the stage.
+  const showRow = v2 ? typing : !staged || typing;
+  // What the box holds this time (see composerShape).
+  const shape = `${showRow ? 'r' : ''}${replyingTo ? 's' : ''}${photo ? 'p' : ''}`;
   return (
     <>
       {/* Over the stage's black the phone's clock is white, as it is over the clip in the Feed. */}
@@ -503,49 +610,33 @@ export default function CommentsSheet() {
         active={focused}
         side
         stage={stage}
-        stageOverlay={staged ? <StageRail kind={kind} id={id} /> : undefined}
+        stageOverlay={rail}
         onSettled={onSettled}
         keyboardSync={v2}
         smoothOpen={v2}
-        header={
-          <View style={styles.headerRow}>
-            <Text ref={heading} accessibilityRole="header" accessibilityLabel={count ? `Comments, ${count}` : 'Comments'} style={styles.heading}>Comments{count ? ` · ${count}` : ''}</Text>
-            <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={close} style={styles.closeButton}>
-              <Ionicons name="close" size={22} color={colors.textMuted} />
-            </Pressable>
-          </View>
-        }
+        header={header}
       >
         <View ref={frame} style={{ flex: 1 }} onAccessibilityEscape={close}>
           {v2 ? <SheetKeyboardProbe into={sheetKeyboard} /> : null}
-          <CommentList
-            listRef={list}
-            pull={staged && LIST_PULL && Platform.OS !== 'web'}
-            tapsPutKeyboardAway={v2Phone}
-            scrollYValue={scrollY}
-            contentContainerStyle={styles.list}
+          {listEl}
+          <View
+            ref={composer}
+            style={styles.composer}
+            onLayout={(e) => {
+              const h = e.nativeEvent.layout.height;
+              composerH.current = h;
+              composerShape.current = shape;
+              // At rest: nothing above the words. The lowest seen is the one line an empty box has.
+              if (!shape && (!(restComposerH.current > 0) || h < restComposerH.current)) restComposerH.current = h;
+            }}
           >
-            {/* The post itself first: who, the whole caption, its small line. */}
-            <CommentsCaption kind={kind} id={id} />
-            <JumpProvider value={jumpCtx}>
-              {threadEls}
-            </JumpProvider>
-            {/* Only hidden ones so far: "Hidden comments" below says so, not "No comments yet" above it. */}
-            {!threads.length && !(exists && hidden.length) ? <Text style={styles.empty}>{exists ? (LESS_AI || LESS_AI_ROUND2 ? 'No comments yet.' : 'No comments yet. Start the conversation.') : looked ? 'This is no longer available.' : ''}</Text> : null}
-            <HiddenComments count={hidden.length}>
-              {hidden.map((c) => (
-                <CommentRow key={c.id} comment={c} big onUnhide={() => actions.unhideByWords(kind === 'hit' ? 'hit-comment' : 'comment', c.id)} />
-              ))}
-            </HiddenComments>
-          </CommentList>
-          <View ref={composer} style={styles.composer} onLayout={(e) => { composerH.current = e.nativeEvent.layout.height; }}>
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
             {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
             {/* Docked on the box's top edge while replying, the × on the right. Plain, never a
                 height animation: an iPhone kept the animation's first frame (no height) and the
                 strip never showed (Oct 25 recording). */}
             {replyingTo ? (
-              <View style={styles.replying}>
+              <View style={styles.replying} onLayout={(e) => { stripH.current = e.nativeEvent.layout.height; }}>
                 <Text style={styles.replyingText} numberOfLines={1}>
                   Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
                 </Text>
@@ -555,7 +646,7 @@ export default function CommentsSheet() {
               </View>
             ) : null}
             {/* Part of the box, just above the words: it moves only with the box, never on its own (Oct 25). */}
-            {v2 || !staged || typing ? quickRow : null}
+            {showRow ? quickRow : null}
             {photo ? (
               <View style={styles.attached}>
                 <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
@@ -651,6 +742,30 @@ export default function CommentsSheet() {
  * pulled down and away from anywhere, as on Instagram; anywhere else it is
  * the list's own scroll. The list is held at its top while the sheet moves.
  */
+/**
+ * What you write while the sheet is open lands at the bottom, as in a
+ * conversation (Oct 25, owner: "commenting puts it on the top not bottom"):
+ * your comments made since it opened come after every other comment, your
+ * replies last in their thread, in the order you sent them, whatever the
+ * clocks say. A comment's time is its writer's phone's (it is saved with
+ * it), so one written on a phone set ahead, or brought in with a time to
+ * come, would otherwise sort below yours and leave your new one above it.
+ * Next time the sheet opens, everything is in plain time order again.
+ */
+function sentLast(threads: Thread[], me: ID | null, since: number): Thread[] {
+  if (!me) return threads;
+  const mineNow = (c: Comment) => c.authorId === me && Date.parse(c.createdAt) > since;
+  const last = <T,>(xs: T[], isLast: (x: T) => boolean): T[] => {
+    const after = xs.filter(isLast);
+    if (!after.length || after.length === xs.length) return xs;
+    return [...xs.filter((x) => !isLast(x)), ...after];
+  };
+  return last(threads, (t) => mineNow(t.top)).map((t) => {
+    const replies = last(t.replies, mineNow);
+    return replies === t.replies ? t : { ...t, replies };
+  });
+}
+
 /** Hands the page the sheet's keyboard word (it lives inside the sheet, under the page). */
 function SheetKeyboardProbe({ into }: { into: React.MutableRefObject<SheetKeyboard | null> }) {
   into.current = useSheetKeyboard();
@@ -760,11 +875,12 @@ const styleDefinitions = StyleSheet.create({
   quickItem: { flex: 1, maxWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   quickPressed: { backgroundColor: colors.surfaceAlt, transform: [{ scale: 1.15 }] },
   quickEmoji: { fontSize: 22 },
-  // COMMENTS_V2: a calm row of 44-point slots spread edge to edge, with room above and below; glyphs a touch larger, no bubble.
-  quickV2: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 2 },
-  quickSlot: { flexBasis: 44, flexShrink: 1, minWidth: 34, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // COMMENTS_V2 (Oct 25, v3: "smaller like instagrams"): a compact 40-point strip of 23-point glyphs, evenly
+  // spaced across at most 340 points (a wide phone does not stretch it), tucked 4 points into the gap above the box.
+  quickV2: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', height: QUICK_ROW_H, marginBottom: -4, width: '100%', maxWidth: 340, alignSelf: 'center' },
+  quickSlot: { flexBasis: 38, flexShrink: 1, minWidth: 30, height: QUICK_ROW_H, alignItems: 'center', justifyContent: 'center' },
   quickSqueeze: { transform: [{ scale: 0.88 }] },
-  quickGlyph: { fontSize: 27, lineHeight: 34 },
+  quickGlyph: { fontSize: 23, lineHeight: 28 },
   attached: { width: 64, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginLeft: 34 + spacing.sm },
   // The × is small on the photo; what takes the tap is the whole top-right corner of it.
   attachedRemoveTarget: { position: 'absolute', top: 0, right: 0, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },

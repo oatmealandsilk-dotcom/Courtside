@@ -124,6 +124,16 @@ const ROW_OUT = FadeOut.duration(160);
 const REPLY_IN = FadeIn.duration(200);
 /** A comment you just sent fades in where it lands, without moving (a slide up drew it over the row above for a moment). */
 const FRESH_IN = FadeIn.duration(220);
+/**
+ * In a browser the rows below glide out of the way first (ROW_GLIDE); what
+ * comes in (your reply, the replies it unfolds, "Hide replies") waits for
+ * that room, so it is never drawn over the comment still gliding down (Oct
+ * 25, v3: posting a reply drew "Hide replies" over the next name for a moment).
+ */
+const AFTER_GLIDE = 200;
+const REPLY_IN_WEB = FadeIn.duration(200).delay(AFTER_GLIDE);
+const FRESH_IN_WEB = FadeIn.duration(220).delay(AFTER_GLIDE);
+const TOGGLE_IN_WEB = FadeIn.duration(160).delay(AFTER_GLIDE);
 
 export function CommentThread({ thread, big = false, open, onToggle, onReply, onPressBody, onRowLayout, isFresh, glide = false }: {
   thread: Thread;
@@ -157,7 +167,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
   const row = (c: Comment, reply: boolean) => (
     <Animated.View
       key={c.id}
-      entering={isFresh?.(c) ? FRESH_IN : glide && reply && drawn.current ? REPLY_IN : undefined}
+      entering={isFresh?.(c) ? (moves ? FRESH_IN_WEB : FRESH_IN) : glide && reply && drawn.current ? (moves ? REPLY_IN_WEB : REPLY_IN) : undefined}
       exiting={moves ? ROW_OUT : undefined}
       layout={moves ? ROW_GLIDE : undefined}
       onLayout={onRowLayout ? (e) => onRowLayout(c.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
@@ -177,7 +187,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
       {row(thread.top, false)}
       {open ? thread.replies.map((c) => row(c, true)) : null}
       {count ? (
-        <Animated.View key={`${thread.top.id}:toggle`} layout={moves ? ROW_GLIDE : undefined} exiting={moves ? ROW_OUT : undefined} style={[styles.toggleWrap, { marginLeft: replyIndent(big) }]}>
+        <Animated.View key={`${thread.top.id}:toggle`} entering={moves && drawn.current ? TOGGLE_IN_WEB : undefined} layout={moves ? ROW_GLIDE : undefined} exiting={moves ? ROW_OUT : undefined} style={[styles.toggleWrap, { marginLeft: replyIndent(big) }]}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
