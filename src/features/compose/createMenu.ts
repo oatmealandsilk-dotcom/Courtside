@@ -9,9 +9,19 @@ import { useSyncExternalStore } from 'react';
  * "When I click the + and then click out of it, the bottom island disappears
  * and comes back. Either make it not disappear or make the animation
  * significantly better"). While the box is up the bar stays where it is,
- * dimmed with the page, its + still the way to close the box.
+ * its + still the way to close the box.
  */
 let closer: (() => void) | null = null;
+
+/**
+ * While the box is up the bar keeps its own colour; only its four tabs step
+ * back, under a veil of the bar's own ground this strong (0 to 1), so the lit
+ * + is plainly the control in charge (as iOS greys a tab bar's colours while
+ * something is up over it, never its ground). It used to go under the page's
+ * dim instead and turned a dark grey (Oct 25, owner: "Don't like how this
+ * bottom gets dark grey").
+ */
+export const BAR_RECEDE = 0.4;
 
 /** Where the box is: not there, on its way in (the + was just tapped), up, or leaving. */
 export type CreateMenuState = 'closed' | 'opening' | 'open' | 'leaving';
