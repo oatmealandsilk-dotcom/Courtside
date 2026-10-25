@@ -56,7 +56,18 @@ export const useSheetDrag = () => useContext(DragSheetContext);
  * the way up. Read when the keyboard is about to show, so the page can scroll
  * once, from the final layout, at the same moment the keyboard starts.
  */
-export interface SheetKeyboard { bodyTopWithKeyboard: () => number }
+export interface SheetKeyboard {
+  bodyTopWithKeyboard: () => number;
+  /**
+   * The same two edges once the keyboard is down again (Oct 25, v3): the top
+   * of the body where the sheet comes back to rest, and the bottom of the
+   * body clear of the home bar. Read as the keyboard starts going down (after
+   * posting), so the page can bring a new comment into view in one scroll
+   * that runs with the keyboard and the sheet, not after them.
+   */
+  bodyTopAtRest: () => number;
+  bodyBottomAtRest: () => number;
+}
 const SheetKeyboardContext = createContext<SheetKeyboard | null>(null);
 export const useSheetKeyboard = () => useContext(SheetKeyboardContext);
 
@@ -419,7 +430,10 @@ function PlainSheet({
   const sheetKeyboard = useMemo<SheetKeyboard>(() => ({
     // Fully open (the ride takes it there): its top a sliver below the status bar, its body under the header.
     bodyTopWithKeyboard: () => insets.top + 20 + headH,
-  }), [insets.top, headH]);
+    // Raised by the keyboard: back where it was resting; otherwise it stays where it is.
+    bodyTopAtRest: () => insets.top + 20 + (raisedByKeyboard.value ? latestOpen.current : translateY.value) + headH,
+    bodyBottomAtRest: () => windowHeight - insets.bottom,
+  }), [insets.top, insets.bottom, headH, windowHeight]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const closeCount = useRef(closeSignal);
   useEffect(() => {
@@ -678,7 +692,10 @@ function StageSheet({
   const handleH = useRef(60);
   const sheetKeyboard = useMemo<SheetKeyboard>(() => ({
     bodyTopWithKeyboard: () => Math.min(stageTop.value, yf) + StyleSheet.hairlineWidth + handleH.current,
-  }), [yf]);
+    // Raised by the keyboard: back at half; put at full by a finger: it stays there.
+    bodyTopAtRest: () => (raisedByKeyboard.value ? yh : Math.max(stageTop.value, yf)) + StyleSheet.hairlineWidth + handleH.current,
+    bodyBottomAtRest: () => H - insets.bottom,
+  }), [yf, yh, H, insets.bottom]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (ride) return undefined;
     const ios = Platform.OS === 'ios';
