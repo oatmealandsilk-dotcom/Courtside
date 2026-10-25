@@ -398,7 +398,8 @@ function LogSession() {
         // A tracker's session: logged as that session, which then counts as logged (migration 58).
         ...(fresh ? { activityId: fresh.id } : {}),
         // From a hit: where it was, as the note, and the court itself in your log (migration 130).
-        ...(fromHit ? { note: `At ${fromHit.place}` } : {}),
+        // A hit with no court yet (Flexible) gives its town, or nothing.
+        ...(fromHit?.place ? { note: `At ${fromHit.place}` } : {}),
         ...(fromHit?.placeId ? { courtId: fromHit.placeId } : {}),
         // Typed in by hand (Oct 8): private to your log.
         ...(typedStats.kcal ? { kcal: typedStats.kcal } : {}),
@@ -467,7 +468,7 @@ function LogSession() {
   ) : waiting ? (
     <SheetTitle title="Log your tennis" onClose={close} />
   ) : fresh ? (
-    <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title={fromHit ? 'How was the hit?' : isTennisActivity(fresh) ? 'Log your tennis' : 'Log your workout'} line={`${fromHit?.place ? `${fromHit.place}. ` : ''}From ${fromWho(fresh)} · ${activityWhen(fresh)}. Only you see this.`} lines={2} onClose={close} />
   ) : done ? (
     <SheetTitle title={isTennisActivity(done) ? 'Log your tennis' : 'Log your workout'} line={done.status === 'logged' ? 'Logged. It counts toward your streak and hours.' : 'You already logged this session.'} lines={2} onClose={close} />
   ) : deciding ? (
@@ -475,7 +476,7 @@ function LogSession() {
   ) : choosing ? (
     <SheetTitle title="Log a session" line="Your tracker picked these up. Pick one, or log one yourself." lines={2} onClose={close} />
   ) : fromHit ? (
-    <SheetTitle title="How was the hit?" line={`${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}. Only you see this.`} lines={2} onClose={close} />
+    <SheetTitle title="How was the hit?" line={`${fromHit.place ? `${fromHit.place}${fromHit.who ? ` · with ${fromHit.who}` : ''}` : fromHit.who ? `With ${fromHit.who}` : 'Your hit'}. Only you see this.`} lines={2} onClose={close} />
   ) : (
     <SheetTitle title="Log a session" line="Counts toward your streak. Only you see it." onClose={close} />
   );

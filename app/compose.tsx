@@ -683,7 +683,7 @@ function Compose() {
     opponent: canTagKind(kind) ? (opponentText.trim() || (fromHit && !players.length ? fromHit.who : '')) : '',
     // Where it was, as the note ("At Alder Park"): the hit's place, else the court tagged here, so Your sessions names it.
     // From Finish, the place typed at Start when there was no court.
-    note: fromHit ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : fromLive?.place ? `At ${fromLive.place}` : undefined,
+    note: fromHit?.place ? `At ${fromHit.place}` : loggedCourt() ? `At ${loggedCourt()!.name}` : fromLive?.place ? `At ${fromLive.place}` : undefined,
     ...(opened?.type === 'tracker' && logMinutes && logMinutes !== opened.activity.minutes ? { minutes: logMinutes } : {}),
     // A live session with no tracker: the clock's time, or the one picked under Edit.
     ...(liveOnly ? { minutes: logMinutes ?? liveMins } : {}),

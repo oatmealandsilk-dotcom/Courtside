@@ -139,14 +139,15 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
       const other = withId ? users.find((u) => u.id === withId) : undefined;
       const place = shortPlace(prefill.place);
       toastId.current = showToast({
-        title: prefill.who ? `How was the hit with ${prefill.who}?` : `How was the hit at ${place}?`,
+        // A hit with no court yet (Flexible) has its town as its place, or none.
+        title: prefill.who ? `How was the hit with ${prefill.who}?` : place ? `How was the hit at ${place}?` : 'How was the hit?',
         ...(other ? { look: 'pill' as const, person: { name: other.name, seed: other.avatarSeed, uri: other.avatarUrl } } : {}),
         // With your tracker's copy it carries what "Tennis detected" would have
         // said (the two arrive together, and this one takes its place): the
         // session's mark and its numbers, yours alone.
         ...(tracked
           ? { glyph: 'session' as const, body: [duration(tracked.minutes), tracked.maxHr ? `${tracked.maxHr} max bpm` : null, pickSource({ type: 'tracker', activity: tracked })].filter(Boolean).join(' · ') }
-          : { icon: 'hit' as const, ...(prefill.who ? { body: place } : {}) }),
+          : { icon: 'hit' as const, ...(prefill.who && place ? { body: place } : {}) }),
         href: tracked ? `/compose?activity=${tracked.id}&hit=${first.id}` : `/log-session?hit=${first.id}`,
         action: { label: 'Log it', onPress: open },
         holdMs: HOLD_MS,

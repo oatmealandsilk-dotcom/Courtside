@@ -1492,6 +1492,27 @@ const STEPS = [
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Open until' }); },
   },
   {
+    // Oct 25, owner: "an option to put like TBD … basically like we don't have to choose a court right now".
+    // Find Players lists Rosa's hit with no court yet ("Court flexible · near Glendale", plain words, not a
+    // court link); Looking for a hit offers Flexible under the nearest courts, and once it is picked Post is ready.
+    name: 'flexible-hit',
+    title: 'Looking for a hit: Flexible, no court yet',
+    async run(page) {
+      await page.reveal({ text: 'Court flexible · near Glendale' }, 20000);
+      if (!(await page.find({ label: /^Court flexible, near Glendale, about \d+ miles?\. You pick the court together in the chat\.$/ }))) throw new Error('the flexible hit’s place line does not say how far it is, or what happens next');
+      await page.reveal({ label: 'Post a hit' }, 20000);
+      await page.tap({ label: 'Post a hit' });
+      await page.waitFor({ text: 'Choose where to play' });
+      // Under the nearest courts, maybe below Post at the sheet's foot: brought up first.
+      await page.reveal({ label: 'Flexible. Pick the court together in the chat' }, 20000);
+      await page.tap({ label: 'Flexible. Pick the court together in the chat' });
+      await page.waitFor({ text: 'Whoever joins picks the court with you in the chat.' });
+      if (await page.find({ text: 'Choose where to play' })) throw new Error('Post still waits for a court after Flexible was picked');
+    },
+    expect: [{ text: 'Flexible' }, { text: 'Pick the court together in the chat' }, { text: /Court flexible$/ }],
+    after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Pick the court together in the chat' }); },
+  },
+  {
     // The Session sheet (Oct 16, owner: "do a with week strip"): + → Session opens your week, Start a session,
     // the demo's tracker sessions each with its Log it, and Log one yourself. Closed again, nothing logged,
     // so the next step still finds a session to post. Before it, since that one adds a post.

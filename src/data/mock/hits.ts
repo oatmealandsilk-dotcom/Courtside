@@ -16,8 +16,10 @@ const at = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.n
  * Players and the map have to get right: two at demo parks near you (with
  * the court's id, so they show on its page), one at a place only typed (no
  * spot: it sits in the list without a distance), one in San Diego (under
- * "Further away"), and one by Ella, a teen, which an adult who does not
- * follow her must not see anywhere.
+ * "Further away"), one by Ella, a teen, which an adult who does not
+ * follow her must not see anywhere, and one by Rosa with no court yet
+ * ("Flexible", features/hits/flexible): near Glendale, measured to its rough
+ * area, never on the map or a court's page.
  */
 export const demoHits: HitRequest[] = [
   { id: 'hit-demo-1', authorId: 'u-sam', startsAt: laterToday(3), place: at(1), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Lefty, steady rally pace. Bring balls if you have a fresh can.', createdAt: hoursFromNow(-2), joinedIds: [] },
@@ -37,6 +39,8 @@ export const demoHits: HitRequest[] = [
   // Your own hit tomorrow evening, which Priya was in until she tapped
   // "Can't make it": its spot is open again, and her note is in your alerts.
   { id: 'hit-demo-8', authorId: CURRENT_USER_ID, startsAt: tomorrowAt(18), place: at(2), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Match play, best of three tiebreak sets.', createdAt: hoursFromNow(-8), joinedIds: [] },
+  // Rosa's hit with no court yet: its town and a town-sized area (0.05°), the way the server keeps one (migration 187).
+  { id: 'hit-demo-9', authorId: 'u-rosa', startsAt: tomorrowAt(17), place: { flexible: true, name: 'Court flexible · near Glendale', near: 'Glendale', area: { lat: 34.15, lng: -118.25 } }, levelMin: 3.0, levelMax: 4.0, format: 'hit', spots: 1, note: 'New to LA and still finding courts. Happy to play wherever suits you.', createdAt: hoursFromNow(-3), joinedIds: [] },
 ];
 
 /** The demo hits only a player who has been here a while has: one they joined, and one of their own (see api's `?new=1`). */
