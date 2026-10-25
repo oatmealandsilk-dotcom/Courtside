@@ -11,6 +11,7 @@ import { TOP_SHADE } from './ReelCaption';
 import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
@@ -65,7 +66,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Plays only on the screen you are looking at: a page pushed over this one,
   // or a tab slid away, holds it until you come back (the phone's player does
   // the same in ClipVideo). The comments stage keeps its clip playing.
-  const onTop = useIsFocused() || held;
+  // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
+  const windowsHeld = useWindowsHeld();
+  const onTop = (useIsFocused() && !windowsHeld) || held;
   const active = wanted && onTop;
   const insets = useSafeAreaInsets();
   // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).

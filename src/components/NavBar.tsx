@@ -30,6 +30,10 @@ import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withA
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { LookBar } from './TabBarLooks';
+import { HOLD_MS, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
+
+/** A hold on the Feed tab while on the Feed: the Feed's windows. */
+const holdFeed = () => requestFeedWindows('bar');
 
 /** The screen's pixels per point, read once: the bar's moves are rounded to whole pixels. */
 const PX = PixelRatio.get();
@@ -104,6 +108,8 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const insets = useSafeAreaInsets();
   // None when the page on show was opened cold from a link and belongs to no tab (index -1).
   const activeRoute: string | undefined = state.routes[state.index]?.name;
+  // The Feed's windows (features/feed/feedWindows): a hold on the Feed tab, only while on the Feed itself.
+  const onFeedHold = useFeedWindowsOn() && activeRoute === 'index' && feedUnder ? holdFeed : undefined;
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -220,6 +226,7 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
         veilStyle={veilStyle}
         veilBlocks={veilBlocks}
         onVeil={() => { closeCreateMenu(); }}
+        onFeedHold={onFeedHold}
       />
     );
   }
@@ -238,6 +245,8 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
                 <Pressable
                   ref={tourRef(item.route)}
                   onPress={() => navigation.navigate(item.route)}
+                  onLongPress={item.route === 'index' ? onFeedHold : undefined}
+                  delayLongPress={item.route === 'index' && onFeedHold ? HOLD_MS : undefined}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={item.label}

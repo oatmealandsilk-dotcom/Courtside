@@ -1,5 +1,6 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 
 export interface ClipVideoHandle { seek: (seconds: number) => void; player: null; reattach: () => void }
@@ -23,7 +24,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Plays only on the screen you are looking at, as on a phone: a page pushed
   // over this one, or a tab slid away, holds it until you come back. The
   // comments stage is the exception: its clip plays on above the sheet.
-  const onTop = useIsFocused() || held;
+  // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
+  const windowsHeld = useWindowsHeld();
+  const onTop = (useIsFocused() && !windowsHeld) || held;
   const active = wanted && onTop;
   const el = useRef<HTMLVideoElement>(null);
   // Rate and level are set on the element, and set again whenever it reloads

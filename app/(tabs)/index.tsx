@@ -7,7 +7,6 @@ import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, us
 import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
-import { FeedTopRow } from '@/features/groups/FeedTopRow';
 import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
@@ -71,6 +70,8 @@ import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
+import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedSpot, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, type Spot } from '@/features/feed/feedWindows';
+import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsRow, WindowsStack } from '@/features/feed/FeedWindowsView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { warmOpenOutside } from '@/features/share/openOutside';
@@ -1248,6 +1249,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const activeKey = feed[active] ? keyOf(feed[active]) : undefined;
   const activeKeyRef = useRef(activeKey);
   activeKeyRef.current = activeKey;
+  // The Feed's windows (features/feed/feedWindows): which page this feed is on, for its card.
+  const windowKey = topRow ? FOR_YOU : scope?.activities ? ACTIVITIES_KEY : scope?.groupId ?? null;
+  useEffect(() => { if (windowKey) noteFeedSpot(windowKey, spotOf(feed[active], activeKey, (id) => usersById.get(id)?.name)); }, [windowKey, activeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (windowKey) noteFeedSpot(windowKey, null); }, [windowKey]);
   // The posts an admin pushed to the bottom, arriving (or changing) after this feed was dealt: any of them
   // below the page on screen go to the very end. Nothing at or above the page on screen moves. For you, a
   // group's feed and Activities only; one person's posts keep the grid's order.
@@ -2643,6 +2648,29 @@ function FeedLayer({ shown, children }: { shown: boolean; children: React.ReactN
 /** The top row's "Activities" word, held where a group's id would be. */
 const ACTIVITIES = 'activities';
 
+/**
+ * For the Feed's windows: where a feed not built yet would start (its newest post), for its card.
+ * Activities without the players near a new player (only the Activities feed itself knows them).
+ */
+function firstSpotOf(key: string, app: ReturnType<typeof useApp>): Spot | null {
+  const me = app.currentUserId;
+  const hidden = new Set([...app.blockedIds, ...app.mutedIds]);
+  const follows = new Set(app.followingIds);
+  const none = new Set<string>();
+  const group = key === ACTIVITIES ? undefined : app.feedGroups.find((g) => g.id === key);
+  let best: Post | undefined;
+  let bestAt = -Infinity;
+  for (const p of app.posts) {
+    if (hidden.has(p.authorId) || unfinishedClip(p, me)) continue;
+    if (key === ACTIVITIES ? !isActivity(p, me, follows, none) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
+    const at = Date.parse(p.createdAt);
+    if (at > bestAt) { best = p; bestAt = at; }
+  }
+  if (!best) return null;
+  const authorId = best.authorId;
+  return spotOfPost(best, `p:${best.id}`, app.users.find((u) => u.id === authorId)?.name);
+}
+
 function GroupedFeed() {
   const app = useApp();
   const { feedGroups, feedGroupInvites, currentUserId, actions } = app;
@@ -2668,25 +2696,39 @@ function GroupedFeed() {
   const insets = useSafeAreaInsets();
   // Android's Back on a group's feed goes back to For you rather than leaving
   // the Feed. A feed pinched in is let out first (its own Back, in Home).
-  useAndroidBack(() => { if (!groupId || chrome.hidden) return false; setGroupId(null); return true; });
+  useAndroidBack(() => { if (closeFeedWindows()) return true; if (!groupId || chrome.hidden) return false; setGroupId(null); return true; });
+  // Hold the row (or the bar's Feed tab) for every feed side by side (features/feed/feedWindows): admins first.
+  const windowsOn = useFeedWindowsOn();
   const activitiesTip = useTip('activities', groupId === ACTIVITIES);
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} row={row} />
-      {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
-          is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
-      {kept.map((key) => (
-        <FeedLayer key={key} shown={key === groupId}>
-          <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
-        </FeedLayer>
-      ))}
-      <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />
+      {/* The windows' dark ground, only while they are up; the feeds below are one card (WindowsStack). */}
+      <WindowsGround />
+      <WindowsStack>
+        <SnapFrame feed={FOR_YOU}>
+          <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} row={row} />
+        </SnapFrame>
+        {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
+            is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
+        {kept.map((key) => (
+          <FeedLayer key={key} shown={key === groupId}>
+            <SnapFrame feed={key}>
+              <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
+            </SnapFrame>
+          </FeedLayer>
+        ))}
+      </WindowsStack>
+      <WindowsClosedOnly>
+        <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />
+      </WindowsClosedOnly>
       {currentUserId ? (
-        <FeedTopRow
+        <WindowsRow
           groups={feedGroups}
           selected={groupId}
-          onSelect={(next) => { if (next !== groupId) setGroupId(next); }}
+          onSelect={(next) => { if (next !== groupId) { if (windowsOn) noteRowSwitch(); setGroupId(next); } }}
+          onHold={windowsOn ? showWindowsFromRow : undefined}
+          onHoldStart={windowsOn ? noteFeedPressIn : undefined}
           onPlus={() => router.push('/find-groups')}
           onPicture={chrome.picture}
           hidden={chrome.hidden}
@@ -2696,8 +2738,20 @@ function GroupedFeed() {
           invites={feedGroupInvites.length}
         />
       ) : null}
+      {windowsOn ? (
+        <FeedWindows
+          feeds={[{ key: ACTIVITIES_KEY, name: 'Activities' }, { key: FOR_YOU, name: 'For you' }, ...feedGroups.map((g) => ({ key: g.id, name: g.name }))]}
+          current={groupId ?? FOR_YOU}
+          onChoose={(key) => setGroupId(key === FOR_YOU ? null : key)}
+          blocked={chrome.hidden}
+          firstSpot={(key) => firstSpotOf(key, app)}
+        />
+      ) : null}
     </View>
   );
 }
+
+/** A hold on the Feed's top row. */
+const showWindowsFromRow = () => requestFeedWindows('row');
 
 export default asTabRoute<{ previewSection?: string; scope?: FeedScope }>(FeedTab, '/');

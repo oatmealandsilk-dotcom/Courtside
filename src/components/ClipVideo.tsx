@@ -4,6 +4,7 @@ import { VideoView, createVideoPlayer, type SurfaceType, type VideoPlayer } from
 import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, peekLeft, takeLeft } from '@/features/feed/clipResume';
 
 /** How many seconds of a clip are fetched before it counts as loaded and may start. */
@@ -81,7 +82,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // whatever the page that drew it asked for, and it carries on when you
   // come back. A clip's own page needs to say nothing for this. The one
   // exception is the comments stage, which keeps its clip playing above it.
-  const onTop = useIsFocused() || held;
+  // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
+  const windowsHeld = useWindowsHeld();
+  const onTop = (useIsFocused() && !windowsHeld) || held;
   const active = wanted && onTop;
   // The player is made and freed by hand rather than by the toolkit's hook:
   // the hook freed a still-playing player when a page left the feed, and
