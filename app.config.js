@@ -158,7 +158,13 @@ module.exports = {
       // the white one, light on the dark one), so they do not flip when the app takes over; once the app
       // runs, ThemedStatusBar sets them per theme. Replaces expo-status-bar's plugin (fixed dark, Oct 24).
       './plugins/withLaunchStatusBar',
-      'expo-router',
+      // adaptiveColors off (Oct 25): left on, expo-router redraws every page in the app the moment the
+      // phone (or browser) turns dark or light, for its own Color API, which the app does not use. With
+      // the app following the phone (userInterfaceStyle 'automatic'), that would be a whole-app redraw at
+      // every change of mode, switch on or off, under a finger too. Automatic dark mode does its own
+      // change instead, through the smooth path (src/theme/ThemeProvider.tsx followPhone). Read from the
+      // app's config at runtime, so it reaches phones by update.
+      ['expo-router', { adaptiveColors: false }],
       // The microphone is for voice notes in chats (expo-audio, below) and the sound of a video
       // recorded with Record video (expo-image-picker); the Instant camera itself never records sound.
       ['expo-camera', { cameraPermission: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.', microphonePermission: 'CourtSide uses the microphone to record the sound of videos you post, and for voice notes you send in chats.', recordAudioAndroid: false }],
