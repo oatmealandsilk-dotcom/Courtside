@@ -99,7 +99,7 @@ export function ListRow({ label, value, tone = 'muted', lead, onPress, a11y, ope
         {lead ?? null}
         {value != null && value !== '' ? (
           typeof value === 'string'
-            ? <Text style={[styles.rowValueText, tone === 'brand' ? styles.rowBrand : tone === 'text' ? styles.rowText : null]} numberOfLines={1}>{value}</Text>
+            ? <Text style={[styles.rowValueText, tone === 'brand' ? styles.rowBrand : tone === 'text' ? styles.rowText : null]} numberOfLines={2}>{value}</Text>
             : value
         ) : null}
         {onPress ? <Ionicons name={open === undefined ? 'chevron-forward' : open ? 'chevron-up' : 'chevron-down'} size={15} color={tone === 'brand' ? colors.brand : colors.textMuted} /> : null}
