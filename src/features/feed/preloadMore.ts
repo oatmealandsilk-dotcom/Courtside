@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '@/store/AppContext';
 import { primeClip, type PrimeLimits } from './clipPrimer';
+import { noteOpeningCached } from './quickStart';
 
 /**
  * More reels loaded ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre load
@@ -28,6 +29,9 @@ import { primeClip, type PrimeLimits } from './clipPrimer';
  * first. Turned on for everyone by setting this to true and shipping an over-the-air update: no
  * database change, no new native code. In the web demo, ?admin=1 makes the demo's player an
  * admin. The same pattern as COMMENTS_V2_RELEASED.
+ *
+ * A primed clip counts as "opening on the phone" for the quick start (features/feed/quickStart,
+ * its own switch QUICK_START_FOR_EVERYONE, admins first too): its page starts on a second, not three.
  */
 export const PRELOAD_MORE_FOR_EVERYONE = false;
 
@@ -94,7 +98,9 @@ export function useClipPrimer(targets: readonly PrimeTarget[], on: boolean) {
     const job: { uri: string; cancel: () => void } = { uri: next.uri, cancel: () => { if (live === job) live = null; stop(); } };
     current.current = job;
     live = job;
-    stop = primeClip(next.uri, next.from, PRIME_LIMITS, () => {
+    stop = primeClip(next.uri, next.from, PRIME_LIMITS, (ok) => {
+      // Its opening is on the phone: when its page is built, it may start on the quick rule (quickStart).
+      if (ok) noteOpeningCached(next.uri);
       if (live === job) live = null;
       if (current.current !== job) return;
       current.current = null;
