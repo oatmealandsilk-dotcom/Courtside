@@ -34,15 +34,21 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  * delayed when I click them"). A finger resting on a button stays down about 80 to 120 ms, so at
  * 120 ms almost every tap showed nothing until it lifted, and on a tap that opens a page the look
  * then came with the new page. At 80 a normal tap shows its look while the finger is still down.
- * Why 80 is still safe (iPhone's own scrolling lists wait about 150 ms, but they have no other check):
- *   - a finger that has moved MOVE_SLOP (8 pt) by then never shows the look, so to reach it a swipe
- *     would have to start slower than 100 points a second (8 pt in 80 ms), a crawl; a page swipe
- *     counts as a flick from 350;
- *   - and even that crawl now drops the look the moment it passes 8 pt (pressMove), before the tab
- *     row (14 pt) or a section row (11 pt) can take the finger and move the page, so a card is
+ * Only for a finger that is resting, though (iPhone's own scrolling lists wait about 150 ms):
+ *   - a finger that has moved MOVE_SLOP (8 pt) by then never shows the look;
+ *   - a finger that has drifted more than STILL_SLOP but not 8 pt is how a slow swipe or scroll
+ *     starts (a finger speeds up from rest, so 80 ms in it has often gone only a few points): it
+ *     keeps the Oct 23 wait, DRIFT_LOOK_DELAY, and shows nothing if it passes 8 pt in that time.
+ *     Released first, it is a tap and flashes its look as before;
+ *   - and any look already on is dropped the moment the finger passes 8 pt (pressMove), before the
+ *     tab row (14 pt) or a section row (11 pt) can take the finger and move the page, so a card is
  *     never seen down while the page slides (the Oct 23 rule).
  */
 export const PRESS_LOOK_DELAY = 80;
+/** How far a finger may have drifted by PRESS_LOOK_DELAY and still count as resting on the button. */
+const STILL_SLOP = 4;
+/** The wait (from touch-down) for a finger that has drifted past STILL_SLOP: the Oct 23 wait. */
+const DRIFT_LOOK_DELAY = 120;
 /**
  * How far a finger may drift before the press counts as the start of a swipe or a scroll. A thumb
  * tap rolls 4 to 8 points and still gets its look; 8 is still under every sideways swipe's take-over
@@ -112,12 +118,19 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   // When the look went on (0 while it is off), and a quick tap's pending hide.
   const shownAt = useRef(0);
   const hide = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Where this finger came down, and whether it has since moved off like a swipe or a scroll.
+  // Where and when this finger came down, the furthest it has drifted since, and whether it has
+  // moved off like a swipe or a scroll.
   const start = useRef<{ x: number; y: number } | null>(null);
+  const downAt = useRef(0);
+  const drift = useRef(0);
   const moved = useRef(false);
+  // A drifting finger's look, waiting for DRIFT_LOOK_DELAY.
+  const later = useRef<ReturnType<typeof setTimeout> | null>(null);
   const clearHide = () => { if (hide.current) { clearTimeout(hide.current); hide.current = null; } };
+  const clearLater = () => { if (later.current) { clearTimeout(later.current); later.current = null; } };
   const drop = useCallback(() => {
     clearHide();
+    clearLater();
     if (!shownAt.current) return;
     shownAt.current = 0;
     lookRef.current(false);
@@ -128,7 +141,7 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     const unsubscribe = subscribePageDragging(() => { if (isPageDragging()) drop(); });
     return () => { dropListeners.delete(drop); unsubscribe(); };
   }, [inSwipe, drop]);
-  useEffect(() => clearHide, []);
+  useEffect(() => () => { clearHide(); clearLater(); }, []);
   // Leaving a swipeable area mid-press (a phone turned, a browser resized, a swipe surface switched
   // off) takes any look on show with it, so it can never come back stuck on.
   useEffect(() => { if (!inSwipe) drop(); }, [inSwipe, drop]);
@@ -136,28 +149,48 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   const touchStart = (e: GestureResponderEvent) => {
     if (!inSwipe) return;
     start.current = pointOf(e);
+    downAt.current = Date.now();
+    drift.current = 0;
     moved.current = false;
+    clearLater();
   };
   const pressMove = (e: GestureResponderEvent) => {
     if (!inSwipe || moved.current || !start.current) return;
     const at = pointOf(e);
-    if (!at || Math.hypot(at.x - start.current.x, at.y - start.current.y) <= MOVE_SLOP) return;
+    if (!at) return;
+    const far = Math.hypot(at.x - start.current.x, at.y - start.current.y);
+    if (far > drift.current) drift.current = far;
+    if (far <= MOVE_SLOP) return;
     moved.current = true;
     // A look already on goes now: the finger is swiping or scrolling, and this is before any page
     // or list can take it, so the card is back up before anything moves (it used to stay down
     // until React Native let the press go, up to 130 ms into a scroll).
     drop();
   };
-  const pressIn = () => {
-    if (!inSwipe) { lookRef.current(true); return; }
+  const show = () => {
+    clearLater();
     // The page is already sliding under this finger, or the finger is on its way: no look at all.
     if (isPageDragging() || moved.current) return;
     clearHide();
     shownAt.current = Date.now();
     lookRef.current(true);
   };
+  const pressIn = () => {
+    if (!inSwipe) { lookRef.current(true); return; }
+    if (isPageDragging() || moved.current) return;
+    // Drifting, not resting: it may be a slow swipe or scroll starting, so it waits the Oct 23 wait.
+    const left = DRIFT_LOOK_DELAY - (Date.now() - downAt.current);
+    if (drift.current > STILL_SLOP && downAt.current && left > 0) {
+      clearLater();
+      later.current = setTimeout(show, left);
+      return;
+    }
+    show();
+  };
   const pressOut = () => {
     if (!inSwipe) { lookRef.current(false); return; }
+    // Let go while a drifting finger's look was still waiting: a tap after all, so it flashes now.
+    if (later.current) show();
     if (!shownAt.current) return;
     // A quick tap's look went on in this same moment: hold it for a flash.
     const left = FLASH_MS - (Date.now() - shownAt.current);
