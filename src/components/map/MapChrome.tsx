@@ -19,6 +19,7 @@ import { LevelPill } from '@/components/LevelPill';
 import { Tappable } from '@/components/Tappable';
 import * as haptics from '@/lib/haptics';
 import { isClosedCourt, type Court, type CourtRow } from '@/features/players/courts';
+import { courtSurfaceWord } from '@/features/places/courtSurface';
 import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
 import type { HitRequest } from '@/data/types';
@@ -1373,7 +1374,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   // only from the map while no player has said: then the facts line below
   // is the one place lights are mentioned, and the two can never disagree.
   const playersOnLights = !!facts && facts.lights.yes + facts.lights.no > 0;
-  const meta = [formatMiles(miles), court.count > 1 ? `${court.count} courts` : '1 court', court.surface ? court.surface.replace(/_/g, ' ') : null, court.lit && !playersOnLights ? 'lit at night' : null].filter(Boolean).join(' · ');
+  const meta = [formatMiles(miles), court.count > 1 ? `${court.count} courts` : '1 court', courtSurfaceWord(court), court.lit && !playersOnLights ? 'lit at night' : null].filter(Boolean).join(' · ');
   // Clips and photos people tagged here: the best proof a court gets played on.
   // The same posts, in the same order, as the court's own page and its reel.
   const place = useMemo(() => ({ id: mapCourt ? court.id : undefined, name: court.name, lat: court.lat, lng: court.lng }), [mapCourt, court.id, court.name, court.lat, court.lng]);

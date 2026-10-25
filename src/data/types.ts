@@ -1646,6 +1646,19 @@ export interface CourtRing { courtId: string; name?: string; lat: number; lng: n
 export interface CourtRegulars { courtId: string; userIds: ID[] }
 
 /**
+ * "What surface?" at a court the map says nothing about (migration 186):
+ * your own answer (Hard, Clay or Grass; null before you answer) and the
+ * surface the court registered, once five players in a row said the same
+ * (null until then). `agree`: how many of the newest answers in a row say
+ * the same, after a vote.
+ */
+export interface CourtSurfaceAnswer {
+  surface: 'hard' | 'clay' | 'grass' | null;
+  registered: 'hard' | 'clay' | 'grass' | null;
+  agree?: number;
+}
+
+/**
  * King of the Court (court_kings, migration 130): the most match wins
  * posted at one court in the last 90 days. 'wins': the board is wins (n),
  * `last` the day of the latest; 'regulars': nobody has won there yet, so the

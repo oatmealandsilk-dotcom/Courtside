@@ -10,7 +10,7 @@ import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
-import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
+import { courtSurfaceOf, surfaceAdjective, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
@@ -181,7 +181,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
       {/* Starts and ends at the page's margins like the topic strip (the pane clips anything wider), so a card cut at the edge says there are more; a drag along it never turns the page. */}
       <ScrollView nativeID="courts-near-strip" horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
         {rows.map(({ c, miles }) => {
-          const kind = surfaceKind(c.surface);
+          const kind = courtSurfaceOf(c);
           const meta = metaLine(miles, c.count, c.lit);
           const badge = badges.get(c.id);
           // The tag said aloud: "hard courts".

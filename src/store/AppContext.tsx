@@ -132,7 +132,9 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, CourtSurfaceAnswer, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
+import { notePlayerSurface } from '@/features/players/courts';
+import type { VotedSurface } from '@/features/places/courtSurface';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
 
@@ -793,6 +795,18 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * no board yet), so the card stays away.
    */
   courtKings: (courtId: string) => Promise<CourtKings | null>;
+  /**
+   * "What surface?" at a court the map says nothing about (migration 186):
+   * your own answer and what the court registered. Null when it could not be
+   * asked (signed out, or a database without it), so the question stays away.
+   */
+  courtSurface: (courtId: string) => Promise<CourtSurfaceAnswer | null>;
+  /**
+   * Answers "What surface?" with Hard, Clay or Grass. Once five players in a
+   * row say the same, it registers, and the courts on the phone take it at
+   * once. Throws when it was refused (too many answers today).
+   */
+  voteCourtSurface: (courtId: string, surface: VotedSurface) => Promise<CourtSurfaceAnswer>;
   /**
    * Who else was at a court on one of your days (Flyby, migration 130): only
    * when you were there yourself, only people you may see. Asked again at
@@ -4581,6 +4595,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }));
     if (live(me, userId)) void remote.seenPartnerStreak(userId, milestone).catch(() => undefined);
     else demoStreakSeen.current = { ...demoStreakSeen.current, [userId]: Math.max(demoStreakSeen.current[userId] ?? 0, milestone) };
+  }, []);
+
+  const courtSurface = useCallback(async (courtId: string): Promise<CourtSurfaceAnswer | null> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !isMapCourtId(courtId)) return null;
+    if (live(me)) return remote.fetchCourtSurface(me, courtId).catch(() => null);
+    return demoApi.courtSurface({ courtId, me });
+  }, []);
+
+  const voteCourtSurface = useCallback(async (courtId: string, surface: VotedSurface): Promise<CourtSurfaceAnswer> => {
+    const me = stateRef.current.currentUserId;
+    if (!me || !isMapCourtId(courtId)) throw new Error('sign in');
+    const got = live(me) ? await remote.voteCourtSurface(courtId, surface) : await demoApi.voteCourtSurface({ courtId, me, surface });
+    if (got.registered) notePlayerSurface(courtId, got.registered);
+    return got;
   }, []);
 
   const courtKings = useCallback(async (courtId: string): Promise<CourtKings | null> => {
@@ -9433,6 +9462,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      courtSurface,
+      voteCourtSurface,
       flyby,
       friendsOnStreak,
       updateIdentity,
@@ -9678,6 +9709,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      courtSurface,
+      voteCourtSurface,
       flyby,
       friendsOnStreak,
       updateIdentity,

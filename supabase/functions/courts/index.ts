@@ -160,6 +160,11 @@ const lacksFactColumns = (error: { code?: string; message: string }) =>
   (error.code === 'PGRST204' || error.code === '42703' || /does not exist|schema cache/i.test(error.message))
   && /osm_access|access|book_url|indoor|\bfee\b/.test(error.message);
 
+/** Set once the courts table turns out to have no player_surface (a database before migration 186). */
+let noPlayerSurface = false;
+const lacksPlayerSurface = (error: { code?: string; message: string }) =>
+  (error.code === 'PGRST204' || error.code === '42703' || /does not exist|schema cache/i.test(error.message)) && /player_surface/.test(error.message);
+
 /** Keeps courts, 500 at a time. Says what went wrong, or null. */
 async function saveCourts(rows: Record<string, unknown>[]): Promise<string | null> {
   for (let k = 0; k < rows.length; k += 500) {
@@ -263,16 +268,19 @@ Deno.serve(async (req) => {
 
   // The database hands back a thousand rows at a time; a big city has more.
   const courts: unknown[] = [];
-  const columns = (facts: boolean) => `id, name, lat, lng, lit, surface${facts ? ', access, fee, indoor, book_url' : ''}`;
+  // player_surface: what five players in a row said (migration 186). The sync above never sends it, so it is never overwritten.
+  const columns = (facts: boolean) => `id, name, lat, lng, lit, surface${facts ? ', access, fee, indoor, book_url' : ''}${noPlayerSurface ? '' : ', player_surface'}`;
   for (let from = 0; from < 4000; from += 1000) {
     const page = (facts: boolean) => admin.from('courts').select(columns(facts))
       .gte('lat', lat - dLat).lte('lat', lat + dLat).gte('lng', lng - dLng).lte('lng', lng + dLng)
       .order('id').range(from, from + 999);
     let { data, error } = await page(!noFactColumns);
-    // A database before migration 60: answer without the access columns.
-    if (error && !noFactColumns && lacksFactColumns(error)) {
-      noFactColumns = true;
-      ({ data, error } = await page(false));
+    // A database before migration 186 answers without players' surface; one before 60, without the access columns.
+    for (let tries = 0; error && tries < 2; tries++) {
+      if (!noPlayerSurface && lacksPlayerSurface(error)) noPlayerSurface = true;
+      else if (!noFactColumns && lacksFactColumns(error)) noFactColumns = true;
+      else break;
+      ({ data, error } = await page(!noFactColumns));
     }
     if (error) return json({ error: 'courts unavailable' }, 503);
     courts.push(...(data ?? []));
