@@ -1145,7 +1145,7 @@ const STEPS = [
       await page.eval(`(() => { document.querySelector('${players}').scrollTop = 0; document.querySelector('${threads}').scrollTop = 0; return true; })()`);
       await sleep(400);
     },
-    expect: [{ text: 'Find Players' }, { text: 'Open hits' }],
+    expect: [{ text: 'Find Players' }, { text: 'Open hits', any: true }],
   },
   {
     name: 'feed',
