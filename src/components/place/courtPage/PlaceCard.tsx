@@ -12,6 +12,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb';
 import { CourtKing } from '@/components/place/CourtKing';
 import { HereTag } from '@/components/place/CourtLife';
+import { SurfaceAsk } from '@/components/place/SurfaceAsk';
 import { Avatar, Screen } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
 import type { CourtAccess } from '@/data/types';
@@ -111,6 +112,7 @@ export function PlaceCard({ view }: { view: CourtView }) {
           </View>
           <View style={[styles.acts, short && styles.actsShort]}><CourtActions view={view} /></View>
           <FactStrip view={view} short={short} />
+          {view.askSurface ? <SurfaceAsk courtId={view.askSurface} onRegistered={view.onSurface} /> : null}
           <View style={[styles.gutter, styles.sections, short && styles.sectionsShort]}>
             <ClipsSection view={view} />
             <HitsSection view={view} count={hits.length} />

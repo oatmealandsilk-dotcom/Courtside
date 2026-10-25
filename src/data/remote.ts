@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -1672,6 +1672,9 @@ export interface ReportedItem {
  */
 const missingFunction = (error: { code?: string; message: string }) =>
   error.code === 'PGRST202' || error.code === '42883' || /could not find the function|function .* does not exist/i.test(error.message);
+
+/** Hard, Clay or Grass as the database says it (migration 186), or null. */
+const votedSurface = (v: unknown): 'hard' | 'clay' | 'grass' | null => (v === 'hard' || v === 'clay' || v === 'grass' ? v : null);
 
 /** The same for a table: PostgREST's "Could not find the table" (PGRST205), or Postgres's "relation … does not exist". */
 const missingTable = (error: { code?: string; message: string }) =>
@@ -4435,6 +4438,33 @@ export const remote = {
         .map((t) => ({ userId: t.id!, n: num(t.n), ...(typeof t.last === 'string' ? { last: t.last.slice(0, 10) } : {}) })),
       me: { wins: num(r.me?.n), ...(typeof r.me?.rank === 'number' ? { rank: r.me.rank } : {}), ranked: !!r.me?.ranked && (typeof r.me?.rank === 'number' || over), ...(over ? { over: true } : {}) },
     };
+  },
+  /**
+   * "What surface?" at one court (migration 186): your own answer (your row
+   * of court_surface_votes; the table shows you only yours) and the surface
+   * the court registered. Null when it could not be asked, or the database
+   * has no answers yet, so the question stays away.
+   */
+  async fetchCourtSurface(me: ID, courtId: string): Promise<CourtSurfaceAnswer | null> {
+    if (!isMapCourtId(courtId)) return null;
+    const db = need();
+    const [mine, court] = await Promise.all([
+      db.from('court_surface_votes').select('surface').eq('court_id', courtId).eq('user_id', me).maybeSingle(),
+      db.from('courts').select('player_surface').eq('id', courtId).maybeSingle(),
+    ]);
+    if (mine.error || court.error) return null;
+    return { surface: votedSurface((mine.data as { surface?: unknown } | null)?.surface), registered: votedSurface((court.data as { player_surface?: unknown } | null)?.player_surface) };
+  },
+  /**
+   * Answers "What surface?" (vote_court_surface, migration 186): keeps your
+   * answer and says what the court now has registered, and how many of the
+   * newest answers in a row agree. Throws when it was refused ("slow down").
+   */
+  async voteCourtSurface(courtId: string, surface: 'hard' | 'clay' | 'grass'): Promise<CourtSurfaceAnswer> {
+    const { data, error } = await need().rpc('vote_court_surface', { p_court: courtId, p_surface: surface });
+    if (error) throw error;
+    const r = (data ?? {}) as { surface?: unknown; registered?: unknown; agree?: unknown };
+    return { surface: votedSurface(r.surface), registered: votedSurface(r.registered), agree: num(r.agree) };
   },
   /**
    * Who else was at a court on a day of yours (flyby, migration 130): only

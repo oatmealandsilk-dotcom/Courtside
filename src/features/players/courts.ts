@@ -8,6 +8,7 @@ import { milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
 import { plain } from '@/features/search/words';
 import { looksPublic } from '@/features/places/courtName';
+import { isVotedSurface, type VotedSurface } from '@/features/places/courtSurface';
 // The courts function's own reading of a court's map tags, so a court
 // fetched straight from OpenStreetMap is read the same way as a stored one.
 import { courtTagFacts } from '../../../supabase/functions/courts/tags';
@@ -22,6 +23,12 @@ export interface Court {
   count: number;
   lit?: boolean;
   surface?: string;
+  /**
+   * What five players in a row said it is played on (migration 186), for a
+   * court whose map data says nothing. The map's own surface always wins:
+   * read the two through courtSurfaceOf.
+   */
+  playerSurface?: VotedSurface;
   /**
    * Who may play there (migration 60): absent, or 'unknown', when nobody
    * has said. Members-only and private courts are greyed and never suggested.
@@ -40,6 +47,8 @@ export const isClosedCourt = (c: { access?: CourtAccess }) => c.access === 'memb
 interface Row {
   id: string; name: string | null; lat: number; lng: number; lit: boolean | null; surface: string | null;
   access?: CourtAccess | null; fee?: boolean | null; indoor?: boolean | null; book_url?: string | null;
+  /** Players' registered surface; only from a database with migration 186. */
+  player_surface?: string | null;
 }
 interface Element { id: number; type: string; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> }
 
@@ -168,6 +177,26 @@ function keepCourts(key: string, list: Court[]) {
     return AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next));
   }).catch(() => undefined);
 }
+/**
+ * Five players in a row just named a court's surface (migration 186): the
+ * courts already on the phone take it at once, so Courts near you and the
+ * map show it without waiting for the next fetch.
+ */
+export function notePlayerSurface(courtId: string, surface: VotedSurface) {
+  const patch = (list: Court[]) => (list.some((c) => c.id === courtId && c.playerSurface !== surface) ? list.map((c) => (c.id === courtId ? { ...c, playerSurface: surface } : c)) : list);
+  for (const [key, list] of cache) cache.set(key, patch(list));
+  for (const [key, list] of named) named.set(key, patch(list));
+  if (saved) {
+    const was = saved;
+    const next = Object.fromEntries(Object.entries(was).map(([key, list]) => [key, patch(list)]));
+    // Written only when a kept court actually changed.
+    if (Object.keys(next).some((key) => next[key] !== was[key])) {
+      saved = next;
+      void AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => undefined);
+    }
+  }
+}
+
 /** Signing out: the kept courts go with the rest of what this phone held for the account. */
 export function forgetSavedCourts() {
   saved = {};
@@ -235,6 +264,7 @@ function fold(rows: Row[], center: LatLng, radiusMeters: number, cap = radiusMet
       if (row.name && have.name === 'Tennis courts') have.name = row.name;
       if (row.lit) have.lit = true;
       if (!have.surface && row.surface) have.surface = row.surface;
+      if (!have.playerSurface && isVotedSurface(row.player_surface)) have.playerSurface = row.player_surface;
       continue;
     }
     // Who may play there comes with the court whose id the pin stands under: players' answers are saved against it.
@@ -244,6 +274,7 @@ function fold(rows: Row[], center: LatLng, radiusMeters: number, cap = radiusMet
       ...(typeof row.fee === 'boolean' ? { fee: row.fee } : {}),
       ...(typeof row.indoor === 'boolean' ? { indoor: row.indoor } : {}),
       ...(row.book_url ? { bookUrl: row.book_url } : {}),
+      ...(isVotedSurface(row.player_surface) ? { playerSurface: row.player_surface } : {}),
     });
   }
   const reach = radiusMeters / 1609.34;
@@ -279,7 +310,7 @@ export function courtRows(courts: Court[], from: LatLng | null): CourtRow[] {
     const name = plain(row.c.name);
     const same = byName.get(name)?.find((kept) => milesBetween(kept.c, row.c) <= 1.5);
     if (same) {
-      same.c = { ...same.c, count: same.c.count + row.c.count, lit: same.c.lit || row.c.lit || undefined, surface: same.c.surface ?? row.c.surface };
+      same.c = { ...same.c, count: same.c.count + row.c.count, lit: same.c.lit || row.c.lit || undefined, surface: same.c.surface ?? row.c.surface, playerSurface: same.c.playerSurface ?? row.c.playerSurface };
       continue;
     }
     const kept = { ...row };
@@ -382,6 +413,8 @@ const BASE_COLUMNS = 'id,name,lat,lng,lit,surface';
 const ACCESS_COLUMNS = 'access,fee,indoor,book_url';
 /** Set once the courts table turns out to have no access columns (a database before migration 60). */
 let noAccessColumns = false;
+/** Set once the courts table turns out to have no player_surface (a database before migration 186). */
+let noPlayerSurface = false;
 
 /**
  * Courts anywhere within about 140 miles whose name has a word starting
@@ -411,11 +444,14 @@ export async function searchCourtsByName(text: string, near: LatLng, signal?: Ab
     if (signal) q = q.abortSignal(signal);
     return q;
   };
-  let { data, error } = await ask(noAccessColumns ? BASE_COLUMNS : `${BASE_COLUMNS},${ACCESS_COLUMNS}`);
-  // A database before migration 60 has no access columns: ask without them from now on.
-  if (error && !noAccessColumns && /access|book_url|indoor|\bfee\b/.test(error.message)) {
-    noAccessColumns = true;
-    ({ data, error } = await ask(BASE_COLUMNS));
+  const columns = () => [BASE_COLUMNS, noAccessColumns ? null : ACCESS_COLUMNS, noPlayerSurface ? null : 'player_surface'].filter(Boolean).join(',');
+  let { data, error } = await ask(columns());
+  // A database before migration 186 has no player_surface, one before 60 no access columns: ask without them from now on.
+  for (let tries = 0; error && tries < 2; tries++) {
+    if (!noPlayerSurface && /player_surface/.test(error.message)) noPlayerSurface = true;
+    else if (!noAccessColumns && /access|book_url|indoor|\bfee\b/.test(error.message)) noAccessColumns = true;
+    else break;
+    ({ data, error } = await ask(columns()));
   }
   if (error) throw error;
   const out = fold((data ?? []) as unknown as Row[], near, 300000);

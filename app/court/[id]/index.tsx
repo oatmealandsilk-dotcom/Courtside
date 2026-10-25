@@ -11,6 +11,7 @@ import { isClip, parseCourtParams, sameCourt } from '@/features/places/court';
 import { areaOf } from '@/features/places/search';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
+import { courtSurfaceWord, surfaceKind, type VotedSurface } from '@/features/places/courtSurface';
 import { isMapCourtId } from '@/features/places/courtName';
 import { openCourtReel, postFromCourt, sendCourtToChat, showCourtOnMap, startSessionHere, useCourtOpen } from '@/features/players/courtLink';
 import { formatMiles, milesBetween } from '@/features/players/geo';
@@ -54,9 +55,12 @@ function CourtPage() {
   // What OpenStreetMap knows (how many courts, lit, surface), from the map's own
   // courts: the same id, or one within 0.15 mi. Nothing found, nothing said.
   const [mapCourt, setMapCourt] = useState<Court | null>(null);
+  // A surface five players in a row named while this page was open (migration 186).
+  const [named, setNamed] = useState<VotedSurface | null>(null);
   useEffect(() => {
     if (!place) return undefined;
     let on = true;
+    setNamed(null);
     fetchCourts({ lat: place.lat, lng: place.lng }, 2000)
       .then((list) => { if (on) setMapCourt(list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null); })
       .catch(() => undefined);
@@ -93,7 +97,12 @@ function CourtPage() {
   // Lights from the map only while no player has said: then "What players
   // say" is the one place lights are mentioned, and the two never disagree.
   const playersOnLights = !!said && said.lights.yes + said.lights.no > 0;
-  const facts = mapCourt ? [mapCourt.count > 1 ? `${mapCourt.count} courts` : '1 court', mapCourt.surface ? mapCourt.surface.replace(/_/g, ' ') : null, mapCourt.lit && !playersOnLights ? 'lit at night' : null].filter(Boolean).join(' · ') : '';
+  // The surface: the map's own word when it names one, else what players registered.
+  const surfaceWord = mapCourt ? courtSurfaceWord({ surface: mapCourt.surface, playerSurface: named ?? mapCourt.playerSurface }) : null;
+  const facts = mapCourt ? [mapCourt.count > 1 ? `${mapCourt.count} courts` : '1 court', surfaceWord, mapCourt.lit && !playersOnLights ? 'lit at night' : null].filter(Boolean).join(' · ') : '';
+  // "What surface?": signed in, at a court on the map whose data says nothing and players have not settled it, never at someone's home.
+  // It stays for this visit once players settle it (no jump); the next visit has the surface.
+  const askSurface = mapCourt && factsId && currentUserId && access !== 'private' && !surfaceKind(mapCourt.surface) && !mapCourt.playerSurface ? factsId : undefined;
 
   // This page's own address, so a tap that would open it again comes back here instead.
   const ownHref = useMemo(() => ({ pathname: '/court/[id]' as const, params: Object.fromEntries(Object.entries({ id: params.id, name: params.name, lat: params.lat, lng: params.lng }).filter(([, v]) => v !== undefined)) }), [params.id, params.name, params.lat, params.lng]);
@@ -161,8 +170,10 @@ function CourtPage() {
     closed,
     // A count, never names: who follows a court is theirs to know.
     followers: extras ? followers : 0,
-    map: mapCourt ? { count: mapCourt.count, surface: mapCourt.surface, lit: !!mapCourt.lit } : null,
+    map: mapCourt ? { count: mapCourt.count, surface: surfaceWord, lit: !!mapCourt.lit } : null,
     playersOnLights,
+    askSurface,
+    onSurface: setNamed,
     factsLine: facts,
     posts: list,
     users,

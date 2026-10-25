@@ -22,6 +22,8 @@ import { DEMO_HITS_OF_YOURS, demoHitChat, demoHitNotifications, demoHits } from 
 import { demoGroupInviteNotifications } from './mock/groupInvites';
 import { isMapCourtId } from '@/features/places/courtName';
 import { milesBetween } from '@/features/players/geo';
+import { surfaceRun, type VotedSurface } from '@/features/places/courtSurface';
+import { DEMO_PARK } from './mock/courts';
 import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
@@ -47,6 +49,7 @@ import type {
   Comment,
   Conversation,
   CourtKings,
+  CourtSurfaceAnswer,
   DailyHealth,
   FeedScore,
   FlybyPerson,
@@ -459,6 +462,38 @@ export async function courtKings({ courtId, me, sessions, ranked = true }: { cou
   const regulars = DEMO_COURT_REGULARS[courtId] ?? [];
   if (regulars.length) return { courtId, mode: 'regulars', top: clone(regulars.slice(0, 3)), me: { wins: 0, ranked: false } };
   return { courtId, mode: 'none', top: [], me: { wins: 0, ranked: false } };
+}
+
+/* ------------------------------------------- What surface? (migration 186) */
+
+/**
+ * The demo's court_surface_votes: one answer per player per court, newest
+ * first. Marigold Park, the demo court the map says nothing about, already
+ * has four players' "Hard", so a fifth Hard registers it, the way five in a
+ * row do on the server (vote_court_surface). Kept for the session only.
+ */
+const demoSurfaceVotes = new Map<string, { userId: ID; surface: VotedSurface }[]>([
+  [DEMO_PARK(4).id, ['u-mira', 'u-dev', 'u-june', 'u-tomas'].map((userId) => ({ userId, surface: 'hard' as const }))],
+]);
+const demoPlayerSurface = new Map<string, VotedSurface>();
+
+/** Your answer at a demo court, and what it registered. */
+export async function courtSurface({ courtId, me }: { courtId: string; me: ID }): Promise<CourtSurfaceAnswer> {
+  await delay(null, 160);
+  const mine = demoSurfaceVotes.get(courtId)?.find((v) => v.userId === me)?.surface ?? null;
+  return { surface: mine, registered: demoPlayerSurface.get(courtId) ?? null };
+}
+
+/** The demo's vote_court_surface: a change is your newest answer; the same answer again stays where it was. */
+export async function voteCourtSurface({ courtId, me, surface }: { courtId: string; me: ID; surface: VotedSurface }): Promise<CourtSurfaceAnswer> {
+  await delay(null, 200);
+  const votes = demoSurfaceVotes.get(courtId) ?? [];
+  const had = votes.find((v) => v.userId === me);
+  const next = had?.surface === surface ? votes : [{ userId: me, surface }, ...votes.filter((v) => v.userId !== me)];
+  demoSurfaceVotes.set(courtId, next);
+  const { agree, registers } = surfaceRun(next.map((v) => v.surface));
+  if (registers) demoPlayerSurface.set(courtId, registers);
+  return { surface, registered: demoPlayerSurface.get(courtId) ?? null, agree };
 }
 
 /**

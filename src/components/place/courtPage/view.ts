@@ -1,4 +1,5 @@
 import type { CourtAccess, Post, User } from '@/data/types';
+import type { VotedSurface } from '@/features/places/courtSurface';
 import type { CourtPostsStatus } from '@/features/places/useCourtPosts';
 
 /**
@@ -30,6 +31,13 @@ export interface CourtView {
   map: { count: number; surface?: string | null; lit: boolean } | null;
   /** Players have said whether it has lights: then only "What players say" mentions lights. */
   playersOnLights: boolean;
+  /**
+   * The court to ask "What surface?" about (migration 186): its map id, when
+   * the map says nothing about its surface and players have not settled it.
+   */
+  askSurface?: string;
+  /** Five players in a row just named the surface: the page's facts show it. */
+  onSurface?: (surface: VotedSurface) => void;
   /** "4 courts · hard · lit at night": what the map knows, in one line; '' when it knows nothing. */
   factsLine: string;
   posts: Post[];

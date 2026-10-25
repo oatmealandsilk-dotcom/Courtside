@@ -11,7 +11,7 @@ import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
-import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
+import { courtSurfaceOf, surfaceAdjective, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
@@ -32,7 +32,18 @@ import { TextScale } from '@/theme/textScale';
  *   'now' the outlined card before it, kept to go back to: the surface tag and status on top, the name and distance under them
  */
 export const COURTS_LOOK: 'now' | 'N' = 'N';
-const LOOK = COURTS_LOOK as 'now' | 'N';
+/**
+ * Map peek's little maps are drawn on the phone by the hidden snapshot view, on the page the app opens to,
+ * and that has never run on a real iPhone (this Mac has no Xcode). So admin accounts (the owner's own phone)
+ * get it first; everyone else keeps the outlined card until he has seen it on his phone. Then turn this on.
+ */
+export const PEEK_FOR_EVERYONE = false;
+/** The card this person sees: map peek, or the outlined card. */
+export function usePeekLook(): 'now' | 'N' {
+  const { users, currentUserId } = useApp();
+  const admin = !!users.find((u) => u.id === currentUserId)?.isAdmin;
+  return COURTS_LOOK === 'N' && (PEEK_FOR_EVERYONE || admin) ? 'N' : 'now';
+}
 
 const CARD = 168;
 // The room inside a card, a little more than a grouped box's, since no fill marks its edge.
@@ -130,6 +141,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
   /** False in a picture of the page sliding in (a swipe back from a thread): only maps kept from before show, nothing new is drawn mid-swipe. */ pictures?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const LOOK = usePeekLook();
   const near = useNearCourts(center);
   const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts, seeing, shownAtCourt } = useApp();
   const rows = useMemo(() => {
@@ -211,7 +223,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
         onScroll={LOOK === 'now' ? undefined : (e) => sawTo(e.nativeEvent.contentOffset.x + e.nativeEvent.layoutMeasurement.width)}
         scrollEventThrottle={LOOK === 'now' ? undefined : 100}>
         {rows.map(({ c, miles }, i) => {
-          const kind = surfaceKind(c.surface);
+          const kind = courtSurfaceOf(c);
           const meta = metaLine(miles, c.count, c.lit);
           const badge = badges.get(c.id);
           // The tag said aloud: "hard courts".
