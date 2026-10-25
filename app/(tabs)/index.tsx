@@ -48,6 +48,7 @@ import { RailSave, RailTap } from '@/components/RailButton';
 import { RailGlyph } from '@/components/RailGlyph';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
+import { PRIME_CLIPS, PRIME_LOOK, useClipPrimer, usePreloadMore, type PrimeTarget } from '@/features/feed/preloadMore';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
@@ -1752,6 +1753,39 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     }
     if (urls.length) ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined);
   }, [coversOn, active, feed]);
+
+  // Two more reels ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre load more
+  // maybe two more reels in advance. We can do only the very beginning too"): the next two clips
+  // past the built pages get their first second or so fetched into the player's own cache, one at
+  // a time, once everything nearer is in (the lookahead's gate, one page further on) and the app is
+  // in front, with their covers. Admins only for now (features/feed/preloadMore); for everyone else
+  // nothing here runs.
+  const preloadMore = usePreloadMore();
+  const primeOn = preloadMore && appActive && lookaheadOk(EXTRA);
+  const primeTargets: PrimeTarget[] = [];
+  const primeCovers: string[] = [];
+  if (preloadMore) {
+    for (let k = EXTRA + 1; k <= EXTRA + PRIME_LOOK && primeTargets.length < PRIME_CLIPS; k += 1) {
+      const item = feed[active + k];
+      if (!item || inReach(active + k)) continue;
+      if (item.type === 'hit' && item.story.videoUrl) {
+        primeTargets.push({ uri: item.story.videoUrl, from: 0 });
+        if (item.story.thumbnailUrl) primeCovers.push(item.story.thumbnailUrl);
+      } else if (item.type === 'post' && item.post.videoUrl && reachable(item.post)) {
+        primeTargets.push({ uri: item.post.videoUrl, from: item.post.trimStart ?? 0 });
+        if (item.post.thumbnailUrl) primeCovers.push(item.post.thumbnailUrl);
+      }
+    }
+  }
+  useClipPrimer(primeTargets, primeOn);
+  const primeCoverKey = primeOn ? primeCovers.join('\n') : '';
+  useEffect(() => {
+    const urls = primeCoverKey ? primeCoverKey.split('\n').filter((url) => !coversFetched.current.has(url)) : [];
+    if (!urls.length) return;
+    urls.forEach((url) => coversFetched.current.add(url));
+    if (Platform.OS !== 'web') { ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined); return; }
+    for (const url of urls) { const img = new window.Image(); img.src = url; }
+  }, [primeCoverKey]);
 
   // Whether someone else's post may leave CourtSide as a picture is asked as it
   // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
