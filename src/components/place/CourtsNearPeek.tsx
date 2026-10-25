@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 
 import { HitGlyph } from '@/components/HitGlyph';
 import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb';
+import { MapCreditDot } from '@/components/map/MapCreditDot';
 import { useOpenSettled, useStartMapsIn } from '@/features/feed/warmup';
 import { surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 import { useIsFocused } from '@/lib/useIsFocused';
@@ -97,8 +98,9 @@ export function PeekCardBody(p: PeekCardProps) {
       <View style={styles.peek}>
         <CourtMapThumb lat={p.lat} lng={p.lng} width={PEEK_W} height={PEEK_H} zoom={ZOOM} draw={p.draw} />
         <Pin />
-        {/* The map's licence asks for its credit on the map: tucked in the corner, small and muted, never growing with Text Size (Oct 25, owner: "make open street map smaller"). */}
-        <Text pointerEvents="none" maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>© OpenStreetMap</Text>
+        {/* The map's licence asks for its credit on the map: a tiny ⓘ in the corner that shows it on a tap (Oct 25, owner: "For open street map
+            can you just put a small dot instead of the full word"). Its own press: a tap on it shows the credit, never opens the court. */}
+        <MapCreditDot style={styles.credit} size={10} fontSize={6.5} />
         {/* On the map's foot: the surface and what's on there, small light chips. Beside an open hit the
             surface is its dot alone, so the hit's time always reads whole. */}
         <View style={styles.chips} pointerEvents="none">
@@ -172,7 +174,7 @@ export const peekFrame = StyleSheet.create({ card: { width: PEEK_CARD_W, padding
 
 const styleDefinitions = StyleSheet.create({
   peek: { width: PEEK_W, height: PEEK_H, backgroundColor: colors.bgElevated, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
-  credit: { position: 'absolute', right: 4, top: 2, fontSize: 6.5, lineHeight: 8, letterSpacing: 0, color: colors.textFaint, opacity: 0.75 },
+  credit: { right: 5, top: 4 },
   // The chips' dot lines up with the name's first letter below (6 in, plus the chip's own 6).
   chips: { position: 'absolute', left: 6, bottom: 6, right: 6, flexDirection: 'row', alignItems: 'center', gap: 4 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: radius.sm, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, flexShrink: 0 },

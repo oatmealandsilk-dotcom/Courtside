@@ -27,9 +27,9 @@ import type { CourtView } from './view';
  * words; Oct 25: "Completely optimize court page. Open hits should probaly
  * show up before posts and activities there"). Rules: no icon tiles; every
  * empty section is one line; each action is on the page once (Play here,
- * Post, Directions, Share, the credit); the surface is one word and a dot in
- * its colour, nothing when unknown; lights are said once, players' answers
- * first; every gate is as before.
+ * Post, Directions, Share; the map's credit is the map's own ⓘ); the surface
+ * is one word and a dot in its colour, nothing when unknown; lights are said
+ * once, players' answers first; every gate is as before.
  */
 
 const ACCESS_SHORT: Record<Exclude<CourtAccess, 'unknown'>, string> = { public: 'Public', members: 'Members', pay: 'Pay to play', private: 'Private' };
@@ -258,12 +258,6 @@ export function PlayersSay({ courtId, name }: { courtId: string; name: string })
   );
 }
 
-/** The map's credit for the court's facts at the foot: one small muted line, while they are shown. */
-export function MapCredit({ view }: { view: CourtView }) {
-  const styles = useThemedStyles(styleDefinitions);
-  return view.map ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>Court details from OpenStreetMap</Text> : null;
-}
-
 const styleDefinitions = StyleSheet.create({
   dim: { opacity: PRESS_DIM },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -302,6 +296,4 @@ const styleDefinitions = StyleSheet.create({
   note: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: 11 },
   noteText: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textMuted, flex: 1, minWidth: 0 },
   noteFlag: { paddingTop: 3 },
-  // The credit: small, muted, never grows with the phone's Text Size.
-  credit: { fontSize: 9, lineHeight: 12, letterSpacing: 0.1, color: colors.textFaint },
 });

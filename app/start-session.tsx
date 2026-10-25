@@ -11,6 +11,7 @@ import { DragSheet } from '@/components/DragSheet';
 import { LiveDot } from '@/components/LiveDot';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb';
+import { MapCreditDot } from '@/components/map/MapCreditDot';
 import { StartButton, type StartPhase } from '@/components/session/StartButton';
 import { formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, LiveSession, TaggedCourt } from '@/data/types';
@@ -241,7 +242,8 @@ export default function StartSession() {
                   {/* The map fades into the card at its foot, so the court's name reads as the map's own caption. */}
                   <LinearGradient pointerEvents="none" colors={[withAlpha(colors.surface, 0), colors.surface]} style={styles.mapFade} />
                   <CourtPin mapH={mapH} here={isHere} />
-                  <Text pointerEvents="none" style={styles.credit}>© OpenStreetMap</Text>
+                  {/* The map's credit, folded into a small ⓘ in its corner (Oct 25, owner: "just put a small dot instead of the full word"); its own press, so a tap on it does not change the court. */}
+                  <MapCreditDot style={styles.credit} />
                 </View>
               ) : null}
               <View style={[styles.place, court && styles.placeUnderMap]}>
@@ -391,7 +393,7 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, overflow: 'hidden' },
   map: { backgroundColor: colors.bgElevated, overflow: 'hidden' },
   mapFade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 34 },
-  credit: { position: 'absolute', right: 10, top: 7, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
+  credit: { right: 10, top: 6 },
   // The pin, its point on the court's spot in the middle of the map.
   pin: { position: 'absolute', left: '50%', marginLeft: -PIN_W / 2, width: PIN_W, height: PIN_H },
   // The mark on the ground, centred on the pin's point.
