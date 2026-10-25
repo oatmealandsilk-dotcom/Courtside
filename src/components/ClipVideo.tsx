@@ -5,6 +5,7 @@ import { videoSource } from '@/lib/videoSource';
 import { noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, peekLeft, takeLeft } from '@/features/feed/clipResume';
+import { usePageLeaving } from '@/features/feed/pageLeaving';
 
 /** How many seconds of a clip are fetched before it counts as loaded and may start. */
 const PRELOAD_SECONDS = 3;
@@ -81,8 +82,11 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // whatever the page that drew it asked for, and it carries on when you
   // come back. A clip's own page needs to say nothing for this. The one
   // exception is the comments stage, which keeps its clip playing above it.
+  // On a feed page a swipe has just been decided away from, it stops (silent
+  // first) as the finger lifts, before the next page has landed (pageLeaving).
   const onTop = useIsFocused() || held;
-  const active = wanted && onTop;
+  const leaving = usePageLeaving();
+  const active = wanted && onTop && !leaving;
   // The player is made and freed by hand rather than by the toolkit's hook:
   // the hook freed a still-playing player when a page left the feed, and
   // its sound could run on after. Here it is silenced and stopped first,

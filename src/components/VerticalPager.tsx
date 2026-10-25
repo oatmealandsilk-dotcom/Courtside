@@ -11,6 +11,7 @@ import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_
 import { colors } from '@/theme';
 import { useTopRowHint } from '@/lib/topRowHint';
 import { AT_REST, NO_DRAG, dragFrom as rowDragFrom, followRow, offPage, settleRow, showRow, type RowDrag } from '@/features/feed/topRowScroll';
+import { PageKeyContext, PageLeavingContext, makePageLeaving } from '@/features/feed/pageLeaving';
 
 /**
  * Full-height pages that snap one at a time. The active page changes once a
@@ -20,6 +21,10 @@ import { AT_REST, NO_DRAG, dragFrom as rowDragFrom, followRow, offPage, settleRo
  * does"). It used to change at the midpoint, under the finger, starting and
  * stopping players mid-swipe. A move made by code (back to the top, a resize)
  * still follows the page as it passes.
+ *
+ * The clip you are leaving is the exception: it stops the moment the swipe is
+ * decided, as the finger lifts, not once the next page has landed (Oct 25,
+ * owner: "it waits until the screen fully lands"). See features/feed/pageLeaving.
  */
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -70,8 +75,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (node?.scrollTo) { node.scrollTo({ x: 0, y: target, animated }); return; }
     runOnUI(() => { 'worklet'; scrollTo(list, 0, target, animated); })();
   }, [list, top]);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { fingerMoved.current = false; setAroundRef.current(0); jump(0, true); } }), [jump]);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { fingerMoved.current = false; setAroundRef.current(0); headForRef.current(0); jump(0, true); } }), [jump]);
   const setAroundRef = useRef<(index: number) => void>(() => undefined);
+  const headForRef = useRef<(index: number) => void>(() => undefined);
 
   // How far the strip is pulled into view (the first page's corners round
   // while it is), and how open the gap under the clock is, which is what the
@@ -164,6 +170,40 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const changed = useCallback((index: number) => {
     if (index !== last.current) { last.current = index; onIndex(index); }
   }, [onIndex]);
+  // The page a decided swipe is leaving (features/feed/pageLeaving): its clip stops as the finger
+  // lifts, while the page itself stays the active one until the feed lands. Pages by their own keys.
+  const [leaving] = useState(makePageLeaving);
+  const keys = useRef<string[]>([]);
+  keys.current = children.map((child, index) => pageKey(child, index));
+  // The swipe is decided and heads for `index`: the page it leaves is the one it was resting on,
+  // unless it is heading straight back there (a spring back), which leaves nothing.
+  const headFor = useCallback((index: number) => {
+    const here = last.current;
+    leaving.set(index !== here ? keys.current[here] ?? null : null);
+  }, [leaving]);
+  headForRef.current = headFor;
+  // Landed on another page: the page left goes on counting as left until the Feed has drawn the
+  // new page as the active one (the render this landing starts), never a moment before, or its
+  // clip would start again for a moment as the page it is on goes still.
+  const letGoAfterDraw = useRef<string | null>(null);
+  const [, drawn] = useState(0);
+  useEffect(() => {
+    const key = letGoAfterDraw.current;
+    if (key === null) return;
+    letGoAfterDraw.current = null;
+    if (leaving.get() === key) leaving.set(null);
+  });
+  // The feed is on `index` now (landed, or passed by a move made in code). Back on the page the
+  // swipe left (it turned round): its clip carries on at once. On another: the page left is let
+  // go of once the Feed has drawn it (above).
+  const landed = useCallback((index: number) => {
+    const leftKey = leaving.get();
+    if (leftKey !== null) {
+      if (leftKey === keys.current[index]) leaving.set(null);
+      else { letGoAfterDraw.current = leftKey; drawn((n) => n + 1); }
+    }
+    changed(index);
+  }, [changed, leaving]);
   // The page a swipe starts from: on an iPhone the scroller may only stop on
   // it or a neighbour (snapOffsets below), so a hard flick moves one page.
   const [around, setAround] = useState(initialIndex);
@@ -188,8 +228,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   useAnimatedReaction(() => !!row && row.value > 0.5, (now, before) => { if (now !== before) runOnJS(setRowAway)(now); }, [row]);
   const settled = useCallback((y: number) => {
     swiping.value = false;
+    awaitHead.value = false;
     const from = last.current;
-    changed(pageOf(y));
+    landed(pageOf(y));
     setAround(pageOf(y));
     onSettled?.(last.current);
     // Only a finger's own swipe that ends on another page counts as a swipe (onSwiped).
@@ -200,7 +241,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     const back = drag.page >= 0 && drag.page === last.current ? drag : null;
     if (drag.page >= 0 && !back) rowDrag.value = NO_DRAG;
     settleRow(row, last.current === 0, back);
-  }, [changed, pageOf, onSettled, onSwiped, row, rowDrag]);
+  }, [landed, pageOf, onSettled, onSwiped, row, rowDrag]);
   const dragFrom = useCallback((y: number) => setAround(pageOf(y)), [pageOf]);
   settledRef.current = settled;
   const dragEnded = useCallback((y: number) => {
@@ -220,6 +261,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // From a finger going down until the feed comes to rest (settled): the page
   // under it is not the active one yet.
   const swiping = useSharedValue(false);
+  // The finger has lifted and where the feed is heading is not known yet: its next move tells.
+  const awaitHead = useSharedValue(false);
   const onScroll = useAnimatedScrollHandler({
     onScroll: (e) => {
       const y = e.contentOffset.y;
@@ -238,6 +281,17 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         if (!dragging.value && !holding.value && !gliding.value && y < top - 2 && lastY.value >= 0 && y < lastY.value) settleTo(top);
         if (y >= top - 0.5) settling.value = false;
       }
+      // The finger has lifted: the feed only ever glides straight to the page it will rest on
+      // (the page stops take it forward if it was moving forward, back if back, the nearest if
+      // still), so its first move after letting go names that page.
+      if (awaitHead.value && !dragging.value && lastY.value >= 0) {
+        const dy = y - lastY.value;
+        if (Math.abs(dy) > 0.5 && Math.abs(dy) < h / 2) {
+          awaitHead.value = false;
+          const at = (y - top) / h;
+          runOnJS(headFor)(Math.max(0, Math.min(count - 1, dy > 0 ? Math.ceil(at - 0.02) : Math.floor(at + 0.02))));
+        }
+      }
       if (lastY.value >= 0) {
         const dy = y - lastY.value;
         // On to the next clip tucks the bar, back up lifts it: one glide per
@@ -251,7 +305,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       lastY.value = y;
       pageH.value = h;
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
-      if (index !== lastIndex.value) { lastIndex.value = index; if (!swiping.value) runOnJS(changed)(index); }
+      if (index !== lastIndex.value) { lastIndex.value = index; if (!swiping.value) runOnJS(landed)(index); }
     },
     onBeginDrag: (e) => {
       if (IOS) runOnJS(dragFrom)(e.contentOffset.y);
@@ -259,6 +313,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       if (row) rowDrag.value = rowDragFrom(row, Math.max(0, Math.round((e.contentOffset.y - top) / (pageH.value || 1))));
       dragging.value = true;
       swiping.value = true;
+      awaitHead.value = false;
       // A second swipe within the last one's 140ms settle wait: drop that wait, or it would land
       // the old page mid-gesture (found in review, Oct 19).
       runOnJS(cancelSettle)();
@@ -277,6 +332,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       dragging.value = false;
       runOnJS(setPageScrolling)(false);
       const y = e.contentOffset.y;
+      // The swipe is decided as the finger lifts: the feed's first move from here names the page
+      // it will rest on (onScroll, above), a frame later, and the clip being left stops then.
+      // (Not the iPhone's own targetContentOffset: whether that has the page stops applied
+      // depends on which of the scroller's two listeners hears it first.)
+      awaitHead.value = true;
       const d = rowDrag.value;
       if (d.page >= 0 && !d.lifted) rowDrag.value = { ...d, net: y - (top + d.page * pageH.value), lifted: true };
       if (top > 0 && !holding.value) {
@@ -337,6 +397,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   useEffect(() => () => setPageScrolling(false), []);
 
   return (
+    <PageLeavingContext.Provider value={leaving}>
     <View style={{ flex: 1 }} onTouchStart={(e) => hint.down(e.nativeEvent.pageY)} onTouchMove={(e) => hint.move(e.nativeEvent.pageY)} onTouchEnd={hint.up} onTouchCancel={hint.up} onLayout={(e) => {
       // A page is the room, exactly: the bar floats over the page rather
       // than taking room from it, so nothing about the bar can leave a gap.
@@ -377,7 +438,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
             // refresh reorders the feed, a page that moves keeps everything it
             // has built, its buffered video included, instead of starting over.
             <View key={pageKey(child, index)} style={{ height }}>
-              {child}
+              <PageKeyContext.Provider value={pageKey(child, index)}>{child}</PageKeyContext.Provider>
               {index === 0 && top > 0 ? <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: -22, left: -22, right: -22, height: 70, borderTopWidth: 22, borderLeftWidth: 22, borderRightWidth: 22, borderColor: colors.bg, borderTopLeftRadius: 44, borderTopRightRadius: 44 }, capsStyle]} /> : null}
             </View>
           ))}
@@ -399,5 +460,6 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
         </Animated.View>
       ) : null}
     </View>
+    </PageLeavingContext.Provider>
   );
 });

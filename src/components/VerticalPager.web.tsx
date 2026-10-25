@@ -1,7 +1,7 @@
 import { barCompact, glideBar } from '@/features/navigation/barShrink';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
-import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { pagerStep } from '@/lib/pagerGesture';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
@@ -11,6 +11,7 @@ import { colors } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useTopRowHint } from '@/lib/topRowHint';
 import { AT_REST, NO_DRAG, dragFrom, followRow, offPage, settleRow, showRow, type RowDrag } from '@/features/feed/topRowScroll';
+import { PageKeyContext, PageLeavingContext, makePageLeaving } from '@/features/feed/pageLeaving';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -101,13 +102,44 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     cancelAnimationFrame(animation.current);
     gliding.current = false;
   };
+  // The page a decided swipe is leaving (features/feed/pageLeaving): its clip stops as the finger
+  // lifts, not once the feed has landed (Oct 25, owner: "it waits until the screen fully lands"),
+  // while the page itself stays the active one until then. Pages by their own keys.
+  const [leaving] = useState(makePageLeaving);
+  const keys = useRef<string[]>([]);
+  keys.current = children.map((child, index) => pageKey(child, index));
+  // Heading for `index`: the page it leaves is the one it was resting on, unless it is heading
+  // straight back there (a spring back), which leaves nothing.
+  const headFor = (index: number) => {
+    const here = reported.current;
+    leaving.set(index !== here ? keys.current[here] ?? null : null);
+  };
+  // Landed on another page: the page left goes on counting as left until the Feed has drawn the
+  // new page as the active one (the render this landing starts), never a moment before, or its
+  // clip would start again for a moment.
+  const letGoAfterDraw = useRef<string | null>(null);
+  const [, drawn] = useState(0);
+  useEffect(() => {
+    const key = letGoAfterDraw.current;
+    if (key === null) return;
+    letGoAfterDraw.current = null;
+    if (leaving.get() === key) leaving.set(null);
+  });
   // The page in view becomes the active one only once the feed has landed on
   // it, the way Instagram Reels and TikTok do: while you drag, the clip you
   // are leaving keeps playing and the next one shows its first frame (owner,
-  // Oct 19: "push 3 only if it's what Instagram does").
+  // Oct 19: "push 3 only if it's what Instagram does"). Once the finger has
+  // let go towards another page, the clip being left has stopped (headFor).
   const commit = (el: HTMLDivElement) => {
     if (!el.clientHeight) return;
     const index = Math.round(el.scrollTop / el.clientHeight);
+    // Back on the page the swipe left (it turned round): its clip carries on at once. On to
+    // another: the page left is let go of once the Feed has drawn the landing (above).
+    const leftKey = leaving.get();
+    if (leftKey !== null) {
+      if (leftKey === keys.current[index]) leaving.set(null);
+      else { letGoAfterDraw.current = leftKey; drawn((n) => n + 1); }
+    }
     const byUser = userMoved.current;
     userMoved.current = false;
     if (index === reported.current) return;
@@ -121,6 +153,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     stop();
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, target));
+    // Where it will rest is decided here (a finger let go, a jump made in code): the clip being left stops now.
+    if (el.clientHeight) headFor(Math.round(to / el.clientHeight));
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.scrollTop = to; el.style.scrollSnapType = 'y mandatory'; commit(el); return; }
     const started = performance.now();
     const desktop = isDesktopBrowser();
@@ -219,7 +253,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     return () => { stop(); if (idle) clearTimeout(idle); el.removeEventListener('wheel', wheel); el.removeEventListener('keydown', key); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
   }, [children.length]);
 
-  return <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+  return <PageLeavingContext.Provider value={leaving}><div style={{ position: 'relative', height: '100%', width: '100%' }}>
     {/* Behind the feed, in the gap the pull opens: the greeting and the disc, riding in its middle. */}
     {onRefresh && pullAlign === 'left' ? (
       // In the Feed's corner, level with its words (Oct 4): the ring draws round the logo.
@@ -327,8 +361,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     {/* Under each page's own key, not its place: a page a refresh moves keeps its buffered video. */}
     {children.map((child, index) => <div key={pageKey(child, index)} style={{ display: 'flex', flexDirection: 'column',
       height: '100%', width: '100%', scrollSnapAlign: 'start', scrollSnapStop: 'always',
-      position: 'relative', overflow: 'hidden' }}>{child}</div>)}
+      position: 'relative', overflow: 'hidden' }}><PageKeyContext.Provider value={pageKey(child, index)}>{child}</PageKeyContext.Provider></div>)}
   </div>
   </Animated.View>
-  </div>;
+  </div></PageLeavingContext.Provider>;
 });

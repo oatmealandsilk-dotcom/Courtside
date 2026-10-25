@@ -12,6 +12,7 @@ import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
+import { usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
 
@@ -65,8 +66,11 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Plays only on the screen you are looking at: a page pushed over this one,
   // or a tab slid away, holds it until you come back (the phone's player does
   // the same in ClipVideo). The comments stage keeps its clip playing.
+  // A swipe decided away from its page stops it as the finger lifts, before
+  // the next page has landed (pageLeaving), as the phone's ClipVideo does.
   const onTop = useIsFocused() || held;
-  const active = wanted && onTop;
+  const leaving = usePageLeaving();
+  const active = wanted && onTop && !leaving;
   const insets = useSafeAreaInsets();
   // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
   const drop = useContext(TopBandContext);
