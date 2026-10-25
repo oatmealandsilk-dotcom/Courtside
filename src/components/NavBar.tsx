@@ -201,7 +201,7 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const tuck = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
-  // The quiet pill in place of the glass one (tabBarLook, Oct 25): the same bar, drawn plainer.
+  // The quiet pill in place of the round one (tabBarLook, Oct 25): the same bar and the same glass, a new shape.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (
       <LookBar
