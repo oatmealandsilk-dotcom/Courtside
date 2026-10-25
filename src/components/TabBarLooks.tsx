@@ -118,13 +118,13 @@ export const LookBar = React.memo(function LookBar({
     if (shownMedia !== media && shownFeed === feedShown) {
       const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
       setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
-      // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
-      // to nothing), and a page opened over them (a profile, a court) flips `media` in the same redraw that
-      // lets the fade go, which reaches the screen only a frame later. Glass re-tinted under a parent at
-      // nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole again,
-      // under the copy fading over it. Anywhere else it re-tints at once, as before.
-      if (glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
     }
+    // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
+    // to nothing), and a page opened over them (a profile, a court, or another tab) flips `media` in the
+    // same redraw that lets the fade go, which reaches the screen only a frame later. Glass re-tinted under
+    // a parent at nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole
+    // again. Anywhere else it re-tints at once, as before.
+    if (shownMedia !== media && glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
   }
   // The tab lit at the touch (Oct 25 audit: the new tab lit only once the router had redrawn about a
   // thousand parts, 60-170 ms after the finger lifted, with no answer to the touch before that). It
@@ -145,14 +145,16 @@ export const LookBar = React.memo(function LookBar({
   // Read by the handlers below, which are made once (the bar redraws only when what it shows changes).
   const now = useRef({ activeRoute, onTab, onTabPressIn });
   now.current = { activeRoute, onTab, onTabPressIn };
-  const press = useRef({ route: null as string | null, tapped: false, painted: true, frame: 0, wait: undefined as ReturnType<typeof setTimeout> | undefined });
+  const press = useRef({ route: null as string | null, tapped: false, painted: true, frame: 0, wait: undefined as ReturnType<typeof setTimeout> | undefined, seq: 0 });
   useEffect(() => () => { clearTimeout(press.current.wait); cancelAnimationFrame(press.current.frame); }, []);
   const tabPressIn = useCallback((route: string) => {
     const p = press.current;
     clearTimeout(p.wait);
     p.tapped = false;
     p.route = route;
-    if (route !== now.current.activeRoute) {
+    // The tab already on show: any other tab lit by a quicker tap whose page has not come yet goes dark.
+    if (route === now.current.activeRoute) setPressed(null);
+    else {
       setPressed(route);
       // In a browser the bar's redraw and the page's share one thread: the page waits for a frame
       // with the lit tab in it (below). A phone draws the bar's redraw on its own.
@@ -172,8 +174,10 @@ export const LookBar = React.memo(function LookBar({
     const p = press.current;
     clearTimeout(p.wait);
     p.tapped = true;
-    const go = () => now.current.onTab(route);
-    if (route === now.current.activeRoute) { go(); return; }
+    // Only the latest tap goes: one held for its lit frame (below) never lands after a later tap.
+    const mine = ++p.seq;
+    const go = () => { if (p.seq === mine) now.current.onTab(route); };
+    if (route === now.current.activeRoute) { setPressed(null); go(); return; }
     // Lit already at the touch, and drawn: the page goes now. Otherwise (a quick tap in a busy
     // browser, a keyboard, a screen reader) the lit tab is drawn first, then the page.
     const litFirst = p.route !== route || !p.painted;
