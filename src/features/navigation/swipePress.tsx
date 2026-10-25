@@ -35,7 +35,10 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  * is already moving by then), so its look shows then, well under half the
  * wait. Only a finger that has started to drift waits the whole
  * PRESS_LOOK_DELAY, as before, and a look on show goes the moment the finger
- * moves past MOVE_SLOP, not only when the page starts to slide.
+ * moves past MOVE_SLOP, not only when the page starts to slide. A look taken
+ * away by a swipe or a scroll goes in that same frame (`instant`), with no
+ * release spring, so a thumb that rests a moment and then swipes never shows
+ * the card ticking back up while the page slides.
  */
 export const PRESS_LOOK_DELAY = 120;
 /** How soon a finger that has stayed put shows its press look, inside a swipeable area. */
@@ -78,8 +81,8 @@ export const useInSwipeArea = () => useContext(SwipeAreaContext);
  * press through react-native-web's responder system): it calls this the
  * moment it takes the finger, so a look already showing goes with it.
  */
-const dropListeners = new Set<() => void>();
-export const dropPressLooks = () => { dropListeners.forEach((fn) => fn()); };
+const dropListeners = new Set<(instant?: boolean) => void>();
+export const dropPressLooks = () => { dropListeners.forEach((fn) => fn(true)); };
 
 /**
  * The Pressable props that hold a press back by PRESS_STILL_DELAY (the first
@@ -98,14 +101,15 @@ export function pressDelayProps(delayLongPress: number | undefined): { delayLong
 }
 
 /**
- * Drives a press look (`look(true)` to show it, `look(false)` to let it go)
+ * Drives a press look (`look(true)` to show it, `look(false)` to let it go;
+ * `look(false, true)` when a swipe or a scroll took it, to be gone at once)
  * for a press that may sit inside a swipeable area. Wire `pressIn` / `pressOut`
  * to the Pressable's onPressIn / onPressOut, `touchStart` / `pressMove` to its
  * onTouchStart / onPressMove, and spread `delay` onto it.
  * Outside a swipeable area (or with `enabled` false) the look follows the
  * finger exactly as a plain Pressable's does, and `delay` is undefined.
  */
-export function useSwipePressLook(look: (on: boolean) => void, { enabled = true, delayLongPress }: { enabled?: boolean; delayLongPress?: number } = {}) {
+export function useSwipePressLook(look: (on: boolean, instant?: boolean) => void, { enabled = true, delayLongPress }: { enabled?: boolean; delayLongPress?: number } = {}) {
   const inSwipe = useContext(SwipeAreaContext) && enabled;
   const lookRef = useRef(look);
   lookRef.current = look;
@@ -121,17 +125,18 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   const moved = useRef(false);
   const clearHide = () => { if (hide.current) { clearTimeout(hide.current); hide.current = null; } };
   const clearLater = () => { if (later.current) { clearTimeout(later.current); later.current = null; } };
-  const drop = useCallback(() => {
+  // `instant`: the finger went on to swipe or scroll, so the look goes in this frame, no release spring.
+  const drop = useCallback((instant?: boolean) => {
     clearHide();
     clearLater();
     if (!shownAt.current) return;
     shownAt.current = 0;
-    lookRef.current(false);
+    lookRef.current(false, instant === true);
   }, []);
   useEffect(() => {
     if (!inSwipe) return;
     dropListeners.add(drop);
-    const unsubscribe = subscribePageDragging(() => { if (isPageDragging()) drop(); });
+    const unsubscribe = subscribePageDragging(() => { if (isPageDragging()) drop(true); });
     return () => { dropListeners.delete(drop); unsubscribe(); };
   }, [inSwipe, drop]);
   useEffect(() => () => { clearHide(); clearLater(); }, []);
@@ -153,8 +158,8 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     at.current = now;
     if (Math.hypot(now.x - start.current.x, now.y - start.current.y) > MOVE_SLOP) {
       moved.current = true;
-      // A swipe or a scroll under a look already on show: it goes now, not when the page starts to slide.
-      drop();
+      // A swipe or a scroll under a look already on show: it goes now, in this frame, not when the page starts to slide.
+      drop(true);
     }
   };
   const show = () => {

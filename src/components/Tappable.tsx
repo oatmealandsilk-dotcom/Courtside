@@ -81,9 +81,13 @@ export function Tappable({
     ).start();
   };
 
+  // A dip taken away because the finger went on to swipe or scroll: back to rest in this same
+  // frame, no spring, so the control never ticks back up while the page slides.
+  const snapBack = () => { scale.setValue(1); fade.setValue(1); };
+
   // On a page that swipes sideways the dip waits a beat, so a finger that is swiping never dips the
   // control (swipePress). A like (immediate) is left to fire on touch-down, exactly as before.
-  const press = useSwipePressLook((on) => spring(on ? scaleTo : 1), { enabled: !immediate, delayLongPress });
+  const press = useSwipePressLook((on, instant) => (!on && instant ? snapBack() : spring(on ? scaleTo : 1)), { enabled: !immediate, delayLongPress });
 
   return (
     <Pressable
