@@ -154,6 +154,25 @@ export function peekCardShot(key: string, hash: string): CardShot | null {
   return streets ? { uri: fileFor(streets.name).uri, kind: 'streets' } : null;
 }
 
+/**
+ * A picture of the streets alone kept for this person's card at this place in the theme now (whatever its
+ * size or the map's look then): only for the softened loading look (MapLoadState's MAP_LOADING 'D'), shown
+ * blurred. Never one with people on it, and never one in another theme: right after a theme change, a light
+ * picture under a dark map would flash bright to dark as the map came in, so then it is Plain.
+ */
+export function peekPlaceShot(user: string, lat: number, lng: number, theme: string): string | null {
+  const now = Date.now();
+  const la = lat.toFixed(4);
+  const ln = lng.toFixed(4);
+  const here = index.entries.filter((e) => {
+    if (e.kind !== 'streets' || now - e.at >= PLACE_MAX_AGE_MS) return false;
+    const part = e.key.split('|');
+    return part[0] === user && part[3] === la && part[4] === ln;
+  });
+  const pick = here.find((e) => e.key.split('|')[1] === theme);
+  return pick ? fileFor(pick.name).uri : null;
+}
+
 /** Whether this look is kept already (a 'card' picture: with exactly these pins, recently). */
 export function hasCardShot(key: string, kind: ShotKind, hash?: string): boolean {
   const now = Date.now();
