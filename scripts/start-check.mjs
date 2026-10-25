@@ -56,6 +56,9 @@ const cases = [
   ['admin, quick link, trimmed to start at 5 s, 5.9 s in', { probe: probe(5.9, { from: 5 }) }, false],
   ['admin, quick link, trimmed to start at 5 s, 6.0 s in', { probe: probe(6.0, { from: 5 }) }, true],
   ['admin, quick link, ready before (swiped past on the quick rule)', { probe: probe(0.2), wanted: false, wasReady: true }, true],
+  ['admin, ready before, player now waiting mid-play (a stall: its spinner shows)', { probe: probe(5, { status: 'loading' }), wasReady: true }, false],
+  ['everyone else, ready before, player now waiting mid-play (as before)', { probe: probe(5, { status: 'loading' }), wasReady: true, on: false }, false],
+  ['everyone else, ready before, 3 s ahead not in after a jump back (as before)', { probe: probe(1, { from: 0 }), wasReady: true, on: false, wanted: false }, false],
   ['admin, a clip that cannot load', { probe: probe(0, { status: 'error' }), failed: true }, true],
   ['everyone else, quick link, 1.5 s in, on screen', { probe: probe(1.5), on: false }, false],
   ['everyone else, quick link, opening primed, 1.5 s in', { probe: probe(1.5), on: false, cached: true }, false],
@@ -76,7 +79,7 @@ const tracks = [
   ['app-compressed 1080p, 3.5 Mb/s, SDR', { averageBitrate: 3_500_000, videoRange: 'sdr' }, false],
   ['camera file, 13 Mb/s', { averageBitrate: 13_000_000, videoRange: 'sdr' }, true],
   ['camera HDR (Dolby Vision / HLG)', { averageBitrate: 4_000_000, videoRange: 'hlg' }, true],
-  ['nothing known yet', null, false],
+  ['a track with nothing in it (ClipVideo still waits for the track before any quick start)', null, false],
 ];
 for (const [name, track, expected] of tracks) {
   const heavy = q.heavyTrack(track);

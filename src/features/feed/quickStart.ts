@@ -114,7 +114,7 @@ export type StartInputs = {
   failed: boolean;
   /** It is the clip on screen, meant to be playing. */
   wanted: boolean;
-  /** It was ready before: once ready it stays ready. */
+  /** It was ready before: with the quick rule on, it stays ready while its player says it can play. */
   wasReady: boolean;
   on: boolean; link: LinkState; cached: boolean; heavy: boolean; stalledBefore: boolean;
 };
@@ -138,5 +138,9 @@ export function decideStart(at: StartInputs): StartDecision {
   const loaded = !!probe && hasIn(probe, secondsNeeded('careful', probe.length));
   const opening = !!probe && hasIn(probe, secondsNeeded('quick', probe.length));
   const quick = opening && !loaded && at.wanted && startRule(at) === 'quick';
-  return { loaded, opening, quick, ready: at.wasReady || loaded || at.failed || quick };
+  // With the rule on, a clip that was ready stays ready while its player can play (swiped past before
+  // its three seconds were in, or a loop's jump back). A real stall (the player waiting) is not ready,
+  // as before, so a post's own spinner still shows it. With the rule off: exactly the old rule.
+  const holding = at.on && at.wasReady && !!probe && probe.status === 'readyToPlay';
+  return { loaded, opening, quick, ready: loaded || at.failed || quick || holding };
 }

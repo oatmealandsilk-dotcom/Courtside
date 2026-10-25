@@ -149,7 +149,10 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   useEffect(() => {
     track.current = 'unknown';
     const report = (info: (TrackInfo & { size?: { width: number; height: number } }) | null | undefined) => {
+      const was = track.current;
       noteTrack(info);
+      // Known only now (an iPhone names the track a moment after it says the clip can play): look again.
+      if (was !== track.current && quickStartOn()) checkNow.current();
       const size = info?.size;
       if (size && size.width > 0 && size.height > 0) latestSize.current?.(size.width, size.height);
     };
@@ -185,6 +188,8 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // When it last started on the quick rule, before its three seconds were in (0: it did not): a
   // stall soon after says the link cannot keep up with a quick start (below).
   const quickFrom = useRef(0);
+  // Where that quick start began: only a wait after the picture has moved on from here is a stall.
+  const quickAt = useRef(0);
   // The readiness check, run at once when the clip comes on screen or the app comes back, not at the next tick.
   const checkNow = useRef<() => void>(() => undefined);
   useEffect(() => {
@@ -224,10 +229,14 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       try { failed = player.status === 'error'; } catch { /* player already released */ }
       if (track.current === 'unknown' && quickStartOn()) safely(() => noteTrack((player as unknown as { videoTrack?: TrackInfo | null }).videoTrack));
       // Off screen: ready once its three seconds are in, as before. On screen: sooner, on the quick
-      // rule, where it applies. Once ready it stays ready (features/feed/quickStart).
+      // rule, where it applies. For admins, once ready it stays ready while its player can play
+      // (features/feed/quickStart); for everyone else exactly as before.
       const { loaded, opening, ready } = decideStart({
         probe: probe(), failed, wanted: wantPlay.current, wasReady: readyRef.current,
-        on: quickStartOn(), link: linkState(), cached: openingWasIn, heavy: track.current === 'heavy', stalledBefore: stalledEarly(),
+        on: quickStartOn(), link: linkState(), cached: openingWasIn,
+        // Not known to be light yet counts as heavy: the phone names a clip's track only after it can
+        // play, and a primed opening is in at once, so an HDR camera file must not slip through first.
+        heavy: track.current !== 'light', stalledBefore: stalledEarly(),
       });
       // Its first second is in: from now on a page built for this clip finds its opening on the phone.
       if (opening) noteOpeningCached(uri);
@@ -326,6 +335,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     // Starting before its three seconds are in, from where they were being fetched: the quick
     // rule's start, watched for an early stall (below). A jump elsewhere is not its test.
     quickFrom.current = !loadedRef.current && Math.abs(target - placedAt.current) < 0.5 ? Date.now() : 0;
+    quickAt.current = target;
     // Only a real move is a seek; the first play of a clip sitting at its start is a plain play.
     safely(() => { if (Math.abs(player.currentTime - target) > 0.05) player.currentTime = target; });
     safely(() => player.play());
@@ -344,7 +354,10 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       confirm = setTimeout(() => {
         confirm = undefined;
         safely(() => {
-          if (quickFrom.current && wantPlay.current && started.current && !away() && player.status === 'loading') { quickFrom.current = 0; noteEarlyStall(); }
+          // The phone's own short wait before a first frame moves (it holds picture and sound together)
+          // is not a stall: only one after the clip has played on from its start turns the rule off.
+          if (quickFrom.current && wantPlay.current && started.current && !away() && player.status === 'loading'
+            && player.currentTime > quickAt.current + 0.2) { quickFrom.current = 0; noteEarlyStall(); }
         });
       }, STALL_CONFIRM_MS);
     });
