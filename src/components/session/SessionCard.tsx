@@ -37,6 +37,12 @@ export type CardLook = {
   wash: 'brand' | 'shirt' | 'soft' | 'none';
   /** The soft wash's top corner ('soft'): a little of the court's pale accent on the box's own fill. */
   tint?: string;
+  /**
+   * The court's second colour, a touch of it on the quiet light box (London's purple, Oct 25, owner: "Wimbledon
+   * theme should have a touch of purple on cards"): the result pill, the Tennis profile card's rating and mark, and
+   * the week's bars on Your sessions take it. Unset on every other box, which keeps its own colours there.
+   */
+  touch?: string;
   /** How far the shirt's corners are taken toward the page's surface ('shirt', ShirtWash's lift): the quiet dark box's. */
   lift?: number;
   /**
@@ -125,17 +131,22 @@ export function boxLook(theme: ThemeName): CardLook {
  * page's surface a step from the page, its hairline, ink numbers, the score
  * and the result in the court's accent) with a soft wash of the court's pale
  * accent from the top corner; Melbourne's result pill a fifth deeper, as its
- * light blue holds white at only 4.0:1. On New York's navy page, Night's box:
+ * light blue holds white at only 4.0:1; London's pill, rating and week bars in
+ * its purple (touch). On New York's navy page, Night's box:
  * the page's surface a step lighter than the page with the shirt's corners
  * brought toward it, the yellow lettering, the page's hairline.
  */
 function quietLook(theme: ThemeName): CardLook {
   if (pageIsDark()) return { ...cardLook(theme), fill: colors.surface, lift: QUIET_GLOW_LIFT };
+  // The court's second colour, where its palette has one (cardTouch, London's purple; every other court's is its brand).
+  const touch = colors.cardTouch !== colors.brand ? colors.cardTouch : undefined;
   return {
     ...sheetLook(),
     wash: 'soft',
+    // The green wash stays: the purple is only a touch (Oct 25; a lilac wash read as a purple card, fighting the greens).
     tint: mixHex(colors.surface, colors.brandDim, QUIET_TINT),
-    pillFill: theme === 'ao' ? mixHex(colors.brand, colors.text, 0.2) : colors.brand,
+    pillFill: touch ?? (theme === 'ao' ? mixHex(colors.brand, colors.text, 0.2) : colors.brand),
+    touch,
   };
 }
 
