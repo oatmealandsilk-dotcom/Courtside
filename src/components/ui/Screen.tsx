@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
 import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
-import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import React, { startTransition, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
@@ -13,6 +13,7 @@ import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measur
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
+import { usePressV2 } from '@/features/navigation/pressV2';
 import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -33,6 +34,8 @@ import { TextScale, colors, oneLine, spacing, typography } from '@/theme';
 // that stretch. Let go past it and the phone's own bounce lands the page on
 // the strip's top, where it holds while the fetch runs, then springs back.
 const IOS = Platform.OS === 'ios';
+/** How long after a page is built its pull disc is (see discIn): past a page's slide in. */
+const DISC_AFTER_MS = 600;
 // Roughly how far a page coasts after letting go, per point-per-millisecond of speed, at the normal slowing.
 const COAST = 499;
 
@@ -285,6 +288,17 @@ const ScreenBody = React.memo(function ScreenBody({
   // pull), and the disc's moving parts. Both live on the animation thread.
   const gap = useSharedValue(0);
   const disc = usePullDisc();
+  // The disc itself (its drawing and its four moving parts) is built a moment after the page, not with
+  // it: nobody pulls a page that is still sliding in, and a page can only start to slide in once all of
+  // it is built (Oct 25, owner: "The response times here take way way way way way tooo long"). With the
+  // quicker press feel only (pressV2: admins first); everyone else gets it with the page, as before.
+  const quick = usePressV2();
+  const [discIn, setDiscIn] = useState(!quick);
+  useEffect(() => {
+    if (discIn) return undefined;
+    const t = setTimeout(() => startTransition(() => setDiscIn(true)), DISC_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [discIn]);
   // Whether this page can refresh right now: asked at the moment of each
   // pull, since a page can gain or lose it after the listeners are on.
   const canRefresh = useRef(false);
@@ -708,7 +722,7 @@ const ScreenBody = React.memo(function ScreenBody({
             through the page or hidden by it; it only ever shows inside the gap. */}
         {strip > 0 ? (
           <Reanimated.View pointerEvents="none" style={[styles.pullRow, underBar, rowStyle]}>
-            <PullDisc gap={gap} disc={disc} line={PULL_LINE} />
+            {discIn ? <PullDisc gap={gap} disc={disc} line={PULL_LINE} /> : null}
           </Reanimated.View>
         ) : null}
         {updatedNote}
@@ -723,7 +737,7 @@ const ScreenBody = React.memo(function ScreenBody({
       )}
       {onRefresh && Platform.OS === 'web' ? (
         <Reanimated.View pointerEvents="none" style={[styles.webRefresh, underBar, webDiscStyle]}>
-          <PullDisc gap={gap} disc={disc} line={WEB_PULL_LINE} />
+          {discIn ? <PullDisc gap={gap} disc={disc} line={WEB_PULL_LINE} /> : null}
         </Reanimated.View>
       ) : null}
     </KeyboardAvoidingView>

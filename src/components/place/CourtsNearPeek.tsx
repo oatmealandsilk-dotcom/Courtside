@@ -6,7 +6,7 @@ import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb
 import { MapCreditDot } from '@/components/map/MapCreditDot';
 import { useOpenSettled, useStartMapsIn } from '@/features/feed/warmup';
 import { surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedLater } from '@/lib/useIsFocused';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
@@ -50,7 +50,7 @@ const UNDER_MAP = 10;
  * chat or court page opened over it draws its own picture first.
  */
 export function useCourtPicturesGo(): boolean {
-  const onShow = useIsFocused();
+  const onShow = useIsFocusedLater();
   const settled = useOpenSettled();
   const mapsIn = useStartMapsIn();
   const [late, setLate] = useState(false);
@@ -70,7 +70,7 @@ export function useCourtPicturesGo(): boolean {
  * A browser needs nothing here. The page mounts it once, first.
  */
 export function CourtsNearSnapshots() {
-  const onShow = useIsFocused();
+  const onShow = useIsFocusedLater();
   return onShow ? <CourtMapSnapshots /> : null;
 }
 

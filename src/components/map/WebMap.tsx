@@ -34,7 +34,7 @@ import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MAP_LOADING, softShotAllowed, MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedLater } from '@/lib/useIsFocused';
 import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { cardHint, hasCardShot, hashText, peekCardShot, peekPlaceShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
@@ -174,7 +174,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const outOfView = useRef<() => boolean>(() => false);
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_REVEAL_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
-  const onScreen = useIsFocused();
+  const onScreen = useIsFocusedLater();
   // Scrolled off the screen (reading the list under it) counts as out of view too.
   const spot = useCardOnScreen();
   outOfView.current = () => !onScreen || props.visible === false || props.inView?.() === false || !spot.onScreen();

@@ -1,5 +1,5 @@
 import { usePathname } from 'expo-router';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedLater } from '@/lib/useIsFocused';
 
 /**
  * Whether the page at `path` is the one on show: on top, its tab on screen,
@@ -13,7 +13,7 @@ import { useIsFocused } from '@/lib/useIsFocused';
  */
 export function useShownAt(path?: string): boolean {
   // Both hooks run every time: a hook behind `&&` gets skipped whenever the left side is false.
-  const focused = useIsFocused();
+  const focused = useIsFocusedLater();
   const pathname = usePathname();
   return path === undefined || (focused && pathname === path);
 }

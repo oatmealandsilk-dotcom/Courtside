@@ -1,8 +1,8 @@
-import React, { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, startTransition, use, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { useIsFocused as useRouteFocused } from 'expo-router';
 import { AppStateLater } from '@/store/AppContext';
-import { TabOnShowContext, useIsFocused } from '@/lib/useIsFocused';
+import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
 import { usePressV2 } from '@/features/navigation/pressV2';
@@ -37,15 +37,45 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   const box = useRef({ active }).current;
   useLayoutEffect(() => { box.active = active; }, [box, active]);
   const quick = usePressV2();
+  const onShow = routeFocused && active;
+  // The parts that only stand down when covered (the map, court pictures, tips: useIsFocusedLater) hear
+  // "covered" once the page opened over the tab has slid in, not in the tap that opens it. Before, the
+  // map card, the court cards and their hidden picture-taker all redrew (the last one taken down) in that
+  // same tap, so a player's page waited on them before it could start to slide (Oct 25, owner: "The
+  // response times here take way way way way way tooo long"). With the quicker press feel only (pressV2:
+  // admins first): it changes when the map pauses under a page, which no web check can see on a phone.
+  // (A swipe on to another tab is the same: those parts stand down once the row has moved.)
+  const later = useCoveredLater(onShow, quick ? COVERED_AFTER_MS : 0);
   return (
     <InTabRowContext.Provider value={quick ? true : active}>
       <TabFocusContext.Provider value={active}>
         <TabActiveBox.Provider value={box}>
-          <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+          <TabOnShowContext.Provider value={onShow}>
+            <TabOnShowLaterContext.Provider value={later}>{children}</TabOnShowLaterContext.Provider>
+          </TabOnShowContext.Provider>
         </TabActiveBox.Provider>
       </TabFocusContext.Provider>
     </InTabRowContext.Provider>
   );
+}
+
+/** Long enough for a page opened over the tabs to have slid in (the phone's push is about 350 ms). */
+const COVERED_AFTER_MS = 500;
+
+/**
+ * `onShow` turning true at once, and false only `wait` ms after it did (as background work), so
+ * whatever follows it redraws after the page on top has slid in. `wait` 0: `onShow` as it is.
+ */
+function useCoveredLater(onShow: boolean, wait: number): boolean {
+  const [coveredNow, setCoveredNow] = useState(!onShow);
+  // On show again: at once, in this same draw.
+  if (onShow && coveredNow) setCoveredNow(false);
+  useEffect(() => {
+    if (onShow || coveredNow || wait === 0) return undefined;
+    const t = setTimeout(() => startTransition(() => setCoveredNow(true)), wait);
+    return () => clearTimeout(t);
+  }, [onShow, coveredNow, wait]);
+  return onShow || (wait > 0 && !coveredNow);
 }
 
 export function useTabActive(): boolean {
@@ -128,5 +158,11 @@ export function ThemeGate({ pane, children }: { pane: string; children: () => Re
 function OffScreenLater({ children }: { children: React.ReactNode }) {
   // On show: the route on top and, in the tab row, this tab on screen (see useIsFocused).
   const onShow = useIsFocused();
-  return <AppStateLater hidden={!onShow}>{children}</AppStateLater>;
+  // Outside the phone's tab row (a browser's tabs), "covered" for the parts that can wait comes from
+  // here, the same way TabFocus gives it in the row: once a page opened over the tab has slid in.
+  const inRow = use(TabOnShowLaterContext) !== undefined;
+  const later = useCoveredLater(onShow, usePressV2() && !inRow ? COVERED_AFTER_MS : 0);
+  const inner = <AppStateLater hidden={!onShow}>{children}</AppStateLater>;
+  // Whether this tab sits in the row never changes while it is mounted.
+  return inRow ? inner : <TabOnShowLaterContext.Provider value={later}>{inner}</TabOnShowLaterContext.Provider>;
 }
