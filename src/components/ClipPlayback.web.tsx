@@ -17,6 +17,9 @@ import { usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
 
+/** How long a clip on screen may wait on its cover before the loading disc shows (the phone's ClipPlayback). */
+const SPIN_AFTER_MS = 1000;
+
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
@@ -108,7 +111,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReadyState] = useState(false);
-  const setReady = (ok: boolean) => { setReadyState(ok); if (ok) onReady?.(true); };
+  // Whether it has had its first frame since it came on the page: until then its cover is what shows.
+  const [framed, setFramed] = useState(false);
+  const setReady = (ok: boolean) => { setReadyState(ok); if (ok) { setFramed(true); onReady?.(true); } };
   // A video that cannot load is a fact, not a wait: the page shows its poster
   // and a line saying so, rather than a placeholder that never clears.
   const [failed, setFailed] = useState(false);
@@ -116,13 +121,15 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   const latestReady = useRef(onReady);
   latestReady.current = onReady;
   // The loading disc only for a wait you would notice: a clip fetched ahead to its first frame
-  // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page.
+  // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page. One still
+  // on its cover (the video's poster, fetched ten pages ahead: postersAhead) shows that for a
+  // second first, as on Instagram, and on a phone (SPIN_AFTER_MS).
   const [spin, setSpin] = useState(false);
   useEffect(() => {
     if (ready || !active) { setSpin(false); return undefined; }
-    const t = setTimeout(() => setSpin(true), 300);
+    const t = setTimeout(() => setSpin(true), poster && !framed ? SPIN_AFTER_MS : 300);
     return () => clearTimeout(t);
-  }, [ready, active]);
+  }, [ready, active, poster, framed]);
   // How quick the connection is (lib/netSpeed), as a phone measures it: only real waits on
   // screen count. A clip that came on screen without enough to play, the time until it played;
   // a stall of half a second or more mid-play, a slow reading. A clip fetched ahead that starts
@@ -153,7 +160,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // Chrome parked there does not fetch on when told 'auto', only once it plays, and stalls then.)
   const fetchHint = active || preload ? (warmOnly && !active ? 'metadata' : 'auto') : 'none';
   // Gone from the page (or given another clip): what it had fetched goes with it.
-  useEffect(() => () => latestReady.current?.(false), [uri]);
+  useEffect(() => () => { latestReady.current?.(false); setFramed(false); }, [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
   // tap up there toggles the sound and brings it back the same way.
   const [discOn, setDiscOn] = useState(false);

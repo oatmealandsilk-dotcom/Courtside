@@ -48,8 +48,8 @@ import { RailGlyph } from '@/components/RailGlyph';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { PRIME_CLIPS, PRIME_LOOK, useClipPrimer, usePreloadMore, type PrimeTarget } from '@/features/feed/preloadMore';
+import { POSTERS_AHEAD, POSTERS_AHEAD_SLOW, usePostersAhead } from '@/features/feed/postersAhead';
 import { connectionIsQuick } from '@/lib/netSpeed';
-import { CourtSpinner } from '@/components/CourtSpinner';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { markFeedSwiped } from '@/features/feed/firstSwipe';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
@@ -1070,12 +1070,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     </>
   ), [styles, holdWord, wordsBottom, tuckStyle]);
   const warmWaiters = useRef<(() => void)[]>([]);
-  // Quick or slow connection, read again whenever a new page comes up. Each
-  // page's cover takes the reading once, the first time it is drawn (off
-  // screen, while the page is built ahead), and keeps it, so a page that is
-  // waiting never switches from one loading screen to another in view.
-  const [quick, setQuick] = useState(connectionIsQuick);
-  const coverQuick = useRef(new Map<string, boolean>());
   const firstReadyRef = useRef(false);
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -1090,11 +1084,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     // How to wait is chosen once, here, from how quickly clips have been
     // loading: on a quick connection the feed holds until the new first clip
     // is ready (about a second at most) and lands on it playing; on a slow one
-    // it comes straight back and waits on the CourtSide loading page. Either
+    // it comes straight back and waits on the new first clip's cover. Either
     // way there is one waiting screen, never two.
     const quickNow = connectionIsQuick();
-    coverQuick.current.clear();
-    setQuick(quickNow);
     rerank(false, true);
     // In a browser the scroller snaps back to the page it was resting on —
     // the old first page, now further down below the new ones — so the feed
@@ -1294,7 +1286,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   }, [sinks]);
   // The post, Instant or question on screen; the tip and challenge pages are none of them.
   const realKey = activeKey && signalKind(activeKey) ? activeKey : undefined;
-  useEffect(() => { setQuick(connectionIsQuick()); }, [active, realKey]);
   const held = !!myStage && myStage.key === activeKey && !myStage.covered && !(PAUSE_AT_FULL && myStage.full);
   const playing = (focused || held) && !touring && !paused;
   // A new page on screen (or the feed coming back to the front): the last one
@@ -1745,52 +1736,42 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     const item = feed[index];
     return ahead === EXTRA && !!item && lookahead.current.has(keyOf(item));
   };
-  // The covers of the pages just past the built ones, once the lookahead is on (a phone; a browser warms its own below).
-  const coversFetched = useRef(new Set<string>());
-  const coversOn = Platform.OS !== 'web' && lookahead.current.size > 0 && lookaheadOk(2);
-  useEffect(() => {
-    if (!coversOn) return;
-    const urls: string[] = [];
-    for (let k = EXTRA; k <= EXTRA + 1; k += 1) {
+  // Every reel's cover, there before you reach it (Oct 25, owner: "I'm scrolling on Instagram as
+  // fast as I can and I don't ever hit a video that's not loaded"): the covers of the next ten pages
+  // (three on a slow link) are fetched ahead, nearest first, while this Feed is on show, so a page
+  // shows its cover the instant it arrives and keeps it until its video plays (ClipPlayback). For
+  // everyone: pictures only (features/feed/postersAhead).
+  const postersOn = playing && warmed && !warming && appActive;
+  const posterUrls: string[] = [];
+  if (postersOn) {
+    const reach = connectionIsQuick() ? POSTERS_AHEAD : POSTERS_AHEAD_SLOW;
+    for (let k = 1; k <= reach; k += 1) {
       const item = feed[active + k];
       const url = item?.type === 'post' ? (item.post.thumbnailUrl ?? item.post.imageUrl) : item?.type === 'hit' ? (item.story.thumbnailUrl ?? item.story.imageUrl) : undefined;
-      if (url && !coversFetched.current.has(url)) { coversFetched.current.add(url); urls.push(url); }
+      if (url) posterUrls.push(url);
     }
-    if (urls.length) ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined);
-  }, [coversOn, active, feed]);
+  }
+  usePostersAhead(posterUrls, postersOn);
 
-  // Two more reels ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre load more
-  // maybe two more reels in advance. We can do only the very beginning too"): the next two clips
-  // past the built pages get their first second or so fetched into the player's own cache, one at
-  // a time, once everything nearer is in (the lookahead's gate, one page further on) and the app is
-  // in front, with their covers. Admins only for now (features/feed/preloadMore); for everyone else
-  // nothing here runs.
+  // More reels ahead, just their very beginning (Oct 25, owner: "Ok so we need to pre load more
+  // maybe two more reels in advance. We can do only the very beginning too", then "I'm scrolling on
+  // Instagram as fast as I can and I don't ever hit a video that's not loaded"): the next five clips
+  // past the built pages get their first second or so fetched into the player's own cache, one at a
+  // time, nearest first, once everything nearer is in (the lookahead's gate, one page further on)
+  // and the app is in front. Their covers come with the ten above. Admins only for now
+  // (features/feed/preloadMore); for everyone else nothing here runs.
   const preloadMore = usePreloadMore();
   const primeOn = preloadMore && appActive && lookaheadOk(EXTRA);
   const primeTargets: PrimeTarget[] = [];
-  const primeCovers: string[] = [];
   if (preloadMore) {
     for (let k = EXTRA + 1; k <= EXTRA + PRIME_LOOK && primeTargets.length < PRIME_CLIPS; k += 1) {
       const item = feed[active + k];
       if (!item || inReach(active + k)) continue;
-      if (item.type === 'hit' && item.story.videoUrl) {
-        primeTargets.push({ uri: item.story.videoUrl, from: 0 });
-        if (item.story.thumbnailUrl) primeCovers.push(item.story.thumbnailUrl);
-      } else if (item.type === 'post' && item.post.videoUrl && reachable(item.post)) {
-        primeTargets.push({ uri: item.post.videoUrl, from: item.post.trimStart ?? 0 });
-        if (item.post.thumbnailUrl) primeCovers.push(item.post.thumbnailUrl);
-      }
+      if (item.type === 'hit' && item.story.videoUrl) primeTargets.push({ uri: item.story.videoUrl, from: 0 });
+      else if (item.type === 'post' && item.post.videoUrl && reachable(item.post)) primeTargets.push({ uri: item.post.videoUrl, from: item.post.trimStart ?? 0 });
     }
   }
   useClipPrimer(primeTargets, primeOn);
-  const primeCoverKey = primeOn ? primeCovers.join('\n') : '';
-  useEffect(() => {
-    const urls = primeCoverKey ? primeCoverKey.split('\n').filter((url) => !coversFetched.current.has(url)) : [];
-    if (!urls.length) return;
-    urls.forEach((url) => coversFetched.current.add(url));
-    if (Platform.OS !== 'web') { ExpoImage.prefetch(urls, 'memory-disk').catch(() => undefined); return; }
-    for (const url of urls) { const img = new window.Image(); img.src = url; }
-  }, [primeCoverKey]);
 
   // Whether someone else's post may leave CourtSide as a picture is asked as it
   // comes on screen, so its ••• menu opens already knowing (openOutside.ts).
@@ -1798,19 +1779,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     const item = feed[active];
     if (item?.type === 'post') warmOpenOutside(item.post, currentUserId);
   }, [active, feed, currentUserId]);
-
-  // Warm the covers on either side so a swipe never lands on a grey rectangle.
-  useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    for (const offset of [1, -1, 2]) {
-      const item = feed[active + offset];
-      const url = item?.type === 'post' ? item.post.thumbnailUrl : undefined;
-      if (url) {
-        const img = new window.Image();
-        img.src = url;
-      }
-    }
-  }, [active, feed]);
 
   // Whatever is settled on screen counts as watched, once per session.
   const showing = feed[active];
@@ -1987,20 +1955,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 if (Platform.OS !== 'web' && !arrived && distance > STAND_IN_REACH) return <View key={pageKey} style={styles.holdPage} />;
                 return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
               }
-              // The same over a built page whose picture has not landed yet.
-              const cover = (id: string, kind: 'mark' | 'word', poster?: string, wide?: boolean) => {
-                if (inNow(id)) { coverQuick.current.delete(id); return null; }
-                let quickCover = coverQuick.current.get(id);
-                if (quickCover === undefined) { quickCover = quick; coverQuick.current.set(id, quickCover); }
+              // The same over a built page whose picture has not landed yet. A reel with a cover needs
+              // none: its cover is drawn under its caption and buttons until its video plays
+              // (ClipPlayback), the way Instagram shows a reel still loading, so the page is whole the
+              // moment it arrives (Oct 25, owner: "I don't ever hit a video that's not loaded").
+              const cover = (id: string, kind: 'mark' | 'word', poster?: string) => {
+                if (inNow(id) || (kind === 'word' && poster)) return null;
                 // Once the picture is in, the cover fades away over 180 ms rather than being cut (Oct 22 sweep, item 15).
-                if (kind === 'word' && quickCover && poster) {
-                  return (
-                    <Reanimated.View key="poster" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: wide || !phone ? '#000' : colors.bg }]}>
-                      <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} cachePolicy="memory-disk" contentFit={wide || !phone ? 'contain' : 'cover'} />
-                      <View style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}><CourtSpinner ink="white" /></View>
-                    </Reanimated.View>
-                  );
-                }
                 return <Reanimated.View key="skeleton" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</Reanimated.View>;
               };
               // On a phone, the page behind and two ahead keep their video buffered.
@@ -2341,7 +2302,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                   </Reanimated.View>
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
-                  {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl, post.orientation === 'landscape') : null}
+                  {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl) : null}
                   {removedOver(post)}
                 </View>
               );
