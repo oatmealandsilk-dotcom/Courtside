@@ -144,7 +144,7 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
   // size moves: it is glass, and glass under a changing see-through goes see-through itself.
   const chipDip = useRef(new RNAnimated.Value(1)).current;
   const pressChip = (down: boolean) => (down
-    ? RNAnimated.timing(chipDip, { toValue: PRESS_SHRINK, duration: 60, useNativeDriver: true })
+    ? RNAnimated.timing(chipDip, { toValue: PRESS_SHRINK, duration: 0, useNativeDriver: true })
     : RNAnimated.spring(chipDip, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 })
   ).start();
   // Where the court sits: the middle of the map that shows, between the status bar and the sheet.

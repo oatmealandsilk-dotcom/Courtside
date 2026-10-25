@@ -118,7 +118,7 @@ export function RoundAction({ icon = 'ellipse-outline', glyph, iconOn, label, on
   // owner: "Buttons need to be way more responsive. They are way to delayed when I click them").
   const dip = useRef(new Animated.Value(1)).current;
   const press = (down: boolean) => (down
-    ? Animated.timing(dip, { toValue: PRESS_SHRINK, duration: 60, useNativeDriver: true })
+    ? Animated.timing(dip, { toValue: PRESS_SHRINK, duration: 0, useNativeDriver: true })
     : Animated.spring(dip, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 })
   ).start();
   return (

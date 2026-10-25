@@ -63,8 +63,11 @@ export function Tappable({
   const scale = useRef(new Animated.Value(1)).current;
   const fade = useRef(new Animated.Value(1)).current;
 
-  // Quick: the dip is a short straight run, the release a fast spring, so a
-  // tap reads as instant rather than as an animation you watch.
+  // Instant: the dip lands in the very next frame the finger touches (no run
+  // to watch, the way iPhone's own buttons answer), and the release is a fast
+  // spring. A 60 ms run here left the first frames of a press looking unanswered
+  // (Oct 24, owner: "Buttons need to be way more responsive. They are way to
+  // delayed when I click them").
   const spring = (to: number) => {
     // A dimming control: down at once on the press, back up over a beat on release (and any hover lift undone).
     if (dim && to <= 1) {
@@ -73,7 +76,7 @@ export function Tappable({
       return;
     }
     (to < 1
-      ? Animated.timing(scale, { toValue: to, duration: 60, useNativeDriver: true })
+      ? Animated.timing(scale, { toValue: to, duration: 0, useNativeDriver: true })
       : Animated.spring(scale, { toValue: to, useNativeDriver: true, speed: 160, bounciness: 4 })
     ).start();
   };
