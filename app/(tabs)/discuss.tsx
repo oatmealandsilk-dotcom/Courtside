@@ -26,6 +26,8 @@ import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { UpToday, useUpToday } from '@/components/UpToday';
 import { PostHitField } from '@/components/PostHitField';
+import { OpenHitsTop } from '@/components/hits/OpenHitsLooks';
+import { OPEN_HITS_LOOK } from '@/components/hits/openHitsLook';
 import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
@@ -689,6 +691,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search ? (
           <FirstReveal order={openHits.length ? 1 : 3}><View style={styles.hits}>
+            {/* The top's look to compare (Oct 24, openHitsLook.ts): 'now' is the field below and ships. */}
+            {OPEN_HITS_LOOK !== 'now' ? <OpenHitsTop look={OPEN_HITS_LOOK} count={listedHits.length} forFriends={hitsForFriends} court={!listedHits.length && promptCourt ? { id: promptCourt.id, name: labelOf(promptCourt), lat: promptCourt.lat, lng: promptCourt.lng } : null} /> : <>
             <View style={styles.hitsHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
@@ -711,6 +715,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 />
               );
             })()}
+            </>}
             {/* Cards fold in and out (a hit posted or called off, More open hits) and the rest glide (Oct 22 sweep, item 7). */}
             <FoldList items={shownHits} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />} />
             {moreHits ? (

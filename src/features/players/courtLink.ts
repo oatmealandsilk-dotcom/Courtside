@@ -83,7 +83,7 @@ export function showCourtOnMap(court: Spot) {
  * posting a hit from a court's page or card keeps that court (its id too,
  * which puts the hit on the court's page).
  */
-const playHereParams = (court: Spot) => ({ courtId: court.id || 'near', courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) });
+export const playHereParams = (court: Spot) => ({ courtId: court.id || 'near', courtName: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) });
 export const playHereHref = (court: Spot): Href => ({ pathname: '/hit-request/new', params: playHereParams(court) });
 export function playHere(court: Spot) {
   router.push(playHereHref(court));

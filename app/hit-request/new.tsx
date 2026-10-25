@@ -58,11 +58,15 @@ export default function NewHit() {
   // Late in the evening there is no hour left today: start on tomorrow, and Today is not offered
   // (picked, it showed no times and kept a 9pm already under way).
   const todayOpen = HOURS.some((h) => h >= new Date().getHours() + 1);
-  const [day, setDay] = useState(todayOpen ? 0 : 1);
+  // A time already picked (?day=&hour=, Open hits' look C: "Today 6pm"): that day and hour, when the form offers it.
+  const timeParams = useLocalSearchParams<{ day?: string; hour?: string }>();
+  const pickedDay = Number(timeParams.day); const pickedHour = Number(timeParams.hour);
+  const timePicked = Number.isInteger(pickedDay) && pickedDay >= 0 && pickedDay < 7 && HOURS.includes(pickedHour) && (pickedDay > 0 || pickedHour >= new Date().getHours() + 1);
+  const [day, setDay] = useState(timePicked ? pickedDay : todayOpen ? 0 : 1);
   // Left open past 9pm on Today: on to tomorrow.
   useEffect(() => { if (!todayOpen && day === 0) setDay(1); }, [todayOpen, day]);
   const nextHour = Math.min(21, Math.max(6, new Date().getHours() + 1));
-  const [hour, setHour] = useState(nextHour);
+  const [hour, setHour] = useState(timePicked ? pickedHour : nextHour);
   // Courts book on the half hour too: ":00 / :30" beside Time moves every hour in the row to its half past
   // (Oct 7: one row of times, not a second row repeating the chosen hour). It stays as picked across days and hours.
   const [half, setHalf] = useState(false);
