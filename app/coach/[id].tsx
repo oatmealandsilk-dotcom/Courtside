@@ -204,7 +204,14 @@ export default function CoachDetail() {
         </Pressable>
       ) : null}
       {user.bio ? <Text style={styles.bio}>{user.bio}</Text> : null}
-      {coach.credentials.length || coach.specialties.length ? (
+      {LESS_AI ? (() => {
+        // The hand-made look (Oct 24): the credentials as one plain line, leaving out what the bio or headline already says.
+        const said = `${user.bio ?? ''} ${coach.headline ?? ''}`.toLowerCase();
+        const creds = coach.credentials.filter((c) => !said.includes(c.toLowerCase()));
+        const years = coach.yearsCoaching && !coach.credentials.some((c) => /\byears?\b/i.test(c)) && !/\byears?\b/.test(said) ? `${coach.yearsCoaching} years coaching` : null;
+        const line = [...creds, years].filter(Boolean).join(' · ');
+        return line ? <Text style={[styles.factText, styles.credLine]}>{line}</Text> : null;
+      })() : coach.credentials.length || coach.specialties.length ? (
         <View style={styles.facts}>
           {coach.credentials.map((c) => (
             <View key={c} style={styles.fact}><Ionicons name="checkmark" size={14} color={colors.brand} /><Text style={styles.factText}>{c}</Text></View>
@@ -368,6 +375,19 @@ export default function CoachDetail() {
       {!isOwner && currentUserId ? (
         <Collapse open={canReview}>
         <View style={styles.form}>
+          {LESS_AI ? (
+            // The hand-made look (Oct 24): "Rate Tomás" and small stars; the box and Post review come once a star is tapped.
+            <View style={styles.rateRow}>
+              <Text style={styles.formLead}>Rate {first}</Text>
+              <View style={styles.starPick}>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Pressable key={i} accessibilityRole="radio" accessibilityState={{ selected: reviewStars === i }} accessibilityLabel={`${i} star${i > 1 ? 's' : ''}`} onPress={() => setReviewStars(i)} hitSlop={8}>
+                    <Ionicons name={i <= reviewStars ? 'star' : 'star-outline'} size={20} color={i <= reviewStars ? colors.warning : colors.textFaint} />
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+          ) : <>
           <Text style={styles.formLead}>{first} answered you. How did it go?</Text>
           <View style={styles.starPick}>
             {[1, 2, 3, 4, 5].map((i) => (
@@ -376,21 +396,24 @@ export default function CoachDetail() {
               </Pressable>
             ))}
           </View>
+          </>}
+          {LESS_AI && !reviewStars ? null : <>
           <Field value={reviewBody} onChangeText={setReviewBody} placeholder="Your review" multiline minHeight={70} />
           <Button label="Post review" disabled={!reviewStars || !reviewBody.trim()} loading={posting} onPress={postReview} full />
+          </>}
         </View>
         </Collapse>
       ) : null}
       {reviews.length === 0 ? (
         <Text style={styles.muted}>{LESS_AI ? 'No reviews yet.' : `No reviews yet. Only players ${first} has answered can leave one.`}</Text>
       ) : (
-        <Reanimated.View entering={ARRIVE} style={styles.group}>
+        <Reanimated.View entering={ARRIVE} style={LESS_AI ? styles.reviewsPlain : styles.group}>
           {reviews.map((r, index) => {
             const author = users.find((u) => u.id === r.authorId);
             // Someone else's review: hold its words to report it, as with a comment.
             const report = currentUserId && r.authorId !== currentUserId ? () => reportReview(r, author) : undefined;
             return (
-              <Reanimated.View key={r.id} entering={ARRIVE} style={[styles.review, index > 0 && styles.line]}>
+              <Reanimated.View key={r.id} entering={ARRIVE} style={[styles.review, LESS_AI && styles.reviewPlain, index > 0 && styles.line]}>
                 <View style={styles.reviewHead}>
                   <Avatar name={author?.name ?? '?'} seed={author?.avatarSeed ?? r.id} uri={author?.avatarUrl} size={30} />
                   <View style={{ flex: 1, gap: 1 }}>
@@ -475,6 +498,10 @@ const styleDefinitions = StyleSheet.create({
   changeAfter: { ...typography.smallStrong, color: colors.brand },
   pair: { flexDirection: 'row', gap: spacing.sm },
   starPick: { flexDirection: 'row', gap: 6 },
+  rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  credLine: { marginTop: spacing.md },
+  reviewsPlain: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  reviewPlain: { paddingHorizontal: 0 },
   review: { gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   reviewHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   reviewName: { ...typography.smallStrong, color: colors.text },
