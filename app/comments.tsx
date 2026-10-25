@@ -37,11 +37,9 @@ const QUICK_V2 = ['🎾', '❤️', '🔥', '🙌', '👏', '😍', '😮', '�
 /**
  * COMMENTS_V2's row, the way Instagram's sits (Oct 25, owner: "Emoji bar
  * should be smaller like instagrams"): a compact 40-point strip of small
- * glyphs, tight on the box, there only while you type.
+ * glyphs, tight on the box, always there (it never pops in or out with the keyboard).
  */
 const QUICK_ROW_H = 40;
-/** What the row adds to the box when it shows: its height, less the 4 it tucks into the gap under it, plus that gap. */
-const QUICK_ROW_BLOCK = QUICK_ROW_H - 4 + spacing.sm;
 /** The Replying strip's height before it has ever been drawn (it is measured after that). */
 const STRIP_GUESS = 36;
 /**
@@ -142,8 +140,8 @@ export default function CommentsSheet() {
   const restComposerH = useRef(0);
   const stripH = useRef(STRIP_GUESS);
   const sheetKeyboard = useRef<SheetKeyboard | null>(null);
-  // The emoji row shows only while you type (on the stage; with COMMENTS_V2 everywhere, as on Instagram),
-  // giving its room back to the comments otherwise (see onBoxFocus).
+  // Without COMMENTS_V2, on the stage the emoji row shows only while you type, giving its room back to the
+  // comments at half (see onBoxFocus). COMMENTS_V2 keeps it always there, as on Instagram.
   const [typing, setTyping] = useState(false);
   const heading = useRef<Text>(null);
   // It lights up for a moment as it comes into view (the same light as a reported reply's in its thread).
@@ -159,7 +157,16 @@ export default function CommentsSheet() {
     return () => clearTimeout(t);
   }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
   // COMMENTS_V2: the comment you just posted gets the same soft light once, as the list brings it into view.
+  // Taken off again once it has faded (about 1.8 s): a light that rests at off after being on can be put back
+  // on by a later redraw on an iPhone (components/ui/restMotion), so it is not left in the row.
   const [fresh, setFresh] = useState<{ id: ID; lit: number } | null>(null);
+  const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (freshTimer.current) clearTimeout(freshTimer.current); }, []);
+  const lightUp = (commentId: ID) => {
+    setFresh({ id: commentId, lit: Date.now() });
+    if (freshTimer.current) clearTimeout(freshTimer.current);
+    freshTimer.current = setTimeout(() => setFresh((f) => (f && f.id === commentId ? null : f)), 2000);
+  };
   const jumpCtx = useMemo(() => (
     at ? { at, ref: () => undefined, onLayout: () => undefined, lit: atLit }
       : fresh ? { at: fresh.id, ref: () => undefined, onLayout: () => undefined, lit: fresh.lit }
@@ -308,11 +315,8 @@ export default function CommentsSheet() {
     if (rowY.current[commentId] === undefined) return;
     frame.current?.measureInWindow((_x, top) => composer.current?.measureInWindow((_x2, boxTop) => showIn(commentId, boxTop - top)));
   };
-  /** The box's height with the keyboard up while replying (COMMENTS_V2): the emoji row and the strip in it, drawn yet or not. */
-  const typingComposerH = () => {
-    const s = composerShape.current;
-    return composerH.current + (s.includes('r') ? 0 : QUICK_ROW_BLOCK) + (s.includes('s') ? 0 : stripH.current);
-  };
+  /** The box's height with the keyboard up while replying (COMMENTS_V2): the strip in it, drawn yet or not (the emoji row is always there). */
+  const typingComposerH = () => composerH.current + (composerShape.current.includes('s') ? 0 : stripH.current);
   /**
    * How much of the list will show between the header and the box once the
    * keyboard is down and the box is back to one empty line (COMMENTS_V2), or
@@ -326,8 +330,6 @@ export default function CommentsSheet() {
   };
   const replyTo = (comment: Comment) => {
     startReply(comment);
-    // COMMENTS_V2: the emoji row comes in the same drawing as the strip, not a beat later with the keyboard.
-    if (v2) setTyping(true);
     if (Platform.OS === 'web') { setTimeout(() => reveal(comment.id), 350); return; }
     if (v2 && Platform.OS === 'ios' && sheetKeyboard.current) {
       // Already typing: the box only gains its strip; the comment comes up just above it once that is drawn.
@@ -428,8 +430,16 @@ export default function CommentsSheet() {
       if (!sheetOpen.current) return;
       if (rowY.current[sent.id] === undefined) { if (frames++ < 30) requestAnimationFrame(go); return; }
       const seen = hiding ? restSeen() : undefined;
-      if (seen !== undefined) showIn(sent.id, seen); else reveal(sent.id);
-      setFresh({ id: sent.id, lit: Date.now() });
+      if (seen !== undefined) {
+        showIn(sent.id, seen);
+        // A phone scrolls no further than the list's end as it is now: where the sheet comes down further than
+        // the box (a tall clip, no word bar on the keyboard), that end is short of the aim. Once all is at rest
+        // the comment is checked once more on screen; that is a no-op unless the glide above fell short.
+        const settle = () => { if (sheetOpen.current) reveal(sent.id); };
+        const down = Keyboard.addListener('keyboardDidHide', () => { down.remove(); clearTimeout(late); setTimeout(settle, 120); });
+        const late = setTimeout(() => { down.remove(); settle(); }, 1000);
+      } else reveal(sent.id);
+      lightUp(sent.id);
     };
     requestAnimationFrame(go);
   }, [all.length]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -483,16 +493,6 @@ export default function CommentsSheet() {
   const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
   const onBoxFocus = () => { if (blurTimer.current) clearTimeout(blurTimer.current); setTyping(true); };
-  // COMMENTS_V2 on a phone: the row goes the moment the keyboard starts down, not a beat later part way
-  // down (the box stepping down under it), and comes back with it (Android's Back can put the keyboard
-  // away and leave the box focused).
-  useEffect(() => {
-    if (!v2Phone) return undefined;
-    const ios = Platform.OS === 'ios';
-    const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', () => { if (input.current?.isFocused?.()) setTyping(true); });
-    const hide = Keyboard.addListener(ios ? 'keyboardWillHide' : 'keyboardDidHide', () => { if (blurTimer.current) clearTimeout(blurTimer.current); setTyping(false); });
-    return () => { show.remove(); hide.remove(); };
-  }, [v2Phone]);
   const onBoxBlur = () => {
     blurredAt.current = Date.now();
     if (blurTimer.current) clearTimeout(blurTimer.current);
@@ -504,7 +504,7 @@ export default function CommentsSheet() {
   };
   const quickRow = v2 ? (
     // COMMENTS_V2: Instagram's row: small glyphs evenly spaced in a compact strip (not stretched across a wide
-    // screen), tight on the box, no bubble; a press gives a small squeeze.
+    // screen), tight on the box, always there, no bubble; a press gives a small squeeze.
     <View style={styles.quickV2}>
       {QUICK_V2.map((e) => (
         <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} hitSlop={{ top: 4, bottom: 4 }} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickSlot, pressed && styles.quickSqueeze]}>
@@ -594,10 +594,13 @@ export default function CommentsSheet() {
       </HiddenComments>
     </CommentList>
   ), [list, staged, v2Phone, scrollY, styles, kind, id, jumpCtx, threadEls, threads.length, exists, hidden, looked, actions]);
-  // The emoji row: COMMENTS_V2 only while typing, as on Instagram; otherwise always on the plain sheet, and while typing on the stage.
-  const showRow = v2 ? typing : !staged || typing;
-  // What the box holds this time (see composerShape).
+  // The emoji row: always with COMMENTS_V2 (as on Instagram: it never pops in or out with the keyboard) and on the
+  // plain sheet; on the stage without it, only while typing.
+  const rowAtRest = v2 || !staged;
+  const showRow = rowAtRest || typing;
+  // What the box holds this time (see composerShape), and what it holds at rest.
   const shape = `${showRow ? 'r' : ''}${replyingTo ? 's' : ''}${photo ? 'p' : ''}`;
+  const restShape = rowAtRest ? 'r' : '';
   return (
     <>
       {/* Over the stage's black the phone's clock is white, as it is over the clip in the Feed. */}
@@ -626,8 +629,8 @@ export default function CommentsSheet() {
               const h = e.nativeEvent.layout.height;
               composerH.current = h;
               composerShape.current = shape;
-              // At rest: nothing above the words. The lowest seen is the one line an empty box has.
-              if (!shape && (!(restComposerH.current > 0) || h < restComposerH.current)) restComposerH.current = h;
+              // At rest: no strip or photo above the words. The lowest seen is the one line an empty box has.
+              if (shape === restShape && (!(restComposerH.current > 0) || h < restComposerH.current)) restComposerH.current = h;
             }}
           >
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
