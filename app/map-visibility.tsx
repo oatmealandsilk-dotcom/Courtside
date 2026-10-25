@@ -15,6 +15,10 @@ import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
+import { LESS_AI } from '@/theme/look';
+
+/** The hand-made look's short labels (Oct 24): a label and the radio, as in Ask-to-hit's Who sees it. A screen reader still hears the whole sentence. */
+const SHORT: Partial<Record<MapVisibility, string>> = { nearby: 'Players nearby · rough area', mutuals: 'People you follow back', none: 'Only me' };
 
 const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'people-outline', mutuals: 'swap-horizontal-outline', none: 'eye-off-outline' };
 
@@ -88,10 +92,10 @@ export default function MapVisibilitySheet() {
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(answer.current ?? (first ? null : mapVisibility ?? null)); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
-      header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time.' : undefined} onClose={close} />}
+      header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first && !LESS_AI ? 'You can change this any time.' : undefined} onClose={close} />}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />
+        {LESS_AI ? null : <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />}
         {teen ? (
           <View style={styles.notice} accessibilityRole="text">
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
@@ -103,9 +107,15 @@ export default function MapVisibilitySheet() {
             </View>
           </View>
         ) : null}
-        <View style={styles.choices} accessibilityRole="radiogroup">
-          {choices.map((c) => {
+        <View style={LESS_AI ? styles.choicesPlain : styles.choices} accessibilityRole="radiogroup">
+          {choices.map((c, i) => {
             const on = picked === c.value;
+            if (LESS_AI) return (
+              <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void pick(c.value); }} style={({ pressed }) => [styles.choicePlain, i > 0 && styles.choiceLine, pressed && { backgroundColor: colors.surfaceAlt }]}>
+                <Text style={[styles.labelPlain, on && styles.labelOn]} numberOfLines={1}>{teen ? c.label : SHORT[c.value] ?? c.label}</Text>
+                <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+              </Pressable>
+            );
             return (
               <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void pick(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
                 <View style={[styles.tile, on && styles.tileOn]}><Ionicons name={ICON[c.value]} size={19} color={on ? colors.bg : colors.textMuted} /></View>
@@ -203,6 +213,11 @@ const styleDefinitions = StyleSheet.create({
   choices: { gap: spacing.sm },
   choice: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
   choiceOn: { borderColor: colors.text },
+  choicesPlain: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  choicePlain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 54, paddingHorizontal: spacing.lg },
+  choiceLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  labelPlain: { ...typography.body, color: colors.text, flex: 1 },
+  labelOn: { ...font('600') },
   tile: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tileOn: { backgroundColor: colors.text },
   words: { flex: 1, gap: 2 },
