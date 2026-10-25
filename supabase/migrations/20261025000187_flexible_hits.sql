@@ -22,15 +22,14 @@
 -- is never where anyone lives:
 --   * The app sends a point already rounded to a town-sized square (0.05°,
 --     about 5 km). This file never keeps that point: a trigger rebuilds the
---     whole place from scratch (guard_hit_place), and the area becomes
---       - for a known adult on "Players nearby" whose rough map spot is out
---         (last_seen, the same rough spot every adult already sees on the
---         map): that spot when it is within 5 km, else the rough spot the
---         map would give them there today (map_fuzz, the map's own rounding);
---       - for everyone else (teens, no birthday, "Friends only", "Only me",
---         Location off, never answered): their profile town's point within
---         40 km, rounded to 0.05°, else the app's point rounded to 0.05°;
+--     whole place from scratch (guard_hit_place), and the area becomes, for
+--     everyone alike (adults, teens, any map setting):
+--       - their profile town's point when it is within 40 km, rounded to
+--         0.05°, else the app's point rounded again to 0.05° here;
 --       - nothing known at all: the hit is refused (flexible_needs_area).
+--     Never the map's rough spot (last_seen): a hit is read by every signed-in
+--     account (teens too, who never see an adult's spot on the map) and it
+--     stays up after Location is turned off, when the map spot is gone.
 --   * A hit at a court can never carry an area: the same trigger strips
 --     "flexible", "near" and "area" from every other place.
 --   * Teen rules are unchanged: a teen's hit is still seen only by the people
@@ -80,19 +79,17 @@ declare
   wrong text[] := '{}';
 begin
   if to_regclass('public.hit_requests') is null or to_regclass('public.last_seen') is null
-     or to_regclass('public.user_state') is null or to_regclass('public.profiles') is null then
-    raise exception 'Migration 187 stopped before changing anything: hit_requests (43), last_seen (46), user_state and profiles have to be there first.';
+     or to_regclass('public.profiles') is null then
+    raise exception 'Migration 187 stopped before changing anything: hit_requests (43), last_seen (46) and profiles have to be there first.';
   end if;
-  if to_regprocedure('public.map_fuzz(uuid, double precision, double precision, date)') is null
-     or to_regprocedure('public.known_adult(uuid)') is null
+  if to_regprocedure('public.known_adult(uuid)') is null
      or to_regprocedure('public.km_between(double precision, double precision, double precision, double precision)') is null
      or to_regprocedure('public.miles_text(double precision)') is null then
-    raise exception 'Migration 187 stopped before changing anything: it needs map_fuzz (63), known_adult (109), km_between (53) and miles_text (60).';
+    raise exception 'Migration 187 stopped before changing anything: it needs known_adult (109), km_between (53) and miles_text (60).';
   end if;
   if (select count(*) from information_schema.columns where table_schema = 'public'
-        and ((table_name = 'user_state' and column_name = 'map_visibility')
-          or (table_name = 'profiles' and column_name in ('city_lat', 'city_lng')))) <> 3 then
-    raise exception 'Migration 187 stopped before changing anything: user_state.map_visibility (63) or profiles.city_lat/city_lng (49) is missing.';
+        and table_name = 'profiles' and column_name in ('city_lat', 'city_lng')) <> 2 then
+    raise exception 'Migration 187 stopped before changing anything: profiles.city_lat/city_lng (49) is missing.';
   end if;
   for i in 1 .. array_length(expected, 1) loop
     if (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = expected[i][1]) <> 1
@@ -139,38 +136,15 @@ declare
   -- flexible_hits_187
   hinted boolean := hint_lat is not null and hint_lng is not null
     and hint_lat between -90 and 90 and hint_lng between -180 and 180;
-  vis text;
-  seen public.last_seen;
-  fz record;
   clat double precision;
   clng double precision;
 begin
   area_lat := null;
   area_lng := null;
-  -- A known adult whose rough spot is on the map for everyone ("Players
-  -- nearby", sharing now): that rough spot, or the map's rough spot for them
-  -- where the hit is, today. Nothing finer than the map already shows.
-  if hinted and public.known_adult(u) then
-    select us.map_visibility into vis from public.user_state us where us.user_id = u;
-    if vis = 'nearby' then
-      select * into seen from public.last_seen l where l.user_id = u and l.seen_at > now() - interval '30 days';
-      if found then
-        if public.km_between(hint_lat, hint_lng, seen.lat, seen.lng) <= 5 then
-          area_lat := seen.lat;
-          area_lng := seen.lng;
-          return;
-        end if;
-        select f.fuzz_lat, f.fuzz_lng into fz from public.map_fuzz(u, hint_lat, hint_lng, (now() at time zone 'utc')::date) f;
-        if fz.fuzz_lat is not null and fz.fuzz_lng is not null then
-          area_lat := fz.fuzz_lat;
-          area_lng := fz.fuzz_lng;
-          return;
-        end if;
-      end if;
-    end if;
-  end if;
-  -- Everyone else, and anyone above it could not place: a town-sized square.
-  -- Their profile's town when it is near (or nothing else is known), else the point the app sent.
+  -- Everyone alike, adults and teens, whatever their map setting: a town-sized
+  -- square, never the map's rough spot (a hit is read by every signed-in
+  -- account and outlives Location off). Their profile's town when it is near
+  -- (or nothing else is known), else the point the app sent, rounded again here.
   select p.city_lat, p.city_lng into clat, clng from public.profiles p where p.id = u;
   if clat is not null and clng is not null and (not hinted or public.km_between(hint_lat, hint_lng, clat, clng) <= 40) then
     area_lat := (round((clat * 20)::numeric) / 20)::double precision;

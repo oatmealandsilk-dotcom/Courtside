@@ -10,8 +10,8 @@ import type { LatLng } from '@/features/players/positions';
  * near (`near`, "Cary") and a rough `area`, so the Open hits list can say how
  * far it is and the server can tell players nearby. The area is never where
  * anyone is: the app sends a point rounded to 0.05° (a town-sized square,
- * about 5 km), and the database (migration 187) replaces it with the poster's
- * rough map spot or their town's point. No screen ever draws it or shows
+ * about 5 km), and the database (migration 187) replaces it with their town's
+ * point, or rounds it again: never the map's rough spot. No screen ever draws it or shows
  * coordinates, only "near Cary" and a rounded distance.
  *
  * The name is written out too ("Court flexible · near Cary"), so an older app

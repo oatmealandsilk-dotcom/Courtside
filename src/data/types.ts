@@ -1757,7 +1757,7 @@ export interface HitRequest {
   /**
    * Where: a court picked from the courts list carries the map's id for it (no migration: place is jsonb); a typed place has only a name.
    * "Flexible" (Oct 25, features/hits/flexible): no court yet, picked together in the hit's chat. It has no id, lat or lng,
-   * only `flexible`, the town it is near ("Cary") and a rough `area` (a town-sized square, or the poster's rough map spot:
+   * only `flexible`, the town it is near ("Cary") and a rough `area` (a town-sized square, 0.05°, never the map's spot:
    * migration 187), used only to say how far it is. The name reads "Court flexible · near Cary".
    */
   place: { id?: string; name: string; lat?: number; lng?: number; flexible?: true; near?: string; area?: { lat: number; lng: number } };
