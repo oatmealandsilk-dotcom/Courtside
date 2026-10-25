@@ -1,7 +1,7 @@
 import { brandShadow } from '@/theme/fillMode';
-import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { PRESS_SHRINK } from '@/theme/press';
+import React, { useRef } from 'react';
+import { Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HitGlyph } from '@/components/HitGlyph';
@@ -53,10 +53,10 @@ export function SectionHead({ title, count, sub, link, accessory }: {
           {count ? <Text style={styles.count}>{count}</Text> : null}
         </View>
         {link ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={link.a11y} hitSlop={10} onPress={link.onPress} style={({ pressed }) => [styles.headLink, pressed && styles.pressed]}>
+          <Tappable dim hoverTo={1} accessibilityLabel={link.a11y} hitSlop={10} onPress={link.onPress} style={styles.headLink}>
             <Text style={styles.headLinkText}>{link.label}</Text>
             <Ionicons name="chevron-forward" size={14} color={colors.brand} />
-          </Pressable>
+          </Tappable>
         ) : accessory ?? null}
       </View>
       {sub ? (typeof sub === 'string' ? <Text style={styles.sub}>{sub}</Text> : sub) : null}
@@ -113,23 +113,29 @@ export function RoundAction({ icon = 'ellipse-outline', glyph, iconOn, label, on
   on?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  // The disc dips on the phone's own animation thread the moment the finger lands (as Tappable
+  // does), not through a redraw of the page, so on a busy page it never answers late (Oct 24,
+  // owner: "Buttons need to be way more responsive. They are way to delayed when I click them").
+  const dip = useRef(new Animated.Value(1)).current;
+  const press = (down: boolean) => (down
+    ? Animated.timing(dip, { toValue: PRESS_SHRINK, duration: 60, useNativeDriver: true })
+    : Animated.spring(dip, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 })
+  ).start();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={on === undefined ? undefined : { selected: on }}
       onPress={onPress}
+      onPressIn={() => press(true)}
+      onPressOut={() => press(false)}
       hitSlop={4}
       style={styles.act}
     >
-      {({ pressed }) => (
-        <>
-          <View style={[styles.disc, pressed && styles.discPressed]}>
-            {glyph ?? <Ionicons name={on && iconOn ? iconOn : icon} size={22} color={colors.brand} />}
-          </View>
-          <Text style={styles.actLabel} numberOfLines={1}>{label}</Text>
-        </>
-      )}
+      <Animated.View style={[styles.disc, { transform: [{ scale: dip }] }]}>
+        {glyph ?? <Ionicons name={on && iconOn ? iconOn : icon} size={22} color={colors.brand} />}
+      </Animated.View>
+      <Text style={styles.actLabel} numberOfLines={1}>{label}</Text>
     </Pressable>
   );
 }
@@ -236,9 +242,9 @@ export function PlayersSayRows({ courtId, name, inset = spacing.lg }: { courtId:
           <View style={[styles.factWords, styles.noteWords, said.facts.length > 0 && styles.factLine]}>
             <Text style={styles.noteText} numberOfLines={3}>“{quoted.text}”</Text>
             {canReport ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`Report this note about ${name}`} hitSlop={12} onPress={reportNote} style={({ pressed }) => [styles.noteFlag, pressed && styles.pressed]}>
+              <Tappable dim hoverTo={1} accessibilityLabel={`Report this note about ${name}`} hitSlop={12} onPress={reportNote} style={styles.noteFlag}>
                 <Ionicons name="flag-outline" size={14} color={colors.textFaint} />
-              </Pressable>
+              </Tappable>
             ) : null}
           </View>
         </View>
@@ -251,7 +257,6 @@ export function PlayersSayRows({ courtId, name, inset = spacing.lg }: { courtId:
 export const ASK_ABOUT = 'Lights, nets, busy times, the surface, house rules';
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: PRESS_DIM },
   // The one head every section opens with.
   head: { gap: 3 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 26 },
@@ -275,7 +280,6 @@ const styleDefinitions = StyleSheet.create({
   act: { flex: 1, minWidth: 0, alignItems: 'center', gap: 7 },
   // Fully round, so it reads as pressable (DESIGN.md, the Pill Rule); the raised surface and a hairline keep it off the page on every court.
   disc: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
-  discPressed: { transform: [{ scale: PRESS_SHRINK }] },
   actLabel: { ...font('500'), fontSize: 12, lineHeight: 15, letterSpacing: -0.1, color: colors.text },
   // Right now.
   nowMark: { backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

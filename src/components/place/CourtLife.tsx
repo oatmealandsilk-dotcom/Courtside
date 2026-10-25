@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui';
 import { HitGlyph } from '@/components/HitGlyph';
+import { Tappable } from '@/components/Tappable';
 import type { CourtAccess, User } from '@/data/types';
 import { askToHit, openCourtNow, openCourtReview } from '@/features/players/courtLink';
 import { ACCESS_LABEL, NOW_ICON, courtNoteKey, nowStatus, playingLine, regularsLine, summarizeFacts } from '@/features/players/courtSummary';
@@ -88,10 +89,13 @@ export function NowTags({ courtId, name, access }: { courtId: string; name: stri
 export function HereTag({ onCheckOut, small = false }: { onCheckOut: () => void; small?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="You’re checked in here. Check out" hitSlop={6} onPress={onCheckOut} style={({ pressed }) => [styles.tag, styles.tagLink, small && styles.tagSmall, pressed && styles.pressed]}>
-      {small ? null : <View style={styles.liveDot} />}
-      <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Check out' : 'You’re here · Check out'}</Text>
-    </Pressable>
+    // On a small card the tag keeps to its words' width (its slot), so a tap beside it still opens the card.
+    <View style={small ? styles.tagSlot : undefined}>
+      <Tappable dim hoverTo={1} accessibilityLabel="You’re checked in here. Check out" hitSlop={6} onPress={onCheckOut} style={[styles.tag, styles.tagLink, small && styles.tagSmall]}>
+        {small ? null : <View style={styles.liveDot} />}
+        <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Check out' : 'You’re here · Check out'}</Text>
+      </Tappable>
+    </View>
   );
 }
 
@@ -216,6 +220,7 @@ const styleDefinitions = StyleSheet.create({
   tagLinkText: { color: colors.brand },
   // The small card's size (Your courts), for "You're here".
   tagSmall: { height: 22, paddingHorizontal: 8, gap: 4, alignSelf: 'flex-start' },
+  tagSlot: { alignSelf: 'flex-start' },
   tagSmallText: { ...typography.caption, letterSpacing: 0 },
   // Live: someone is on court now.
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.brand },

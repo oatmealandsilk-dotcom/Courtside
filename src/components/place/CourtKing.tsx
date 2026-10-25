@@ -1,11 +1,11 @@
-import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { CrownGlyph } from '@/components/place/CrownGlyph';
+import { Tappable } from '@/components/Tappable';
 import { SectionHead } from '@/components/place/courtPage/parts';
 import { Avatar } from '@/components/ui';
 import type { CourtKings, ID, User } from '@/data/types';
@@ -105,9 +105,9 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
         title="King of the Court"
         sub={sub}
         accessory={(
-          <Pressable accessibilityRole="button" accessibilityLabel="How King of the Court works" accessibilityState={{ expanded: info }} hitSlop={6} onPress={() => setInfo((v) => !v)} style={({ pressed }) => [styles.info, pressed && styles.pressed]}>
+          <Tappable dim hoverTo={1} accessibilityLabel="How King of the Court works" accessibilityState={{ expanded: info }} hitSlop={6} onPress={() => setInfo((v) => !v)} style={styles.info}>
             <Ionicons name={info ? 'information-circle' : 'information-circle-outline'} size={22} color={info ? colors.text : colors.textMuted} />
-          </Pressable>
+          </Tappable>
         )}
       />
       {info ? (
@@ -195,7 +195,7 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
       <View style={styles.card}>
         {kings.mode === 'wins' ? (
           // The crown: the King, big, in a gold ring. The crown and the name say it; no label above.
-          <Pressable accessibilityRole="link" accessibilityLabel={`King of ${place}: ${firstIsMe ? 'you' : first.user.name}, ${unit(first.n)}. Open profile`} onPress={() => open(first.userId)} style={({ pressed }) => [styles.king, firstIsMe && styles.mine, pressed && styles.pressed]}>
+          <Tappable dim hoverTo={1} accessibilityRole="link" accessibilityLabel={`King of ${place}: ${firstIsMe ? 'you' : first.user.name}, ${unit(first.n)}. Open profile`} onPress={() => open(first.userId)} style={[styles.king, firstIsMe && styles.mine]}>
             <View style={styles.kingFace}>
               <View style={[styles.ring, { borderColor: withAlpha(colors.sun, 0.7) }]}>
                 <Avatar name={first.user.name} seed={first.user.avatarSeed} uri={first.user.avatarUrl} size={60} />
@@ -212,14 +212,14 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
               <Text style={styles.kingNumber}>{first.n}</Text>
               <Text style={styles.kingUnit}>{first.n === 1 ? 'win' : 'wins'}</Text>
             </View>
-          </Pressable>
+          </Tappable>
         ) : null}
         {rows.map((t, i) => {
           const rank = (kings.mode === 'wins' ? 2 : 1) + i;
           const mine = t.userId === currentUserId;
           const hint = mine ? climb(rank) : null;
           return (
-            <Pressable key={t.userId} accessibilityRole="link" accessibilityLabel={`Number ${rank}: ${mine ? 'you' : t.user.name}, ${unit(t.n)}. Open profile`} onPress={() => open(t.userId)} style={({ pressed }) => [styles.row, (i > 0 || !regulars) && styles.line, mine && styles.mine, pressed && styles.pressed]}>
+            <Tappable dim hoverTo={1} key={t.userId} accessibilityRole="link" accessibilityLabel={`Number ${rank}: ${mine ? 'you' : t.user.name}, ${unit(t.n)}. Open profile`} onPress={() => open(t.userId)} style={[styles.row, (i > 0 || !regulars) && styles.line, mine && styles.mine]}>
               <Text style={[styles.rank, mine && styles.rankMine]}>{rank}</Text>
               <Avatar name={t.user.name} seed={t.user.avatarSeed} uri={t.user.avatarUrl} size={36} />
               <View style={styles.rowWords}>
@@ -227,7 +227,7 @@ export function CourtKing({ courtId, name, refresh = 0 }: { courtId: string; nam
                 <Text style={[styles.rowHandle, hint ? styles.hint : null]} numberOfLines={1}>{hint ?? `@${t.user.handle}`}</Text>
               </View>
               <Text style={styles.count}><Text style={styles.countNumber}>{t.n}</Text>{` ${kings.mode === 'wins' ? (t.n === 1 ? 'win' : 'wins') : (t.n === 1 ? 'day' : 'days')}`}</Text>
-            </Pressable>
+            </Tappable>
           );
         })}
         {/* Your own line, under the top three: your place and what it takes, or your wins when you aren't on the board. */}
@@ -264,7 +264,6 @@ const styleDefinitions = StyleSheet.create({
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   // Your line alone, under "No King yet."
   cardSolo: { borderRadius: radius.lg },
-  pressed: { opacity: PRESS_DIM },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   mine: { backgroundColor: colors.brandDim },
   // The King.

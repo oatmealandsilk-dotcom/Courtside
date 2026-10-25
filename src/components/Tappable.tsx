@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Platform, Pressable, type AccessibilityState, type StyleProp, type ViewStyle } from 'react-native';
 
 import { useSwipePressLook } from '@/features/navigation/swipePress';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
@@ -29,7 +29,7 @@ interface Props {
   hitSlop?: number;
   accessibilityRole?: 'button' | 'link';
   accessibilityLabel?: string;
-  accessibilityState?: { selected?: boolean; disabled?: boolean };
+  accessibilityState?: AccessibilityState;
 }
 
 /**

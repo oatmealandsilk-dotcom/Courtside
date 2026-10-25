@@ -50,6 +50,8 @@ const BAR_HELD = 96;
 const RISE_MS = 480;
 /** If the rise never reports that it has finished, the bar is put in place this long after it set off anyway. */
 const RISE_GRACE_MS = 1000;
+/** A tab's release this soon after its finger landed belongs to that same touch (which already went), in ms. */
+const TAB_PRESS_SPAN = 10000;
 
 /**
  * Minimal shape of what react-navigation hands a custom tabBar. Typed locally
@@ -112,6 +114,8 @@ export function NavBar({ state, navigation }: NavBarProps) {
   const tourCreate = useTourTarget('create');
   const tourMessages = useTourTarget('side-messages');
   const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'index' ? tourHome : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
+  // When a finger last landed on a tab in the phone bar (it goes then, not on the release).
+  const tabDownAt = useRef(0);
   // While the tour is up, a screen reader reads only the tour, not the bar under the dim.
   const touring = useTourOpen();
   const hideFromReader = touring ? 'no-hide-descendants' as const : 'auto' as const;
@@ -211,7 +215,12 @@ export function NavBar({ state, navigation }: NavBarProps) {
                 {index === 2 && <View style={[styles.createSlot, styles.createAbove]}><Animated.View><Pressable ref={tourCreate} accessibilityRole="button" accessibilityLabel="Create a post" onPress={openCreate} style={styles.createButton}><BrandWash /><Ionicons name="add" size={28} color={colors.brandInk} /></Pressable></Animated.View></View>}
                 <Pressable
                   ref={tourRef(item.route)}
-                  onPress={() => navigation.navigate(item.route)}
+                  // A tab goes the moment the finger lands, the way iPhone's own tab bars do (Oct 24, owner:
+                  // "Buttons need to be way more responsive. They are way to delayed when I click them"); it no
+                  // longer waits for the finger to lift. The release that follows does nothing more, while a
+                  // screen reader's double tap (a press with no touch-down) still goes as before.
+                  onPressIn={() => { tabDownAt.current = Date.now(); navigation.navigate(item.route); }}
+                  onPress={() => { if (Date.now() - tabDownAt.current > TAB_PRESS_SPAN) navigation.navigate(item.route); }}
                   accessibilityRole="tab"
                   accessibilityState={{ selected: active }}
                   accessibilityLabel={item.label}

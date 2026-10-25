@@ -1,6 +1,6 @@
-import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { PRESS_SHRINK } from '@/theme/press';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated as RNAnimated, Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,6 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb';
 import { CourtKing } from '@/components/place/CourtKing';
+import { Tappable } from '@/components/Tappable';
 import { HereTag } from '@/components/place/CourtLife';
 import { Avatar, Screen } from '@/components/ui';
 import { Glass } from '@/components/ui/Glass';
@@ -96,9 +97,9 @@ export function PlaceCard({ view }: { view: CourtView }) {
               <View style={styles.people}>
                 <View style={styles.faces}>
                   {view.players.slice(0, 3).map((u, i) => (
-                    <Pressable key={u.id} accessibilityRole="link" accessibilityLabel={`${u.name}, open profile`} hitSlop={4} onPress={() => router.push(`/user/${u.id}`)} style={({ pressed }) => [i > 0 && styles.faceOver, pressed && styles.pressed]}>
+                    <Tappable dim hoverTo={1} key={u.id} accessibilityRole="link" accessibilityLabel={`${u.name}, open profile`} hitSlop={4} onPress={() => router.push(`/user/${u.id}`)} style={i > 0 ? styles.faceOver : undefined}>
                       <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={22} style={styles.face} />
-                    </Pressable>
+                    </Tappable>
                   ))}
                 </View>
                 <Text style={styles.peopleText} numberOfLines={1}>Played here by <Text style={styles.peopleNames}>{view.playedBy}</Text></Text>
@@ -139,6 +140,13 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const [w, setW] = useState(0);
+  // "See on map" dips on the phone's own animation thread the moment the finger lands. Only its
+  // size moves: it is glass, and glass under a changing see-through goes see-through itself.
+  const chipDip = useRef(new RNAnimated.Value(1)).current;
+  const pressChip = (down: boolean) => (down
+    ? RNAnimated.timing(chipDip, { toValue: PRESS_SHRINK, duration: 60, useNativeDriver: true })
+    : RNAnimated.spring(chipDip, { toValue: 1, useNativeDriver: true, speed: 160, bounciness: 4 })
+  ).start();
   // Where the court sits: the middle of the map that shows, between the status bar and the sheet.
   // On a computer the map is a rounded card of its own, with nothing laid over its foot.
   const over = rounded ? 0 : SHEET_OVER;
@@ -162,15 +170,13 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
         {top ? <LinearGradient pointerEvents="none" colors={[withAlpha(colors.bg, 0.92), withAlpha(colors.bg, 0)]} style={[styles.heroTopFade, { height: top + 30 }]} /> : null}
         <PlacePin spotY={spotY} />
       </Animated.View>
-      <Pressable accessibilityRole="button" accessibilityLabel={`See ${name} on the map`} onPress={onOpenMap} style={StyleSheet.absoluteFill}>
-        {({ pressed }) => (
-          <View style={[styles.mapChip, { bottom: over + spacing.md }, pressed && styles.mapChipPressed]}>
-            <Glass radius={radius.pill} style={styles.mapChipGlass}>
-              <Ionicons name="map-outline" size={15} color={colors.text} />
-              <Text style={styles.mapChipText}>See on map</Text>
-            </Glass>
-          </View>
-        )}
+      <Pressable accessibilityRole="button" accessibilityLabel={`See ${name} on the map`} onPress={onOpenMap} onPressIn={() => pressChip(true)} onPressOut={() => pressChip(false)} style={StyleSheet.absoluteFill}>
+        <RNAnimated.View style={[styles.mapChip, { bottom: over + spacing.md }, { transform: [{ scale: chipDip }] }]}>
+          <Glass radius={radius.pill} style={styles.mapChipGlass}>
+            <Ionicons name="map-outline" size={15} color={colors.text} />
+            <Text style={styles.mapChipText}>See on map</Text>
+          </Glass>
+        </RNAnimated.View>
       </Pressable>
       <Text pointerEvents="none" style={[styles.osm, { bottom: over + 8 }]}>© OpenStreetMap</Text>
     </View>
@@ -229,11 +235,12 @@ function TopBar({ name, top, offsetY, strip, solidAt }: { name: string; top: num
     <View pointerEvents="box-none" style={[styles.bar, { height: top + BAR_H }]}>
       <Animated.View pointerEvents={solid ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, styles.barGround, ground]} />
       <View pointerEvents="box-none" style={[styles.barRow, { marginTop: top }]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={6} onPress={() => goBack()} style={({ pressed }) => [styles.back, pressed && styles.backPressed]}>
+        {/* Dips on the phone's own animation thread at the touch; only its size moves, never how see-through it is (glass). */}
+        <Tappable hoverTo={1} accessibilityLabel="Go back" hitSlop={6} scaleTo={0.95} onPress={() => goBack()} style={styles.back}>
           <Glass radius={19} tint={dark ? colors.surfaceAlt : undefined} style={[styles.backGlass, dark && styles.backGlassDark]}>
             <Ionicons name="chevron-back" size={21} color={colors.text} style={styles.backGlyph} />
           </Glass>
-        </Pressable>
+        </Tappable>
         <View pointerEvents="none" style={styles.barTitleWrap}>
           <Animated.Text style={[styles.barTitle, title]} numberOfLines={1} accessibilityElementsHidden={!solid} importantForAccessibility={solid ? 'auto' : 'no-hide-descendants'}>{name}</Animated.Text>
         </View>
@@ -259,7 +266,9 @@ function PlaceNow({ courtId, name, access }: { courtId: string; name: string; ac
   const now = useCourtNow(courtId, access);
   return (
     <View style={styles.nowWrap}>
-      <Pressable accessibilityRole="button" accessibilityLabel={now.a11y} onPress={() => openCourtNow({ id: courtId, name, access })} style={({ pressed }) => [styles.now, pressed && styles.nowPressed]}>
+      {/* A card: it shrinks a touch the moment the finger lands, on the phone's own animation thread. */}
+      <View style={styles.nowStretch}>
+      <Tappable hoverTo={1} accessibilityLabel={now.a11y} onPress={() => openCourtNow({ id: courtId, name, access })} style={styles.now}>
         <NowMark icon={now.icon} size={38} />
         <View style={styles.nowWords}>
           <Text style={styles.nowLead} numberOfLines={1}>{now.title}</Text>
@@ -275,7 +284,8 @@ function PlaceNow({ courtId, name, access }: { courtId: string; name: string; ac
         ) : (
           <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
         )}
-      </Pressable>
+      </Tappable>
+      </View>
       {now.youHere ? <HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
     </View>
   );
@@ -332,7 +342,9 @@ function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
           <React.Fragment key={c.label}>
             {i > 0 ? <View style={styles.stripRule} /> : null}
             {c.link ? (
-              <Pressable accessibilityRole="link" accessibilityLabel={c.a11y} hitSlop={6} onPress={c.link} style={({ pressed }) => [styles.stripCol, { flexGrow: share(c) }, pressed && styles.pressed]}>{body}</Pressable>
+              <View style={[styles.stripSlot, { flexGrow: share(c) }]}>
+                <Tappable dim hoverTo={1} accessibilityRole="link" accessibilityLabel={c.a11y} hitSlop={6} onPress={c.link} style={styles.stripLinkCol}>{body}</Tappable>
+              </View>
             ) : (
               <View style={[styles.stripCol, { flexGrow: share(c) }]} accessible accessibilityLabel={c.a11y}>{body}</View>
             )}
@@ -345,7 +357,6 @@ function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
 
 const styleDefinitions = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
-  pressed: { opacity: PRESS_DIM },
   gutter: { paddingHorizontal: spacing.lg },
   // The map.
   hero: { width: '100%', backgroundColor: colors.bgElevated },
@@ -353,7 +364,6 @@ const styleDefinitions = StyleSheet.create({
   heroMap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, overflow: 'hidden' },
   heroTopFade: { position: 'absolute', left: 0, right: 0, top: 0 },
   mapChip: { position: 'absolute', right: spacing.lg, borderRadius: radius.pill, boxShadow: '0px 2px 10px rgba(0, 0, 0, 0.14)' },
-  mapChipPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   mapChipGlass: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   mapChipText: { ...typography.smallStrong, color: colors.text },
   osm: { position: 'absolute', left: spacing.lg, fontSize: 9, lineHeight: 11, color: colors.textFaint, opacity: 0.9 },
@@ -380,7 +390,8 @@ const styleDefinitions = StyleSheet.create({
   // Right now.
   nowWrap: { marginTop: spacing.lg, gap: spacing.sm, alignItems: 'flex-start' },
   now: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingLeft: 11, paddingRight: 14, paddingVertical: 11, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  nowPressed: { backgroundColor: colors.surfaceAlt },
+  // The card keeps the row's full width (Tappable sits inside, sized by it).
+  nowStretch: { alignSelf: 'stretch' },
   nowWords: { flex: 1, minWidth: 0, gap: 2 },
   nowLead: { ...typography.bodyStrong, color: colors.text },
   nowSubRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
@@ -398,6 +409,9 @@ const styleDefinitions = StyleSheet.create({
   strip: { flexDirection: 'row', alignItems: 'stretch', marginTop: 20, marginHorizontal: spacing.lg, paddingVertical: 11, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   stripShort: { marginTop: 14 },
   stripCol: { flexBasis: 0, flexShrink: 1, minWidth: 0, alignItems: 'center', gap: 3, paddingHorizontal: 4 },
+  // Book: its column's room, and the link filling it (Tappable sits inside, sized by it).
+  stripSlot: { flexBasis: 0, flexShrink: 1, minWidth: 0 },
+  stripLinkCol: { alignItems: 'center', gap: 3, paddingHorizontal: 4 },
   stripRule: { width: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 2 },
   stripLabel: { ...typography.small, fontSize: 12, color: colors.textMuted },
   stripValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, maxWidth: '100%' },
@@ -413,7 +427,6 @@ const styleDefinitions = StyleSheet.create({
   barGround: { backgroundColor: colors.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   barRow: { height: BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 6 },
   back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  backPressed: { opacity: 0.7, transform: [{ scale: 0.95 }] },
   backGlass: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.12)' },
   // On a dark court the map's tiles are dark too: a lighter frost and a firmer edge keep the button found.
   backGlassDark: { borderWidth: 1, borderColor: colors.borderStrong, boxShadow: '0px 2px 10px rgba(0, 0, 0, 0.45)' },

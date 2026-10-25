@@ -1,10 +1,10 @@
-import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
+import { Tappable } from '@/components/Tappable';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { CourtHits } from '@/components/place/CourtHits';
@@ -112,19 +112,19 @@ export function ClipsSection({ view }: { view: CourtView }) {
         {tileW ? shown.map((p) => <GridTile key={p.id} post={p} author={byId.get(p.authorId)} width={tileW} height={tileH} onPress={() => view.onOpenReel(p)} />) : null}
       </View>
       {hidden > 0 ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`See all ${posts.length} ${word}`} onPress={() => setAll(true)} style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}>
+        <Tappable dim hoverTo={1} accessibilityLabel={`See all ${posts.length} ${word}`} onPress={() => setAll(true)} style={styles.moreRow}>
           <Text style={styles.moreText}>See all {posts.length}{more ? '+' : ''} {word}</Text>
           <Ionicons name="chevron-down" size={15} color={colors.text} />
-        </Pressable>
+        </Tappable>
       ) : more ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Show older ${word}`} disabled={loadingOlder} onPress={view.onOlder} style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}>
+        <Tappable dim hoverTo={1} accessibilityLabel={`Show older ${word}`} disabled={loadingOlder} onPress={view.onOlder} style={styles.moreRow}>
           {loadingOlder ? <CourtSpinner size={18} /> : (
             <>
               <Text style={styles.moreText}>Show older {word}</Text>
               <Ionicons name="chevron-down" size={15} color={colors.text} />
             </>
           )}
-        </Pressable>
+        </Tappable>
       ) : null}
     </View>
   );
@@ -148,11 +148,11 @@ function GridTile({ post, author, width, height, onPress }: { post: Post; author
     </View>
   );
   return (
-    <Pressable
+    <Tappable hoverTo={1}
       accessibilityRole="link"
       accessibilityLabel={`${kind} by ${who}, ${when}: ${post.body}`}
       onPress={onPress}
-      style={({ pressed }) => [styles.tile, { width, height }, picture ? null : { backgroundColor: withAlpha(tint, 0.14) }, pressed && styles.tilePressed]}
+      style={[styles.tile, { width, height }, picture ? null : { backgroundColor: withAlpha(tint, 0.14) }]}
     >
       {picture ? (
         <>
@@ -175,7 +175,7 @@ function GridTile({ post, author, width, height, onPress }: { post: Post; author
           {foot(false)}
         </View>
       )}
-    </Pressable>
+    </Tappable>
   );
 }
 
@@ -247,13 +247,11 @@ export function SaysSection({ courtId, name }: { courtId: string; name: string }
 const sectionGap = { gap: spacing.md } as const;
 
 const styleDefinitions = StyleSheet.create({
-  pressed: { opacity: PRESS_DIM },
   section: sectionGap,
   // The grid: tiles on a 3pt seam, the block's outer corners rounded as one.
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP, borderRadius: radius.lg, overflow: 'hidden' },
   blank: { backgroundColor: colors.surfaceAlt },
   tile: { overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  tilePressed: { transform: [{ scale: PRESS_SHRINK }] },
   tileShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 64 },
   tileWords: { flex: 1, padding: 9, paddingTop: 10 },
   tileText: { ...font('500'), fontSize: 12, lineHeight: 16, color: colors.text },

@@ -1,9 +1,9 @@
-import { PRESS_DIM } from '@/theme/press';
 import React, { useMemo, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HitCard } from '@/components/HitCard';
+import { Tappable } from '@/components/Tappable';
 import { hitListOrder } from '@/features/hits/order';
 import { hitTipCard, useJustPosted } from '@/features/hits/hitTips';
 import { useTourOpen } from '@/features/tour/tourStore';
@@ -43,10 +43,12 @@ export function CourtHits({ place }: { place: { id?: string; name: string; lat: 
     <View style={styles.wrap}>
       {hits.map((h) => <HitCard key={h.id} hit={h} {...(hitTip?.hitId === h.id ? { tip: hitTip.tip, tipReady: focused && !tourOpen } : {})} />)}
       {more ? (
-        <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
+        <View style={styles.moreSlot}>
+        <Tappable dim hoverTo={1} accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((o) => !o)} hitSlop={6} style={styles.more}>
           <Text style={styles.moreText}>{moreOpen ? 'Fewer open hits' : `More open hits (${more})`}</Text>
           <Ionicons name={moreOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-        </Pressable>
+        </Tappable>
+        </View>
       ) : null}
     </View>
   );
@@ -57,8 +59,8 @@ const HITS_SHOWN = 3;
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
-  pressed: { opacity: PRESS_DIM },
-  // The same "More open hits" row as Find Players.
-  more: { flexDirection: 'row', alignItems: 'center', gap: 4, alignSelf: 'flex-start', paddingVertical: 4 },
+  // The same "More open hits" row as Find Players (its slot keeps the tap to the words, as before).
+  moreSlot: { alignSelf: 'flex-start' },
+  more: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4 },
   moreText: { ...typography.smallStrong, color: colors.textMuted },
 });
