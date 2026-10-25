@@ -1,6 +1,7 @@
 import type { HitRequest, Post, Question, User } from '@/data/types';
 import { joinedCount } from '@/features/hits/audience';
 import { hitShort } from '@/features/hits/format';
+import { isFlexibleHit } from '@/features/hits/flexible';
 
 /*
  * The line that goes with a link shared outside the app: short, about the
@@ -25,9 +26,11 @@ export function hitShareText(hit: HitRequest, author: User | undefined, me: stri
   const left = Math.max(0, hit.spots - joinedCount(hit));
   const need = left > 1 ? `${left} players` : 'a hitting partner';
   const when = hitShort(hit.startsAt);
+  // No court yet (Flexible): "Today 6pm near Cary, court flexible".
+  const where = isFlexibleHit(hit) ? `${hit.place.near ? ` near ${hit.place.near}` : ''}, court flexible` : ` at ${hit.place.name}`;
   return author?.id === me
-    ? `Need ${need}: ${when} at ${hit.place.name}. You in?`
-    : `${first(author)} needs ${need}: ${when} at ${hit.place.name}. You in?`;
+    ? `Need ${need}: ${when}${where}. You in?`
+    : `${first(author)} needs ${need}: ${when}${where}. You in?`;
 }
 
 export function profileShareText(user: User, me: string | null): string {

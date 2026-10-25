@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
 import Discuss from '../../app/(tabs)/discuss';
@@ -17,6 +17,8 @@ import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { followRow } from '@/features/navigation/barShrink';
+import { setRowOnFeed } from '@/features/navigation/barOverMedia';
 
 /**
  * The strip, left to right: Community (where the app opens, Find Players
@@ -34,6 +36,8 @@ function TabSlot({ index, width, jumpTab, jumpOffset, children }: { index: numbe
   return <Animated.View style={[{ width, flex: 1 }, style]}>{children}</Animated.View>;
 }
 const LAST = TAB_PATHS.length - 1;
+/** The Feed's place in the row. */
+const FEED = TAB_PATHS.indexOf('/');
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 
 /**
@@ -66,34 +70,82 @@ export function TabsPager({ pathname }: { pathname: string }) {
 
   // A tap on the bottom bar, a link, or a back gesture changes the address;
   // the row glides there.
-  // A far tab (Profile to Community) is lifted out of its slot and set down next
-  // door to the current one for the length of the glide, so the two slide
-  // past each other the way neighbours do — nothing in between is dragged by.
   const jumpTab = useSharedValue(-1);
   const jumpOffset = useSharedValue(0);
+  // The glide a tap (or a link) set going: from where the row was to where it lands, as tab
+  // positions; `to` is -1 when the row is not gliding to a tab. `id` tells a glide from the next.
+  // The bar's tuck rides it frame by frame (barShrink's followRow), so it lands with the page.
+  const glide = useSharedValue({ id: 0, from: 0, to: -1 });
   useEffect(() => {
     if (target === activeRef.current) return;
-    const from = activeRef.current;
     moveTo(target);
     setActive(target);
-    if (Math.abs(target - from) <= 1) {
-      // Community, if it was left, is put back once the row is at rest (atRest).
-      position.value = withTiming(target, { duration: 260, easing: EASE }, (finished) => { if (finished) runOnJS(atRest)(); });
-      return;
-    }
-    const dir = target > from ? 1 : -1;
-    jumpTab.value = target;
-    jumpOffset.value = (from + dir - target) * (width || 1);
-    position.value = from;
-    position.value = withTiming(from + dir, { duration: 280, easing: EASE }, (finished) => {
-      // Landed: put the row at the real slot and the tab back where it lives, in one frame.
-      position.value = target;
+    const w = width || 1;
+    runOnUI((to: number, w: number) => {
+      'worklet';
+      const id = glide.value.id + 1;
+      // A far tab lifted for a glide this one cuts short goes back to its own slot.
       jumpTab.value = -1;
       jumpOffset.value = 0;
-      if (!finished) position.value = target;
-      else runOnJS(atRest)();
-    });
+      // From wherever the row is drawn right now: at rest on a tab, or part way along a glide a
+      // quicker tap cut short (Oct 25 audit: it used to jump back to the last tab first).
+      const at = position.value;
+      if (Math.abs(to - at) < 1.999) {
+        // Next door, or already part way there: the row simply glides over.
+        glide.value = { id, from: at, to };
+        followRow(0);
+        // Community, if it was left, is put back once the row is at rest (atRest).
+        position.value = withTiming(to, { duration: 260, easing: EASE }, (finished) => {
+          if (glide.value.id !== id) return;
+          glide.value = { id, from: at, to: -1 };
+          followRow(finished ? 1 : -1);
+          if (finished) runOnJS(atRest)();
+        });
+        return;
+      }
+      // A far tab (Profile to Community) is lifted out of its slot and set down in the first slot
+      // past the screen's edge the way the row is going, for the length of the glide, so the two
+      // slide past each other the way neighbours do: nothing in between is dragged by.
+      const dir = to > at ? 1 : -1;
+      const whole = Math.abs(at - Math.round(at)) < 0.001;
+      const slot = whole ? Math.round(at) + dir : dir > 0 ? Math.floor(at) + 2 : Math.ceil(at) - 2;
+      jumpTab.value = to;
+      jumpOffset.value = (slot - to) * w;
+      glide.value = { id, from: at, to: slot };
+      followRow(0);
+      position.value = withTiming(slot, { duration: 280, easing: EASE }, (finished) => {
+        if (glide.value.id !== id) return;
+        glide.value = { id, from: at, to: -1 };
+        // Landed: put the row at the real slot and the tab back where it lives, in one frame.
+        // Cut short (a finger picked the row up): the tab goes back to its own slot where it is.
+        if (finished) position.value = to;
+        jumpTab.value = -1;
+        jumpOffset.value = 0;
+        followRow(finished ? 1 : -1);
+        if (finished) runOnJS(atRest)();
+      });
+    })(target, w);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, position, width, jumpTab, jumpOffset]);
+  // The glide's progress, for the bar's tuck riding it (frame by frame, on the animation thread).
+  useAnimatedReaction(() => position.value, (at) => {
+    const g = glide.value;
+    if (g.to < 0) return;
+    const span = g.to - g.from;
+    if (Math.abs(span) < 0.0001) return;
+    followRow(Math.max(0, Math.min(0.9999, (at - g.from) / span)));
+  });
+  // Which tab is mostly under the bar, as the row slides (a lifted far tab in the slot it was set
+  // down in): the bar turns dark or light over a clip once, as the Feed passes half way under it.
+  useAnimatedReaction(() => {
+    const near = Math.round(position.value);
+    const lifted = jumpTab.value;
+    if (lifted >= 0 && near === lifted + Math.round(jumpOffset.value / widthValue.value)) return lifted;
+    return near;
+  }, (now, was) => {
+    if (now !== was) runOnJS(setRowOnFeed)(now === FEED);
+  });
+  useEffect(() => () => setRowOnFeed(null), []);
 
   const heading = (index: number | null) => {
     setPendingTab(index === null ? null : TAB_PATHS[index]);

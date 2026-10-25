@@ -17,3 +17,12 @@ export function connectionIsQuick() {
   if (!recent.length) return true;
   return recent.reduce((sum, ms) => sum + ms, 0) / recent.length < 2000;
 }
+
+/**
+ * The same measure, saying when there is none yet: quick, slow, or unknown (no clip has loaded
+ * this session). The quick start (features/feed/quickStart) treats unknown as slow.
+ */
+export function linkState(): 'quick' | 'slow' | 'unknown' {
+  if (!recent.length) return 'unknown';
+  return connectionIsQuick() ? 'quick' : 'slow';
+}

@@ -58,8 +58,9 @@ export function PlayerCard({ user, variant, onPress }: {
   // On the other courts but Night both cards are the quiet box near the page (Oct 25, owner: "I meant the tennis
   // profile card and the activity cards"), as the session boxes are: boxLook. Clean's full card and Night's keep their own.
   const look = (variant === 'banner' && LESS_AI_ROUND2) || quietBox(theme) ? boxLook(theme) : cardLook(theme);
-  // The rating in the court's accent on a light card drawn as the stats sheet (the quiet box; Clean's banner below).
-  const ratingInk = look.plain ? colors.brand : look.figure;
+  // The rating in the court's accent on a light card drawn as the stats sheet (the quiet box; Clean's banner below);
+  // London's in its purple (look.touch, Oct 25).
+  const ratingInk = look.plain ? look.touch ?? colors.brand : look.figure;
   const reduced = useReducedMotion();
   const week = usePerWeek(user);
   const key = `${variant}:${user.id}`;
@@ -93,7 +94,7 @@ export function PlayerCard({ user, variant, onPress }: {
           <Ionicons name="chevron-forward" size={15} color={look.muted} />
         </View>
         <View style={[styles.heroRow, styles.bannerHero]}>
-          <Text maxFontSizeMultiplier={1.3} style={[styles.bannerFigure, { color: pop === 'now' || pop === 'A' ? look.figure : colors.brand }]}>{ratingText(p)}</Text>
+          <Text maxFontSizeMultiplier={1.3} style={[styles.bannerFigure, { color: pop === 'now' || pop === 'A' ? look.figure : look.touch ?? colors.brand }]}>{ratingText(p)}</Text>
           <Text maxFontSizeMultiplier={1.3} style={[styles.system, styles.bannerSystem, { color: systemInk }]}>{system}</Text>
         </View>
         <View style={styles.inline}>

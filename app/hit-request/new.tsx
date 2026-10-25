@@ -9,6 +9,7 @@ import { Field } from '@/components/ui';
 import { ChipStrip, Chips, Fine, Section, SheetTitle, Submit, Tiles, formBody } from '@/components/sheet/SheetForm';
 import type { HitAudience, HitRequest, ID } from '@/data/types';
 import { EVERYONE_FRIENDS_LINE, opensAtFor } from '@/features/hits/audience';
+import { FLEXIBLE_COURT, nearWord } from '@/features/hits/flexible';
 import { markJustPosted } from '@/features/hits/hitTips';
 import { AudienceMenu, AudienceSettingRow, GroupsCard, InviteRow } from '@/features/hits/WhoSeesFirst';
 import { isMapCourtId } from '@/features/places/courtName';
@@ -16,7 +17,8 @@ import { fetchCourts, isClosedCourt, type Court } from '@/features/players/court
 import { notKnownAdult } from '@/features/players/age';
 import { milesBetween } from '@/features/players/geo';
 import { clockWords, hitsWithinLine } from '@/features/players/openToHit';
-import { homeFor } from '@/features/players/positions';
+import { homeFor, placeFor } from '@/features/players/positions';
+import { nearestPlace } from '@/data/locations';
 import { useMyCity } from '@/features/players/useMyCity';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -106,8 +108,26 @@ export default function NewHit() {
   // A typed town ("Cary, NC") is looked up first, as the map does, so the courts are never another city's in the same state.
   // Not known to be an adult: a hit reaches only the people who follow you (hits/visible), and the sheet says so.
   const forFriends = !!currentUser && notKnownAdult(currentUser);
-  const { town, pending: townPending } = useMyCity(currentUser);
+  const { town, city: myCityAt, pending: townPending } = useMyCity(currentUser);
   const home = useMemo(() => (currentUser && !(townPending && !detectedCoords) ? homeFor(currentUser, detectedCoords, town) : null), [currentUser, detectedCoords, town, townPending]);
+  // "Flexible" (no court yet): offered only when where you are is really known (this phone's spot, the
+  // spot you last shared, or your profile's town), never the guess the courts list falls back on,
+  // so the hit is never put in a city you aren't in. The town it says it is near is the one beside that
+  // spot: your shared spot's, else your profile's, else the nearest town the app knows (each only
+  // within 25 miles). The spot is rounded to a town-sized square as it is chosen (features/hits/flexible).
+  const mySeen = currentUser ? lastSeen[currentUser.id] : undefined;
+  const flexible = useMemo(() => {
+    const hint = detectedCoords ?? (mySeen ? { lat: mySeen.lat, lng: mySeen.lng } : null) ?? myCityAt;
+    if (!currentUser || !hint) return null;
+    const close = (at: { lat: number; lng: number } | null | undefined) => !!at && milesBetween(hint, at) <= 25;
+    const known = currentUser.location?.trim() ? placeFor(currentUser.location) : undefined;
+    const profileAt = myCityAt ?? (known ? { lat: known.lat, lng: known.lng } : null);
+    const nearest = nearestPlace(hint.lat, hint.lng);
+    const near = (close(mySeen) ? nearWord(mySeen?.city) : undefined)
+      ?? (close(profileAt) ? nearWord(currentUser.location) : undefined)
+      ?? (close(nearest) ? nearWord(nearest.name) : undefined);
+    return { near, hint };
+  }, [currentUser, detectedCoords, mySeen, myCityAt]);
   // Members-only and private courts are never suggested for a hit (a search by name still finds them).
   useEffect(() => {
     if (!home) return undefined;
@@ -161,8 +181,10 @@ export default function NewHit() {
       ? (opensNow ? 'It starts within 3 hours, so it opens to everyone now.' : `If a spot’s left ${opensText}, it opens to everyone.`)
       : forFriends
         ? `${EVERYONE_FRIENDS_LINE}${asked.length ? ` ${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : ''}`
-        : asked.length ? `${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.` : 'Whoever joins gets a chat with you.';
-  const summary = [FORMAT_LABEL[format], `${dayWord} at ${timeLabel(hour, half)}`, where?.name].filter(Boolean).join(' · ');
+        : asked.length ? `${askedNames} ${asked.length === 1 ? 'gets' : 'get'} it in your chat too.`
+          // No court yet: the chat is where it gets picked.
+          : where?.flexible ? 'Whoever joins picks the court with you in the chat.' : 'Whoever joins gets a chat with you.';
+  const summary = [FORMAT_LABEL[format], `${dayWord} at ${timeLabel(hour, half)}`, where?.flexible ? FLEXIBLE_COURT : where?.name].filter(Boolean).join(' · ');
 
   const post = async () => {
     if (!ready || !where) return;
@@ -248,7 +270,7 @@ export default function NewHit() {
           </Section>
 
           <Section strong title="Where" hint={farLine ?? undefined}>
-            <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} />
+            <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} flexible={flexible} />
           </Section>
 
           <Section strong title="Game">

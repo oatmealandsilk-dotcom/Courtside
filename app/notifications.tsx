@@ -22,7 +22,8 @@ import { allTennis, foundBursts, foundHref, foundLine, foundTitle } from '@/feat
 import { tagState, yourResult } from '@/features/activity/sessionTags';
 import { useApp } from '@/store/AppContext';
 import { confirmUnfollow } from '@/lib/confirm';
-import type { DetectedActivity, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
+import type { DetectedActivity, HitRequest, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
+import { hitSpot } from '@/features/hits/visible';
 import { isTennisActivity } from '@/features/activity/workouts';
 import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
@@ -166,12 +167,16 @@ interface Group {
   found?: { activityIds: string[]; previews: (string | undefined)[] };
 }
 
-function routeFor(group: Group): string {
+function routeFor(group: Group, hits: HitRequest[]): string {
   // Several workouts found at once: their list, each with its own Log it.
   if (group.found) return foundHref(group.found.activityIds);
   // The map's alerts open the map: on the player, or on the hit with its card up.
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
-  if (group.kind === 'map-new-hit') return `/map?hit=${group.targetId}`;
+  // A hit with no spot to show (Flexible: no court yet, features/hits/flexible) opens its own page instead.
+  if (group.kind === 'map-new-hit') {
+    const hit = hits.find((h) => h.id === group.targetId);
+    return hit && !hitSpot(hit) ? `/hit-request/${group.targetId}` : `/map?hit=${group.targetId}`;
+  }
   // A tennis session a tracker picked up opens a new post with it on: post it, or just log it.
   if (group.kind === 'activity') return `/compose?activity=${group.targetId}`;
   // Your week on court: the recap card for that week (its target is the week's Monday).
@@ -673,7 +678,7 @@ export default function Notifications() {
                   if (group.kind === 'court-activity') { openFollowedCourt(group.targetId); return; }
                   const calledOff = calledOffChatFor(group);
                   if (calledOff) { router.push(`/messages/${calledOff}`); return; }
-                  const to = routeFor(group);
+                  const to = routeFor(group, hitRequests);
                   // "Clip posted" and the like open Home: goHome closes this page down to the
                   // tabs. Never '/', the splash screen's address too, which opened a second app on top.
                   if (to === '/') { goHome(); requestScrollToTop('/'); } else router.push(to);

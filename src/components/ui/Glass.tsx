@@ -37,7 +37,10 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
   const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
-    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive || clear, tintColor: clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
+    // Answering a touch (Apple's glass swelling and shimmering under the finger) only when asked
+    // for: the tab bar's `clear` glass did it too, so every tap wobbled the whole bar with every
+    // icon in it, and the icons went soft while it was scaled (Oct 25 audit).
+    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
     if (behind) {
       // Out under the hairline edge too, as when it held what it shows: no ring of bare page inside the edge.
       const edge = -(StyleSheet.flatten(style)?.borderWidth ?? 0);
@@ -58,6 +61,13 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   }
   return <View style={[rounded, veil, clear ? styles.webClear : styles.web, style]}>{children}</View>;
 }
+
+/**
+ * How much of its tint `clear` glass shows here (0 to 1), as Glass draws it on
+ * this phone or browser: for a copy of the glass laid over it for a moment
+ * (the tab bar's look as a clip goes), so it reads as the glass, not a slab.
+ */
+export const CLEAR_GLASS_ALPHA = liquidGlass ? 0xbf / 255 : Platform.OS === 'android' ? 0xe6 / 255 : 0xb3 / 255;
 
 /**
  * The fades a piece of glass sits under (1 shown, 0 gone): a clip's words

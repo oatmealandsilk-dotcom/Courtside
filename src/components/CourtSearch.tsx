@@ -6,6 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import type { HitRequest } from '@/data/types';
+import { FLEXIBLE_LINE, FLEXIBLE_TITLE, flexiblePlace } from '@/features/hits/flexible';
 import { courtRows, fetchCourts, type Court } from '@/features/players/courts';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import type { LatLng } from '@/features/players/positions';
@@ -16,8 +18,11 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner, inputCorner } from '@/theme/look';
 
-/** Where a hit is played: a court from the list carries the map's id for it, so its card opens that court's page. */
-export interface ChosenPlace { id?: string; name: string; lat?: number; lng?: number }
+/**
+ * Where a hit is played: a court from the list carries the map's id for it, so its card opens that court's page.
+ * "Flexible" is no court yet (features/hits/flexible): its town and a rough area, never a spot.
+ */
+export type ChosenPlace = HitRequest['place'];
 
 export { plain };
 // Moved beside the other court-name rules; kept here for the screens that import them from the search.
@@ -45,8 +50,14 @@ export function Highlighted({ text, words, style, strong, lines = 2, wordStart =
  * courts nearest you; as you type, the courts whose names match, best match
  * first with what you typed in bold, and a last row to use what you typed
  * as the place. Names get two lines, so a long park name still reads.
+ *
+ * With `flexible` (Oct 25, the owner: "we don't have to choose a court right
+ * now"), a last row under the nearest courts, "Flexible", posts the hit with
+ * no court: whoever joins picks it with you in the chat. Not while typing (a
+ * name typed is a place), and never when where you are isn't known: the hit
+ * would have no town to be near.
  */
-export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
+export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType, flexible }: {
   home: LatLng | null;
   /** The courts already loaded around you. */
   nearby: Court[];
@@ -54,6 +65,8 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
   onChoose: (place: ChosenPlace | null) => void;
   typed: string;
   onType: (text: string) => void;
+  /** Offers "Flexible": the town it is near, and where you are (rounded to a town-sized square before it is kept). */
+  flexible?: { near?: string; hint: LatLng } | null;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
@@ -93,6 +106,21 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
     return out.filter(({ c }) => (c.name === 'Tennis courts' ? ++unnamed <= 2 : true)).slice(0, query ? 8 : 4);
   }, [query, words, pool]);
 
+  if (chosen?.flexible) {
+    return (
+      <Animated.View entering={FadeIn.duration(160)} style={styles.chosen}>
+        <View style={styles.tileOn}><Ionicons name="chatbubbles" size={17} color={colors.brandInk} /></View>
+        <View style={styles.rowWords}>
+          <Text style={styles.chosenName} numberOfLines={1}>{FLEXIBLE_TITLE}</Text>
+          <Text style={styles.rowMeta}>{FLEXIBLE_LINE}</Text>
+        </View>
+        <Pressable accessibilityRole="button" accessibilityLabel="Change where" hitSlop={8} onPress={() => { onChoose(null); onType(''); setTimeout(() => input.current?.focus(), 50); }}>
+          <Text style={styles.change}>Change</Text>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
   if (chosen) {
     const court = chosen.lat !== undefined;
     return (
@@ -131,6 +159,16 @@ export function CourtSearch({ home, nearby, chosen, onChoose, typed, onType }: {
           </Pressable>
         ))}
         {query && !rows.length && !loadingWide ? <Text style={styles.none}>No courts called “{query}” nearby.</Text> : null}
+        {/* No court yet: under the nearest courts, set apart by the same hairline. */}
+        {!query && flexible ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={`${FLEXIBLE_TITLE}. ${FLEXIBLE_LINE}`} onPress={() => onChoose(flexiblePlace(flexible.near, flexible.hint))} style={({ pressed }) => [styles.row, rows.length > 0 && styles.rule, pressed && styles.pressed]}>
+            <View style={styles.tile}><Ionicons name="chatbubbles-outline" size={16} color={colors.brand} /></View>
+            <View style={styles.rowWords}>
+              <Text style={[styles.rowName, styles.rowNameMatch]} numberOfLines={1}>{FLEXIBLE_TITLE}</Text>
+              <Text style={styles.rowMeta} numberOfLines={2}>{FLEXIBLE_LINE}</Text>
+            </View>
+          </Pressable>
+        ) : null}
         {query ? (
           <Pressable accessibilityRole="button" accessibilityLabel={`Use ${query}`} onPress={() => onChoose({ name: query.slice(0, 120) })} style={({ pressed }) => [styles.row, rows.length > 0 && styles.rule, pressed && styles.pressed]}>
             <View style={styles.tile}><Ionicons name="location-outline" size={16} color={colors.textMuted} /></View>

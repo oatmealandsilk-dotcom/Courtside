@@ -2,14 +2,15 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, use
 import { AppState, Platform, StyleSheet, View } from 'react-native';
 import { VideoView, createVideoPlayer, type SurfaceType, type VideoPlayer } from 'expo-video';
 import { videoSource } from '@/lib/videoSource';
-import { noteClipLoad } from '@/lib/netSpeed';
+import { linkState, noteClipLoad } from '@/lib/netSpeed';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, peekLeft, takeLeft } from '@/features/feed/clipResume';
 import { usePageLeaving } from '@/features/feed/pageLeaving';
-
-/** How many seconds of a clip are fetched before it counts as loaded and may start. */
-const PRELOAD_SECONDS = 3;
+import {
+  EARLY_STALL_MS, PRELOAD_SECONDS, STALL_CONFIRM_MS, decideStart, heavyTrack, noteEarlyStall, noteOpeningCached,
+  openingCached, quickStartOn, stalledEarly, type StartProbe, type TrackInfo,
+} from '@/features/feed/quickStart';
 
 /**
  * A clip on a phone. Plays on its own and loops, the way a feed expects —
@@ -103,6 +104,16 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     p.timeUpdateEventInterval = 0.2;
     return p;
   }, [uri]);
+  // Whether this clip's opening was on the phone before this player asked for it (primed ahead,
+  // or fetched by an earlier page this session): read once, as the player is made, so its own
+  // fetch never counts (features/feed/quickStart).
+  const openingWasIn = useMemo(() => openingCached(uri), [uri]);
+  // Whether its picture is heavy (HDR, or a camera file's data rate), once the player says.
+  const track = useRef<'unknown' | 'light' | 'heavy'>('unknown');
+  const noteTrack = (info: TrackInfo | null | undefined) => {
+    if (!info || track.current === 'heavy') return;
+    track.current = heavyTrack(info) ? 'heavy' : 'light';
+  };
   // The viewer paused the clip on the page itself, moved it by hand while it
   // was stopped, or a page was pushed over it: the next play carries on from
   // exactly where it stands instead of following the swipe rule (clipResume).
@@ -136,11 +147,16 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   const latestSize = useRef(onSize);
   latestSize.current = onSize;
   useEffect(() => {
-    const report = (track: { size?: { width: number; height: number } } | null | undefined) => {
-      const size = track?.size;
+    track.current = 'unknown';
+    const report = (info: (TrackInfo & { size?: { width: number; height: number } }) | null | undefined) => {
+      const was = track.current;
+      noteTrack(info);
+      // Known only now (an iPhone names the track a moment after it says the clip can play): look again.
+      if (was !== track.current && quickStartOn()) checkNow.current();
+      const size = info?.size;
       if (size && size.width > 0 && size.height > 0) latestSize.current?.(size.width, size.height);
     };
-    safely(() => report((player as unknown as { videoTrack?: { size?: { width: number; height: number } } | null }).videoTrack));
+    safely(() => report((player as unknown as { videoTrack?: (TrackInfo & { size?: { width: number; height: number } }) | null }).videoTrack));
     const a = player.addListener('sourceLoad', ({ availableVideoTracks }) => report(availableVideoTracks?.[0]));
     const b = player.addListener('videoTrackChange', ({ videoTrack }) => report(videoTrack));
     return () => { a.remove(); b.remove(); };
@@ -149,25 +165,36 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // merely once the player can name it. Clips straight off a phone's camera
   // are heavy (a 13 Mb/s HDR file was seen), and starting one on a thin
   // buffer ran the small sound track while the picture stalled on its first
-  // frame. The wish to play is kept, and honoured the moment enough is in.
+  // frame. So a clip counts as loaded once its first three seconds are in.
+  // The one on screen may start sooner, once about a second is in, where that
+  // is safe: a quick link or its opening already on the phone, a light clip,
+  // and no early stall this session (the quick rule, admins first:
+  // features/feed/quickStart). A page waiting off screen still reports ready
+  // only once its three seconds are in, so the Feed's next fetches wait for it
+  // as before. The wish to play is kept, and honoured the moment enough is in.
   const wantPlay = useRef(false);
   const begin = useRef<() => void>(() => undefined);
   // Where the clip waits before it plays, and so where its first seconds are fetched from.
   const placedAt = useRef(trimStart);
-  const isReady = () => {
-    let ready = false;
-    safely(() => {
-      if (player.status !== 'readyToPlay') return;
-      const length = player.duration || 0;
-      const need = Math.min(PRELOAD_SECONDS, Math.max(0.5, length - 0.1));
-      const buffered = player.bufferedPosition;
-      ready = length > 0 && (buffered >= placedAt.current + need || buffered >= length - 0.1);
-    });
-    return ready;
+  /** What the player says right now: its state, length and how far it is fetched; null if it cannot say. */
+  const probe = (): StartProbe | null => {
+    let now: StartProbe | null = null;
+    safely(() => { now = { status: player.status, length: player.duration || 0, buffered: player.bufferedPosition, from: placedAt.current }; });
+    return now;
   };
+  // Its first three seconds (or all of it) are in.
+  const loadedRef = useRef(false);
   const readyRef = useRef(false);
+  // When it last started on the quick rule, before its three seconds were in (0: it did not): a
+  // stall soon after says the link cannot keep up with a quick start (below).
+  const quickFrom = useRef(0);
+  // Where that quick start began: only a wait after the picture has moved on from here is a stall.
+  const quickAt = useRef(0);
+  // The readiness check, run at once when the clip comes on screen or the app comes back, not at the next tick.
+  const checkNow = useRef<() => void>(() => undefined);
   useEffect(() => {
     readyRef.current = false;
+    loadedRef.current = false;
     placedAt.current = trimStart;
     const askedAt = Date.now();
     // Only the first time this player is in says anything about the
@@ -200,20 +227,34 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       // instead of holding the reader on a placeholder for good.
       let failed = false;
       try { failed = player.status === 'error'; } catch { /* player already released */ }
-      const ready = isReady() || failed;
+      if (track.current === 'unknown' && quickStartOn()) safely(() => noteTrack((player as unknown as { videoTrack?: TrackInfo | null }).videoTrack));
+      // Off screen: ready once its three seconds are in, as before. On screen: sooner, on the quick
+      // rule, where it applies. For admins, once ready it stays ready while its player can play
+      // (features/feed/quickStart); for everyone else exactly as before.
+      const { loaded, opening, ready } = decideStart({
+        probe: probe(), failed, wanted: wantPlay.current, wasReady: readyRef.current,
+        on: quickStartOn(), link: linkState(), cached: openingWasIn,
+        // Not known to be light yet counts as heavy: the phone names a clip's track only after it can
+        // play, and a primed opening is in at once, so an HDR camera file must not slip through first.
+        heavy: track.current !== 'light', stalledBefore: stalledEarly(),
+      });
+      // Its first second is in: from now on a page built for this clip finds its opening on the phone.
+      if (opening) noteOpeningCached(uri);
+      loadedRef.current = loaded;
       if (ready !== readyRef.current) {
         readyRef.current = ready;
-        // How long this one took is the phone's best measure of the connection.
-        if (ready && !measured) { measured = true; noteClipLoad(Date.now() - askedAt); }
         latestReady.current?.(ready);
       }
+      // How long its three seconds took is the phone's best measure of the connection, whenever it started.
+      if ((loaded || failed) && !measured) { measured = true; noteClipLoad(Date.now() - askedAt); }
       if (ready && wantPlay.current) begin.current();
-      if (ready) { clearInterval(timer); }
+      if (loaded || failed) { clearInterval(timer); }
     };
+    checkNow.current = check;
     const timer = setInterval(check, 150);
     check();
     const sub = player.addListener('statusChange', check);
-    return () => { clearInterval(timer); sub.remove(); };
+    return () => { clearInterval(timer); sub.remove(); checkNow.current = () => undefined; };
   }, [player, trimStart]); // eslint-disable-line react-hooks/exhaustive-deps
   // A clip that is not the one on screen is silent, whatever it was asked for.
   useEffect(() => {
@@ -283,6 +324,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
     if (playFromHere.current) {
       playFromHere.current = false;
+      quickFrom.current = 0;
       forgetLeft(uri);
       safely(() => player.play());
       return;
@@ -290,15 +332,43 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
     // Back within a few seconds of swiping away: on from where it was, even
     // on a player rebuilt meanwhile. Later, or a first play: the trim's start.
     const target = takeLeft(uri, wantedAt.current) ?? trimStart;
+    // Starting before its three seconds are in, from where they were being fetched: the quick
+    // rule's start, watched for an early stall (below). A jump elsewhere is not its test.
+    quickFrom.current = !loadedRef.current && Math.abs(target - placedAt.current) < 0.5 ? Date.now() : 0;
+    quickAt.current = target;
     // Only a real move is a seek; the first play of a clip sitting at its start is a plain play.
     safely(() => { if (Math.abs(player.currentTime - target) > 0.05) player.currentTime = target; });
     safely(() => player.play());
   };
+  // A clip that started on the quick rule and stalls in its first seconds (its player waiting for
+  // more of it while it should be playing) shows this link cannot keep up with a quick start: every
+  // clip waits for its three seconds again for the rest of the session (features/feed/quickStart).
+  // The stall itself is handled as any stall is: the picture holds until the player has more.
+  useEffect(() => {
+    let confirm: ReturnType<typeof setTimeout> | undefined;
+    const sub = player.addListener('statusChange', ({ status }) => {
+      if (status !== 'loading' || !quickFrom.current) return;
+      if (Date.now() - quickFrom.current > EARLY_STALL_MS) { quickFrom.current = 0; return; }
+      if (confirm) clearTimeout(confirm);
+      // A wait that has not cleared this much later is a stall, not the player's instant check on play.
+      confirm = setTimeout(() => {
+        confirm = undefined;
+        safely(() => {
+          // The phone's own short wait before a first frame moves (it holds picture and sound together)
+          // is not a stall: only one after the clip has played on from its start turns the rule off.
+          if (quickFrom.current && wantPlay.current && started.current && !away() && player.status === 'loading'
+            && player.currentTime > quickAt.current + 0.2) { quickFrom.current = 0; noteEarlyStall(); }
+        });
+      }, STALL_CONFIRM_MS);
+    });
+    return () => { if (confirm) clearTimeout(confirm); sub.remove(); };
+  }, [player]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (active && !paused) {
       if (!wantPlay.current) wantedAt.current = Date.now();
       wantPlay.current = true;
-      if (readyRef.current) begin.current();
+      // Ready (or able to start on the quick rule right now): it starts at once.
+      if (readyRef.current) begin.current(); else checkNow.current();
     } else if (active || !onTop || leaving) {
       // Paused by the viewer, or covered: a page pushed over the feed (the
       // comments, a profile) or its tab slid away. Neither is a swipe, so it
@@ -310,6 +380,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       if (started.current) playFromHere.current = true;
       wantPlay.current = false;
       started.current = false;
+      quickFrom.current = 0;
       safely(() => player.pause());
     } else {
       // Swiped away (or uncovered on a feed that has moved on meanwhile). A
@@ -323,6 +394,7 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
       }
       wantPlay.current = false;
       started.current = false;
+      quickFrom.current = 0;
       // Each native call stands on its own: a position read that fails must
       // never take the pause down with it, or the clip plays on after the swipe.
       safely(() => player.pause());
@@ -337,9 +409,9 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // longer the clip on screen (wantPlay is false for it) stays still.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'background' || state === 'inactive') { safely(() => player.pause()); return; }
+      if (state === 'background' || state === 'inactive') { quickFrom.current = 0; safely(() => player.pause()); return; }
       if (state !== 'active' || !wantPlay.current) return;
-      if (!started.current) { if (readyRef.current) begin.current(); return; }
+      if (!started.current) { if (readyRef.current) begin.current(); else checkNow.current(); return; }
       for (const other of livePlayers) if (other !== player) { try { other.pause(); } catch { /* released */ } }
       safely(() => player.play());
     });

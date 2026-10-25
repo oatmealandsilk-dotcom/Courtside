@@ -15,6 +15,7 @@ import type { ShareItem, User } from '@/data/types';
 import { isLocalMedia } from '@/data/remote';
 import { GroupAvatar, groupName, isDirectChat, isGroupChat, othersIn } from '@/features/messages/groups';
 import { hitWhen } from '@/features/hits/format';
+import { placeInSentence, placeLabel } from '@/features/hits/flexible';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -133,7 +134,7 @@ export default function ShareSheet() {
       // A hit that was called off can't be sent on.
       const hit = hitRequests.find((h) => h.id === id && !h.cancelled);
       if (!hit) return null;
-      const label = `Looking for a hit · ${hitWhen(hit.startsAt)} · ${hit.place.name}`;
+      const label = `Looking for a hit · ${hitWhen(hit.startsAt)} · ${placeLabel(hit.place)}`;
       return { item: { kind: 'hit-request', id }, label, icon: <HitGlyph size={20} color={colors.brand} />, outside: { title: hitShareText(hit, users.find((u) => u.id === hit.authorId), currentUserId), url: shareLink('hit-request', id, me?.handle) } };
     }
     if (kind === 'court') {
@@ -337,7 +338,8 @@ export default function ShareSheet() {
       const by = post?.authorId === currentUserId ? 'Your' : whose(users.find((u) => u.id === post?.authorId)?.name.split(' ')[0]);
       return `${by} ${post?.kind === 'clip' ? 'clip' : 'post'}`;
     }
-    if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return h ? `A hit at ${h.place.name}, ${hitWhen(h.startsAt)}` : 'A hit'; }
+    // "A hit at Pullen Park, …", or with no court yet (Flexible) "A hit near Cary, …".
+    if (kind === 'hit-request') { const h = hitRequests.find((x) => x.id === id); return h ? `A hit${placeInSentence(h.place) ? ` ${placeInSentence(h.place)}` : ''}, ${hitWhen(h.startsAt)}` : 'A hit'; }
     return sending.label;
   };
 

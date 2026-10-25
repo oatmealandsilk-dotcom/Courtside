@@ -9,7 +9,7 @@ import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
 import { useCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { isStartTab } from '@/features/navigation/startTab';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Easing, useSharedValue, withTiming } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import { BAR_RECEDE, closeCreateMenu, markCreateOpening, useCreateMenuState } from '@/features/compose/createMenu';
@@ -65,9 +65,12 @@ const RISE_GRACE_MS = 1000;
  */
 export interface NavBarProps {
   state: { index: number; routes: { key: string; name: string }[] };
-  navigation: { navigate: (name: string) => void };
+  /** `prepare`: a finger came down on a tab, so the page it opens can get ready meanwhile (AppShell). */
+  navigation: { navigate: (name: string) => void; prepare?: (name: string) => void };
   /** Whether the page under the phone's bar is the Feed itself (AppShell): the quiet pill is dark over a clip only there. */
   feedUnder?: boolean;
+  /** Whether it is one of the four tabs (the tab row), not a page opened over them (AppShell). */
+  tabsUnder?: boolean;
 }
 
 interface NavItem {
@@ -91,7 +94,12 @@ const ITEMS: NavItem[] = [
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
-export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
+/**
+ * Drawn again only when what it is handed changes (AppShell keeps those steady) or the counts and
+ * the rest it reads from the app do: the shell redraws with every change anywhere in the app, and
+ * the bar used to with it, adding to every tap's redraw (Oct 25 audit).
+ */
+export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder = true, tabsUnder = true }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds, isGuest } = useApp();
@@ -123,7 +131,7 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const tourProfile = useTourTarget('tab-profile');
   const tourCreate = useTourTarget('create');
   const tourMessages = useTourTarget('side-messages');
-  const tourRef = (route: string) => (route === 'discuss' ? tourDiscuss : route === 'index' ? tourHome : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined);
+  const tourRef = useCallback((route: string) => (route === 'discuss' ? tourDiscuss : route === 'index' ? tourHome : route === 'coaches' ? tourCoaches : route === 'profile' ? tourProfile : undefined), [tourDiscuss, tourHome, tourCoaches, tourProfile]);
   // While the tour is up, a screen reader reads only the tour, not the bar under the dim.
   const touring = useTourOpen();
   const hideFromReader = touring ? 'no-hide-descendants' as const : 'auto' as const;
@@ -143,13 +151,18 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const extra = pathname.startsWith('/search') ? 'search' : pathname.startsWith('/notifications') ? 'notifications' : pathname.startsWith('/messages') ? 'messages' : null;
   // The + is a toggle: a second tap closes the Create box with its own
   // animation. Mid-post (the box already gone) a tap there does nothing.
-  const openCreate = () => {
+  // Read when tapped, so the + hands the bar the same function every time (the bar is drawn again
+  // only when what it shows changes, not on every change of page).
+  const createNow = useRef({ isGuest, pathname });
+  createNow.current = { isGuest, pathname };
+  const openCreate = useCallback(() => {
+    const { isGuest: guest, pathname: here } = createNow.current;
     // A guest (guest mode, Oct 17): posting needs a profile, so the + asks them to join.
-    if (isGuest) { openJoinSheet('post'); return; }
+    if (guest) { openJoinSheet('post'); return; }
     // Said first, so the bar knows the box is coming and stays (owner, Oct 17, see createMenu).
-    if (pathname !== '/compose') { markCreateOpening(); router.push('/compose'); return; }
+    if (here !== '/compose') { markCreateOpening(); router.push('/compose'); return; }
     closeCreateMenu();
-  };
+  }, []);
   // While the Create box is up, the bar stays where it is, in its own colour:
   // a veil of its own ground over the pill steps the tabs back (BAR_RECEDE),
   // in and out on the box's own timing; never the page's dim, which turned it
@@ -210,6 +223,10 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const tuck = useAnimatedStyle(() => ({
     transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) * PX) / PX }],
   }));
+  // Steady from one redraw to the next, so the quiet pill (memo) is drawn again only when what it shows changes.
+  const onTab = useCallback((route: string) => navigation.navigate(route), [navigation]);
+  const onTabPressIn = useCallback((route: string) => navigation.prepare?.(route), [navigation]);
+  const outerStyle = useMemo(() => [lift === 'up' ? null : styles.held, lift === 'held' ? null : duck], [lift, styles.held, duck]);
   // The quiet pill in place of the round one (tabBarLook, Oct 25): the same bar and the same glass, a new shape.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (
@@ -217,18 +234,20 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
         items={ITEMS}
         activeRoute={activeRoute}
         feedUnder={feedUnder}
+        tabsUnder={tabsUnder}
         profileAlerts={profileAlerts}
-        onTab={(route) => navigation.navigate(route)}
+        onTab={onTab}
+        onTabPressIn={onTabPressIn}
         onCreate={openCreate}
         tourRef={tourRef}
         tourCreate={tourCreate}
         bottom={Math.max(insets.bottom, 12)}
-        outerStyle={[lift === 'up' ? null : styles.held, lift === 'held' ? null : duck]}
+        outerStyle={outerStyle}
         tuckStyle={tuck}
         hideFromReader={hideFromReader}
         veilStyle={veilStyle}
         veilBlocks={veilBlocks}
-        onVeil={() => { closeCreateMenu(); }}
+        onVeil={closeVeil}
         onFeedHold={onFeedHold}
       />
     );
@@ -428,7 +447,10 @@ export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
       )}
     </View>
   );
-}
+});
+
+/** The Create box's veil was tapped: the box closes, as a tap anywhere else outside it does. */
+const closeVeil = () => { closeCreateMenu(); };
 
 /**
  * The phone bar in another court (the one a theme pick is leaving),
