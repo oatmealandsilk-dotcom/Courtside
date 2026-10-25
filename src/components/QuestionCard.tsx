@@ -76,12 +76,12 @@ function QuestionCardInner({
 
   return (
     <Card onPress={onPress} style={styles.card}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI ? 'nowrap' : 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
             after it. A thread carried in from outside keeps to the handle —
             the badge beside it already says where it came from. */}
-        <PlayerName userId={author?.id} style={styles.footerText} numberOfLines={1}>
+        <PlayerName userId={author?.id} style={[styles.footerText, LESS_AI && { flexShrink: 1 }]} numberOfLines={1}>
           {author && !question.source ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerName}>{author.name} </Text> : null}
           @{author?.handle ?? 'player'}
         </PlayerName>
@@ -93,8 +93,8 @@ function QuestionCardInner({
         ) : author ? <LevelPill profile={author.profile} small style={styles.levelPill} /> : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
         {LESS_AI ? (
-          <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto' }, pressed && { opacity: PRESS_DIM }]}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerText}>{meta.label}{brandCorner ? '' : ` · ${relativeTime(question.createdAt)}${question.editedAt ? ' · Edited' : ''}`}</Text>
+          <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, pressed && { opacity: PRESS_DIM }]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.footerText}>{meta.label}{brandCorner ? '' : ` · ${relativeTime(question.createdAt)}${question.editedAt ? ' · Edited' : ''}`}</Text>
           </SwipePressable>
         ) : brandCorner ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
       </View>

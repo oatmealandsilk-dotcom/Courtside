@@ -55,8 +55,6 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI, corner } from '@/theme/look';
-import { computeStats } from '@/features/practice/stats';
-import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -71,7 +69,6 @@ function inSection(p: Post, section: string): boolean {
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
- const { sessions, stories } = useApp();
  const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
@@ -185,8 +182,6 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
- // The same count as Your sessions' (computeStats over what you logged and posted).
- const liveStreak = useMemo(() => (LESS_AI && currentUserId ? computeStats(currentUserId, sessions, posts, stories).currentStreakDays : 0), [currentUserId, sessions, posts, stories]);
  // A guest (guest mode, Oct 17): your profile is what an account is for.
  if (!user && isGuest) {
    return <Screen memoryKey="profile" title="Profile" wash right={<GuestSignIn />}><View style={{ paddingTop: spacing.lg }}><GuestJoinCard title="Your tennis, in one place" body="Make a free account to post your clips, log your sessions and find people to hit with." /></View></Screen>;
@@ -228,8 +223,8 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          {/* The flame after your name is what everyone else sees there (3 days or more). A screen reader hears it once, from the streak pill under it. */}
          {LESS_AI ? (
            // The hand-made look (Oct 24): no pill row; the flame and number after the name are the way to Your sessions,
-           // counted the way Your sessions counts it, so the two never disagree (the demo's Profile said 9 days, Your sessions 11).
-           <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>{liveStreak >= STREAK_FLAME_FROM ? <Pressable accessibilityRole="link" accessibilityLabel={`${liveStreak}-day streak. See your sessions`} hitSlop={10} onPress={() => router.push('/your-sessions')} style={({ pressed }) => pressed && styles.pillPressed}><StreakFlame days={liveStreak} size="large" silent/></Pressable> : null}</View>
+           // the same number as the Tennis profile card (signed in, both come from what you logged, as Your sessions does).
+           <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>{shownStreak(user, currentUserId) ? <Pressable accessibilityRole="link" accessibilityLabel={`${shownStreak(user, currentUserId)}-day streak. See your sessions`} hitSlop={10} onPress={() => router.push('/your-sessions')} style={({ pressed }) => pressed && styles.pillPressed}><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></Pressable> : null}</View>
          ) : <>
          <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
          {/* The streak opens your sessions (only you see them); Log beside it opens the log sheet, two taps from here to a logged session. */}

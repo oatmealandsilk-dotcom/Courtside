@@ -499,7 +499,7 @@ const styleDefinitions = StyleSheet.create({
   pair: { flexDirection: 'row', gap: spacing.sm },
   starPick: { flexDirection: 'row', gap: 6 },
   rateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  credLine: { marginTop: spacing.md },
+  credLine: { marginTop: spacing.md, marginBottom: spacing.md },
   reviewsPlain: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   reviewPlain: { paddingHorizontal: 0 },
   review: { gap: spacing.sm, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },

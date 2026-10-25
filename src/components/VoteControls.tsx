@@ -30,7 +30,7 @@ export function VoteControls({ item, userId, onVote }: {
       accessibilityState={{ selected: active }} onPress={event => { event.stopPropagation(); onVote(direction); }}
       style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: PRESS_DIM }]}>
       <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? colors.brand : colors.textMuted}/>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>
+      {LESS_AI && !count ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>}
     </Pressable>;
   })}</View>;
 }

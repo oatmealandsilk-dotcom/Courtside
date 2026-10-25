@@ -654,9 +654,10 @@ function Logged({ session: s, people, onOpen, openWord, hideNote = false, source
       {/* Beside the big number, outside the row's own button. Post it / Posted keep a slot of the same width on every
           row, so the share buttons stand in one line down the list, even on a row too old to post. */}
       <View style={[styles.actionSpot, styles.actionRow]}>
-        {LESS_AI ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={6} onPress={onShare} style={({ pressed }) => [styles.share, pressed && styles.pressed]}>
-          <Ionicons name="share-outline" size={16} color={colors.text} />
-        </Pressable>}
+        {/* The hand-made look (Oct 24): the circle goes, the share stays as a bare quiet icon (the only way to share a match or practice from here). */}
+        <Pressable accessibilityRole="button" accessibilityLabel={`Share to Instagram: ${title}`} hitSlop={8} onPress={onShare} style={({ pressed }) => [LESS_AI ? styles.shareBare : styles.share, pressed && styles.pressed]}>
+          <Ionicons name="share-outline" size={16} color={LESS_AI ? colors.textFaint : colors.text} />
+        </Pressable>
         <View style={styles.postSlot}>
           {postId ? (
             <Pressable accessibilityRole="link" accessibilityLabel={`Posted. Open the post: ${title}`} hitSlop={{ top: 8, bottom: 8, left: 2, right: 8 }} onPress={() => router.push(`/post/${postId}`)} style={({ pressed }) => [styles.posted, pressed && styles.pressed]}>
@@ -708,7 +709,8 @@ const styleDefinitions = StyleSheet.create({
   // A logged session's share button sits before Post it / Posted; its big line keeps clear of both.
   actionRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   heroLineShare: { paddingRight: 116 },
-  heroLinePost: { paddingRight: 80 },
+  heroLinePost: { paddingRight: 112 },
+  shareBare: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   heroInk: { color: colors.text },
   dayLead: { minHeight: HERO_LINE, justifyContent: 'center' },
   // Post it as plain brand words (Oct 24), not an outlined pill.
