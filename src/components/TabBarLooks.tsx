@@ -10,6 +10,7 @@ import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
+import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressIn, noteFeedPressOut } from '@/features/feed/feedWindows';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -50,7 +51,7 @@ export interface LookItem {
  */
 export function LookBar({
   items, activeRoute, feedUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil,
+  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -71,6 +72,8 @@ export function LookBar({
   veilStyle: AnimStyle;
   veilBlocks: boolean;
   onVeil: () => void;
+  /** A hold on the Feed tab while on the Feed: the Feed's windows (features/feed/feedWindows). Only given while they are on. */
+  onFeedHold?: () => void;
 }) {
   const { theme } = useTheme();
   // Over a clip on the Feed the bar turns dark, as today's glass does over a picture: on the Feed
@@ -126,7 +129,7 @@ export function LookBar({
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
     <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
-      onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
+      onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom }, outerStyle]}>
@@ -149,13 +152,13 @@ export function LookBar({
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
+function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; media: boolean; glassMedia: boolean; live: boolean;
   items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
-  veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void;
+  veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void; onFeedHold?: () => void;
 }) {
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
@@ -193,16 +196,24 @@ function Face({ palette: c, media, glassMedia, live, items, activeRoute, profile
   items.forEach((item, index) => {
     if (index === 2) row.push(plus);
     const active = item.route === activeRoute;
+    const hold = item.route === 'index' ? onFeedHold : undefined;
     row.push(
       <View style={styles.slot} key={item.route}>
         <Pressable
           disabled={!live}
           accessible={live}
           onPress={() => onTab(item.route)}
+          onPressIn={hold ? noteFeedPressIn : undefined}
+          onPressOut={hold ? noteFeedPressOut : undefined}
+          onLongPress={hold}
+          delayLongPress={hold ? HOLD_MS : undefined}
           accessibilityRole="tab"
           accessibilityState={{ selected: active }}
           accessibilityLabel={item.label}
-          style={styles.hit}
+          accessibilityActions={hold ? SHOW_ALL_FEEDS : undefined}
+          onAccessibilityAction={hold ? (e) => { if (e.nativeEvent.actionName === 'showAllFeeds') hold(); } : undefined}
+          style={hold ? [styles.hit, NO_CALLOUT] : styles.hit}
+          {...(hold ? HOLD_MARK : null)}
         >
           {/* What the tutorial lights: the tab's width, the icon and its word's height, as today. */}
           <View ref={live ? tourRef(item.route) : undefined} style={styles.target}>

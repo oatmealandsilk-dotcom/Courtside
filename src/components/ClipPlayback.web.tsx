@@ -11,6 +11,7 @@ import { TOP_SHADE } from './ReelCaption';
 import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
+import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
@@ -68,7 +69,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   // the same in ClipVideo). The comments stage keeps its clip playing.
   // A swipe decided away from its page stops it as the finger lifts, before
   // the next page has landed (pageLeaving), as the phone's ClipVideo does.
-  const onTop = useIsFocused() || held;
+  // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
+  const windowsHeld = useWindowsHeld();
+  const onTop = (useIsFocused() && !windowsHeld) || held;
   const leaving = usePageLeaving();
   const shown = wanted && onTop;
   const active = shown && !leaving;
