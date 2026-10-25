@@ -184,15 +184,24 @@ function QuestionDetail() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
-          <Chip label={meta.label} selected tint={tint} ink={inkOn(tint)} small onPress={() => openTopic(question.topic)} />
+          {/* The hand-made look (Oct 24): the topic a muted word, not a filled chip; still a tap to its threads. */}
+          {LESS_AI ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} hitSlop={10} onPress={() => openTopic(question.topic)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{meta.label}</Text>
+            </Pressable>
+          ) : <Chip label={meta.label} selected tint={tint} ink={inkOn(tint)} small onPress={() => openTopic(question.topic)} />}
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
         <RichText style={styles.body}>{question.body}</RichText>
         {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
-          {question.tags.map((tag) => (
+          {question.tags.map((tag) => (LESS_AI ? (
+            <Pressable key={tag} accessibilityRole="link" accessibilityLabel={`#${tag}`} hitSlop={8} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>#{tag}</Text>
+            </Pressable>
+          ) : (
             <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
-          ))}
+          )))}
         </View>
         {question.source ? (
           <Pressable

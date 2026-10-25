@@ -38,6 +38,7 @@ import { goToTab } from '@/features/navigation/startTab';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
+import { LESS_AI } from '@/theme/look';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -227,7 +228,7 @@ function PostCardInner({
       ) : null}
       <Pressable onPress={onPress} style={styles.body}>
         {/* The session's card already says what it was: no label over its words. */}
-        {sessionCard ? null : <Tappable
+        {sessionCard || LESS_AI ? null : <Tappable
           accessibilityLabel={`${meta.label}: see discussions about this in Community`}
           onPress={() => { requestSection('/discuss', 'discussions'); requestSection('/discuss#topic', KIND_TOPIC[post.kind]); goToTab('/discuss'); }}
           style={[styles.kindRow, { borderColor: `${meta.tint}55` }]}
@@ -284,9 +285,14 @@ function PostCardInner({
         {/* Tags the caption does not already say: a #tag written in it is not repeated as a chip. */}
         {tagsNotInCaption(post.body, post.tags).length > 0 ? (
           <View style={styles.tagRow}>
-            {tagsNotInCaption(post.body, post.tags).map((tag) => (
+            {tagsNotInCaption(post.body, post.tags).map((tag) => (LESS_AI ? (
+              // The hand-made look (Oct 24): plain brand words, not outlined pills; still a search.
+              <Pressable key={tag} accessibilityRole="link" accessibilityLabel={`#${tag}`} hitSlop={8} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} style={({ pressed }) => pressed && { opacity: 0.6 }}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.tagWord}>#{tag}</Text>
+              </Pressable>
+            ) : (
               <Chip key={tag} label={`#${tag}`} onPress={() => router.push({pathname:"/search",params:{q:`#${tag}`}})} small />
-            ))}
+            )))}
           </View>
         ) : null}
       </Pressable>
@@ -408,6 +414,7 @@ const styleDefinitions = StyleSheet.create({
   // A written plan's drills, under its session box.
   planned: { gap: spacing.xs },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  tagWord: { ...typography.small, ...font('500'), color: colors.brand },
   // Instagram's row, as under a photo post: like, comment and send on the left, save and more on the
   // right, 18 points between glyphs. Each is a 44-point square; the row is pulled out by the padding
   // at its ends (and up and down) so the first and last glyphs sit on the words' edges.
