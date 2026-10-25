@@ -35,6 +35,7 @@ import { QuestionListSkeleton } from '@/components/Skeleton';
 import { Highlighted } from '@/components/CourtSearch';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtsNear, useNearCourts } from '@/components/place/CourtsNear';
+import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { FollowPill } from '@/components/FollowPill';
@@ -986,6 +987,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         </View>
       }
     >
+      {/* First, so everything else covers it: where a phone draws Courts near you's little maps, one at a time, while this page is on show (the chat's own way). */}
+      <CourtsNearSnapshots />
       {/* Under the header and out of every scroller, so it stays exactly where it is while
           either section scrolls or the two slide past each other. */}
       <View style={[styles.sectionsColumn, column ? { maxWidth: column } : null]}>

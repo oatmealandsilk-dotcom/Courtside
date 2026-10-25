@@ -81,8 +81,6 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw
   lat: number; lng: number; width: number; height: number; zoom?: number;
   /** False: only a picture kept from before shows (else the stand-in); nothing new is drawn until it turns true. */
   draw?: boolean;
-  /** The phone's: draws in place. A browser always draws off screen, so it changes nothing here. */
-  drawsHere?: boolean;
 }) {
   const { theme } = useTheme();
   const key = thumbKey(theme, lat, lng, width, height, zoom);

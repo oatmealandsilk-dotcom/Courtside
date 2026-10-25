@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { HitGlyph } from '@/components/HitGlyph';
-import { LOOK_CARD_W, LookCardBody, LookHeldBody, lookFrame, useCourtPicturesGo, type CourtsLook } from '@/components/place/CourtsNearLooks';
+import { PEEK_CARD_W, PeekCardBody, PeekHeldBody, peekFrame, useCourtPicturesGo } from '@/components/place/CourtsNearPeek';
 import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
@@ -26,15 +26,13 @@ import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /**
- * Which card Courts near you shows (Oct 24, owner: "They still could look better"):
- *   'now' the outlined card as it is: the surface tag and status on top, the name and distance under them
+ * Which card Courts near you shows (Oct 24, owner: "Ok do map peek, but fix the wording under"):
  *   'N'   Map peek: the court's own map on top, surface + status as small chips on it, the name under it
- *   'O'   Map left: a wider card, a square of the court's map beside its name, distance and surface
- *   'P'   Refined type: no map, no tag; the name, then distance · courts and surface · lights as two quiet lines
- * (CourtsNearLooks has N, O and P, and when their maps are drawn.)
+ *         (CourtsNearPeek has the card, and when its maps are drawn)
+ *   'now' the outlined card before it, kept to go back to: the surface tag and status on top, the name and distance under them
  */
-export const COURTS_LOOK: 'now' | CourtsLook = 'now';
-const LOOK = COURTS_LOOK as 'now' | CourtsLook;
+export const COURTS_LOOK: 'now' | 'N' = 'N';
+const LOOK = COURTS_LOOK as 'now' | 'N';
 
 const CARD = 168;
 // The room inside a card, a little more than a grouped box's, since no fill marks its edge.
@@ -157,11 +155,11 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
   const holding = !!center && !rows.length && near.loading;
   const [heldShown, setHeldShown] = useState(holding);
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
-  // The looks with maps: how many cards from the left have been on screen, so only those draw their
-  // maps (2–3 at first, then each one as the strip is swiped to it), and not while the app is opening.
+  // Map peek: how many cards from the left have been on screen, so only those draw their maps
+  // (2–3 at first, then each one as the strip is swiped to it), and not while the app is opening.
   const picturesGo = useCourtPicturesGo();
   const { width: screenW } = useWindowDimensions();
-  const step = (LOOK === 'now' ? CARD : LOOK_CARD_W[LOOK]) + spacing.sm;
+  const step = (LOOK === 'now' ? CARD : PEEK_CARD_W) + spacing.sm;
   const [seen, setSeen] = useState(() => Math.ceil((screenW - 2 * spacing.lg) / step));
   const sawTo = (right: number) => { const n = Math.ceil(right / step); if (n > seen) setSeen(n); };
   if (!rows.length && (holding || heldShown)) {
@@ -172,7 +170,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
         </View>
         <View style={[styles.row, styles.heldRow]}>
           {[0, 1, 2].map((i) => (
-            LOOK !== 'now' ? <View key={i} style={[styles.card, lookFrame(LOOK)]}><LookHeldBody look={LOOK} /></View> :
+            LOOK === 'N' ? <View key={i} style={[styles.card, peekFrame]}><PeekHeldBody /></View> :
             <View key={i} style={styles.card}>
               <View style={styles.top}><View style={styles.heldTag} /></View>
               {/* The real card's room for its words (WordsRoom), under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
@@ -215,10 +213,10 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
               accessibilityRole="link"
               accessibilityLabel={[labelOf(c), meta, said, badge?.hit ? `hit ${badge.hit}` : null, badge?.posts].filter(Boolean).join(', ')}
               onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
-              style={({ pressed }) => [styles.card, LOOK !== 'now' && lookFrame(LOOK), pressed && styles.cardPressed]}
+              style={({ pressed }) => [styles.card, LOOK === 'N' && peekFrame, pressed && styles.cardPressed]}
             >
-              {LOOK !== 'now' ? (
-                <LookCardBody look={LOOK} name={labelOf(c)} lat={c.lat} lng={c.lng} miles={miles} count={c.count} lit={c.lit} kind={kind} tint={surfaceTint(kind)}
+              {LOOK === 'N' ? (
+                <PeekCardBody name={labelOf(c)} lat={c.lat} lng={c.lng} meta={meta} kind={kind} tint={surfaceTint(kind)}
                   hit={badge?.hit ?? null} posts={badge?.posts ?? null} draw={picturesGo && i < seen} />
               ) : <>
               {/* The surface's tag with what's on there beside it (a hit first, else its posts), so the card stays short. */}
