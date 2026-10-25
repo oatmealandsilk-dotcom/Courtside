@@ -5,13 +5,12 @@ import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
-import { surfaceAdjective, surfaceKind, surfaceLabel, surfaceShort, type SurfaceKind } from '@/features/places/courtSurface';
+import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
@@ -22,7 +21,7 @@ import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const CARD = 168;
@@ -31,27 +30,19 @@ const PAD = spacing.lg - 2;
 const MOST = 8;
 
 /**
- * What stands top left on a card, in place of the court icon (Oct 24, owner: the icon is "too ai
- * looking and repetitive"; "Maybe something that says the surface of the court?"). 'now' is the
- * icon tile; '1' a small tag, a dot in the surface's colour and its word ("Hard"), none when the
- * map does not say; '2' the tile filled with the surface's colour and its word ("HARD"), the
- * court's colour and "COURTS" when it does not say; '3' no tile, the line under the name says it
- * ("1.6 mi · 8 hard courts · lights") and a hit or posts stand top left alone.
+ * Top left on a card, in place of the old court icon (Oct 24, owner: the icon was "too ai looking
+ * and repetitive"; "Maybe something that says the surface of the court?"; he chose look 1): a small
+ * outlined tag, a dot in the surface's colour and its word ("Hard"), the status pill beside it.
+ * When the map does not say what the court is played on, no tag and no icon.
  */
-export type CourtsSurfaceLook = 'now' | '1' | '2' | '3';
-export const COURTS_SURFACE_LOOK = 'now' as CourtsSurfaceLook;
-
 /** A surface's colour, from the theme's surface slots (the same on every light court). */
 function surfaceTint(kind: SurfaceKind | null): string {
   return kind === 'hard' ? colors.surfaceHard : kind === 'clay' ? colors.surfaceClay : kind === 'grass' ? colors.surfaceGrass : colors.surfaceOther;
 }
 
-/** The line under a card's name: how far, how many courts (and of what, in look 3), lights. */
-function metaLine(miles: number, count: number, lit: boolean | undefined, kind: SurfaceKind | null): string {
-  const what = COURTS_SURFACE_LOOK === '3' && kind
-    ? `${count} ${surfaceAdjective[kind]} court${count === 1 ? '' : 's'}`
-    : count > 1 ? `${count} courts` : null;
-  return [formatMiles(miles), what, lit ? 'lights' : null].filter(Boolean).join(' · ');
+/** The line under a card's name: how far, how many courts, lights. */
+function metaLine(miles: number, count: number, lit: boolean | undefined): string {
+  return [formatMiles(miles), count > 1 ? `${count} courts` : null, lit ? 'lights' : null].filter(Boolean).join(' · ');
 }
 
 /**
@@ -163,7 +154,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
         <View style={[styles.row, styles.heldRow]}>
           {[0, 1, 2].map((i) => (
             <View key={i} style={styles.card}>
-              <View style={styles.top}>{COURTS_SURFACE_LOOK === 'now' || COURTS_SURFACE_LOOK === '2' ? <View style={styles.tile} /> : <View style={styles.heldTag} />}</View>
+              <View style={styles.top}><View style={styles.heldTag} /></View>
               {/* The real card's room for its words (WordsRoom), under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
               <View>
                 <WordsRoom />
@@ -191,10 +182,10 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
       <ScrollView nativeID="courts-near-strip" horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
         {rows.map(({ c, miles }) => {
           const kind = surfaceKind(c.surface);
-          const meta = metaLine(miles, c.count, c.lit, kind);
+          const meta = metaLine(miles, c.count, c.lit);
           const badge = badges.get(c.id);
-          // Said aloud once: look 3 already says it in the line, the others in their own words here.
-          const said = COURTS_SURFACE_LOOK !== 'now' && COURTS_SURFACE_LOOK !== '3' && kind ? `${surfaceAdjective[kind]} court${c.count === 1 ? '' : 's'}` : null;
+          // The tag said aloud: "hard courts".
+          const said = kind ? `${surfaceAdjective[kind]} court${c.count === 1 ? '' : 's'}` : null;
           return (
             <SwipePressable
               key={c.id}
@@ -203,12 +194,9 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
               onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             >
-              {/* The court's icon with what's on there beside it (a hit first, else its posts), so the card stays short. */}
+              {/* The surface's tag with what's on there beside it (a hit first, else its posts), so the card stays short. */}
               <View style={styles.top}>
-                {COURTS_SURFACE_LOOK === 'now' ? <View style={styles.tile}><CourtGlyph size={18} color={colors.brand} /></View>
-                  : COURTS_SURFACE_LOOK === '1' ? (kind ? <View style={styles.tag}><View style={[styles.tagDot, { backgroundColor: surfaceTint(kind) }]} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.tagText} numberOfLines={1}>{surfaceLabel[kind]}</Text></View> : null)
-                  : COURTS_SURFACE_LOOK === '2' ? <SurfaceSwatch kind={kind} />
-                  : null}
+                {kind ? <View style={styles.tag}><View style={[styles.tagDot, { backgroundColor: surfaceTint(kind) }]} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.tagText} numberOfLines={1}>{surfaceLabel[kind]}</Text></View> : null}
                 {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
                   : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
               </View>
@@ -232,18 +220,6 @@ export function CourtsNear({ center, revealOrder, foldGap = 0 }: {
     </View>
   );
   return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
-}
-
-/** Look 2: the tile filled with the surface's colour, its word in white ("HARD"); "COURTS" when the map does not say. */
-function SurfaceSwatch({ kind }: { kind: SurfaceKind | null }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const word = kind ? surfaceShort[kind] : 'COURTS';
-  return (
-    <View style={[styles.tile, { backgroundColor: surfaceTint(kind) }]}>
-      {/* A fixed tile, so its word never grows with the phone's text size (the card's label says it). */}
-      <Text allowFontScaling={false} style={[styles.swatchText, word.length === 5 && styles.swatchText5, word.length > 5 && styles.swatchText6]} numberOfLines={1}>{word}</Text>
-    </View>
-  );
 }
 
 /**
@@ -275,19 +251,12 @@ const styleDefinitions = StyleSheet.create({
   // A light card: no fill and no shadow, just a hairline in the theme's border colour, so the strip sits quietly on the page.
   card: { width: CARD, padding: PAD, gap: 4, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
-  // The quiet court tile of the search rows and the map's results: solid brand stays for buttons.
-  // The tile's height whatever stands there (or nothing), so no look is taller or shorter than another.
+  // The old court tile's 36 pt height whatever stands there (a tag, a pill, or nothing), so no card is taller or shorter than another.
   top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, minHeight: 36 },
-  tile: { width: 36, height: 36, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  // Look 1: a small hairline tag, the surface's dot and its word.
+  // A small hairline tag, the surface's dot and its word.
   tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 7, paddingRight: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, flexShrink: 0 },
   tagDot: { width: 7, height: 7, borderRadius: 4 },
   tagText: { ...typography.caption, letterSpacing: 0, color: colors.text },
-  // Look 2: the swatch's word, white on the surface's colour.
-  // Sized to the word so it fits the 36 pt tile whole: four letters at 10, five at 8.5, six at 7.5.
-  swatchText: { ...typography.caption, ...font('700'), fontSize: 10, letterSpacing: 0.3, color: colors.onMedia },
-  swatchText5: { fontSize: 8.5, letterSpacing: 0 },
-  swatchText6: { fontSize: 7.5, letterSpacing: 0 },
   name: { ...typography.bodyStrong, fontSize: 16, letterSpacing: -0.2, color: colors.text, lineHeight: 20 },
   meta: { ...typography.small, color: colors.textMuted },
   badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
@@ -303,7 +272,7 @@ const styleDefinitions = StyleSheet.create({
   heldRow: { flexDirection: 'row', overflow: 'hidden' },
   heldLine: { height: 14, marginVertical: 3, borderRadius: 7, backgroundColor: colors.bgElevated },
   heldMeta: { width: '48%', height: 12 },
-  // Looks 1 and 3 hold a tag's place, not a tile's.
+  // A tag's place.
   heldTag: { width: 56, height: 22, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
   // Over the unseen words, from their top.
   heldOver: { position: 'absolute', top: 0, left: 0 },

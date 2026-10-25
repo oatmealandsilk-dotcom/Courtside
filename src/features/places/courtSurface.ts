@@ -33,8 +33,5 @@ export function surfaceKind(word: string | null | undefined): SurfaceKind | null
 /** The word on a tag: "Hard", "Clay", "Grass". */
 export const surfaceLabel: Record<SurfaceKind, string> = { hard: 'Hard', clay: 'Clay', grass: 'Grass', turf: 'Turf', carpet: 'Carpet', synthetic: 'Synthetic' };
 
-/** The word inside a 36 pt swatch: six letters at most (six set a size smaller), so it fits. */
-export const surfaceShort: Record<SurfaceKind, string> = { hard: 'HARD', clay: 'CLAY', grass: 'GRASS', turf: 'TURF', carpet: 'CARPET', synthetic: 'SYNTH' };
-
 /** The word in a sentence: "8 hard courts". */
 export const surfaceAdjective: Record<SurfaceKind, string> = { hard: 'hard', clay: 'clay', grass: 'grass', turf: 'turf', carpet: 'carpet', synthetic: 'synthetic' };
