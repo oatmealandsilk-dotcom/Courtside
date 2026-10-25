@@ -545,6 +545,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // sheet over the Feed (a clip's comments, Share, the post menu, Likes…):
   // the Feed is still the page you are on, so the bar stays exactly as it
   // was. Only if that sheet gives way to a real page does the bar get its words.
+  // Either way it changes with the page, never as a move of its own after it (setBarCompact's
+  // withPage, Oct 25 audit: the bar rose and sank on every tap off and back onto the Feed).
   const keptDuck = useRef<number | null>(null);
   const stopWaiting = useRef<(() => void) | null>(null);
   useEffect(() => {
@@ -552,12 +554,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     stopWaiting.current = null;
     if (!focused || paused) return;
     barHolder = owner;
-    if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5); keptDuck.current = null; }
+    if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5, { withPage: true }); keptDuck.current = null; }
     const giveBack = () => {
       keptDuck.current = barCompact.value;
       if (barHolder !== owner) return;
       barHolder = null;
-      setBarCompact(false);
+      setBarCompact(false, { withPage: true });
     };
     return () => {
       if (focusedNow.current) return;

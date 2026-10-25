@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { Easing, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { PAGE_GUTTER, activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { isPageSwipeLocked, sectionPan, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
@@ -48,7 +48,7 @@ const SETTLE = { stiffness: 420, damping: 41, mass: 1, overshootClamping: true }
  * handed up to the tab row when `delegateLeft` / `delegateRight` say so,
  * otherwise the row gives a little and springs back.
  */
-export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0, blocked }: {
+export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 1, delegateLeft = false, delegateRight = false, fill = false, edgeBack = false, bleed = 0, blocked, jumpRef }: {
   index: number;
   panes: React.ReactNode[];
   onIndex: (next: number) => void;
@@ -103,6 +103,13 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
    * held open, and turning the page then would leave its disc behind).
    */
   blocked?: SharedValue<boolean>;
+  /**
+   * Filled in with a way to put the row straight on a pane, on the animation thread, ahead of
+   * `index` (a section changed while the page is out of sight, whose redraw comes as background
+   * work): the pane is in place as the page shows, and the redraw that follows finds it there.
+   * Only this pager fills it in (a browser's pager draws its panes by `index` itself).
+   */
+  jumpRef?: React.MutableRefObject<((pane: number) => void) | null>;
 }) {
   const { isPhone } = useResponsive();
   const count = panes.length;
@@ -199,6 +206,26 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [index, position]);
+
+  useEffect(() => {
+    if (!jumpRef) return undefined;
+    jumpRef.current = (pane: number) => {
+      if (pane === shownRef.current) return;
+      shownRef.current = pane;
+      setShown(pane);
+      const landing = onLand;
+      runOnUI((dest: number) => {
+        'worklet';
+        cancelAnimation(position);
+        driving.value = false;
+        base.value = dest;
+        position.value = dest;
+        if (progress) progress.value = 0;
+        if (landing) landing(dest);
+      })(pane);
+    };
+    return () => { jumpRef.current = null; };
+  }, [jumpRef, onLand, position, base, driving, progress]);
 
   const latest = useRef(onIndex);
   latest.current = onIndex;

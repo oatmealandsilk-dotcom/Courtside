@@ -1,6 +1,8 @@
-import React, { createContext, startTransition, use, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, startTransition, use, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { useIsFocused as useRouteFocused } from 'expo-router';
+// The router's own navigation hook, as useIsFocused (src/lib) reads it: asked on demand, it never redraws anything.
+import { useNavigation } from 'expo-router/build/react-navigation/core/useNavigation';
 import { AppStateLater } from '@/store/AppContext';
 import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
@@ -80,6 +82,17 @@ function useCoveredLater(onShow: boolean, wait: number): boolean {
 
 export function useTabActive(): boolean {
   return useContext(TabFocusContext) ?? true;
+}
+
+/**
+ * Whether the tab this sits in is on show at this moment, asked when it acts (a section asked
+ * for by another page, say), never redrawing the tab when it changes: in the phone's tab row,
+ * its slot on screen and the tabs' route on top; in a browser, its own route on top.
+ */
+export function useOnShowNow(): () => boolean {
+  const box = useContext(TabActiveBox);
+  const navigation = useNavigation();
+  return useCallback(() => (box ? box.active : true) && navigation.isFocused(), [box, navigation]);
 }
 
 /**
