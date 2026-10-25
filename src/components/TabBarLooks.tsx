@@ -220,7 +220,9 @@ function toward(hex: string, to: string, t: number): string {
 
 /** Less round than today's pill (its ends were half its height). */
 const PILL_RADIUS = 18;
-const PLUS_RADIUS = 11;
+/** The +'s shape in the quiet pill (Oct 25, owner: "Show me square vs circle"): 'square' a 42×32 rounded square, 'circle' a 38 round button. */
+const PLUS_SHAPE = 'square' as 'square' | 'circle';
+const PLUS_RADIUS = PLUS_SHAPE === 'circle' ? 19 : 11;
 
 const styles = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
@@ -235,7 +237,7 @@ const styles = StyleSheet.create({
   inner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   // The + stands above the Create box's dim (zIndex 2 over the veil's 1).
   plusAbove: { zIndex: 2 },
-  plus: { width: 42, height: 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
+  plus: { width: PLUS_SHAPE === 'circle' ? 38 : 42, height: PLUS_SHAPE === 'circle' ? 38 : 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
   label: { ...typography.smallStrong, fontSize: 11, letterSpacing: 0.15 },
   // Sits off the icon's shoulder rather than on top of it, as today.
   badge: {
