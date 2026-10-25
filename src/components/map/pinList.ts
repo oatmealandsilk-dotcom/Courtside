@@ -5,6 +5,8 @@ import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
 import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
 import { isOpenToHit } from '@/features/players/openToHit';
+import { surfaceAdjective, surfaceKind } from '@/features/places/courtSurface';
+import { LESS_AI } from '@/theme/look';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
@@ -97,7 +99,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const underYou = yours && !on && !!meAt && milesBetween(meAt, c) < 0.05;
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: tag ? `${c.name}, ${tag}` : c.name, mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).

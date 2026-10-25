@@ -28,7 +28,9 @@ import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typograp
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import type { CourtView } from './view';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
+import { surfaceTint } from '@/components/place/SurfaceTag';
+import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@/features/places/courtSurface';
 
 /*
  * A court's page (owner, Oct 10: "Do b."), the place card: the court the
@@ -299,10 +301,14 @@ const ACCESS_SAID: Record<Exclude<CourtAccess, 'unknown'>, string> = { public: '
 function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { access, bookUrl, map } = view;
-  const cols: { label: string; value: string; a11y: string; link?: () => void }[] = [];
+  const cols: { label: string; value: string; a11y: string; link?: () => void; dot?: SurfaceKind }[] = [];
   if (access !== 'unknown') cols.push({ label: 'Access', value: ACCESS_SHORT[access], a11y: `Who can play: ${ACCESS_SAID[access]}` });
   if (map) cols.push({ label: map.count === 1 ? 'Court' : 'Courts', value: String(map.count), a11y: `${map.count} ${map.count === 1 ? 'court' : 'courts'}` });
-  if (map?.surface) {
+  // The surface in the same words and colours as everywhere else a court is listed ("Hard", "Clay"), when it is one we know (Oct 24).
+  const kind = LESS_AI ? surfaceKind(map?.surface) : null;
+  if (map?.surface && kind) {
+    cols.push({ label: 'Surface', value: surfaceLabel[kind], a11y: `${surfaceAdjective[kind]} court${map.count === 1 ? '' : 's'}`, dot: kind });
+  } else if (map?.surface) {
     const s = map.surface.replace(/_/g, ' ');
     cols.push({ label: 'Surface', value: s.charAt(0).toUpperCase() + s.slice(1), a11y: `Surface: ${s}` });
   }
@@ -323,6 +329,7 @@ function FactStrip({ view, short }: { view: CourtView; short: boolean }) {
           <>
             <Text style={styles.stripLabel} numberOfLines={1}>{c.label}</Text>
             <View style={styles.stripValueRow}>
+              {c.dot ? <View style={[styles.stripDot, { backgroundColor: surfaceTint(c.dot) }]} /> : null}
               <Text style={[styles.stripValue, c.link && styles.stripLink]} numberOfLines={2}>{c.value}</Text>
               {c.link ? <Ionicons name="open-outline" size={13} color={colors.brand} /> : null}
             </View>
@@ -401,6 +408,7 @@ const styleDefinitions = StyleSheet.create({
   stripRule: { width: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: 2 },
   stripLabel: { ...typography.small, fontSize: 12, color: colors.textMuted },
   stripValueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, maxWidth: '100%' },
+  stripDot: { width: 7, height: 7, borderRadius: 4, marginRight: 2 },
   stripValue: { ...typography.bodyStrong, color: colors.text, textAlign: 'center', flexShrink: 1 },
   stripLink: { color: colors.brand },
   // The sections: one 32pt step between each.

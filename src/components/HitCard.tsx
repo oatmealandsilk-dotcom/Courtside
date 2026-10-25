@@ -27,7 +27,10 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
+import { surfaceTint } from '@/components/place/SurfaceTag';
+import { surfaceKind, surfaceLabel, surfaceAdjective } from '@/features/places/courtSurface';
+import { loadedSurface } from '@/features/players/courts';
 
 /**
  * A "Looking for a hit" post: who, when, where, what level and format, and
@@ -111,6 +114,8 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const theirs = !mine && !!currentUserId;
   const openPoster = theirs && author ? () => router.push(`/user/${author.id}`) : undefined;
   const canOpenCourt = hit.place.lat !== undefined && hit.place.lng !== undefined;
+  // The surface comes from the courts already loaded (a hit's saved place does not record it); none found, no tag.
+  const surface = LESS_AI ? surfaceKind(loadedSurface(hit.place.id)) : null;
   // Reported, it leaves your screens at once (the hit's own page goes back, as a reported thread's does).
   const report = () => confirmReport('hit', () => {
     afterReport(actions.reportUser(hit.authorId, `hit-request:${hit.id}`), author, actions);
@@ -170,7 +175,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
         <SwipePressable accessibilityRole="link" accessibilityLabel={`${hit.place.name}${miles !== undefined ? `, ${formatMiles(miles)}` : ''}. See the court`} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
-          <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>
+          {LESS_AI ? null : <View style={styles.placeTile}><CourtGlyph size={12} color={colors.brand} /></View>}
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
@@ -178,7 +183,8 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
         </SwipePressable>
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
-          <Text style={styles.details} numberOfLines={1}>
+          {surface ? <View style={styles.surfaceLead} accessible accessibilityLabel={`${surfaceAdjective[surface]} court`}><View style={[styles.surfaceDot, { backgroundColor: surfaceTint(surface) }]} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.details}>{surfaceLabel[surface]} ·</Text></View> : null}
+          <Text style={[styles.details, surface ? styles.detailsAfterSurface : null]} numberOfLines={1}>
             <Text style={styles.detailsFormat}>{FORMAT_LABEL[hit.format]}</Text>{` · ${levelText(hit, author?.profile.skillSystem)}`}
           </Text>
           <View style={[styles.tag, full && styles.tagFull]}>
@@ -312,7 +318,11 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
 }
 
 const styleDefinitions = StyleSheet.create({
-  card: { ...lift, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  // The court's surface, when the courts already on the phone know it: its dot and word lead the details line.
+  surfaceLead: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
+  surfaceDot: { width: 7, height: 7, borderRadius: 4 },
+  detailsAfterSurface: { marginLeft: -4 },
   head: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headWords: { flex: 1, minWidth: 0 },
   whoRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },

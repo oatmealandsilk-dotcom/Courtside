@@ -77,6 +77,23 @@ export function fetchCourts(center: LatLng, radiusMeters = 9000): Promise<Court[
   return ask;
 }
 
+/**
+ * What a court already on the phone is played on, by its id: a hit's saved place does not record
+ * its surface, so its card asks the courts already loaded (Oct 24). Undefined when not loaded or unknown.
+ */
+export function loadedSurface(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  for (const list of cache.values()) {
+    const c = list.find((x) => x.id === id);
+    if (c?.surface) return c.surface;
+  }
+  for (const list of Object.values(saved ?? {})) {
+    const c = list.find((x) => x.id === id);
+    if (c?.surface) return c.surface;
+  }
+  return undefined;
+}
+
 /** The courts around a spot if they are already on the phone, without waiting: a page can open on a full list. */
 export function peekCourts(center: LatLng, radiusMeters = 9000): Court[] | undefined {
   const key = areaKey(center, radiusMeters);
