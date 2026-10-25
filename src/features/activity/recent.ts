@@ -2,8 +2,8 @@ import type { DetectedActivity, HealthShareKey, ID, Post, PracticeSession, Sessi
 import { localDay } from '@/features/practice/stats';
 import { duration } from '@/lib/format';
 import type { TennisFlags } from './flags';
-import { activityDay, activityTitle, activityWhen, dayWords, loggedLabel, loggedTitle, sessionFromActivity, sessionFromLogged, statsSourceOf } from './format';
-import { inSentence, isTennisActivity } from './workouts';
+import { activityDay, activityHour, activityTitle, activityWhen, dayWords, loggedLabel, loggedTitle, sessionFromActivity, sessionFromLogged, sessionTitle, statsSourceOf } from './format';
+import { isTennisActivity } from './workouts';
 
 /*
  * Your recent sessions as one list, for attaching one to a Post or a Clip
@@ -101,12 +101,13 @@ export function statsOf(pick: SessionPick, share: HealthShareKey[]): SessionDeta
 export const pickTitle = (pick: SessionPick) => (pick.type === 'tracker' ? activityTitle(pick.activity) : loggedLabel(pick.session));
 
 /**
- * The caption a post from this session gets when you leave yours empty:
- * "Saturday tennis" or "Saturday run" (the day, and what the tracker called
- * it), "Tuesday practice". Never the time of day.
+ * The caption a post from this session gets when you leave yours empty: a
+ * tracker's says when it started and what the tracker called it, "Morning
+ * tennis" or "Evening run" (Oct 25, owner); one logged by hand keeps only
+ * its day, so "Tuesday practice" (sessionTitle).
  */
 export const pickCaption = (pick: SessionPick) => (pick.type === 'tracker'
-  ? `${new Date(`${activityDay(pick.activity)}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' })} ${inSentence(activityTitle(pick.activity))}`
+  ? sessionTitle(activityTitle(pick.activity), { day: activityDay(pick.activity), startHour: activityHour(pick.activity) })
   : loggedTitle(pick.session));
 
 /**

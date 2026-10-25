@@ -65,6 +65,9 @@ export function liveMinutes(s: LiveSession, now = Date.now()): number {
 /** The day it goes in your log: the day it started, in your own time zone. */
 export const liveDay = (s: Pick<LiveSession, 'startedAt'>) => localDay(new Date(s.startedAt));
 
+/** The hour (0–23) it started, in your own time zone: what makes its post "Morning practice" (format.sessionTitle). */
+export const liveHour = (s: Pick<LiveSession, 'startedAt'>) => new Date(s.startedAt).getHours();
+
 /** "6:02pm": when it started, as a clock on the wall says it. */
 export function startClock(s: Pick<LiveSession, 'startedAt'>): string {
   return new Date(s.startedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AP])M$/i, (_, x: string) => `${x.toLowerCase()}m`);

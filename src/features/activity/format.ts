@@ -270,11 +270,45 @@ export function loggedLabel(s: Pick<PracticeSession, 'kind' | 'won' | 'sets' | '
   return KIND_LABEL[s.kind];
 }
 
-/** "Tuesday practice", "Sunday match", "Saturday run": what a post from your log says when you leave the caption empty. */
-export function loggedTitle(s: Pick<PracticeSession, 'kind' | 'day'> & { workout?: string }): string {
-  const weekday = new Date(`${s.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
+/**
+ * The part of the day an hour (0–23) falls in, Strava's way (Oct 25, owner:
+ * "Do yes for morning evening afternoon"): Morning 4:00–11:59, Afternoon
+ * 12:00–16:59, Evening 17:00–3:59 (a game past midnight is still the evening's).
+ */
+export function partOfDay(hour: number): 'Morning' | 'Afternoon' | 'Evening' {
+  if (hour >= 4 && hour < 12) return 'Morning';
+  if (hour >= 12 && hour < 17) return 'Afternoon';
+  return 'Evening';
+}
+
+/**
+ * The title a post from a session gets when you leave the caption empty:
+ * when it started and what it was, "Morning practice", "Afternoon match",
+ * "Evening run" (Oct 25, owner), since the post already shows its date.
+ * With no start time to go on (a session logged by hand keeps only its
+ * day), its weekday, as before: "Thursday practice".
+ */
+export function sessionTitle(what: string, when: { day: string; startHour?: number | null }): string {
+  const lead = when.startHour != null
+    ? partOfDay(when.startHour)
+    : new Date(`${when.day}T12:00:00`).toLocaleDateString(undefined, { weekday: 'long' });
+  return `${lead} ${inSentence(what)}`;
+}
+
+/** The hour (0–23) a tracker's session started where it was played, when the tracker said where; otherwise on this phone's clock (as activityDay). */
+export function activityHour(a: Pick<DetectedActivity, 'startedAt' | 'tzOffsetMin'>): number {
+  if (a.tzOffsetMin != null) return new Date(Date.parse(a.startedAt) + a.tzOffsetMin * 60000).getUTCHours();
+  return new Date(a.startedAt).getHours();
+}
+
+/**
+ * "Tuesday practice", "Sunday match", "Saturday run": what a post from your
+ * log says when you leave the caption empty. Your log keeps the day, not the
+ * time, so it is the weekday; given when it started, "Morning practice".
+ */
+export function loggedTitle(s: Pick<PracticeSession, 'kind' | 'day'> & { workout?: string }, startHour?: number | null): string {
   const what = s.kind === 'fitness' && s.workout ? workoutName(s.workout) : KIND_LABEL[s.kind];
-  return `${weekday} ${inSentence(what)}`;
+  return sessionTitle(what, { day: s.day, startHour });
 }
 
 /** "Today", "Yesterday" or "Mon Sep 29", for a day in your log. */

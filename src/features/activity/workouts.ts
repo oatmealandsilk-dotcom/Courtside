@@ -181,7 +181,7 @@ export function distanceFigure(m: number | undefined | null): { value: number; u
   return { value: miles < 10 ? Math.round(miles * 10) / 10 : Math.round(miles), unit: 'mi' };
 }
 
-/** A name inside a sentence: "Saturday run", "Saturday strength training", but "Saturday HIIT". */
+/** A name inside a sentence: "Morning run", "Evening strength training", but "Morning HIIT". */
 export function inSentence(name: string): string {
   return name.length > 1 && name === name.toUpperCase() ? name : name.charAt(0).toLowerCase() + name.slice(1);
 }
