@@ -19,7 +19,6 @@ import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, LESS_AI_ROUND2 } from '@/theme/look';
-import { levelBadge } from '@/lib/badges';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -93,10 +92,10 @@ function QuestionCardInner({
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sourceText}>{question.source.label}</Text>
           </View>
-        ) : author ? (LESS_AI_ROUND2
-          // The rating as plain grey words, not a pill (item 6).
-          ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.footerText, { flexShrink: 0 }]}>{levelBadge(author.profile).label}</Text>
-          : <LevelPill profile={author.profile} small style={styles.levelPill} />) : null}
+        ) : author ? (
+          // The rating keeps its colour (Oct 25, owner: "I like the no @handle but I want to keep color for rating").
+          <LevelPill profile={author.profile} small style={styles.levelPill} />
+        ) : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
         {LESS_AI_DISCUSS ? (
           <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, pressed && { opacity: PRESS_DIM }]}>
