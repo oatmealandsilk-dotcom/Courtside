@@ -4600,8 +4600,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const courtSurface = useCallback(async (courtId: string): Promise<CourtSurfaceAnswer | null> => {
     const me = stateRef.current.currentUserId;
     if (!me || !isMapCourtId(courtId)) return null;
-    if (live(me)) return remote.fetchCourtSurface(me, courtId).catch(() => null);
-    return demoApi.courtSurface({ courtId, me });
+    const got = live(me) ? await remote.fetchCourtSurface(me, courtId).catch(() => null) : await demoApi.courtSurface({ courtId, me });
+    // Registered since this phone kept its courts: they take it now, so the next visit shows it and does not ask.
+    if (got?.registered) notePlayerSurface(courtId, got.registered);
+    return got;
   }, []);
 
   const voteCourtSurface = useCallback(async (courtId: string, surface: VotedSurface): Promise<CourtSurfaceAnswer> => {

@@ -138,9 +138,13 @@ export function notePlayerSurface(courtId: string, surface: VotedSurface) {
   for (const [key, list] of cache) cache.set(key, patch(list));
   for (const [key, list] of named) named.set(key, patch(list));
   if (saved) {
-    const next = Object.fromEntries(Object.entries(saved).map(([key, list]) => [key, patch(list)]));
-    saved = next;
-    void AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => undefined);
+    const was = saved;
+    const next = Object.fromEntries(Object.entries(was).map(([key, list]) => [key, patch(list)]));
+    // Written only when a kept court actually changed.
+    if (Object.keys(next).some((key) => next[key] !== was[key])) {
+      saved = next;
+      void AsyncStorage.setItem(SAVED_KEY, JSON.stringify(next)).catch(() => undefined);
+    }
   }
 }
 

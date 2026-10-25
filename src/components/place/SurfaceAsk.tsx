@@ -64,7 +64,7 @@ export function SurfaceAsk({ courtId, onRegistered }: { courtId: string; onRegis
       .catch(() => { if (taps.current === n) { setMine(was); setSaid('failed'); } });
   };
 
-  const question = said === 'thanks' ? 'Thanks' : said === 'failed' ? 'Didn’t save, try later' : 'What surface?';
+  const question = said === 'thanks' ? 'Thanks' : said === 'failed' ? 'Didn’t save' : 'What surface?';
   return (
     <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="What surface is this court?">
       <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.question, said === 'thanks' && styles.thanks]} numberOfLines={1} accessibilityLiveRegion="polite">{question}</Text>
