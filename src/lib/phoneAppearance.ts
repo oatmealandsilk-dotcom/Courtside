@@ -3,8 +3,8 @@ import { iosBuild } from './splashLook';
 
 /*
  * The phone's own light or dark mode (Oct 25, owner: "a toggle where you can do like automatic dark
- * mode … it automatically turned dark mode when your phone does"). Read for two things: Automatic
- * dark mode on the Theme page (src/theme/ThemeProvider.tsx), and which of the launch screen's two
+ * mode … it automatically turned dark mode when your phone does"; named Match phone the same day). Read
+ * for two things: Match phone on the Theme page (src/theme/ThemeProvider.tsx), and which of the launch screen's two
  * looks the app draws (src/components/LaunchMark.tsx), the same one the phone's own launch picture
  * shows.
  *

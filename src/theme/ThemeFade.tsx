@@ -73,7 +73,7 @@ export function FadeSpot({ store, render }: { store: FadeStore; render: (layers:
 let pageStore: FadeStore | null = null;
 const onShowListeners = new Set<() => void>();
 const tellOnShow = () => onShowListeners.forEach((listener) => listener());
-/** The Theme page's `begin`, while it is open: the phone turning dark or light (Automatic dark mode) fades on it as a pick does. */
+/** The Theme page's `begin`, while it is open: the phone turning dark or light (Match phone) fades on it as a pick does. */
 let pageBegin: ((leaving: ThemeName) => void) | null = null;
 /** Starts the open Theme page's fade from `leaving`, in the caller's go; false when no Theme page is open. */
 export function beginPageFade(leaving: ThemeName): boolean {

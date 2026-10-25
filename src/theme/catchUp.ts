@@ -228,7 +228,7 @@ export function catchUpNow(scope: 'all' | 'active' | readonly string[]) {
 }
 
 /**
- * A change the app made by itself (the phone turning dark or light, with Automatic dark mode on),
+ * A change the app made by itself (the phone turning dark or light, with Match phone on),
  * away from the Theme page, in the same go as the change: the tab on show turns with the rest of
  * the screen, in one redraw, rather than a moment after it (nothing is fading over it to wait
  * for). The other tabs carry on catching up out of sight, as background work. Behind a page (the

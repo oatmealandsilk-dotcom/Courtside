@@ -377,8 +377,8 @@ the closed test.
 - **Navigation-bar buttons that follow the app's theme**
   (`expo-navigation-bar`, Android code only). Since Oct 25 the bar under the
   app follows the phone's own light or dark mode (`userInterfaceStyle:
-  'automatic'`, needed for Automatic dark mode and the dark launch screen), so
-  a phone in dark mode with a light court picked and Automatic dark mode off
+  'automatic'`, needed for Match phone and the dark launch screen), so
+  a phone in dark mode with a light court picked and Match phone off
   gets a dark bar under a light page. With it, the bar would follow the
   court on show instead.
 - **Saving a clip or picture to the gallery** (`expo-media-library`).

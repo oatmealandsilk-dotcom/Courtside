@@ -31,7 +31,7 @@ module.exports = {
     version: '1.0.0',
     orientation: 'portrait',
     scheme: 'courtside',
-    // The app follows the phone's light or dark mode (Oct 25), for two things: Automatic dark mode on
+    // The app follows the phone's light or dark mode (Oct 25), for two things: Match phone on
     // the Theme page (Night while the phone is dark), and the launch screen's dark look on a dark
     // phone (expo-splash-screen's `dark`, below). Until then it was fixed to 'dark', so the app could
     // never tell. The app's own pages still wear the court picked; what follows the phone is only
@@ -121,11 +121,11 @@ module.exports = {
       ...(googleServicesFile ? { googleServicesFile } : {}),
       // Android's own parts of the app (its dialogs, its navigation-bar buttons) follow the
       // phone's light or dark mode (Oct 25), as on the iPhone: without that the app cannot
-      // see the phone's mode (Automatic dark mode, the dark launch screen). From Oct 5 they
+      // see the phone's mode (Match phone, the dark launch screen). From Oct 5 they
       // were fixed light: 'dark' had forced the whole window into night mode, so phones
       // with three-button navigation had a dark band with white buttons along the bottom
       // of every cream page. Following the phone, that band shows only on a phone in dark
-      // mode with a light court picked and Automatic dark mode off. The app's own pages
+      // mode with a light court picked and Match phone off. The app's own pages
       // follow its theme either way. (Buttons that follow the theme itself need
       // expo-navigation-bar, a later build: see docs/android-setup.md.)
       userInterfaceStyle: 'automatic',
@@ -161,7 +161,7 @@ module.exports = {
       // adaptiveColors off (Oct 25): left on, expo-router redraws every page in the app the moment the
       // phone (or browser) turns dark or light, for its own Color API, which the app does not use. With
       // the app following the phone (userInterfaceStyle 'automatic'), that would be a whole-app redraw at
-      // every change of mode, switch on or off, under a finger too. Automatic dark mode does its own
+      // every change of mode, switch on or off, under a finger too. Match phone does its own
       // change instead, through the smooth path (src/theme/ThemeProvider.tsx followPhone). Read from the
       // app's config at runtime, so it reaches phones by update.
       ['expo-router', { adaptiveColors: false }],

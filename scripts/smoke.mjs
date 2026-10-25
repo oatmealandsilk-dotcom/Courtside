@@ -498,6 +498,10 @@ class Page {
     await this.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
     await this.send('Emulation.setUserAgentOverride', { userAgent: PHONE_AGENT, platform: 'Linux armv8l', userAgentMetadata: { mobile: true, platform: 'Android', platformVersion: '14', architecture: '', model: 'Pixel 8', brands: [{ brand: 'Chromium', version: '129' }, { brand: 'Google Chrome', version: '129' }] } });
     await this.send('Page.addScriptToEvaluateOnNewDocument', { source: PAGE_HELPERS });
+    // A light screen, whatever this machine's own setting: a fresh browser is a new player, whose app
+    // follows the screen's light or dark mode (Match phone, on for new players since Oct 25), and the
+    // steps expect the light courts. matchPhoneCheck turns its own pages dark.
+    await this.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
   }
 
   onEvent({ method, params }) {
@@ -681,6 +685,8 @@ const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
 /** The page colours of the Paris court and the default court (Clean since Oct 24), as the browser writes them (src/theme). */
 const PARIS_BG = 'rgb(248, 240, 233)';
 const DEFAULT_BG = 'rgb(255, 255, 255)';
+/** The Night court's page colour (src/theme/ThemeProvider.tsx darkColors.bg). */
+const NIGHT_BG = 'rgb(15, 20, 18)';
 
 /**
  * Runs inside the page, just before a theme card is tapped: from the tap on,
@@ -782,6 +788,61 @@ async function checkAppHop(page) {
   } finally {
     stop();
     await cdp.send('Target.closeTarget', { targetId }).catch(() => {});
+  }
+}
+
+/**
+ * Match phone's start (Oct 25): the app opened in a browser of its own (its own storage, nothing
+ * shared with the run's page) with the screen dark, `seed` saved there first as if from an earlier
+ * visit (null: a fresh browser). Gives back what the app saved for Match phone, the court it shows,
+ * the court after a reload, and (fresh only) the court once the screen turns light. Any error in
+ * that page fails the step. Photographed to `shot`.
+ */
+async function matchPhoneCheck(page, seed, shot) {
+  const { cdp, origin } = page;
+  const { browserContextId } = await cdp.send('Target.createBrowserContext', { disposeOnDetach: true });
+  try {
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', browserContextId });
+    const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
+    const other = new Page(cdp, sessionId, origin);
+    await other.start();
+    await other.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'dark' }] });
+    if (seed) {
+      // Saved before the app's first line runs, on the first load only (a reload must find what the app saved).
+      const source = `if (location.origin === ${JSON.stringify(origin)} && !sessionStorage.getItem('smoke-seeded')) { sessionStorage.setItem('smoke-seeded', '1'); const seed = ${JSON.stringify(seed)}; for (const k in seed) localStorage.setItem(k, seed[k]); }`;
+      await other.send('Page.addScriptToEvaluateOnNewDocument', { source });
+    }
+    // The court the app shows, read only from a page loaded since the last reload (the old one is marked).
+    const court = () => other.waitUntil(() => other.eval('window.__smokeOld ? null : window.__courtsideTheme?.live?.() ?? null'), 45000, 'the app to draw its court');
+    // The peek (open hits, signed out): a page of the app's own, drawn in the court it opens on.
+    await other.goto('/peek');
+    const theme = await court();
+    const saved = await other.eval(`localStorage.getItem('courtside-theme-auto-dark')`);
+    await other.waitFor({ text: 'Open hits near you' }, 45000);
+    const pageBg = await other.call(() => {
+      const el = [...document.querySelectorAll('div')].find((d) => d.childElementCount === 0 && d.textContent === 'Open hits near you' && d.getBoundingClientRect().height > 0);
+      for (let x = el; x && x !== document.body; x = x.parentElement) {
+        const colour = getComputedStyle(x).backgroundColor;
+        if (x.getBoundingClientRect().width >= innerWidth - 1 && colour !== 'rgba(0, 0, 0, 0)') return colour;
+      }
+      return null;
+    });
+    await sleep(300);
+    await other.screenshot(shot);
+    await other.eval('window.__smokeOld = true');
+    await other.send('Page.reload', {});
+    const afterReload = await court();
+    let inLight = null;
+    if (!seed) {
+      await other.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] });
+      inLight = await other.waitUntil(async () => { const now = await other.eval('window.__courtsideTheme?.live?.() ?? null'); return now === 'night' ? null : now; }, 10000, 'the app to leave Night as the screen turns light').catch(() => 'night');
+    }
+    if (other.problems.length) throw Object.assign(new Error(`${other.problems.length} error(s) in the Match phone page`), { problems: other.problems });
+    if (other.blockedSupabase.length) throw new Error(`the app tried to reach the live backend: ${other.blockedSupabase[0]}`);
+    log(`match phone (${seed ? 'used before' : 'new'}): saved ${saved}, ${theme} (page ${pageBg}), after reload ${afterReload}${inLight ? `, light ${inLight}` : ''}`);
+    return { saved, theme, page: pageBg, afterReload, inLight };
+  } finally {
+    await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => undefined);
   }
 }
 
@@ -1242,7 +1303,8 @@ const STEPS = [
       log(`theme: check moved ${took.ring} ms after the tap, page colour ${took.page} ms`);
       await themeFadeDone(page);
     },
-    expect: [{ css: '[aria-label="Paris theme"][aria-checked="true"]' }, { css: '[aria-label="Clean theme"][aria-checked="false"]' }],
+    // This browser started fresh, a new player: Match phone is on (Oct 25, owner: "Match phone. On for new users").
+    expect: [{ css: '[aria-label="Paris theme"][aria-checked="true"]' }, { css: '[aria-label="Clean theme"][aria-checked="false"]' }, { css: '[aria-label="Match phone"][aria-checked="true"]' }],
     // Back to the default court, so every later step sees the app as it always was.
     after: async (page) => {
       await page.call(watchThemeChange, 'Clean theme', DEFAULT_BG);
@@ -1255,6 +1317,26 @@ const STEPS = [
       const profileBg = await profilePageColour(page);
       if (profileBg !== DEFAULT_BG) throw new Error(`Profile is still drawn in another court after the theme change (${profileBg}, want ${DEFAULT_BG})`);
     },
+  },
+  {
+    // Oct 25, owner: "Match phone. On for new users". Two more browsers of their own (their own
+    // storage), each with the screen dark: a fresh one (a new player: Match phone on, so the app
+    // opens on Night, still on after a reload, and back on Clean when the screen turns light), and one
+    // that has used the app before (an old saved thing there: Match phone off, the app on Clean).
+    // The run's own page is not touched.
+    name: 'match-phone',
+    title: 'Match phone: on for a new player, off for one who used the app before',
+    async run(page) {
+      const number = String(STEPS.findIndex((s) => s.name === 'match-phone') + 1).padStart(2, '0');
+      const fresh = await matchPhoneCheck(page, null, path.join(OPTS.out, `${number}-match-phone-new.png`));
+      if (fresh.saved !== '1' || fresh.theme !== 'night' || fresh.page !== NIGHT_BG) throw new Error(`a new player in a dark browser: Match phone saved "${fresh.saved}", app on ${fresh.theme}, page ${fresh.page} (want "1", night, ${NIGHT_BG})`);
+      if (fresh.afterReload !== 'night') throw new Error(`a new player, opened again: the app is on ${fresh.afterReload} (want night: decided once, never flipped)`);
+      if (fresh.inLight !== 'clean') throw new Error(`a new player, the screen turned light: the app is on ${fresh.inLight} (want clean)`);
+      const used = await matchPhoneCheck(page, { 'courtside.tips.done.v2': '["theme"]' }, path.join(OPTS.out, `${number}-match-phone-used.png`));
+      if (used.saved !== '0' || used.theme !== 'clean' || used.page !== DEFAULT_BG) throw new Error(`someone who used the app before, in a dark browser: Match phone saved "${used.saved}", app on ${used.theme}, page ${used.page} (want "0", clean, ${DEFAULT_BG})`);
+      if (used.afterReload !== 'clean') throw new Error(`someone who used the app before, opened again: the app is on ${used.afterReload} (want clean)`);
+    },
+    expect: [{ text: 'Edit profile' }],
   },
   {
     name: 'week-chart',

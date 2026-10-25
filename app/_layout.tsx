@@ -1,3 +1,6 @@
+// First of all, before this open saves anything: what CourtSide had saved here already (a new player
+// or not: Match phone starts on only for a new one, src/lib/usedBefore.ts).
+import '@/lib/usedBefore';
 // First, before any text is drawn: text follows the phone's size setting, with a ceiling.
 import '@/lib/textScale';
 import '@/lib/launchSplash';

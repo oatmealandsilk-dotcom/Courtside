@@ -7,6 +7,7 @@ import { NEW_SPLASH } from '@/lib/splashLook';
 import { catchUpNow, catchUpShown, installCatchUp, noteLive, tapped } from './catchUp';
 import { beginPageFade } from './ThemeFade';
 import { PHONE_APPEARANCE, onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
+import { keysAtOpen, keysAtOpenNow, usedBefore } from '@/lib/usedBefore';
 import { claimedDepth } from '@/features/navigation/gestureClaim';
 import { isPageDragging, isPageScrolling, subscribePageDragging } from '@/features/navigation/swipeLock';
 
@@ -203,17 +204,39 @@ export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
  */
 export const DEFAULT_THEME: ThemeName = 'clean';
 
-/** The court picked, saved on this phone (or in this browser). With Automatic dark mode on, still the court picked, never the Night it shows. */
+/** The court picked, saved on this phone (or in this browser). With Match phone on, still the court picked, never the Night it shows. */
 const STORAGE_KEY = 'courtside-theme';
-/** Automatic dark mode, saved beside it: '1' on, anything else off (Oct 25). */
+/** Match phone, saved beside it: '1' on, anything else off (Oct 25). Saved from the first open on (matchPhoneFrom). */
 const AUTO_DARK_KEY = 'courtside-theme-auto-dark';
 const LEGACY_NIGHT_KEY = 'courtside-night-mode';
+
+/**
+ * Match phone, as saved; or, where it was never saved, decided now and saved, so it is decided once
+ * and never changes by itself after (Oct 25, owner: "Match phone. On for new users"):
+ *   - a new player (nothing of CourtSide's saved on this phone, or in this browser, as this open
+ *     began: a fresh install) starts with it on;
+ *   - anyone who used the app here before (any of its saved things there: src/lib/usedBefore.ts)
+ *     keeps what they had, off, until they switch it on.
+ * Either way the Theme page's switch changes it, as before. Where what was saved could not be read,
+ * it stays off and nothing is saved (the next open, finding this one's things, counts as used).
+ * Where the app cannot see the phone's mode (iPhone builds up to 18, PHONE_APPEARANCE) the switch is
+ * hidden: always off there, and nothing is decided or saved, so the first open of a build that can
+ * see it decides, by then counting that phone as used.
+ */
+function matchPhoneFrom(saved: string | null | undefined, keysBefore: readonly string[] | null): boolean {
+  if (!PHONE_APPEARANCE) return false;
+  if (saved != null) return saved === '1';
+  const before = usedBefore(keysBefore, AUTO_DARK_KEY);
+  if (before === null) return false;
+  save(AUTO_DARK_KEY, before ? '0' : '1');
+  return !before;
+}
 
 function readStored(): { court: ThemeName; autoDark: boolean } {
   try {
     if (Platform.OS !== 'web') return { court: DEFAULT_THEME, autoDark: false };
     const saved = localStorage.getItem(STORAGE_KEY);
-    const autoDark = localStorage.getItem(AUTO_DARK_KEY) === '1';
+    const autoDark = matchPhoneFrom(localStorage.getItem(AUTO_DARK_KEY), keysAtOpenNow());
     if (saved && saved in themes) return { court: saved as ThemeName, autoDark };
     // Anyone who had night mode on before keeps it.
     return { court: localStorage.getItem(LEGACY_NIGHT_KEY) === 'true' ? 'night' : DEFAULT_THEME, autoDark };
@@ -274,14 +297,16 @@ let live: ThemeName = 'default';
 let picked = false;
 
 /*
- * Automatic dark mode (Oct 25, owner: "a toggle where you can do like automatic dark mode … it
+ * Match phone (Oct 25, owner: "a toggle where you can do like automatic dark mode … it
  * automatically turned dark mode when your phone does … I think that's what Instagram Snapchat
- * does"). Off unless switched on, on the Theme page. On: Night while the phone is in dark mode, the
- * court picked while it is light. A dark court picked (Night, New York) stays as it is.
+ * does", then "Match phone. On for new users"). On from the start for a new player, off for
+ * everyone who used the app before (matchPhoneFrom); the Theme page's switch either way. On: Night
+ * while the phone is in dark mode, the court picked while it is light. A dark court picked (Night,
+ * New York) stays as it is.
  *
  * `chosen` is the court picked (what is saved); `live` is what shows. They differ only while this is
  * on and the phone is dark. Picking a court while that is so (a light one: the app is on Night)
- * turns Automatic dark mode off, so the court picked is what you see; picking one while the phone
+ * turns Match phone off, so the court picked is what you see; picking one while the phone
  * is light keeps it on, the court picked becoming the one for light mode.
  *
  * Only where the app can see the phone's mode (PHONE_APPEARANCE: the website, Android, iPhone builds
@@ -292,25 +317,25 @@ let autoDark = false;
 /** The phone (or browser) in dark mode, as last heard. */
 let phoneIsDark = false;
 
-/** What shows for a court picked, with Automatic dark mode on or off and the phone dark or light. */
+/** What shows for a court picked, with Match phone on or off and the phone dark or light. */
 export function shownFor(court: ThemeName, auto: boolean, dark: boolean): ThemeName {
   return auto && dark && !DARK_THEMES.has(court) ? 'night' : court;
 }
 const shownNow = () => shownFor(chosen, autoDark && PHONE_APPEARANCE, phoneIsDark);
 
-/** Whether this app can offer Automatic dark mode (it can see the phone's light or dark mode). */
+/** Whether this app can offer Match phone (it can see the phone's light or dark mode). */
 export const AUTO_DARK_AVAILABLE = PHONE_APPEARANCE;
 
 const autoListeners = new Set<() => void>();
 const subscribeAuto = (listener: () => void) => { autoListeners.add(listener); return () => { autoListeners.delete(listener); }; };
 const getAuto = () => autoDark && PHONE_APPEARANCE;
-/** Automatic dark mode on or off, for the Theme page's switch. */
+/** Match phone on or off, for the Theme page's switch. */
 export function useAutoDark(): boolean {
   return useSyncExternalStore(subscribeAuto, getAuto, getAuto);
 }
-/** The court picked (saved), whatever shows: with Automatic dark mode on and the phone dark, Night shows over it. */
+/** The court picked (saved), whatever shows: with Match phone on and the phone dark, Night shows over it. */
 export const pickedTheme = (): ThemeName => chosen;
-/** What would show with Automatic dark mode switched to `on`, now (the Theme page starts its fade only when that differs). */
+/** What would show with Match phone switched to `on`, now (the Theme page starts its fade only when that differs). */
 export const shownWithAutoDark = (on: boolean): ThemeName => shownFor(chosen, on && PHONE_APPEARANCE, phoneIsDark);
 
 /** The court picked, whatever any held-back tab is still showing. */
@@ -370,7 +395,7 @@ function show(name: ThemeName) {
 }
 
 /**
- * Picks a court: saved at once and shown (see show). With Automatic dark mode on and the phone
+ * Picks a court: saved at once and shown (see show). With Match phone on and the phone
  * dark, a light court picked turns it off, so what you picked is what you see.
  */
 function setTheme(name: ThemeName) {
@@ -391,7 +416,7 @@ function setAutoFlag(on: boolean) {
 }
 
 /**
- * Automatic dark mode on or off (the Theme page's switch): saved at once, and the app goes to Night
+ * Match phone on or off (the Theme page's switch): saved at once, and the app goes to Night
  * or back to the court picked if the phone is dark, the same way as a pick.
  */
 export function setAutoDark(on: boolean) {
@@ -403,7 +428,7 @@ export function setAutoDark(on: boolean) {
 }
 
 /*
- * The phone turning dark or light with Automatic dark mode on. Never under a finger: a page or a
+ * The phone turning dark or light with Match phone on. Never under a finger: a page or a
  * section being swiped, the Feed's clips scrolling, or a moment after either (the swipe settling),
  * the change waits for the page to be still. On the Theme page it plays as a pick does (the old look
  * fading off the page); anywhere else the page on show turns in one go and the rest follow out of
@@ -514,12 +539,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS === 'web') return undefined;
     let alive = true;
     const giveUp = setTimeout(() => { if (alive) setLoaded(true); }, 800);
-    AsyncStorage.multiGet([STORAGE_KEY, AUTO_DARK_KEY])
-      .then((pairs) => {
+    Promise.all([AsyncStorage.multiGet([STORAGE_KEY, AUTO_DARK_KEY]), keysAtOpen()])
+      .then(([pairs, keysBefore]) => {
         if (!alive || picked) return;
         const saved = pairs[0]?.[1];
         if (saved && saved in themes) chosen = saved as ThemeName;
-        autoDark = pairs[1]?.[1] === '1';
+        autoDark = matchPhoneFrom(pairs[1]?.[1], keysBefore);
         if (autoDark) autoListeners.forEach((listener) => listener());
         phoneIsDark = phoneDark();
         const next = shownNow();

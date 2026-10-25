@@ -18,12 +18,14 @@ import { useNavigation } from 'expo-router';
 
 const LEAD = 'Applies everywhere straight away. Pick the court you would rather be on.';
 /**
- * Automatic dark mode (Oct 25): the owner's own words for it ("a toggle where you can do like automatic
- * dark mode … it automatically turned dark mode when your phone does"). Instagram calls the same thing
- * "System default", Snapchat "Match System".
+ * Match phone (Oct 25): asked for as "a toggle where you can do like automatic dark mode … it
+ * automatically turned dark mode when your phone does", named by the owner the same day ("Match
+ * phone. On for new users": on from the start for a new player, see ThemeProvider's matchPhoneFrom).
+ * Instagram calls the same thing "System default", Snapchat "Match System". The switch is named
+ * Match phone for screen readers too (the auto-tester finds it by that name).
  */
-const AUTO_TITLE = 'Automatic dark mode';
-const AUTO_LINE = `Night when your ${Platform.OS === 'web' ? 'device' : 'phone'} is dark`;
+const AUTO_TITLE = 'Match phone';
+const AUTO_LINE = `Dark when your ${Platform.OS === 'web' ? 'device' : 'phone'} is in dark mode`;
 
 /**
  * Every court, with a swatch and a line on what it is, on its own page.
@@ -55,7 +57,7 @@ export default function ThemePage() {
     begin(leaving);
     setTheme(name);
   }, [begin, setTheme]);
-  // Automatic dark mode switched: the page fades to Night (or back) as for a pick, when the phone is dark.
+  // Match phone switched: the page fades to Night (or back) as for a pick, when the phone is dark.
   const onAuto = useCallback((on: boolean) => {
     const leaving = liveTheme();
     if (shownWithAutoDark(on) !== leaving) begin(leaving);
@@ -112,7 +114,7 @@ const styleDefinitions = StyleSheet.create({
   ring: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.borderStrong },
   // Where the slot sits in the card: its right padding in, the full height, the ring in the middle.
   ringCopy: { position: 'absolute', top: 0, bottom: 0, right: spacing.md + 1, width: 24, alignItems: 'center', justifyContent: 'center' },
-  // Automatic dark mode: a card like the courts', a little apart from them above the list.
+  // Match phone: a card like the courts', a little apart from them above the list.
   autoRow: { marginBottom: spacing.lg },
   // Its swatch: the court picked and Night, side by side, the two it moves between.
   half: { flex: 1 },
@@ -122,7 +124,7 @@ const styleDefinitions = StyleSheet.create({
 type Styles = ReturnType<typeof useThemedStyles<typeof styleDefinitions>>;
 
 /**
- * Automatic dark mode's switch, in a card like the courts' (Oct 25). Its swatch is the court you
+ * Match phone's switch, in a card like the courts' (Oct 25). Its swatch is the court you
  * picked beside Night: what the app moves between as your phone goes light and dark. Bottom to top
  * as a ThemeCard: the old court's face (fading), the live face, the live edge, the old court's
  * words and edge (fading).
