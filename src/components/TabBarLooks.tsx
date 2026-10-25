@@ -8,6 +8,7 @@ import { Glass } from '@/components/ui/Glass';
 import { useFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { barCompact } from '@/features/navigation/barShrink';
+import { getStage } from '@/features/feed/commentStage';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -80,11 +81,25 @@ export function LookBar({
   // snaps from light to dark under a top row that eases, and nothing rests on an animated value.
   const [shownMedia, setShownMedia] = useState(media);
   const [mediaLayers, setMediaLayers] = useState<readonly MediaLayer[]>([]);
+  // The glass's own dark or light: `media`, except for two frames after a clip's comments were up.
+  const [glassHeld, setGlassHeld] = useState<boolean | null>(null);
   if (shownMedia !== media) {
     const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
     setShownMedia(media);
     setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+    // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
+    // to nothing), and a page opened over them (a profile, a court) flips `media` in the same redraw that
+    // lets the fade go, which reaches the screen only a frame later. Glass re-tinted under a parent at
+    // nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole again,
+    // under the solid copy fading over it. Anywhere else it re-tints at once, as before.
+    if (glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
   }
+  useEffect(() => {
+    if (glassHeld === null) return undefined;
+    let second = 0;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setGlassHeld(null)); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); };
+  }, [glassHeld]);
   const begun = useRef(new Set<number>());
   const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
   useEffect(() => {
@@ -109,7 +124,7 @@ export function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = media) => (
-    <Face palette={palette} media={overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
+    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} items={items} activeRoute={activeRoute} profileAlerts={profileAlerts}
       onTab={onTab} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} />
   );
   return (
@@ -133,8 +148,9 @@ export function LookBar({
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
-  palette: Palette; media: boolean; live: boolean;
+function Face({ palette: c, media, glassMedia, live, items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil }: {
+  /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
+  palette: Palette; media: boolean; glassMedia: boolean; live: boolean;
   items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
@@ -148,7 +164,8 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
   // and on a fading copy that colour solid. Over a picture: dark glass (the page's own colour where it
   // is dark already, as on New York) and white marks, the glass told so too, so the two always agree.
   const darkPage = inkOn(c.bg) === '#FFFFFF';
-  const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.bg;
+  const groundOf = (overMedia: boolean) => (overMedia ? (darkPage ? c.bg : darkColors.bg) : c.bg);
+  const ground = groundOf(media);
   const line = media ? withAlpha(c.onMedia, 0.14) : c.border;
   const idleIcon = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
   const idleLabel = media ? withAlpha(c.onMedia, 0.6) : c.textFaint;
@@ -225,7 +242,7 @@ function Face({ palette: c, media, live, items, activeRoute, profileAlerts, onTa
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades.
   return (
-    <Glass clear tint={ground} dark={media ? true : undefined} radius={PILL_RADIUS} style={styles.pill}>
+    <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={PILL_RADIUS} style={styles.pill}>
       {inside}
     </Glass>
   );
