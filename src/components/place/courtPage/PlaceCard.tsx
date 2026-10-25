@@ -10,6 +10,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb';
+import { MapCreditDot } from '@/components/map/MapCreditDot';
 import { CourtKing } from '@/components/place/CourtKing';
 import { HereTag } from '@/components/place/CourtLife';
 import { SurfaceAsk } from '@/components/place/SurfaceAsk';
@@ -26,12 +27,12 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { TextScale, buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import { courtPageLook } from './look';
-import { FactsLine, MapCredit, NameHeart, NowRow, OpenHits, PlayAndSquares, PlayersSay, canSayNow } from './final';
+import { FactsLine, NameHeart, NowRow, OpenHits, PlayAndSquares, PlayersSay, canSayNow } from './final';
 import type { CourtView } from './view';
 import { LESS_AI_COURTS, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
@@ -42,7 +43,7 @@ import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@
  * (owner, Oct 10: "Do b."; made whole Oct 25, look.ts 'final').
  *
  *   The map of the court, edge to edge, with its pin; a tap opens the full
- *   map there ("See on map" says so), its credit small in the corner.
+ *   map there ("See on map" says so), its credit a tiny ⓘ in the corner.
  *   The page rises over it as a sheet: the name with Follow's heart beside
  *   it; the facts in one line ("4 courts · ● Hard · Lights · Public"); the
  *   town, how far, how many follow it; who has played here, as faces; how it
@@ -51,7 +52,7 @@ import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@
  *   surface?" where the map does not say.
  *   Then its sections, each opening the same way (SectionHead) and every
  *   empty one a single line: the open hits first, the clips, King of the
- *   Court, what players say, and the map's credit for the facts.
+ *   Court, what players say (the map's ⓘ credits the facts too).
  *
  * The page before it (look.ts 'now': five round actions, a facts strip,
  * the clips first) is kept one switch away.
@@ -98,7 +99,7 @@ export function PlaceCard({ view }: { view: CourtView }) {
   const nowOK = canSayNow(view);
   // On a phone the page can only start to slide in once all of it is built (Oct 24, owner: "Buttons
   // need to be way more responsive. They are way to delayed when I click them"). So the sections
-  // under the posts (King of the Court, what players say, the credit; the old page's open hits too)
+  // under the posts (King of the Court, what players say; the old page's open hits too)
   // are built once it has slid in (useArrived), as notifications and messages do. Only with two rows
   // of posts or more: then they are under the bar on every phone, out of sight; with fewer they can
   // show on the first screen, and come with the page as before. A computer or an iPad can show them
@@ -154,7 +155,6 @@ export function PlaceCard({ view }: { view: CourtView }) {
               {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). */}
               {below && view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} look="line" /> : null}
               {below && view.extras && view.factsId ? <PlayersSay courtId={view.factsId} name={view.name} /> : null}
-              {below ? <MapCredit view={view} /> : null}
             </View>
           ) : (
             <>
@@ -167,7 +167,6 @@ export function PlaceCard({ view }: { view: CourtView }) {
                 {/* King of the Court (migration 130): signed in, at a court on the map, never at someone's home court, and only while its switch is on for you (migration 140; admins for now). */}
                 {below && view.factsId && view.currentUserId && view.access !== 'private' ? <CourtKing courtId={view.factsId} name={view.name} refresh={view.kingTick} /> : null}
                 {below && view.extras && view.factsId ? <SaysSection courtId={view.factsId} name={view.name} /> : null}
-                {below && view.factsLine ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.credit}>Court details from OpenStreetMap</Text> : null}
               </View>
             </>
           )}
@@ -229,8 +228,9 @@ function PlaceHero({ lat, lng, top, height, name, onOpenMap, offsetY, strip, rou
           </View>
         )}
       </Pressable>
-      {/* The map's licence asks for its credit on the map: kept small, muted, in the corner (Oct 25, owner: "make open street map smaller"). */}
-      <Text pointerEvents="none" maxFontSizeMultiplier={TextScale.CHROME} style={[styles.osm, { bottom: over + 5 }]}>© OpenStreetMap</Text>
+      {/* The map's licence asks for its credit on the map: a tiny ⓘ in the corner that shows it on a tap (Oct 25, owner: "For open street map
+          can you just put a small dot instead of the full word"). It names the court's facts too, so the page needs no credit line at its foot. */}
+      <MapCreditDot align="left" label="Map and court data © OpenStreetMap contributors" style={[styles.osm, { bottom: over + 5 }]} />
     </View>
   );
 }
@@ -419,7 +419,7 @@ const styleDefinitions = StyleSheet.create({
   mapChipPressed: { opacity: 0.8, transform: [{ scale: 0.97 }] },
   mapChipGlass: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, height: 34, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   mapChipText: { ...typography.smallStrong, color: colors.text },
-  osm: { position: 'absolute', left: 10, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
+  osm: { left: 10 },
   pin: { position: 'absolute', left: '50%', marginLeft: -PIN_W / 2, width: PIN_W, height: PIN_H, alignItems: 'center' },
   pinGround: { position: 'absolute', bottom: 0, width: 20, height: 7, borderRadius: 4, marginBottom: 0.5 },
   pinBadge: { position: 'absolute', top: 3, left: 3, width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
@@ -478,7 +478,6 @@ const styleDefinitions = StyleSheet.create({
   finalSections: { marginTop: 28, gap: 28, paddingBottom: spacing.sm },
   // Below the Play here row: the surface question, a row of its own.
   ask: { marginTop: spacing.lg },
-  credit: { fontSize: 9, lineHeight: 12, letterSpacing: 0.1, color: colors.textFaint, textAlign: 'center', marginTop: -spacing.md },
   // The bar over the top.
   bar: { position: 'absolute', left: 0, right: 0, top: 0 },
   barGround: { backgroundColor: colors.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },

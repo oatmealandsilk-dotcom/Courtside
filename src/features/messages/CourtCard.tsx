@@ -4,6 +4,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtMapThumb } from '@/components/map/CourtMapThumb';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { MapCreditDot } from '@/components/map/MapCreditDot';
 import { Tappable } from '@/components/Tappable';
 import { nearestPlace } from '@/data/locations';
 import type { Message } from '@/data/types';
@@ -80,7 +81,8 @@ export function CourtCard({ place, width = COURT_CARD_W, mine, tail, joinTop = f
           <View style={styles.halo} />
           <View style={styles.pin}><CourtGlyph size={12} color={colors.brandInk} /></View>
         </View>
-        <Text pointerEvents="none" style={styles.credit}>© OpenStreetMap</Text>
+        {/* The map's credit, folded into a small ⓘ in its corner (Oct 25, owner: "just put a small dot instead of the full word"); its own press, so a tap on it does not open the court. */}
+        <MapCreditDot style={styles.credit} />
       </View>
       <View style={styles.foot}>
         <View style={styles.words}>
@@ -115,7 +117,7 @@ const styleDefinitions = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 5, shadowOffset: { width: 0, height: 2 }, elevation: 3,
   },
-  credit: { position: 'absolute', right: 6, bottom: 4, fontSize: 8, lineHeight: 10, color: colors.textFaint, opacity: 0.85 },
+  credit: { right: 6, bottom: 5 },
   foot: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingLeft: spacing.md, paddingRight: 10, paddingVertical: 9 },
   words: { flex: 1, minWidth: 0, gap: 1 },
   name: { ...typography.bodyStrong, ...font('600'), fontSize: 15, color: colors.text, lineHeight: 19 },
