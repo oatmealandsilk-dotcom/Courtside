@@ -975,7 +975,8 @@ const STEPS = [
         throw new Error('the map card says "Map didn’t load", though the map server answered');
       }
     },
-    expect: [{ text: 'Open to hit' }, { text: 'Open hits' }],
+    // Open hits sits further down since the map card grew to 400 (Oct 25): on the page, maybe below the bar.
+    expect: [{ text: 'Open to hit' }, { text: 'Open hits', any: true }],
   },
   {
     // Oct 22, owner: "The map blips in". A search hides the map card rather than taking it down, so
