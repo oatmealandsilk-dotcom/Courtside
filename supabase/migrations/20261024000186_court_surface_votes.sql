@@ -97,7 +97,10 @@ begin
   if p_surface is null or p_surface not in ('hard', 'clay', 'grass') then raise exception 'surface?'; end if;
   if exists (select 1 from public.profiles where id = me and suspended_at is not null) then raise exception 'suspended'; end if;
   if p_court is null or not exists (select 1 from public.courts where id = p_court) then raise exception 'court?'; end if;
-  -- One answer at a time per court, so two taps at once are counted in order.
+  -- One answer at a time per player (so 60 a day holds even when many are
+  -- sent at once), then per court (so two players' taps at once are counted
+  -- in order). Always in this order, so two answers never get stuck waiting on each other.
+  perform pg_advisory_xact_lock(hashtextextended('court_surface_player:' || me::text, 0));
   perform pg_advisory_xact_lock(hashtextextended('court_surface:' || p_court, 0));
 
   select * into had from public.court_surface_votes where court_id = p_court and user_id = me;
@@ -112,7 +115,7 @@ begin
     if had.voted_at > now() - interval '1 day' and had.changes >= 10 then raise exception 'slow down'; end if;
     update public.court_surface_votes
        set surface = p_surface, voted_at = clock_timestamp(),
-           changes = case when had.voted_at > now() - interval '1 day' then had.changes + 1 else 0 end
+           changes = case when had.voted_at > now() - interval '1 day' then had.changes + 1 else 1 end
      where court_id = p_court and user_id = me;
   end if;
   -- The same answer again changes nothing: it stays where it was in the order.
