@@ -245,7 +245,7 @@ export function WeekSummary({ recap, label, look, onOpen, onClose, extra, childr
         ) : (
           <View style={styles.mini}>
             {recap.days.map((m, i) => (
-              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 40)), backgroundColor: look.figure } : { backgroundColor: look.lines }]} />
+              <View key={i} style={[styles.miniBar, m ? { height: Math.max(6, Math.round((m / most) * 40)), backgroundColor: look.touch ?? look.figure } : { backgroundColor: look.lines }]} />
             ))}
           </View>
         )}

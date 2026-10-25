@@ -49,6 +49,9 @@ export const lightColors = {
   // green a fifth of the way to the text, the quiet ones the page's muted ink.
   cardFill: '#F6F0E2', cardGlowTop: '#D6E2CA', cardGlowBottom: '#F2D9BD',
   cardFigure: '#3F7049', cardInk: '#3A6141', cardMuted: '#5D584C',
+  // A touch of the court's second colour on the quiet cards in the app (Oct 25, owner: "a touch of purple on cards" for
+  // London): the result pill, the rating and the week's bars. Every court without one keeps its brand here, so nothing changes.
+  cardTouch: '#3F7049',
   // "Growing the game" on the app's copy of the launch screen. Here, the launch picture's own grey
   // (assets/splash.png), a shade lighter than textFaint: on this court the copy is the picture to the
   // pixel, so the line must not darken as the picture hands over (Oct 7). Every other court: its textFaint.

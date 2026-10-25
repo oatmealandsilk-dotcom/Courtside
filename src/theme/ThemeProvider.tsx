@@ -35,6 +35,7 @@ export const darkColors: Palette = {
   // left, green lettering; the quiet words in the page's muted grey.
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
   cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
+  cardTouch: '#6FB483',
   launchLine: '#8A948F',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2E3A34', avatarTint2: '#3A3530', avatarTint3: '#3B3034', avatarTint4: '#2D3640', avatarTint5: '#35313D', avatarTint6: '#363A2E',
@@ -62,6 +63,7 @@ const cleanColors: Palette = {
   // These only fill the slots, with that box's colours.
   cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
   cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
+  cardTouch: '#2C7446',
   launchLine: '#5F6871',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
@@ -89,6 +91,7 @@ const aoColors: Palette = {
   // words 4.7:1 or more on the fill and both corners, the big numbers 5.7:1.
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
+  cardTouch: '#2E85BF',
   launchLine: '#496273',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D3E3EF', avatarTint2: '#E4DED2', avatarTint3: '#EBD8D4', avatarTint4: '#D5E5DD', avatarTint5: '#DDD9EA', avatarTint6: '#E3E6D3',
@@ -115,6 +118,7 @@ const rolandGarrosColors: Palette = {
   // shirt's gold glow bottom left.
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
+  cardTouch: '#AD4E2E',
   launchLine: '#6D5745',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#EBD9CB', avatarTint2: '#E2DDCC', avatarTint3: '#D9DFD5', avatarTint4: '#DDD8E2', avatarTint5: '#EFD5CF', avatarTint6: '#D7DEE3',
@@ -140,6 +144,8 @@ const wimbledonColors: Palette = {
   // the club's purple bottom left. (Oct 6: lilac was tried; owner: "for the London one green looks better".)
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
   cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
+  // London's purple, deepened to an aubergine that sits with its greens (10.1:1 on the card, 10.3:1 under white words).
+  cardTouch: '#5A2D6E',
   launchLine: '#586552',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D9E6CF', avatarTint2: '#E6E0CC', avatarTint3: '#E9D8D7', avatarTint4: '#D3E0E4', avatarTint5: '#DED9E6', avatarTint6: '#E4E5D0',
@@ -167,6 +173,7 @@ const usOpenColors: Palette = {
   // (held low, so the yellow lettering holds on it); the quiet words a shade lighter than the page's.
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
   cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
+  cardTouch: '#F5D460',
   launchLine: '#A9B9CA',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',
