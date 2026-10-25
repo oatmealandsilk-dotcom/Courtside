@@ -1,5 +1,5 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { show as showToast } from '@/lib/toast';
 import { Image, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { RisingSheet } from '@/components/RisingSheet';
@@ -35,6 +35,10 @@ import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
 import { useStillLoading } from '@/lib/useStillLoading';
+import { useArrived } from '@/lib/useArrived';
+import { usePressV2 } from '@/features/navigation/pressV2';
+import { useMessageReady } from '@/features/messages/useMessageReady';
+import type { Post } from '@/data/types';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -69,6 +73,8 @@ function UserProfile() {
   const otherId = id && id !== currentUserId ? id : null;
   const { loadTournamentPlans } = actions;
   useEffect(() => { if (otherId) void loadTournamentPlans(); }, [otherId, loadTournamentPlans]);
+  // Message's server check, asked as the page opens, so the tap is not kept waiting on it (useMessageReady).
+  useMessageReady(otherId && !blockedIds.includes(otherId) ? otherId : null);
   const [menuOpen, setMenuOpen] = useState(false);
   // Message waits on a server check; a second tap meanwhile must not open the chat twice.
   const opening = useRef(false);
@@ -86,6 +92,65 @@ function UserProfile() {
   const tileH = Math.round((tileW * 4) / 3);
 
   const user = users.find((u) => u.id === id);
+  const userId = user?.id;
+
+  // Their four grids' posts, worked out once each time their posts change, as your own Profile
+  // does, not twice per grid on every redraw (Oct 24, owner: "Buttons need to be way more
+  // responsive. They are way to delayed when I click them"): a page can only start to slide in
+  // once all of it is built.
+  const lists = useMemo(() => {
+    if (!userId) return { Posts: [], Clips: [], Activity: [], Tagged: [] } as Record<(typeof TABS)[number], Post[]>;
+    const newestFirst = (a: Post, b: Post) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt);
+    // A post shared to a group lives in that group's feed only (migration 67).
+    const own = posts.filter((p) => p.authorId === userId && !p.archived && !p.groupId);
+    return {
+      Posts: [...own].sort(newestFirst),
+      Clips: own.filter((p) => p.kind === 'clip').sort(newestFirst),
+      Activity: own.filter((p) => !!p.session && hasSessionStats(p.session)).sort(newestFirst),
+      Tagged: posts.filter((p) => isTaggedIn(p, userId) && !p.archived && !p.groupId).sort(newestFirst),
+    } as Record<(typeof TABS)[number], Post[]>;
+  }, [posts, userId]);
+
+  // The grid you open on is built with the page; the other three once it has slid in (useArrived),
+  // off screen beside it, so nothing shows filling in. Each stays built once it has been.
+  // That wait is the quicker press feel's (pressV2: admins first): a swipe to another grid right as
+  // the page lands could find it still filling in, so everyone else gets all four with the page.
+  const arrived = useArrived(usePressV2());
+  const built = useRef(new Set<(typeof TABS)[number]>()).current;
+  built.add(tab);
+  if (arrived) TABS.forEach((t) => built.add(t));
+  const builtKey = TABS.filter((t) => built.has(t)).join();
+
+  const grid = (section: (typeof TABS)[number]) => {
+    const items = lists[section];
+    return (
+        <View style={{ minHeight: 320 }}>
+            <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
+              {items.map((p) => (
+                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: userId ?? '', post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+                  <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
+                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
+                  {/* Several photos: the stacked mark, where a clip has its play mark. */}
+                  <CarouselMark post={p} />
+                  {/* White on a picture or a session tile; on the pale text tile, the muted ink, so it still shows. */}
+                  {p.kind === 'clip' && (() => { const bare = !p.thumbnailUrl && !(p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl); return <Ionicons name="play" size={14} color={bare ? colors.textMuted : '#FFFFFF'} style={[styles.tilePlay, bare && styles.tilePlayFlat]} />; })()}
+                  {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
+                  {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
+                  {p.pinned && section !== 'Tagged' ? <TilePin /> : null}
+                  {/* Taken down (migration 108): only admins ever see someone else's, dimmed and marked. */}
+                  {p.removed ? <TileRemoved /> : null}
+                </Pressable>
+              ))}
+            </View>
+            {!items.length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
+        </View>
+    );
+  };
+  // Built again only when what they show changes, not on every redraw of the page (a Follow, the menu).
+  const panes = useMemo(
+    () => TABS.map((section) => (built.has(section) ? grid(section) : <View style={{ minHeight: 320 }} />)),
+    [lists, builtKey, gridW, tileW, tileH, styles, userId], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   if (!user) {
     return (
@@ -113,35 +178,8 @@ function UserProfile() {
   const coach = coaches.find((c) => c.userId === user.id);
   // What a private account keeps behind the door until they say yes.
   const locked = !!user.isPrivate && !isMe && !following;
-  // A post shared to a group lives in that group's feed only (migration 67).
-  const own = posts.filter((p) => p.authorId === user.id && !p.archived && !p.groupId);
-  const itemsFor = (section: (typeof TABS)[number]) => (section === 'Tagged' ? posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter((p) => (section === 'Clips' ? p.kind === 'clip' : section === 'Activity' ? !!p.session && hasSessionStats(p.session) : true)))
-    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const counts = { Posts: own.length, Clips: own.filter((p) => p.kind === 'clip').length, Activity: own.filter((p) => !!p.session && hasSessionStats(p.session)).length, Tagged: posts.filter((p) => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length };
+  const counts = { Posts: lists.Posts.length, Clips: lists.Clips.length, Activity: lists.Activity.length, Tagged: lists.Tagged.length };
   const profile = user.profile;
-
-  const grid = (section: (typeof TABS)[number]) => (
-        <View style={{ minHeight: 320 }}>
-            <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
-              {itemsFor(section).map((p) => (
-                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
-                  <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
-                  {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
-                  {/* Several photos: the stacked mark, where a clip has its play mark. */}
-                  <CarouselMark post={p} />
-                  {/* White on a picture or a session tile; on the pale text tile, the muted ink, so it still shows. */}
-                  {p.kind === 'clip' && (() => { const bare = !p.thumbnailUrl && !(p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl); return <Ionicons name="play" size={14} color={bare ? colors.textMuted : '#FFFFFF'} style={[styles.tilePlay, bare && styles.tilePlayFlat]} />; })()}
-                  {(p.videoUrl || p.kind === 'clip') && (p.views ?? 0) > 0 ? <TileViews views={p.views ?? 0} /> : null}
-                  {/* Pinned, top left; the tile's own label says "pinned" to a screen reader. */}
-                  {p.pinned && section !== 'Tagged' ? <TilePin /> : null}
-                  {/* Taken down (migration 108): only admins ever see someone else's, dimmed and marked. */}
-                  {p.removed ? <TileRemoved /> : null}
-                </Pressable>
-              ))}
-            </View>
-            {!itemsFor(section).length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
-        </View>
-  );
 
   const say = (text: string) => {
     setNotice(text);
@@ -280,7 +318,7 @@ function UserProfile() {
           </View>
           {/* Posts, Clips, Activity and Tagged side by side: a swipe slides between them,
               the way your own profile does, instead of landing on a tile as a tap. */}
-          <SectionPager index={TABS.indexOf(tab)} panes={TABS.map((section) => grid(section))} progress={underline.progress} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
+          <SectionPager index={TABS.indexOf(tab)} panes={panes} progress={underline.progress} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
         </>
       )}
 

@@ -5,6 +5,7 @@ import { AppStateLater } from '@/store/AppContext';
 import { TabOnShowContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
+import { usePressV2 } from '@/features/navigation/pressV2';
 
 /**
  * Whether the tab a component sits in is the one on screen.
@@ -17,6 +18,15 @@ import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/ca
 const TabFocusContext = createContext<boolean | undefined>(undefined);
 /** The same, as a box read on demand, for the theme's gate (reading the context would redraw it on every swipe). */
 const TabActiveBox = createContext<{ active: boolean } | undefined>(undefined);
+/**
+ * What the route reads (undefined outside the tab row). Before Oct 24 it was TabFocusContext's own
+ * value, and still is without the quicker press feel: so every bar tap redrew the leaving tab and
+ * the arriving tab whole, from the top, before the row could start to glide. With it (pressV2:
+ * admins first) it is only whether the tab sits in the row at all, which never changes (Oct 24,
+ * owner: "Buttons need to be way more responsive"). The parts that follow focus still hear it
+ * (useTabActive, useIsFocused).
+ */
+const InTabRowContext = createContext<boolean | undefined>(undefined);
 
 export function TabFocus({ active, children }: { active: boolean; children: React.ReactNode }) {
   // Whether this tab is on show (its slot on screen, and no page opened over the tabs), worked out
@@ -26,12 +36,15 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   const routeFocused = useRouteFocused();
   const box = useRef({ active }).current;
   useLayoutEffect(() => { box.active = active; }, [box, active]);
+  const quick = usePressV2();
   return (
-    <TabFocusContext.Provider value={active}>
-      <TabActiveBox.Provider value={box}>
-        <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
-      </TabActiveBox.Provider>
-    </TabFocusContext.Provider>
+    <InTabRowContext.Provider value={quick ? true : active}>
+      <TabFocusContext.Provider value={active}>
+        <TabActiveBox.Provider value={box}>
+          <TabOnShowContext.Provider value={routeFocused && active}>{children}</TabOnShowContext.Provider>
+        </TabActiveBox.Provider>
+      </TabFocusContext.Provider>
+    </InTabRowContext.Provider>
   );
 }
 
@@ -53,7 +66,7 @@ export function useTabActive(): boolean {
  */
 export function asTabRoute<P extends object>(Screen: React.ComponentType<P>, pane: string) {
   function TabRoute(props: P) {
-    const inPager = useContext(TabFocusContext) !== undefined;
+    const inPager = useContext(InTabRowContext) !== undefined;
     // The router hands every screen a `segment` prop of its own, so "no
     // props" never held and the hidden copy was fully alive: a second Home
     // feed, with its own player on the first clip, fighting the visible one.

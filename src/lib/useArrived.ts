@@ -1,4 +1,4 @@
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useEffect, useRef, useState } from 'react';
 import { useNavigation } from 'expo-router';
 
 /**
@@ -10,11 +10,18 @@ import { useNavigation } from 'expo-router';
  * notifications, etc respond too slow"). The rest comes in as background
  * work, so a tap meanwhile still goes first, and it is below the first
  * screen, out of sight, before anyone can scroll to it.
+ *
+ * `wait` false: true at once, nothing listened to and no redraw later (a page that only waits for
+ * some people, pressV2). Once it has said true it keeps saying so, even if `wait` turns on after.
  */
-export function useArrived(): boolean {
+export function useArrived(wait = true): boolean {
   const navigation = useNavigation();
   const [arrived, setArrived] = useState(false);
+  const never = useRef(!wait);
+  if (!wait) never.current = true;
+  const now = arrived || never.current;
   useEffect(() => {
+    if (now) return undefined;
     let done = false;
     const arrive = () => {
       if (done) return;
@@ -26,6 +33,6 @@ export function useArrived(): boolean {
     // In case the page never says it has arrived (opened without a slide, or in a browser).
     const fallback = setTimeout(arrive, 700);
     return () => { done = true; clearTimeout(fallback); stop?.(); };
-  }, [navigation]);
-  return arrived;
+  }, [navigation, now]);
+  return now;
 }
