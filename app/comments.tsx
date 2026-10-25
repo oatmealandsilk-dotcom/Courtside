@@ -442,15 +442,17 @@ export default function CommentsSheet() {
       ))}
     </View>
   );
-  // COMMENTS_V2: the photo button and send swap with a short cross-fade, both always there (the hidden one
-  // takes no taps), instead of one zooming out as the other zooms in.
+  // COMMENTS_V2 on a phone: the photo button and send swap with a short cross-fade, both always there (the
+  // hidden one takes no taps), instead of one zooming out as the other zooms in. A browser keeps the one-at-a-
+  // time swap: there a hidden button still caught the tap meant for the one on show (Oct 5 audit, again Oct 25).
+  const crossFade = v2Phone;
   const swap = useRef(new RNAnimated.Value(canSend ? 1 : 0)).current;
   const swapped = useRef(canSend);
   useEffect(() => {
-    if (!v2 || swapped.current === canSend) return;
+    if (!crossFade || swapped.current === canSend) return;
     swapped.current = canSend;
-    RNAnimated.timing(swap, { toValue: canSend ? 1 : 0, duration: 150, easing: RNEasing.out(RNEasing.quad), useNativeDriver: Platform.OS !== 'web' }).start();
-  }, [canSend, v2, swap]);
+    RNAnimated.timing(swap, { toValue: canSend ? 1 : 0, duration: 150, easing: RNEasing.out(RNEasing.quad), useNativeDriver: true }).start();
+  }, [canSend, crossFade, swap]);
   const swapLooks = useMemo(() => ({
     photo: { opacity: swap.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ scale: swap.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }) }] },
     send: { opacity: swap, transform: [{ scale: swap.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] },
@@ -559,7 +561,7 @@ export default function CommentsSheet() {
               <View style={{ flex: 1 }}>
                 <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} onSelectionChange={v2 ? (sel) => { selection.current = sel; } : undefined} mentions compact maxLength={COMMENT_MAX} />
               </View>
-              {v2 ? (
+              {crossFade ? (
                 <View style={styles.action}>
                   {kind === 'post' ? (
                     <RNAnimated.View
