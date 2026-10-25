@@ -98,13 +98,13 @@ export const quietBox = (theme: ThemeName) => QUIET_BOX.has(theme);
 /**
  * How much of the court's pale accent (brandDim) the quiet light box's soft
  * wash starts from: as far from the card as Clean's banner wash is from its
- * card (OKLab 0.035; 0.032 to 0.038 on the four light courts).
+ * card (OKLab 0.035; 0.033 to 0.039 on the four light courts).
  */
-const QUIET_TINT = 0.46;
+const QUIET_TINT = 0.42;
 /**
  * How far the quiet dark box's shirt corners are taken toward the page's
- * surface: New York's then sit as far from its card as Night's do from
- * Night's (OKLab about 0.10).
+ * surface: New York's then sit about as far from its card as Night's do from
+ * Night's (OKLab 0.08 to 0.10).
  */
 const QUIET_GLOW_LIFT = 0.4;
 
