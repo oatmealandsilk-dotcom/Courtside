@@ -14,7 +14,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { PartnerStreaksBox } from '@/components/PartnerStreak';
 import { Duration } from '@/components/session/Duration';
 import { PlayerCard, Swatch, upcoming } from '@/components/tennis/PlayerCard';
-import { AddRow, Box, Chip, DateTile, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
+import { AddRow, Box, Chip, DateTile, DayLead, EmptyRow, MedalGrid, NextMedal, Row, SectionHead, Summary, Tile } from '@/components/tennis/ProfileParts';
 import { PIN_GAP, ProfileTabs } from '@/components/tennis/ProfileTabs';
 import { SectionPager } from '@/components/SectionPager';
 import { WeekBars } from '@/components/tennis/WeekBars';
@@ -429,7 +429,8 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   const who = from && fromFirst ? (s.kind === 'match' && from.role === 'opponent' ? `vs ${fromFirst}` : `with ${fromFirst}`) : people ? peopleText(people, false) : '';
   const note = s.note && !from ? s.note : '';
   const place = note.startsWith('At ') ? note.slice(3).split(' · ')[0] : '';
-  const sub = [who, dayLabel(s.day), place].filter(Boolean).join(' · ');
+  // The hand-made look (Oct 24): the date leads the row ("TUE" over "21"), so the line under says only who and where.
+  const sub = [who, LESS_AI ? null : dayLabel(s.day), place].filter(Boolean).join(' · ');
   const onOpen = from ? () => router.push({ pathname: '/session-tag', params: { tag: from.id } })
     : canScore(s.kind) && !s.fromSessionId ? () => router.push({ pathname: '/log-session', params: { edit: s.id } })
     : undefined;
@@ -439,7 +440,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
   // A score is the small ScoreBoard beside the length (T1, Oct 22), so the title leaves it out.
   const board = canScore(s.kind) && !!s.sets?.length;
   return (
-    <Row first={first} minHeight={60} lead={<Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub} subLines={board ? 2 : 1}
+    <Row first={first} minHeight={60} lead={LESS_AI ? <DayLead day={s.day} /> : <Tile>{icon}</Tile>} title={loggedLabel(s, !board)} sub={sub || undefined} subLines={board ? 2 : 1}
       right={(
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           {board ? <ScoreBoardCompact sets={s.sets!} youWon={s.won} ended={s.ended} /> : null}
@@ -448,7 +449,7 @@ function SessionRow({ session: s, first, me, sessionTags, users, onRemove }: { s
       )}
       onPress={onOpen}
       onLongPress={{ label: 'Remove', run: onRemove }}
-      accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
+      accessibilityLabel={`${loggedLabel(s)}${sub ? `, ${sub}` : ''}${LESS_AI ? `, ${dayLabel(s.day)}` : ''}, ${shortLength(s.minutes)}${onOpen ? '. Open' : ''}`}
     />
   );
 }
