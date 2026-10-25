@@ -23,7 +23,8 @@ import { TextScale } from '@/theme/textScale';
  *   quiet moment after it is over (useOpenSettled, 1.5 s), and the page's own
  *   big map has painted (useStartMapsIn; or 3 s more at most).
  * - Only for the cards on screen (2–3 of them), then each further card as
- *   the strip is swiped to it. One picture at a time (the queue).
+ *   the strip is swiped to it, and only while the page is on show. One
+ *   picture at a time (the queue).
  * - On a phone, by the one hidden web view the page mounts (CourtsNearSnapshots,
  *   the chat's own way), only while the page is on show, gone the moment
  *   each picture is kept. A card with no picture yet shows the stand-in.
@@ -42,8 +43,13 @@ const ZOOM = 15;
 const SIDE = spacing.md;
 const UNDER_MAP = 10;
 
-/** Whether the strip may draw new court pictures yet (see above). */
+/**
+ * Whether the strip may draw new court pictures yet (see above). Only while
+ * the page is on show: a card whose page is covered leaves the line, so a
+ * chat or court page opened over it draws its own picture first.
+ */
 export function useCourtPicturesGo(): boolean {
+  const onShow = useIsFocused();
   const settled = useOpenSettled();
   const mapsIn = useStartMapsIn();
   const [late, setLate] = useState(false);
@@ -52,7 +58,7 @@ export function useCourtPicturesGo(): boolean {
     const t = setTimeout(() => setLate(true), 3000);
     return () => clearTimeout(t);
   }, [settled, mapsIn]);
-  return settled && (mapsIn || late);
+  return onShow && settled && (mapsIn || late);
 }
 
 /**
