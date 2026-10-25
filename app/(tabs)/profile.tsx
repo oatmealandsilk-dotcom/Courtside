@@ -113,7 +113,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // swipe and glides on a tap, instead of jumping once the page changes. 3 pt, on the line and over
  // the grid (Oct 24, owner: "The bar under needs to be more seeable right now it's super thin": the
  // grid below was covering half of it).
- const TABS = ['Posts', 'Clips', 'Activity', 'Tagged'] as const;
+ const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
  // 'Posts' holds everything, clips included, so it is shown as All. Activity (Oct 24, owner): the posts
  // that carry a hit's or a match's numbers, the way Strava's profile shows activities.
  const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'All', Clips: 'Clips', Activity: 'Activity', Tagged: 'Tagged' };
@@ -477,7 +477,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
    <View style={styles.links}>
      <View style={styles.linkRow}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text></View>
    </View>
-   <View style={styles.tabs}>{['All', 'Clips', 'Activity', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
+   <View style={styles.tabs}>{['All', 'Activity', 'Clips', 'Tagged'].map((t, i) => <View key={t} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, i === 0 ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{t}</Text></View>)}</View>
    <View style={styles.grid}>{[0, 1, 2].map((i) => <Reanimated.View key={i} style={[styles.tile, pulse]} />)}</View>
   </>;
 }

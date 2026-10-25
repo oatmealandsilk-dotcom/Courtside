@@ -45,7 +45,7 @@ import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 
 // Activity (Oct 24, owner): their posts that carry a hit's or a match's numbers, as on your own profile.
-const TABS = ['Posts', 'Clips', 'Activity', 'Tagged'] as const;
+const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
 
 /**
  * Someone else's profile, laid out like your own: picture in the middle, name
