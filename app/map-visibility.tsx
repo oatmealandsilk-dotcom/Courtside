@@ -87,7 +87,7 @@ export default function MapVisibilitySheet() {
 
   return (
     <DragSheet
-      peekFraction={first ? 0.8 : 0.7}
+      peekFraction={LESS_AI ? (first ? 0.52 : 0.5) : first ? 0.8 : 0.7}
       fitContent
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(answer.current ?? (first ? null : mapVisibility ?? null)); }}
