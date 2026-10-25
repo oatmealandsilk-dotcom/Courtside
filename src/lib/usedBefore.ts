@@ -6,9 +6,10 @@ import { Platform } from 'react-native';
  * setting that starts one way for a new player and the other for everyone else: Match phone, on from
  * the start for a new player only (owner: "Match phone. On for new users"; src/theme/ThemeProvider.tsx).
  *
- * Read once, as the app's code first loads (app/_layout.tsx brings this file in before anything else),
- * so before this open has saved anything of its own: the names of what is already saved here. Used
- * before = any of CourtSide's own saved things is there. Every name the app saves under starts
+ * Read once, as the app's code first loads (app/_layout.tsx brings this file in first; nothing in the
+ * app saves anything while its code loads), so before this open has saved anything of its own: the
+ * names of what is already saved here. Used before = any of CourtSide's own saved things is there,
+ * leaving out the website's link counting (LINK_MARKS). Every name the app saves under starts
  * "courtside" (a theme picked, tips seen, the tutorial, recent searches, and on a phone the crash
  * reporter's note, written on every open since Oct 1), and Supabase keeps a sign-in under one starting
  * "sb-". A fresh install has none: a phone app's storage goes with it when it is deleted, so
@@ -17,6 +18,17 @@ import { Platform } from 'react-native';
  * first screen is drawn, and "new on this phone" is what a look on this phone goes by.
  */
 const OURS = /^(courtside|sb-)/;
+/**
+ * Not a sign of having used the app: what the website saves before the app ever opens.
+ * courtsidebase.com lands on app.courtsidebase.com/waitlist.html (Cloudflare's redirect, the same
+ * site as the app, so the same storage), which, for a link with a label (?ref=fb, a player's handle,
+ * an affiliate's code), saves a random visitor id and a once-a-day mark for that link
+ * (courtside-seen-fb) and then opens the app. The old welcome.html does the same. Counted, every new
+ * player who came through a link (the Facebook ad, an invite) would start with Match phone off.
+ * The app's own "Get the app" marks (courtside-seen-app-…, src/features/guest/campaign.ts) are the
+ * same kind of mark.
+ */
+const LINK_MARKS = /^courtside-(visitor$|seen-)/;
 
 function webKeys(): string[] | null {
   try {
@@ -53,5 +65,5 @@ export const keysAtOpenNow = (): string[] | null => (Array.isArray(atOpen) ? atO
 /** Whether CourtSide was used here before this open, `except` (the setting being decided) left out; null when it cannot be told. */
 export function usedBefore(keys: readonly string[] | null, except?: string): boolean | null {
   if (!keys) return null;
-  return keys.some((key) => key !== except && OURS.test(key));
+  return keys.some((key) => key !== except && OURS.test(key) && !LINK_MARKS.test(key));
 }

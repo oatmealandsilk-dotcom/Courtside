@@ -1319,10 +1319,11 @@ const STEPS = [
     },
   },
   {
-    // Oct 25, owner: "Match phone. On for new users". Two more browsers of their own (their own
+    // Oct 25, owner: "Match phone. On for new users". Three more browsers of their own (their own
     // storage), each with the screen dark: a fresh one (a new player: Match phone on, so the app
-    // opens on Night, still on after a reload, and back on Clean when the screen turns light), and one
-    // that has used the app before (an old saved thing there: Match phone off, the app on Clean).
+    // opens on Night, still on after a reload, and back on Clean when the screen turns light), one
+    // that came through a link (the landing page's marks only: still new, on Night), and one that
+    // has used the app before (an old saved thing there: Match phone off, the app on Clean).
     // The run's own page is not touched.
     name: 'match-phone',
     title: 'Match phone: on for a new player, off for one who used the app before',
@@ -1332,6 +1333,11 @@ const STEPS = [
       if (fresh.saved !== '1' || fresh.theme !== 'night' || fresh.page !== NIGHT_BG) throw new Error(`a new player in a dark browser: Match phone saved "${fresh.saved}", app on ${fresh.theme}, page ${fresh.page} (want "1", night, ${NIGHT_BG})`);
       if (fresh.afterReload !== 'night') throw new Error(`a new player, opened again: the app is on ${fresh.afterReload} (want night: decided once, never flipped)`);
       if (fresh.inLight !== 'clean') throw new Error(`a new player, the screen turned light: the app is on ${fresh.inLight} (want clean)`);
+      // A new player who came through a link: courtsidebase.com's landing page (public/waitlist.html,
+      // the same site) saved its visitor id and the link's mark before the app opened. Still new.
+      const linked = await matchPhoneCheck(page, { 'courtside-visitor': '00000000-0000-4000-8000-000000000000', 'courtside-seen-fb': new Date().toDateString() }, path.join(OPTS.out, `${number}-match-phone-link.png`));
+      if (linked.saved !== '1' || linked.theme !== 'night' || linked.page !== NIGHT_BG) throw new Error(`a new player who came through a link (the landing page's marks saved), in a dark browser: Match phone saved "${linked.saved}", app on ${linked.theme}, page ${linked.page} (want "1", night, ${NIGHT_BG}: keep src/lib/usedBefore.ts LINK_MARKS in step with public/waitlist.html)`);
+      if (linked.afterReload !== 'night') throw new Error(`a new player who came through a link, opened again: the app is on ${linked.afterReload} (want night)`);
       const used = await matchPhoneCheck(page, { 'courtside.tips.done.v2': '["theme"]' }, path.join(OPTS.out, `${number}-match-phone-used.png`));
       if (used.saved !== '0' || used.theme !== 'clean' || used.page !== DEFAULT_BG) throw new Error(`someone who used the app before, in a dark browser: Match phone saved "${used.saved}", app on ${used.theme}, page ${used.page} (want "0", clean, ${DEFAULT_BG})`);
       if (used.afterReload !== 'clean') throw new Error(`someone who used the app before, opened again: the app is on ${used.afterReload} (want clean)`);

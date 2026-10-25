@@ -88,6 +88,8 @@
         var h = Array.prototype.map.call(b, function (x) { return x.toString(16).padStart(2, '0'); }).join('');
         return h.slice(0, 8) + '-' + h.slice(8, 12) + '-' + h.slice(12, 16) + '-' + h.slice(16, 20) + '-' + h.slice(20);
       };
+      // These two names (courtside-visitor, courtside-seen-…) are left out of the app's "used here
+      // before" test (src/lib/usedBefore.ts LINK_MARKS): a new name saved here must be added there.
       var visitor = null;
       try {
         visitor = localStorage.getItem('courtside-visitor');
