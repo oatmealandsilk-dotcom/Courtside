@@ -12,7 +12,7 @@ import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, H
 import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus } from '@/components/map/MapCanvas';
-import { MAP_LOADING, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_LOADING, softShotAllowed, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, peekPlaceShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
@@ -244,7 +244,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const markerHash = useMemo(() => (expanded ? '' : hashText(JSON.stringify({ items: markers, tpl }))), [expanded, markers, tpl]);
   // The loading look's extras (MAP_LOADING): your face with Location on ('B'); any picture kept of this place, softened ('D').
   const loadingMe = MAP_LOADING === 'B' && !expanded && place.locationOn && model.mePos ? me : null;
-  const loadingSoft = MAP_LOADING === 'D' && !expanded && model.city && !model.cityExact ? peekPlaceShot(me.id, model.city.lat, model.city.lng, theme) : null;
+  const loadingSoft = MAP_LOADING === 'D' && softShotAllowed(me) && !expanded && model.city && !model.cityExact ? peekPlaceShot(me.id, model.city.lat, model.city.lng, theme) : null;
   const keyNow = useRef(key);
   const keepNoneNow = useRef(keepNone);
   keepNoneNow.current = keepNone;

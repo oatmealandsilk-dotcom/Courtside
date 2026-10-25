@@ -29,7 +29,15 @@ import { colors, font, radius, spacing, surfaceColorFor, typography } from '@/th
  * - 'D' Last map, softened: a picture kept of this place's map in this theme (maybe another size or look), blurred; none, Plain.
  * Every one keeps the card's frame, its reveal, its failed state and the quiet "Loading map…" after a long wait.
  */
-export const MAP_LOADING = 'now' as 'now' | 'A' | 'B' | 'C' | 'D';
+export const MAP_LOADING = 'D' as 'now' | 'A' | 'B' | 'C' | 'D';
+/**
+ * The owner picked D (Oct 25: "Last map blurred"). Its blurred picture is new on the phone and this Mac
+ * cannot run an iPhone simulator, so it goes to admin accounts first (the owner's own phone); everyone
+ * else gets D without its picture, which is Plain (A). Turn this on once he has seen it on his phone.
+ */
+export const MAP_SOFT_FOR_EVERYONE = false;
+/** Whether this person's card may show D's softened picture. */
+export const softShotAllowed = (me: { isAdmin?: boolean } | null | undefined) => MAP_SOFT_FOR_EVERYONE || !!me?.isAdmin;
 
 /*
  * What a map shows until it has drawn, on the phone and in the browser alike

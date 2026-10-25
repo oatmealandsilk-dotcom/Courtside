@@ -32,7 +32,7 @@ import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFa
 import { mapMarkers } from '@/components/map/pinList';
 import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
-import { MAP_LOADING, MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
+import { MAP_LOADING, softShotAllowed, MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { useMapLoad } from '@/components/map/useMapLoad';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { curtainState, useStartMapHold } from '@/features/feed/warmup';
@@ -216,7 +216,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const shotKeyNow = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardW || Math.round(windowW - 2 * spacing.lg), h: cardHeight ?? HEIGHT, scale: pixelScale, lock: lock ?? 'open', still }) : '';
   // The loading look's extras (MAP_LOADING): your face with Location on ('B'); any picture kept of this place, softened ('D').
   const loadingMe = MAP_LOADING === 'B' && !expanded && place.locationOn && model.mePos ? me : null;
-  const loadingSoft = MAP_LOADING === 'D' && !expanded && model.city && !model.cityExact ? peekPlaceShot(me.id, model.city.lat, model.city.lng, theme) : null;
+  const loadingSoft = MAP_LOADING === 'D' && softShotAllowed(me) && !expanded && model.city && !model.cityExact ? peekPlaceShot(me.id, model.city.lat, model.city.lng, theme) : null;
   const keyNow = useRef(shotKeyNow);
   keyNow.current = shotKeyNow;
   const [photo, setPhoto] = useState<string | null>(() => peekCardShot(shotKeyNow, '')?.uri ?? null);
