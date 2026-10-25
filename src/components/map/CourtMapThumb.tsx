@@ -59,6 +59,8 @@ function keep(key: string, dataUrl: string) {
 /** What the drawing needs for each spot waiting in line. */
 interface Job { lat: number; lng: number; zoom: number; width: number; height: number; lookJson: string; ground?: string }
 const jobs = new Map<string, Job>();
+function shotTaken(key: string, data: string) { keep(key, data); jobs.delete(key); }
+function shotFailed(key: string) { failed.add(key); jobs.delete(key); queue.leave(key); }
 
 /**
  * A still map of a spot, `width` × `height` points, in the theme's own map
@@ -67,7 +69,13 @@ const jobs = new Map<string, Job>();
  * `zoom`: how close in (a chat's card shows the streets around, Start a
  * session the court's own block).
  */
-export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { lat: number; lng: number; width: number; height: number; zoom?: number }) {
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw = true, drawsHere = false }: {
+  lat: number; lng: number; width: number; height: number; zoom?: number;
+  /** False: only a picture kept from before shows (else the stand-in); nothing new is drawn until it turns true. */
+  draw?: boolean;
+  /** Draws its own picture in place, under the stand-in, when its turn comes, so no CourtMapSnapshots is needed (the web view is wherever the card is, so always on screen). */
+  drawsHere?: boolean;
+}) {
   const { theme } = useTheme();
   const key = thumbKey(theme, lat, lng, width, height, zoom);
   const look = useMemo(() => thumbLook(lookFor(themes[theme])), [theme]);
@@ -76,16 +84,21 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM }: { 
   useEffect(() => {
     if (shots.has(key) || failed.has(key)) return undefined;
     if (fromDisk(key)) { queue.emit(); return undefined; }
+    if (!draw) return undefined;
     jobs.set(key, { lat, lng, zoom, width, height, lookJson: JSON.stringify(look), ground: look.background?.fill });
     queue.join(key);
     return () => { if (!shots.has(key)) { queue.leave(key); jobs.delete(key); } };
-  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [key, draw]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Its turn, when it draws in place: the hidden web view goes under the stand-in, and away once it answers.
+  const myTurn = useSyncExternalStore(queue.subscribe, () => drawsHere && queue.first() === key, () => false);
+  const job = myTurn ? jobs.get(key) : undefined;
   // The picture fades in over the stand-in once it has loaded, never popping.
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
 
   return (
     <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
+      {job ? <SnapshotView key={key} {...job} onShot={(data) => shotTaken(key, data)} onFail={() => shotFailed(key)} /> : null}
       {!shown ? <ThumbStandIn look={look} seed={key} /> : null}
       {shot ? <Image source={{ uri: shot }} onLoad={() => setShown(true)} fadeDuration={180} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
     </View>
@@ -104,15 +117,9 @@ export function CourtMapSnapshots() {
   const key = useSyncExternalStore(queue.subscribe, () => queue.first(), () => null);
   const job = key ? jobs.get(key) : undefined;
   if (!key || !job) return null;
-  const done = () => { jobs.delete(key); queue.leave(key); };
   return (
     <View pointerEvents="none" style={{ position: 'absolute', left: 0, bottom: 0, width: job.width, height: job.height, overflow: 'hidden' }}>
-      <SnapshotView
-        key={key}
-        {...job}
-        onShot={(data) => { keep(key, data); jobs.delete(key); }}
-        onFail={() => { failed.add(key); done(); }}
-      />
+      <SnapshotView key={key} {...job} onShot={(data) => shotTaken(key, data)} onFail={() => shotFailed(key)} />
       <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.bg }]} />
     </View>
   );

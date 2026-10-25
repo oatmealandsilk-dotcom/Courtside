@@ -64,6 +64,10 @@ export function useFeedWarm() {
 export function useStartDrawn() {
   return useSyncExternalStore(subscribe, () => startDrawn, () => startDrawn);
 }
+/** Whether no still map on the start page is still painting (its streets are in, or there is none): later work (court pictures) waits for this. */
+export function useStartMapsIn() {
+  return useSyncExternalStore(subscribe, () => mapHolds === 0, () => mapHolds === 0);
+}
 /** Whether the page under the curtain is ready for it to lift: the feed's first pages, or the start page drawn with its map in. */
 const ready = () => (OPENS_ON_FEED ? warm : startDrawn && (mapHolds === 0 || mapWaitOver));
 export function useCurtainReady() {
