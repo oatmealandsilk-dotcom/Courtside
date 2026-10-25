@@ -14,7 +14,7 @@ import { playHere } from '@/features/players/courtLink';
 import { NOW_ICON, nowAgo, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { TextScale, buttonShape, colors, font, oneLine, pageIsDark, spacing, typography } from '@/theme';
 
 import type { CourtView } from './view';
 
@@ -129,16 +129,19 @@ export function sessionLook(state: CourtView['session']['state']): { label: stri
  * lift (DESIGN.md, the One Shadow Rule), the stopwatch and the whole job in
  * words, so nobody has to guess what a circle called "Start" starts.
  */
-export function PrimaryBar({ session, height = 50, short = false }: { session: CourtView['session']; height?: number; /** "Start a session", without "here" (a half-width button; the page says where). */ short?: boolean }) {
+/** A part-width primary's words (the court page's option B): every state short, so none is cut on a small phone or at a larger Text Size. */
+const SHORT_LABEL: Record<CourtView['session']['state'], string> = { start: 'Start a session', live: 'In progress', finished: 'Log session' };
+
+export function PrimaryBar({ session, height = 50, short = false }: { session: CourtView['session']; height?: number; /** Part width: short words for every state ("Start a session", "In progress", "Log session"; the page says where), less room at the sides, and words that shrink a little rather than be cut. */ short?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const full = sessionLook(session.state);
-  const look = short && session.state === 'start' ? { ...full, label: 'Start a session' } : full;
+  const look = short ? { ...full, label: SHORT_LABEL[session.state] } : full;
   return (
     <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: buttonShape.radius }, pageIsDark() ? styles.liftDark : styles.lift]}>
       <BrandWash radius={buttonShape.radius} curve />
-      <View style={styles.primaryInner}>
+      <View style={[styles.primaryInner, short && styles.primaryInnerShort]}>
         {look.icon === 'live' ? <LiveDot size={9} color={colors.brandInk} /> : <Ionicons name={look.icon} size={19} color={colors.brandInk} />}
-        <Text style={styles.primaryLabel} numberOfLines={1}>{look.label}</Text>
+        <Text {...(short ? oneLine(TextScale.TITLE, 0.85) : {})} style={[styles.primaryLabel, short && styles.primaryLabelShort]} numberOfLines={1}>{look.label}</Text>
       </View>
     </Tappable>
   );
@@ -327,6 +330,8 @@ const styleDefinitions = StyleSheet.create({
   // The primary.
   primary: { alignSelf: 'stretch', ...buttonShape.curve, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', overflow: 'visible' },
   primaryInner: { flexDirection: 'row', alignItems: 'center', gap: 9, paddingHorizontal: spacing.xl },
+  primaryInnerShort: { paddingHorizontal: spacing.md, maxWidth: '100%' },
+  primaryLabelShort: { flexShrink: 1 },
   primaryLabel: { ...typography.bodyStrong, fontSize: 16, color: colors.brandInk },
   // The one shadow on the page: the primary action, in its own colour (plain dark on a dark page).
   lift: { ...brandShadow },

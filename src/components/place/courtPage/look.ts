@@ -19,7 +19,7 @@ import { supabase } from '@/lib/supabase';
  *          here sit side by side (unequal), and the rest is one list.
  *   'C'    "Court sheet": a heart and Share beside the name, how it is right
  *          now as one coloured line, Start a session the one filled button,
- *          Play here at the top of Open hits, and every fact in one
+ *          Play here (tinted) right under it, and every fact in one
  *          "About this court" list at the foot.
  *
  * Every feature stays in each: Start a session, right now, Directions,

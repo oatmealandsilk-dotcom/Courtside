@@ -17,7 +17,7 @@ import { openCourtNow, openCourtReview, playHere } from '@/features/players/cour
 import { NOW_ICON } from '@/features/players/courtSummary';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { TextScale, buttonShape, colors, font, oneLine, pageIsDark, spacing, typography } from '@/theme';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 
 import { ListRow, PrimaryBar, SectionHead, useCourtNow } from './parts';
@@ -62,7 +62,9 @@ export function useCourtFacts(view: CourtView) {
 /**
  * A and B: the court's facts in one line under its name, the way Apple Maps
  * shows "Café · $$ · 0.4 mi": "4 courts · ● Hard · Lights · Public · Book".
- * Unknown parts drop out; nothing known, no line.
+ * Unknown parts drop out. While the map is still being asked the line is
+ * held (empty), so the town line, Start a session and the rest never jump
+ * down when it lands; nothing known, it folds shut.
  */
 export function FactsLine({ view }: { view: CourtView }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -88,30 +90,36 @@ export function FactsLine({ view }: { view: CourtView }) {
       </Pressable>,
     );
   }
-  if (!parts.length) return null;
   return (
-    <View style={styles.facts}>
-      {parts.map((p, i) => (
-        <React.Fragment key={i}>
-          {i > 0 ? <Text style={styles.factSep}> · </Text> : null}
-          {p}
-        </React.Fragment>
-      ))}
-    </View>
+    <Collapse open={view.mapPending || parts.length > 0}>
+      <View style={styles.facts}>
+        {view.mapPending ? <Text style={styles.fact}> </Text> : parts.map((p, i) => (
+          <React.Fragment key={i}>
+            {i > 0 ? <Text style={styles.factSep}> · </Text> : null}
+            {p}
+          </React.Fragment>
+        ))}
+      </View>
+    </Collapse>
   );
 }
 
 /**
  * B and C: the town line with Directions as a word at its end, in the
  * brand's colour: "Raleigh, NC · 1.6 mi · 12 followers · Directions".
+ * Directions is a link of its own (its own screen-reader item, a 44pt
+ * target), and the line is never cut, so it can never fall behind "…";
+ * a long town line wraps and Directions follows it.
  */
 export function MetaLine({ view, meta }: { view: CourtView; meta: string }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Text style={styles.meta} numberOfLines={2}>
-      {meta ? `${meta} · ` : ''}
-      <Text accessibilityRole="link" accessibilityLabel={`Directions to ${view.name}`} onPress={view.onDirections} suppressHighlighting style={styles.metaLink}>Directions</Text>
-    </Text>
+    <View style={styles.metaRow}>
+      {meta ? <Text style={styles.metaText}>{`${meta} · `}</Text> : null}
+      <Pressable accessibilityRole="link" accessibilityLabel={`Directions to ${view.name}`} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} onPress={view.onDirections} style={({ pressed }) => pressed && styles.dim}>
+        <Text style={[styles.metaText, styles.metaLink]}>Directions</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -211,9 +219,23 @@ function PlayHere({ view, height = 44 }: { view: CourtView; height?: number }) {
     <Tappable accessibilityLabel={`Play here. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} hoverTo={1.02} style={[styles.play, { height }]}>
       <View style={styles.playInner}>
         <HitGlyph size={19} color={colors.brand} />
-        <Text style={styles.playText} numberOfLines={1}>Play here</Text>
+        <Text {...oneLine(TextScale.TITLE, 0.85)} style={styles.playText} numberOfLines={1}>Play here</Text>
       </View>
     </Tappable>
+  );
+}
+
+/**
+ * C: Play here (tinted, full width) right under Start a session here, so it
+ * sits second only to it and above Follow's heart, wherever the court's clips
+ * and hits are. Never at a members-only or private court.
+ */
+export function PlayUnder({ view }: { view: CourtView }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Collapse open={!view.closed}>
+      <View style={styles.playUnder}><PlayHere view={view} /></View>
+    </Collapse>
   );
 }
 
@@ -366,15 +388,19 @@ function NowListRow({ view, line }: { view: CourtView; line: boolean }) {
   );
 }
 
-/** B's What players say row: "Add yours", or how many said something, with their rows under it. */
+/**
+ * B's What players say row: its value is what a tap does, "Add yours" (or
+ * "Update yours" once you have said something), with what players said as
+ * rows under it.
+ */
 function SaysListRow({ courtId, name, line }: { courtId: string; name: string; line: boolean }) {
   const { said, mine } = useCourtSaid(courtId);
   return (
     <>
       <ListRow
         label="What players say"
-        value={said.players ? `${said.players} ${said.players === 1 ? 'player' : 'players'}` : 'Add yours'}
-        tone={said.players ? 'muted' : 'brand'}
+        value={mine ? 'Update yours' : 'Add yours'}
+        tone="brand"
         onPress={() => openCourtReview(courtId, { name })}
         a11y={mine ? `Update what you said about ${name}` : `Add what you know about ${name}`}
         line={line}
@@ -410,7 +436,7 @@ export function ThisCourtList({ view, count }: { view: CourtView; count: number 
             line={now}
             tall
           />
-          {count ? <View style={styles.listHits}><CourtHits place={view.here} /></View> : null}
+          {count ? <View style={styles.listHits}><CourtHits place={view.here} atCourt /></View> : null}
         </>
       ) : null}
       {king ? <CourtKing courtId={view.factsId!} name={view.name} refresh={view.kingTick} look="row" line={now || hits} /> : null}
@@ -481,7 +507,8 @@ const styleDefinitions = StyleSheet.create({
   factSurface: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },
   brandWord: { ...font('600'), color: colors.brand },
-  meta: { ...typography.body, color: colors.textMuted, marginTop: 4, lineHeight: 20 },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', marginTop: 4 },
+  metaText: { ...typography.body, color: colors.textMuted, lineHeight: 20, flexShrink: 1 },
   metaLink: { ...font('600'), color: colors.brand },
   // The name's icons: 24pt glyphs on 44pt targets, level with the name's first line.
   nameIcons: { flexDirection: 'row', alignItems: 'center', marginTop: -5, marginRight: -10 },
@@ -503,8 +530,10 @@ const styleDefinitions = StyleSheet.create({
   statusOther: { ...font('600'), color: colors.text },
   // Play here, tinted: the brand's dim fill and its words.
   play: { height: 44, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  playInner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md },
-  playText: { ...typography.bodyStrong, fontSize: 16, color: colors.brand },
+  playInner: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: spacing.md, maxWidth: '100%' },
+  playText: { ...typography.bodyStrong, fontSize: 16, color: colors.brand, flexShrink: 1 },
+  // C: Play here under Start a session.
+  playUnder: { marginTop: spacing.md },
   // A: Play here and the two squares.
   second: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md },
   playGrow: { flex: 1 },

@@ -28,7 +28,7 @@ import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typograp
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import { courtPageLook, type CourtPageLook } from './look';
-import { AboutList, FactsLine, GlassActions, MapCredit, MetaLine, NameIcons, NowRow, PlayAndSquares, SaysA, StartAndPlay, StatusLine, ThisCourtList, canSayNow } from './Options';
+import { AboutList, FactsLine, GlassActions, MapCredit, MetaLine, NameIcons, NowRow, PlayAndSquares, PlayUnder, SaysA, StartAndPlay, StatusLine, ThisCourtList, canSayNow } from './Options';
 import type { CourtView } from './view';
 import { corner } from '@/theme/look';
 
@@ -127,7 +127,10 @@ export function PlaceCard({ view }: { view: CourtView }) {
             ) : look === 'B' ? (
               <StartAndPlay view={view} />
             ) : (
-              <View style={[styles.primary, short && styles.primaryShort]}><PrimaryBar session={view.session} /></View>
+              <>
+                <View style={[styles.primary, short && styles.primaryShort]}><PrimaryBar session={view.session} /></View>
+                <PlayUnder view={view} />
+              </>
             )}
           </View>
           {look === 'now' ? (
@@ -160,8 +163,8 @@ export function PlaceCard({ view }: { view: CourtView }) {
  * A: Clips (Post its link), Open hits only while some are open, King of the
  * Court, What players say with Add what you know, the map's credit.
  * B: Clips, then one list (Right now, Open hits, King, What players say).
- * C: Open hits led by Play here (the clips first once there are posts),
- * King of the Court, then About this court.
+ * C: Clips, Open hits only while some are open (Play here sits under
+ * Start a session), King of the Court, then About this court.
  */
 function OptionSections({ look, view, hits }: { look: Exclude<CourtPageLook, 'now'>; view: CourtView; hits: number }) {
   const king = view.factsId && view.currentUserId && view.access !== 'private'
@@ -187,12 +190,10 @@ function OptionSections({ look, view, hits }: { look: Exclude<CourtPageLook, 'no
       </>
     );
   }
-  const clips = <ClipsSection view={view} quiet />;
-  const open = <HitsSection view={view} count={hits} look="C" />;
   return (
     <>
-      {view.posts.length ? clips : open}
-      {view.posts.length ? open : clips}
+      <ClipsSection view={view} quiet />
+      <HitsSection view={view} count={hits} look="C" />
       {king}
       <AboutList view={view} />
     </>

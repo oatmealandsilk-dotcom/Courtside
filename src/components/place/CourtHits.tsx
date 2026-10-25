@@ -24,7 +24,11 @@ import { colors, spacing, typography } from '@/theme';
  * In Find Players' order too (Oct 7): yours and the ones you are in first,
  * full ones last.
  */
-export function CourtHits({ place }: { place: { id?: string; name: string; lat: number; lng: number } }) {
+export function CourtHits({ place, atCourt = false }: {
+  place: { id?: string; name: string; lat: number; lng: number };
+  /** On that court's own page (the court page's options): each card leaves out the court's name, which the page already is. */
+  atCourt?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, currentUserId, followingIds } = useApp();
   const found = useCourtHits(place);
@@ -41,7 +45,7 @@ export function CourtHits({ place }: { place: { id?: string; name: string; lat: 
   if (!hits.length) return null;
   return (
     <View style={styles.wrap}>
-      {hits.map((h) => <HitCard key={h.id} hit={h} {...(hitTip?.hitId === h.id ? { tip: hitTip.tip, tipReady: focused && !tourOpen } : {})} />)}
+      {hits.map((h) => <HitCard key={h.id} hit={h} atCourt={atCourt} {...(hitTip?.hitId === h.id ? { tip: hitTip.tip, tipReady: focused && !tourOpen } : {})} />)}
       {more ? (
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreOpen }} onPress={() => setMoreOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.more, pressed && styles.pressed]}>
           <Text style={styles.moreText}>{moreOpen ? 'Fewer open hits' : `More open hits (${more})`}</Text>

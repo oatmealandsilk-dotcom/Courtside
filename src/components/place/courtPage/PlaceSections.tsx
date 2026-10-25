@@ -5,7 +5,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { HitGlyph } from '@/components/HitGlyph';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { CourtHits } from '@/components/place/CourtHits';
@@ -214,32 +213,25 @@ export function HitsSection({ view, count, look = 'now' }: {
   view: CourtView;
   count: number;
   /**
-   * The court page's options (look.ts): 'A' hides the section while none are
-   * open (Play here sits above it); 'C' makes Play here the section's first
-   * row, its one way to post a hit, and drops the sentence.
+   * The court page's options (look.ts), 'A' and 'C': Play here sits under
+   * Start a session, so the section shows only while some are open, with
+   * New hit as its link; each card leaves out the court's name (this page
+   * is that court).
    */
   look?: 'now' | 'A' | 'C';
 }) {
-  const styles = useThemedStyles(styleDefinitions);
   const { currentUser } = useApp();
   if (view.closed && !count) return null;
-  if (look === 'A' && !count) return null;
   if (look === 'A' || look === 'C') {
+    if (!count) return null;
     return (
       <View style={sectionGap}>
         <SectionHead
           title="Open hits"
-          count={count ? String(count) : null}
-          link={look === 'A' && !view.closed ? { label: 'New hit', a11y: `Play here. Post a hit at ${view.name}`, onPress: () => playHere(view.here) } : null}
+          count={String(count)}
+          link={!view.closed ? { label: 'New hit', a11y: `Play here. Post a hit at ${view.name}`, onPress: () => playHere(view.here) } : null}
         />
-        {look === 'C' && !view.closed ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={`Play here. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} style={({ pressed }) => [styles.playRow, pressed && styles.playRowPressed]}>
-            <HitGlyph size={21} color={colors.brand} />
-            <Text style={styles.playText}>Play here</Text>
-            <Ionicons name="chevron-forward" size={16} color={colors.brand} />
-          </Pressable>
-        ) : null}
-        {count ? <CourtHits place={view.here} /> : null}
+        <CourtHits place={view.here} atCourt />
       </View>
     );
   }
@@ -332,9 +324,6 @@ const styleDefinitions = StyleSheet.create({
   emptyTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyWords: { flex: 1, minWidth: 0, gap: 4 },
   emptyButton: { alignSelf: 'flex-start', marginTop: spacing.sm },
-  // The options: Post's "+" beside Watch all, and C's Play here row (the one way to post a hit, at the top of Open hits).
+  // The options: Post's "+" beside Watch all.
   plus: { width: 30, height: 26, alignItems: 'center', justifyContent: 'center' },
-  playRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.lg, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  playRowPressed: { backgroundColor: colors.surfaceAlt },
-  playText: { flex: 1, ...typography.bodyStrong, color: colors.brand },
 });
