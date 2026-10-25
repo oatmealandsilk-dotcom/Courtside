@@ -2,6 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
 import React, { useRef, useState } from 'react';
+import { useMessageReady } from '@/features/messages/useMessageReady';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -47,6 +48,8 @@ export default function CoachDetail() {
 
   const coach = coaches.find((c) => c.id === id);
   const user = users.find((u) => u.id === coach?.userId);
+  // Message's server check, asked as the page opens, so the tap is not kept waiting on it (useMessageReady).
+  useMessageReady(user && user.id !== currentUserId && !blockedIds.includes(user.id) ? user.id : null);
 
   const [selected, setSelected] = useState<string | null>(null);
   const [question, setQuestion] = useState('');

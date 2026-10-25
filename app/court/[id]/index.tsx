@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -58,7 +58,9 @@ function CourtPage() {
     if (!place) return undefined;
     let on = true;
     fetchCourts({ lat: place.lat, lng: place.lng }, 2000)
-      .then((list) => { if (on) setMapCourt(list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null); })
+      // As background work: the page redraws for it, and a tap made as it lands (Follow, Directions,
+      // Start a session here) goes first (Oct 24, owner: "Buttons need to be way more responsive").
+      .then((list) => { if (on) { const found = list.find((c) => !!place.id && c.id === place.id) ?? list.find((c) => sameCourt(c, { lat: place.lat, lng: place.lng })) ?? null; startTransition(() => setMapCourt(found)); } })
       .catch(() => undefined);
     return () => { on = false; };
   }, [place]);
@@ -69,7 +71,13 @@ function CourtPage() {
   const [areaDone, setAreaDone] = useState(false);
   const askArea = useCallback(async () => {
     if (!place) return;
-    try { const town = await areaOf(place); setArea((was) => town ?? was); } catch { /* the distance stands alone */ } finally { setAreaDone(true); }
+    let town: string | null = null;
+    try { town = await areaOf(place); } catch { /* the distance stands alone */ }
+    // The town and "asked" land as one redraw, as background work (a tap goes first).
+    startTransition(() => {
+      if (town != null) setArea(town);
+      setAreaDone(true);
+    });
   }, [place]);
   useEffect(() => { void askArea(); }, [askArea]);
 

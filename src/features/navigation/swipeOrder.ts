@@ -45,11 +45,16 @@ export const shownSection = (pathname: string) => shown.get(pathname);
  * someone is listening, since in a browser the only listener mid-swipe is
  * often the picture of the tab sliding in, not the tab.
  */
-const requestListeners = new Map<string, Set<(section: string) => void>>();
+const requestListeners = new Map<string, Set<(section: string, background: boolean) => void>>();
 const asked = new Map<string, string>();
-export const requestSection = (pathname: string, section: string) => {
+/**
+ * `background`: asked out of sight (Community put back on Discussions once it has been left), so
+ * the tab may take it as background work that a tap goes ahead of (Oct 24, owner: "Buttons need
+ * to be way more responsive"). Every other ask is taken at once, before the tab can slide in.
+ */
+export const requestSection = (pathname: string, section: string, { background = false }: { background?: boolean } = {}) => {
   asked.set(pathname, section);
-  requestListeners.get(pathname)?.forEach((fn) => fn(section));
+  requestListeners.get(pathname)?.forEach((fn) => fn(section, background));
 };
 /** The last section asked of this tab that it has not taken yet: read as the tab is built. */
 export const askedSection = (pathname: string) => asked.get(pathname);
@@ -59,7 +64,7 @@ export const takeAskedSection = (pathname: string) => {
   asked.delete(pathname);
   return section;
 };
-export const subscribeSectionRequest = (pathname: string, fn: (section: string) => void) => {
+export const subscribeSectionRequest = (pathname: string, fn: (section: string, background: boolean) => void) => {
   const set = requestListeners.get(pathname) ?? new Set();
   set.add(fn);
   requestListeners.set(pathname, set);

@@ -11,7 +11,7 @@ import { PaneScroller } from '@/components/ui/PaneScroller';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { slidePagesTo } from '@/features/navigation/pageSlide';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
@@ -166,9 +166,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // if the tab is rebuilt later. A picture of the tab sliding in (previewSection)
   // leaves the ask for the real one.
   useEffect(() => {
-    const off = subscribeSectionRequest('/discuss', (value) => {
+    const off = subscribeSectionRequest('/discuss', (value, background) => {
       if (!previewSection) takeAskedSection('/discuss');
-      setLocalSection(asSection(value));
+      // Put back on Discussions once left (TabsPager): this whole tab is redrawn for it, out of
+      // sight, so as background work. A later ask (the bar's Find Players) still wins over it.
+      if (background) startTransition(() => setLocalSection(asSection(value)));
+      else setLocalSection(asSection(value));
     });
     if (!previewSection) { const late = takeAskedSection('/discuss'); if (late) setLocalSection(asSection(late)); }
     return off;

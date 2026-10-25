@@ -23,12 +23,26 @@ import { isPageDragging, subscribePageDragging } from '@/features/navigation/swi
  *   - a quick tap still flashes its look (shown on release, held FLASH_MS)
  *     and fires exactly as before;
  *   - a finger that rests longer and then swipes shows the look, and it is
- *     dropped in the very moment the page swipe starts, not 130 ms later.
+ *     dropped as soon as the finger has moved MOVE_SLOP, before the page
+ *     swipe starts (and again when it starts), not 130 ms later.
  * Everywhere else (pushed pages, sheets, a desktop browser) nothing changes; a
  * sheet opened from a tab says so with <SwipeArea on={false}>, and so does the
  * clip handle (StatsPill), which keeps its own press.
  */
-export const PRESS_LOOK_DELAY = 120;
+/**
+ * 80 ms, down from 120 (Oct 24, owner: "Buttons need to be way more responsive. They are way to
+ * delayed when I click them"). A finger resting on a button stays down about 80 to 120 ms, so at
+ * 120 ms almost every tap showed nothing until it lifted, and on a tap that opens a page the look
+ * then came with the new page. At 80 a normal tap shows its look while the finger is still down.
+ * Why 80 is still safe (iPhone's own scrolling lists wait about 150 ms, but they have no other check):
+ *   - a finger that has moved MOVE_SLOP (8 pt) by then never shows the look, so to reach it a swipe
+ *     would have to start slower than 100 points a second (8 pt in 80 ms), a crawl; a page swipe
+ *     counts as a flick from 350;
+ *   - and even that crawl now drops the look the moment it passes 8 pt (pressMove), before the tab
+ *     row (14 pt) or a section row (11 pt) can take the finger and move the page, so a card is
+ *     never seen down while the page slides (the Oct 23 rule).
+ */
+export const PRESS_LOOK_DELAY = 80;
 /**
  * How far a finger may drift before the press counts as the start of a swipe or a scroll. A thumb
  * tap rolls 4 to 8 points and still gets its look; 8 is still under every sideways swipe's take-over
@@ -127,7 +141,12 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
   const pressMove = (e: GestureResponderEvent) => {
     if (!inSwipe || moved.current || !start.current) return;
     const at = pointOf(e);
-    if (at && Math.hypot(at.x - start.current.x, at.y - start.current.y) > MOVE_SLOP) moved.current = true;
+    if (!at || Math.hypot(at.x - start.current.x, at.y - start.current.y) <= MOVE_SLOP) return;
+    moved.current = true;
+    // A look already on goes now: the finger is swiping or scrolling, and this is before any page
+    // or list can take it, so the card is back up before anything moves (it used to stay down
+    // until React Native let the press go, up to 130 ms into a scroll).
+    drop();
   };
   const pressIn = () => {
     if (!inSwipe) { lookRef.current(true); return; }
