@@ -103,7 +103,7 @@ export function peekCardShot(key: string, _hash: string): CardShot | null {
   return e ? { uri: e.data, kind: 'streets' } : null;
 }
 
-/** Any picture kept of this person's card at this place (whatever its theme, size or look then), the theme now first: for MAP_LOADING 'D' (as on the phone). */
+/** A picture kept of this person's card at this place in the theme now (whatever its size or look then; never another theme's): for MAP_LOADING 'D' (as on the phone). */
 export function peekPlaceShot(user: string, lat: number, lng: number, theme: string): string | null {
   const now = Date.now();
   const la = lat.toFixed(4);
@@ -113,7 +113,7 @@ export function peekPlaceShot(user: string, lat: number, lng: number, theme: str
     const part = e.key.split('|');
     return part[0] === user && part[3] === la && part[4] === ln;
   });
-  const pick = here.find((e) => e.key.split('|')[1] === theme) ?? here[0];
+  const pick = here.find((e) => e.key.split('|')[1] === theme);
   return pick ? pick.data : null;
 }
 

@@ -646,7 +646,7 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <View ref={spot.ref} style={[styles.card, cardHeight ? { height: cardHeight } : null]} onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}>
         {/* Under the map, until it has drawn and faded in over it. Given up on, a tap tries again; still loading, it opens the full map. */}
-        {!loaderGone ? <MapCardLoading me={loadingMe} soft={loadingSoft} /> : null}
+        {!loaderGone ? <MapCardLoading me={loadingMe} soft={loadingSoft} moving={onScreen && !failed && props.visible !== false} /> : null}
         {!cardShown ? (
           <Pressable
             accessibilityRole={failed || onExpand ? 'button' : undefined}

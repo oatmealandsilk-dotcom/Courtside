@@ -483,7 +483,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* No picture (or not loaded yet): the loading sketch over all of it, the city's name and counts too (they come with the map), fading off it once. */}
         {!coverGone && (!cover.uri || !photoIn) && !(lostCover && cover.uri) ? (
           <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.cover, coverFade]}>
-            <MapCardLoading me={loadingMe} soft={loadingSoft} />
+            <MapCardLoading me={loadingMe} soft={loadingSoft} moving={onScreen && !failed && props.visible !== false} />
           </Reanimated.View>
         ) : null}
         {/* Given up on: one quiet message over everything, which the card's tap tries again. */}
