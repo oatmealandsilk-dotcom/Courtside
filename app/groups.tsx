@@ -130,7 +130,7 @@ const styleDefinitions = StyleSheet.create({
   sectionCount: { ...typography.small, color: colors.textFaint },
   sectionAlone: { paddingHorizontal: spacing.xs, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   // The grouped list of Settings: a shade off the page, rows on hairlines.
-  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, minHeight: 72 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   pressed: { backgroundColor: colors.surfaceAlt },

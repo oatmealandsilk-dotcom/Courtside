@@ -12,7 +12,7 @@ import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /*
  * Invites to groups waiting for your answer (migration 181), as one
@@ -79,6 +79,7 @@ export function GroupInvitesSection({ onOpen }: {
           const p = problem?.id === inv.groupId ? problem : full ? { id: inv.groupId, text: INVITE_FULL, full: true } : null;
           return (
             <View key={inv.groupId} style={[styles.row, i > 0 && styles.line]}>
+              <View style={LESS_AI ? styles.groupLine : undefined}>
               <SwipePressable
                 accessibilityRole="link"
                 accessibilityLabel={`${who} invited you to ${inv.name}, ${inv.ask ? 'Ask to join' : 'Open'}, ${members}. Open it`}
@@ -92,7 +93,35 @@ export function GroupInvitesSection({ onOpen }: {
                   <Text style={styles.meta} numberOfLines={1}>{inv.ask ? 'Ask to join' : 'Open'} · {members}</Text>
                 </View>
               </SwipePressable>
-              <View style={styles.buttons}>
+              {/* The hand-made look (Oct 24): a small soft Join at the row's end, Not now a text link under the words. */}
+              {LESS_AI ? (
+                <SwipePressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Join ${inv.name}`}
+                  accessibilityHint={full ? INVITE_FULL : undefined}
+                  accessibilityState={{ busy: busyHere && answering?.accept, disabled: !!answering || full }}
+                  disabled={!!answering || full}
+                  hitSlop={6}
+                  onPress={() => { void answer(inv, true); }}
+                  style={({ pressed }) => [styles.joinSoft, full && styles.btnOff, (pressed || (!!answering && !(busyHere && answering?.accept))) && styles.btnDim]}
+                >
+                  {busyHere && answering?.accept ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={[styles.btnText, styles.joinSoftText]}>Join</Text>}
+                </SwipePressable>
+              ) : null}
+              </View>
+              {LESS_AI ? (
+                <SwipePressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Not now, ${inv.name}`}
+                  accessibilityState={{ busy: busyHere && !answering?.accept, disabled: !!answering }}
+                  disabled={!!answering}
+                  hitSlop={8}
+                  onPress={() => { void answer(inv, false); }}
+                  style={({ pressed }) => [styles.notNow, (pressed || !!answering) && styles.btnDim]}
+                >
+                  <Text style={styles.notNowText}>{busyHere && !answering?.accept ? 'Not now…' : 'Not now'}</Text>
+                </SwipePressable>
+              ) : <View style={styles.buttons}>
                 <SwipePressable
                   accessibilityRole="button"
                   accessibilityLabel={`Join ${inv.name}`}
@@ -116,7 +145,7 @@ export function GroupInvitesSection({ onOpen }: {
                 >
                   {busyHere && !answering?.accept ? <ActivityIndicator size="small" color={colors.textMuted} /> : <Text style={[styles.btnText, styles.btnTextQuiet]}>Not now</Text>}
                 </SwipePressable>
-              </View>
+              </View>}
               {p ? (
                 <View style={styles.problem} accessibilityLiveRegion="polite">
                   <Ionicons name="information-circle-outline" size={16} color={colors.textMuted} />
@@ -139,10 +168,15 @@ export function GroupInvitesSection({ onOpen }: {
 const styleDefinitions = StyleSheet.create({
   part: { gap: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  groupLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  joinSoft: { height: 32, minWidth: 64, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  joinSoftText: { color: colors.brand },
+  notNow: { alignSelf: 'flex-start', marginLeft: 44 + spacing.md, paddingVertical: 2 },
+  notNowText: { ...typography.small, color: colors.textMuted },
   row: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, gap: spacing.sm },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  group: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  group: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, ...(LESS_AI ? { flex: 1, minWidth: 0 } : null) },
   pressed: { opacity: PRESS_DIM },
   words: { flex: 1, minWidth: 0, gap: 1 },
   who: { ...typography.small, color: colors.textMuted },
