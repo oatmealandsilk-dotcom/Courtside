@@ -1,5 +1,5 @@
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { COUNT_EDGE, FoldedWords, GLYPH_EDGE, InstantMeta, MAX_GROW, RailShade, railCount, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -40,10 +40,11 @@ import { MarkDraw } from '@/components/MarkDraw';
 import { Wash } from '@/components/Wash';
 import { Heart } from '@/components/Heart';
 import { MediaPostPage } from '@/components/MediaPostPage';
-import { Tappable } from '@/components/Tappable';
 import { VerticalPager, type VerticalPagerHandle } from '@/components/VerticalPager';
 import { subscribeReveal, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { LikeButton } from '@/components/LikeButton';
+import { RailSave, RailTap } from '@/components/RailButton';
+import { RailGlyph } from '@/components/RailGlyph';
 import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { connectionIsQuick } from '@/lib/netSpeed';
@@ -257,8 +258,9 @@ const phone = Platform.OS !== 'web' || !isDesktopBrowser();
  * The rail's icons and their sizes, matched by eye rather than by number: a
  * heart, a bubble, an arrow, a bookmark and three dots each read as about
  * 26pt of glyph at these sizes, where equal sizes made the heart look biggest.
+ * Drawn by RailGlyph, every outline the same weight (RAIL_STROKE).
  */
-const RAIL_ICONS = [['heart-outline', 31], ['chatbubble-outline', 29], ['arrow-redo-outline', 30], ['bookmark-outline', 28], ['ellipsis-horizontal', 26]] as const;
+const RAIL_ICONS = [['heart', 31], ['bubble', 29], ['share', 30], ['bookmark', 28], ['dots', 26]] as const;
 /**
  * The rail stands a little above the words' bottom line (Oct 4, owner: the dots sat too low,
  * crowding the tab bar; Oct 24 again: "a bit too low"), and every item takes the same slot (Oct 24,
@@ -1053,7 +1055,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         {RAIL_ICONS.map(([name, size]) => (
           <View key={name} style={styles.action}>
             {/* No shadow here: the shadow lifts white glyphs off a video, and on the plain page it only reads as a smudge. */}
-            <View style={styles.glyphBox}><Ionicons name={name} size={size} color={colors.textFaint} /></View>
+            <View style={styles.glyphBox}><RailGlyph name={name} size={size} color={colors.textFaint} edge={false} /></View>
           </View>
         ))}
       </Reanimated.View>
@@ -2030,14 +2032,23 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     </Reanimated.View>
                     <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                       <RailShade />
-                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
-                      <Tappable accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : "Instant comments"} onPress={() => openHitComments()} dim style={styles.action}>
-                        <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
-                        {(story.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(story.commentIds.length)}</Text> : null}
-                      </Tappable>
-                      <Tappable accessibilityLabel="More options" onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })} dim style={styles.action}>
-                        <View style={styles.glyphBox}><Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} /></View>
-                      </Tappable>
+                      <LikeButton ledgerKey={`h:${story.id}`} liked={hitLiked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} pop={burst.id === story.id ? burst.n : 0} what="Instant" size={RAIL_ICONS[0][1]} style={styles.action} glyphBox={styles.glyphBox} labelStyle={styles.actionLabel} />
+                      <RailTap
+                        accessibilityLabel={story.commentIds.length ? `Instant comments, ${story.commentIds.length}` : 'Instant comments'}
+                        onPress={() => openHitComments()}
+                        glyph={<RailGlyph name="bubble" size={RAIL_ICONS[1][1]} />}
+                        count={story.commentIds.length}
+                        style={styles.action}
+                        glyphBox={styles.glyphBox}
+                        labelStyle={styles.actionLabel}
+                      />
+                      <RailTap
+                        accessibilityLabel="More options"
+                        onPress={() => router.push({ pathname: '/post-menu', params: { id: story.id, kind: 'hit' } })}
+                        glyph={<RailGlyph name="dots" size={RAIL_ICONS[4][1]} />}
+                        style={styles.action}
+                        glyphBox={styles.glyphBox}
+                      />
                     </Reanimated.View>
                     </ChromeLayer>
                    </Reanimated.View></PinchZone>
@@ -2236,45 +2247,45 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                   {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
                   <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
                     <RailShade />
-                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphStyle={styles.actionGlyph} labelStyle={styles.actionLabel} />
-                    <Tappable
+                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphBox={styles.glyphBox} labelStyle={styles.actionLabel} />
+                    <RailTap
                       accessibilityLabel="Clip comments"
                       onPress={() => openClipComments()}
-                      dim
+                      glyph={<RailGlyph name="bubble" size={RAIL_ICONS[1][1]} />}
+                      count={post.commentIds.length}
                       style={styles.action}
-                    >
-                      <View style={styles.glyphBox}><Ionicons name="chatbubble-outline" size={RAIL_ICONS[1][1]} color="white" style={styles.actionGlyph} /></View>
-                      {(post.commentIds.length) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.commentIds.length)}</Text> : null}
-                    </Tappable>
+                      glyphBox={styles.glyphBox}
+                      labelStyle={styles.actionLabel}
+                    />
                     {/* Taken down, nobody else could open it: nothing to send. */}
                     {post.removed ? null : (
-                      <Tappable
+                      <RailTap
                         accessibilityLabel={shareLabel(post, currentUserId, 'clip')}
                         onPress={() => share('post', post.id)}
-                        dim
+                        glyph={<RailGlyph name="share" size={RAIL_ICONS[2][1]} />}
+                        count={post.shares ?? 0}
                         style={styles.action}
-                      >
-                        <View style={styles.glyphBox}><Ionicons name="arrow-redo-outline" size={RAIL_ICONS[2][1]} color="white" style={styles.actionGlyph} /></View>
-                        {(post.shares ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text> : null}
-                      </Tappable>
+                        glyphBox={styles.glyphBox}
+                        labelStyle={styles.actionLabel}
+                      />
                     )}
-                    <Tappable
-                      accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'}
-                      onPress={() => actions.toggleSavePost(post.id)}
-                      dim
+                    <RailSave
+                      ledgerKey={`s:${post.id}`}
+                      saved={isSaved}
+                      count={post.savedBy?.length ?? 0}
+                      onToggle={() => actions.toggleSavePost(post.id)}
+                      size={RAIL_ICONS[3][1]}
                       style={styles.action}
-                    >
-                      <View style={styles.glyphBox}><Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={RAIL_ICONS[3][1]} color="white" style={styles.actionGlyph} /></View>
-                      {(post.savedBy?.length ?? 0) > 0 ? <Text style={styles.actionLabel} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text> : null}
-                    </Tappable>
-                    <Tappable
+                      glyphBox={styles.glyphBox}
+                      labelStyle={styles.actionLabel}
+                    />
+                    <RailTap
                       accessibilityLabel="More options"
                       onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
-                      dim
+                      glyph={<RailGlyph name="dots" size={RAIL_ICONS[4][1]} />}
                       style={styles.action}
-                    >
-                      <View style={styles.glyphBox}><Ionicons name="ellipsis-horizontal" size={RAIL_ICONS[4][1]} color="white" style={styles.actionGlyph} /></View>
-                    </Tappable>
+                      glyphBox={styles.glyphBox}
+                    />
                   </Reanimated.View>
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
@@ -2468,8 +2479,6 @@ const styleDefinitions = StyleSheet.create({
   action: { alignItems: 'center', justifyContent: 'flex-start', gap: 2, minWidth: 48, height: RAIL_SLOT },
   // Each glyph centred in the same box, whatever its size (RAIL_ICONS are matched by eye).
   glyphBox: { height: RAIL_GLYPH, justifyContent: 'center', alignItems: 'center' },
-  // Plain white outlines with a crisp dark edge, as Reels sets them, rather than a heavier icon or a soft smudge.
-  actionGlyph: GLYPH_EDGE,
   // Counts in the name's weight (TikTok's newest rail), figures all one width so "9" to "10" does not shift.
   // They sit high, where the words' shade is lightest (the rail's own shade is behind them), so they wear the darkest edge (COUNT_EDGE); the heart's count takes this too.
   actionLabel: { color: 'white', fontSize: 13, lineHeight: 16, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
