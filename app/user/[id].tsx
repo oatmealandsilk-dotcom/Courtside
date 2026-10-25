@@ -29,7 +29,8 @@ import { TilePin } from '@/components/TilePin';
 import { TileRemoved } from '@/features/moderation/RemovedNote';
 import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
-import { PartnerStreakCard } from '@/components/PartnerStreak';
+import { PartnerStreakCard, PartnerStreakLine } from '@/components/PartnerStreak';
+import { LESS_AI } from '@/theme/look';
 import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
@@ -202,6 +203,7 @@ function UserProfile() {
           ))}
           {muted ? <Text style={styles.meta}>· Muted</Text> : null}
         </View>
+        {LESS_AI && !isMe && !blocked ? <PartnerStreakLine userId={user.id} /> : null}
         {blocked ? (
           <View style={styles.blockedBox}>
             <Ionicons name="ban-outline" size={18} color={colors.danger} />
