@@ -127,10 +127,10 @@ const styleDefinitions = StyleSheet.create({
     borderRadius: corner(16), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, backgroundColor: colors.surface,
   },
   rowText: { ...typography.body, fontSize: 16, color: colors.text, flex: 1 },
-  // C: the times as outlined chips after a muted lead, then Other.
-  times: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.sm, rowGap: spacing.sm },
-  timesLead: { ...typography.small, color: colors.textMuted, marginRight: 2 },
-  time: { height: 34, justifyContent: 'center', paddingHorizontal: 13, borderRadius: chipCorner, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  // C: the times as outlined chips after a muted lead, then Other, on one line at a phone's width.
+  times: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 6, rowGap: spacing.sm },
+  timesLead: { ...typography.small, color: colors.textMuted },
+  time: { height: 34, justifyContent: 'center', paddingHorizontal: 11, borderRadius: chipCorner, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   timeText: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   other: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 6, paddingLeft: 2 },
 });
