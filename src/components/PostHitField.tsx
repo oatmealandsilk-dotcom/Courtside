@@ -8,6 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { HitGlyph } from '@/components/HitGlyph';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { LESS_AI, inputCorner } from '@/theme/look';
 
 /**
  * The way to post a hit (Oct 7): a field you could start filling in, at the
@@ -36,12 +37,13 @@ const styleDefinitions = StyleSheet.create({
   field: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     paddingLeft: spacing.lg, paddingRight: 6, paddingVertical: 6, minHeight: 52,
-    ...lift, borderRadius: radius.pill, backgroundColor: colors.surface,
+    // The hand-made look (Oct 24): an outlined field with the less round corner, no lift.
+    ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border, borderRadius: inputCorner(radius.pill) } : { ...lift, borderRadius: radius.pill }), backgroundColor: colors.surface,
   },
   fieldPressed: { transform: [{ scale: PRESS_SHRINK }] },
   text: { ...typography.body, fontSize: 16, color: colors.textMuted, flex: 1 },
   // The small lift, in the arrow's own colour (DESIGN.md: round brand buttons).
-  go: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...brandShadow },
+  go: { width: 38, height: 38, borderRadius: 19, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', ...(LESS_AI ? null : brandShadow) },
   // Under the field, the way Coaching's note sits under its box.
   note: { ...typography.small, color: colors.textMuted, lineHeight: 18, paddingLeft: 2 },
 });
