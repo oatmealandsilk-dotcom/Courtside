@@ -15,6 +15,7 @@ import { CardWash, cardLook } from './SessionCard';
 import { spokenScore } from '@/features/activity/score';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneGlyph } from './ZoneGlyph';
+import { LESS_AI } from '@/theme/look';
 
 /**
  * A photo post's session, straight under the picture (the picture stays
@@ -98,9 +99,9 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
     >
       <CardWash look={look} radius={18 * k} />
       <View style={[styles.row, { gap: 8 * k }]}>
-        <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
+        {LESS_AI ? null : <View style={[styles.badge, { width: 28 * k, height: 28 * k, borderRadius: 14 * k, backgroundColor: withAlpha(look.ink, 0.16) }]}>
           <ZoneGlyph size={14 * k} color={look.ink} />
-        </View>
+        </View>}
         <View style={[styles.flex, { gap: 1 * k }]}>
           <Text style={[styles.title, { color: look.ink }, { fontSize: 14.5 * k, lineHeight: Math.round(19 * k) }]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{title}</Text>
           {sub ? (

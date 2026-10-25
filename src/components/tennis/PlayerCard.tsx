@@ -18,7 +18,7 @@ import {
 import { usePerWeek } from '@/features/players/usePerWeek';
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors, font } from '@/theme';
-import { corner } from '@/theme/look';
+import { LESS_AI, corner } from '@/theme/look';
 
 /** The rating's count: once per player per time the app is open, never on every visit. */
 const played = new Set<string>();
@@ -102,7 +102,7 @@ export function PlayerCard({ user, variant, onPress }: {
           <Text numberOfLines={1} style={[styles.name, { color: look.ink }]}>{user.name}</Text>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
         </View>
-        <View style={styles.mark}><BrandMark size={22} color={look.figure} /></View>
+        {LESS_AI ? null : <View style={styles.mark}><BrandMark size={22} color={look.figure} /></View>}
       </View>
 
       <View style={[styles.heroRow, styles.hero]}>
