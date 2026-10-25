@@ -60,6 +60,8 @@ const RISE_GRACE_MS = 1000;
 export interface NavBarProps {
   state: { index: number; routes: { key: string; name: string }[] };
   navigation: { navigate: (name: string) => void };
+  /** Whether the page under the phone's bar is the Feed itself (AppShell): the quiet pill is dark over a clip only there. */
+  feedUnder?: boolean;
 }
 
 interface NavItem {
@@ -83,7 +85,7 @@ const ITEMS: NavItem[] = [
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
 
-export function NavBar({ state, navigation }: NavBarProps) {
+export function NavBar({ state, navigation, feedUnder = true }: NavBarProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { isPhone, isCompactSidebar } = useResponsive();
   const { conversations, notifications, detectedActivities, currentUserId, currentUser, blockedIds, isGuest } = useApp();
@@ -205,6 +207,7 @@ export function NavBar({ state, navigation }: NavBarProps) {
       <LookBar
         items={ITEMS}
         activeRoute={activeRoute}
+        feedUnder={feedUnder}
         profileAlerts={profileAlerts}
         onTab={(route) => navigation.navigate(route)}
         onCreate={openCreate}

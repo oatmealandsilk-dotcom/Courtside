@@ -39,11 +39,13 @@ export interface LookItem {
  * targets); this only draws the bar.
  */
 export function LookBar({
-  items, activeRoute, profileAlerts, onTab, onCreate, tourRef, tourCreate,
+  items, activeRoute, feedUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
   bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
+  /** Whether the page under the bar is the Feed itself, not a page opened over it (AppShell). */
+  feedUnder: boolean;
   profileAlerts: number;
   onTab: (route: string) => void;
   onCreate: () => void;
@@ -61,9 +63,10 @@ export function LookBar({
   onVeil: () => void;
 }) {
   const { theme } = useTheme();
-  // Over a clip on the Feed the bar turns dark, as today's glass does over a picture.
+  // Over a clip on the Feed the bar turns dark, as today's glass does over a picture: on the Feed
+  // itself, never on a light page opened from the clip (a player, a court), where the Feed tab is still the lit one.
   const onPicture = useFeedOnPicture();
-  const media = activeRoute === 'index' && onPicture;
+  const media = activeRoute === 'index' && feedUnder && onPicture;
   // A clip coming or going (or the Feed being left) changes the bar's ground: the look being left is
   // laid over the new one in the same redraw and fades out, then is taken away, so the bar never
   // snaps from light to dark under a top row that eases, and nothing rests on an animated value.
