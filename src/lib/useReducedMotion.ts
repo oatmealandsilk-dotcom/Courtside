@@ -15,3 +15,6 @@ export function useReducedMotion(): boolean {
 
 /** The same answer for code outside a component (a one-off check before an animation). */
 export const reduceMotionEnabled = (): Promise<boolean> => Promise.resolve(false);
+
+/** The same answer, at once (the screen's cross-fade when the app changes look by itself: src/theme/screenFade). */
+export const reduceMotionNow = (): boolean => false;

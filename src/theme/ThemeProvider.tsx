@@ -6,6 +6,7 @@ import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark
 import { NEW_SPLASH } from '@/lib/splashLook';
 import { catchUpNow, catchUpShown, installCatchUp, noteLive, tapped } from './catchUp';
 import { beginPageFade } from './ThemeFade';
+import { ScreenFadeHost, fadeScreen, screenDrawn } from './screenFade';
 import { PHONE_APPEARANCE, onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
 import { keysAtOpen, keysAtOpenNow, usedBefore } from '@/lib/usedBefore';
 import { claimedDepth } from '@/features/navigation/gestureClaim';
@@ -431,8 +432,10 @@ export function setAutoDark(on: boolean) {
  * The phone turning dark or light with Match phone on. Never under a finger: a page or a
  * section being swiped, the Feed's clips scrolling, or a moment after either (the swipe settling),
  * the change waits for the page to be still. On the Theme page it plays as a pick does (the old look
- * fading off the page); anywhere else the page on show turns in one go and the rest follow out of
- * sight, as after a pick.
+ * fading off the page); anywhere else the whole screen cross-fades from the old look to the new, as
+ * an iPhone does for its own apps (screenFade; Oct 25, owner: "It should fade to dark mode not
+ * immediately change, what does Instagram or Strava do"): the page on show turns under a picture
+ * of the old look, which then fades away, and the rest follow out of sight, as after a pick.
  */
 /** How long after a swipe ends before the phone's change lands (the page settling into place). */
 const AFTER_SWIPE_MS = 450;
@@ -451,16 +454,39 @@ function underFinger(): boolean {
   return claimed || isPageDragging() || isPageScrolling() || stamp() - swipeEnded < AFTER_SWIPE_MS;
 }
 
+/** The phone's change, landed: the page on show turns in one go (under the fading picture). */
+function landPhone(): boolean {
+  const next = shownNow();
+  if (next === live) return false;
+  show(next);
+  catchUpShown();
+  return true;
+}
+
+const tryAgain = () => {
+  if (followTimer) clearTimeout(followTimer);
+  followTimer = setTimeout(followPhone, 120);
+};
+
+const phoneFade = {
+  land: landPhone,
+  held: underFinger,
+  retry: tryAgain,
+};
+
 function followPhone() {
   followTimer = null;
   const next = shownNow();
   if (next === live) return;
-  if (underFinger() && stamp() - heardAt < MOST_WAIT_MS) { followTimer = setTimeout(followPhone, 120); return; }
+  const finger = underFinger();
+  if (finger && stamp() - heardAt < MOST_WAIT_MS) { tryAgain(); return; }
   const leaving = live;
   // The Theme page open: its own fade, exactly as a pick (the copies go on in this same go).
-  const onThemePage = beginPageFade(leaving);
-  show(next);
-  if (!onThemePage) catchUpShown();
+  if (beginPageFade(leaving)) { show(next); return; }
+  // Waited as long as it may and a finger is still on the page: in one go, as before (a picture
+  // held over the page would stop it moving under the finger).
+  if (finger) { landPhone(); return; }
+  fadeScreen(phoneFade);
 }
 
 function phoneChanged(dark: boolean) {
@@ -564,9 +590,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         {loaded ? children : NEW_SPLASH
           ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
           : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
+        {/* The picture of the old look while the app changes look by itself (Match phone): last, over everything. */}
+        {loaded ? <><DrawnWatch /><ScreenFadeHost /></> : null}
       </View>
     </ThemeSourceContext.Provider>
   );
+}
+
+/** Tells the screen's cross-fade when the court picked has been drawn (its picture then fades: screenFade). */
+function DrawnWatch() {
+  const { theme } = useTheme();
+  useLayoutEffect(() => { if (theme === live) screenDrawn(); }, [theme]);
+  return null;
 }
 
 /**
