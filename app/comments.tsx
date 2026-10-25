@@ -2,21 +2,21 @@ import { brandShadow } from '@/theme/fillMode';
 import { LESS_AI } from '@/theme/look';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
+import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, Animated as RNAnimated, Easing as RNEasing, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { FadeInDown, runOnJS, FadeOut, LayoutAnimationConfig, LinearTransition, ZoomIn, ZoomOut, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
+import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft } from '@/components/CommentThread';
 import { JumpProvider } from '@/components/JumpTo';
 import { CommentsCaption } from '@/components/CommentsCaption';
 import { CommentRow } from '@/components/CommentRow';
 import { HiddenComments } from '@/components/HiddenComments';
-import { DragSheet, useSheetDrag } from '@/components/DragSheet';
+import { DragSheet, useSheetDrag, useSheetKeyboard, type SheetKeyboard } from '@/components/DragSheet';
 import { pickFromDevice } from '@/components/MediaPicker';
 import { StageRail } from '@/components/StageRail';
 import { Avatar, BrandWash, Field } from '@/components/ui';
@@ -24,14 +24,16 @@ import type { Comment, ID } from '@/data/types';
 import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
 import { hiddenCommentsOn, listedComments } from '@/features/hiddenWords/hiddenWords';
 import { COMMENT_MAX } from '@/features/feed/limits';
+import { useCommentsV2 } from '@/features/feed/commentsV2';
+import { TextScale } from '@/theme/textScale';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography } from '@/theme';
 
-/** The box's extras (Replying to, the emoji row) glide to their new place as the others come and go (Oct 22 sweep, item 17). */
-const COMPOSER_GLIDE = LinearTransition.duration(200);
 /** One tap drops these into the box, the way Instagram's row above the keyboard does. Tennis first. */
 const QUICK = ['🎾', '🔥', '👏', '😂', '😮', '🙌', '💯', '❤️'];
+/** COMMENTS_V2's row: tennis first, then the warm ones; no 💯 (it reads as a red stamp at this size). */
+const QUICK_V2 = ['🎾', '❤️', '🔥', '🙌', '👏', '😍', '😮', '😂'];
 /**
  * On the stage, how many threads come in with the sheet: about what fills
  * it at half. The rest follow once it has come to rest, so the comments are
@@ -70,6 +72,11 @@ export default function CommentsSheet() {
   const { kind: rawKind, id = '', focus, at, reply: replyParam, stage: stageParam } = useLocalSearchParams<{ kind?: string; id?: string; focus?: string; at?: string; reply?: string; stage?: string }>();
   const kind = rawKind === 'hit' ? 'hit' : 'post';
   const key = stageKeyOf(kind, id);
+  // The new comments feel (COMMENTS_V2: admins first): read once as the sheet opens, so it never changes under you.
+  const v2Now = useCommentsV2();
+  const [v2] = useState(v2Now);
+  // On a phone (not a browser) with it: posting, a tap on the comments and the header put the keyboard away.
+  const v2Phone = v2 && Platform.OS !== 'web';
   // The stage only when the Feed has just put this very clip on it; a reload,
   // an old link (the address says stage, nothing is on it) or a stage already
   // on its way out gets the plain sheet. A wide computer window's docked panel
@@ -116,6 +123,9 @@ export default function CommentsSheet() {
   const scrollY = useSharedValue(0);
   const frame = useRef<View>(null);
   const composer = useRef<View>(null);
+  // The box's height (strip, emoji row, words), and the sheet's word on where its comments start once the keyboard is up (keyboardSync).
+  const composerH = useRef(0);
+  const sheetKeyboard = useRef<SheetKeyboard | null>(null);
   const heading = useRef<Text>(null);
   // It lights up for a moment as it comes into view (the same light as a reported reply's in its thread).
   const [atLit, setAtLit] = useState(0);
@@ -223,7 +233,7 @@ export default function CommentsSheet() {
   useEffect(() => { openThread(atParent); }, [atParent]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Replying: "@them " in the box and a "Replying to @them ×" strip above it.
-  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
+  const { replyingTo, start: startReply, change: changeDraft, stop: stopReplying, cancel: cancelReply, done: doneReplying, resume: resumeDraft, words } = useReplyDraft(setDraft, () => input.current?.focus());
   // Something of your own to send: words beyond the "@them " Reply put in, or a photo.
   const canSend = exists && !takenDown && (!!words(draft).trim() || !!photo);
   // Kept for next time only if there is something of your own in it.
@@ -238,25 +248,56 @@ export default function CommentsSheet() {
   useEffect(() => { sheetOpen.current = true; return () => { sheetOpen.current = false; }; }, []);
   const latestPhoto = useRef(photo);
   latestPhoto.current = photo;
+  // Leaving the box with nothing of your own in it (only the "@them " Reply put
+  // there): the reply is let go, as on Instagram, and the box is a plain empty
+  // comment box again. Anything typed beyond the "@them " keeps the reply. Not
+  // while a photo is being picked: the library takes the keyboard away for a moment.
+  const picking = useRef(false);
+  const latestCancel = useRef(cancelReply);
+  latestCancel.current = cancelReply;
+  const letGoIfBare = () => {
+    if (picking.current || latestPhoto.current) return;
+    if (latestWords.current(latestDraft.current).trim()) return;
+    latestCancel.current();
+  };
+  useEffect(() => {
+    if (Platform.OS === 'web') return undefined;
+    const sub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => letGoIfBare());
+    return () => sub.remove();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The comment being answered stays in sight just above the box, as on
   // Instagram, rather than sliding under the keyboard as it comes up. Measured
   // on screen each time, so it holds whatever height the keyboard and the
   // sheet have reached.
-  const reveal = (commentId: ID) => {
+  /** Scrolls only as far as it takes for the comment to be in sight in the top `seen` points of the list. */
+  const showIn = (commentId: ID, seen: number) => {
     const y = rowY.current[commentId];
-    if (y === undefined) return;
+    if (y === undefined || !(seen > 0)) return;
     const bottom = y + (rowH.current[commentId] ?? 0) + 12;
-    frame.current?.measureInWindow((_x, top) => composer.current?.measureInWindow((_x2, boxTop) => {
-      const seen = boxTop - top;
-      if (!(seen > 0)) return;
-      if (bottom > scrollY.value + seen) list.current?.scrollTo({ y: Math.max(0, bottom - seen), animated: true });
-      else if (y < scrollY.value) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
-    }));
+    if (bottom > scrollY.value + seen) list.current?.scrollTo({ y: Math.max(0, bottom - seen), animated: true });
+    else if (y < scrollY.value) list.current?.scrollTo({ y: Math.max(0, y - 12), animated: true });
+  };
+  const reveal = (commentId: ID) => {
+    if (rowY.current[commentId] === undefined) return;
+    frame.current?.measureInWindow((_x, top) => composer.current?.measureInWindow((_x2, boxTop) => showIn(commentId, boxTop - top)));
   };
   const replyTo = (comment: Comment) => {
     startReply(comment);
     if (Platform.OS === 'web') { setTimeout(() => reveal(comment.id), 350); return; }
+    if (v2 && Platform.OS === 'ios' && sheetKeyboard.current) {
+      // Already typing: the box only gains its strip; the comment comes up just above it once that is drawn.
+      if (Keyboard.isVisible()) { setTimeout(() => reveal(comment.id), 60); return; }
+      // The keyboard on its way: one scroll, worked out from where the box and the sheet will be once
+      // it is up, starting the moment it does, so the comment arrives above the box with them (Oct 25).
+      const coming = Keyboard.addListener('keyboardWillShow', (e) => {
+        coming.remove();
+        const top = sheetKeyboard.current?.bodyTopWithKeyboard();
+        if (top !== undefined) showIn(comment.id, e.endCoordinates.screenY - composerH.current - top);
+      });
+      setTimeout(() => coming.remove(), 1500);
+      return;
+    }
     // Now (the keyboard may already be up), and again once it has finished coming up.
     setTimeout(() => reveal(comment.id), 120);
     const shown = Keyboard.addListener('keyboardDidShow', () => { shown.remove(); setTimeout(() => reveal(comment.id), 60); });
@@ -307,31 +348,75 @@ export default function CommentsSheet() {
       resumeDraft(text, was);
       if (picked) setPhoto(picked);
     });
-    input.current?.focus();
+    // Sent: the keyboard goes down and the sheet with it (COMMENTS_V2 on a phone), as on Instagram; otherwise the box stays ready for more.
+    if (v2Phone) Keyboard.dismiss();
+    else input.current?.focus();
   };
+  // Your comment, once drawn, is brought into view only if it is not already
+  // in sight between the header and the box, and then only just enough: a
+  // reply under a comment on screen leaves the list where it is (Oct 25: it
+  // used to jump, cutting the caption off under the header).
   useEffect(() => {
     const before = justSent.current;
     const sent = before ? all.find((c) => !before.has(c.id) && c.authorId === currentUserId) : undefined;
     if (!sent) return;
     justSent.current = null;
     const go = (tries: number) => {
-      if (!sent.parentId) { list.current?.scrollToEnd({ animated: true }); return; }
-      const y = rowY.current[sent.id];
-      if (y !== undefined) list.current?.scrollTo({ y: Math.max(0, y - 160), animated: true });
+      if (rowY.current[sent.id] !== undefined) reveal(sent.id);
       else if (tries > 0) setTimeout(() => go(tries - 1), 120);
     };
+    // The keyboard on its way down after sending (COMMENTS_V2): measured once it, and the sheet, are at rest.
+    if (v2Phone && Keyboard.isVisible()) {
+      const hidden = Keyboard.addListener('keyboardDidHide', () => { hidden.remove(); clearTimeout(late); setTimeout(() => go(4), 30); });
+      const late = setTimeout(() => { hidden.remove(); go(4); }, 900);
+      return;
+    }
     setTimeout(() => go(4), 80);
   }, [all.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const addPhoto = async () => {
+    picking.current = true;
     try {
       const got = await pickFromDevice('photo');
       if (got?.uri) { setPhoto(got.uri); haptics.tap(); }
-    } catch { /* the library was closed or refused: nothing to add */ }
+    } catch { /* the library was closed or refused: nothing to add */ } finally {
+      picking.current = false;
+    }
+  };
+  // Where the caret is in the box (COMMENTS_V2: an emoji goes in there, as typing would put it), and the
+  // words it was in. An iPhone says nothing when the page itself changes the words (Reply's "@them ", the
+  // strip's ×, a tap out, sending): the caret it last gave is then stale, and an emoji put there would land
+  // inside "@them" and drop the reply. So it counts only while the words are still the ones it was given in.
+  const selection = useRef<{ start: number; end: number; text: string } | null>(null);
+  const typed = (text: string) => {
+    latestDraft.current = text;
+    changeDraft(text);
   };
   const addEmoji = (emoji: string) => {
     haptics.tap();
-    setDraft((d) => d + emoji);
+    if (!v2) {
+      setDraft((d) => d + emoji);
+      input.current?.focus();
+      return;
+    }
+    // At the caret while typing (a browser takes the focus away for the press itself); at the end otherwise.
+    const typingNow = !!input.current?.isFocused?.() || Date.now() - blurredAt.current < 400;
+    const d = latestDraft.current;
+    const at = selection.current;
+    const sel = typingNow && at && at.text === d ? at : { start: d.length, end: d.length };
+    const start = Math.min(sel.start, d.length);
+    const end = Math.min(Math.max(sel.end, start), d.length);
+    const next = d.slice(0, start) + emoji + d.slice(end);
+    typed(next);
+    const caret = start + emoji.length;
+    selection.current = { start: caret, end: caret, text: next };
+    // Opens the keyboard if it was down.
     input.current?.focus();
+    // The caret after the emoji once the new words have landed.
+    setTimeout(() => {
+      const box = input.current as unknown as { setSelection?: (a: number, b: number) => void; setSelectionRange?: (a: number, b: number) => void } | null;
+      if (box?.setSelection) box.setSelection(caret, caret);
+      else box?.setSelectionRange?.(caret, caret);
+    }, 0);
   };
   // On the stage the emoji row shows only while you type, giving its room
   // back to the comments at half. A moment's grace on blur: pressing an emoji
@@ -343,17 +428,45 @@ export default function CommentsSheet() {
   const onBoxBlur = () => {
     blurredAt.current = Date.now();
     if (blurTimer.current) clearTimeout(blurTimer.current);
-    blurTimer.current = setTimeout(() => setTyping(false), 250);
+    blurTimer.current = setTimeout(() => {
+      setTyping(false);
+      // A browser has no keyboard to listen to: the box left (and not taken back by an emoji or the strip's ×) lets a bare reply go.
+      if (Platform.OS === 'web' && !input.current?.isFocused?.()) letGoIfBare();
+    }, 250);
   };
-  const quickRow = (
-    <>
+  const quickRow = v2 ? (
+    // COMMENTS_V2: always there, edge to edge and evenly spaced, no bubble; a press gives a small squeeze.
+    <View style={styles.quickV2}>
+      {QUICK_V2.map((e) => (
+        <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickSlot, pressed && styles.quickSqueeze]}>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.quickGlyph}>{e}</Text>
+        </Pressable>
+      ))}
+    </View>
+  ) : (
+    <View style={styles.quick}>
       {QUICK.map((e) => (
         <Pressable key={e} accessibilityRole="button" accessibilityLabel={`Add ${e}`} hitSlop={6} onPress={() => addEmoji(e)} style={({ pressed }) => [styles.quickItem, pressed && styles.quickPressed]}>
           <Text style={styles.quickEmoji}>{e}</Text>
         </Pressable>
       ))}
-    </>
+    </View>
   );
+  // COMMENTS_V2 on a phone: the photo button and send swap with a short cross-fade, both always there (the
+  // hidden one takes no taps), instead of one zooming out as the other zooms in. A browser keeps the one-at-a-
+  // time swap: there a hidden button still caught the tap meant for the one on show (Oct 5 audit, again Oct 25).
+  const crossFade = v2Phone;
+  const swap = useRef(new RNAnimated.Value(canSend ? 1 : 0)).current;
+  const swapped = useRef(canSend);
+  useEffect(() => {
+    if (!crossFade || swapped.current === canSend) return;
+    swapped.current = canSend;
+    RNAnimated.timing(swap, { toValue: canSend ? 1 : 0, duration: 150, easing: RNEasing.out(RNEasing.quad), useNativeDriver: true }).start();
+  }, [canSend, crossFade, swap]);
+  const swapLooks = useMemo(() => ({
+    photo: { opacity: swap.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), transform: [{ scale: swap.interpolate({ inputRange: [0, 1], outputRange: [1, 0.8] }) }] },
+    send: { opacity: swap, transform: [{ scale: swap.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] },
+  }), [swap]);
 
   const shownThreads = allThreads ? threads : threads.slice(0, FIRST_THREADS);
   // The threads, made again only when they, which are open, or whether you can reply change: typing a
@@ -392,6 +505,8 @@ export default function CommentsSheet() {
         stage={stage}
         stageOverlay={staged ? <StageRail kind={kind} id={id} /> : undefined}
         onSettled={onSettled}
+        keyboardSync={v2}
+        smoothOpen={v2}
         header={
           <View style={styles.headerRow}>
             <Text ref={heading} accessibilityRole="header" accessibilityLabel={count ? `Comments, ${count}` : 'Comments'} style={styles.heading}>Comments{count ? ` · ${count}` : ''}</Text>
@@ -402,9 +517,11 @@ export default function CommentsSheet() {
         }
       >
         <View ref={frame} style={{ flex: 1 }} onAccessibilityEscape={close}>
+          {v2 ? <SheetKeyboardProbe into={sheetKeyboard} /> : null}
           <CommentList
             listRef={list}
             pull={staged && LIST_PULL && Platform.OS !== 'web'}
+            tapsPutKeyboardAway={v2Phone}
             scrollYValue={scrollY}
             contentContainerStyle={styles.list}
           >
@@ -421,47 +538,49 @@ export default function CommentsSheet() {
               ))}
             </HiddenComments>
           </CommentList>
-          <View ref={composer} style={styles.composer}>
+          <View ref={composer} style={styles.composer} onLayout={(e) => { composerH.current = e.nativeEvent.layout.height; }}>
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
             {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
-            <Collapse show={!!replyingTo} gap={spacing.sm} pullTop={spacing.sm} style={styles.replyingWrap}>
-              {replyingTo ? (
-                <View style={styles.replying}>
-                  <Text style={styles.replyingText} numberOfLines={1}>
-                    Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
-                  </Text>
-                  <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
-                    <Ionicons name="close" size={16} color={colors.textMuted} />
-                  </Pressable>
-                </View>
-              ) : null}
-            </Collapse>
-            {!staged ? <Animated.View style={styles.quick}>{quickRow}</Animated.View> : typing ? (
-              <Animated.View entering={FadeInDown.duration(160)} exiting={FadeOut.duration(120)} layout={COMPOSER_GLIDE} style={styles.quick}>{quickRow}</Animated.View>
+            {/* Docked on the box's top edge while replying, the × on the right. Plain, never a
+                height animation: an iPhone kept the animation's first frame (no height) and the
+                strip never showed (Oct 25 recording). */}
+            {replyingTo ? (
+              <View style={styles.replying}>
+                <Text style={styles.replyingText} numberOfLines={1}>
+                  Replying to {replyingTo.self ? 'your comment' : <Text style={styles.replyingHandle}>@{replyingTo.handle}</Text>}
+                </Text>
+                <Pressable accessibilityRole="button" accessibilityLabel="Stop replying" hitSlop={10} onPress={stopReplying}>
+                  <Ionicons name="close" size={16} color={colors.textMuted} />
+                </Pressable>
+              </View>
             ) : null}
-            <Collapse show={!!photo} gap={spacing.sm}>
-              {photo ? (
-                <View style={styles.attached}>
-                  <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
-                  <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
-                    <View style={styles.attachedRemove}>
-                      <Ionicons name="close" size={13} color="#fff" />
-                    </View>
-                  </Pressable>
-                </View>
-              ) : null}
-            </Collapse>
+            {/* Part of the box, just above the words: it moves only with the box, never on its own (Oct 25). */}
+            {v2 || !staged || typing ? quickRow : null}
+            {photo ? (
+              <View style={styles.attached}>
+                <ExpoImage source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" />
+                <Pressable accessibilityRole="button" accessibilityLabel="Remove the photo" onPress={() => setPhoto(null)} style={styles.attachedRemoveTarget}>
+                  <View style={styles.attachedRemove}>
+                    <Ionicons name="close" size={13} color="#fff" />
+                  </View>
+                </Pressable>
+              </View>
+            ) : null}
             <View style={styles.inputRow}>
               <Avatar name={me?.name ?? 'You'} seed={me?.avatarSeed ?? currentUserId ?? 'me'} uri={me?.avatarUrl} size={34} style={styles.me} />
               <View style={{ flex: 1 }}>
-                <Field inputRef={input} value={draft} onChangeText={changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} mentions compact maxLength={COMMENT_MAX} />
+                <Field inputRef={input} value={draft} onChangeText={v2 ? typed : changeDraft} placeholder={takenDown ? 'Comments are closed: this was taken down.' : replyingTo ? (replyingTo.self ? 'Add a reply…' : `Reply to @${replyingTo.handle}…`) : author && author.id !== currentUserId ? `Add a comment for ${author.name.split(' ')[0]}…` : 'Add a comment…'} multiline minHeight={44} onSubmitEditing={send} onFocus={onBoxFocus} onBlur={onBoxBlur} onSelectionChange={v2 ? (sel) => { selection.current = { start: sel.start, end: sel.end, text: latestDraft.current }; } : undefined} mentions compact maxLength={COMMENT_MAX} />
               </View>
-              {/* One button at a time, swapped with a quick zoom: drawn one over the other, a browser
-                  let the hidden send arrow catch the tap meant for the photo button (Oct 5 audit). */}
-              <LayoutAnimationConfig skipEntering>
+              {crossFade ? (
                 <View style={styles.action}>
-                  {kind === 'post' && !canSend ? (
-                    <Animated.View key="photo" entering={ZoomIn.duration(160)} exiting={ZoomOut.duration(110)} style={[StyleSheet.absoluteFill, styles.center]}>
+                  {kind === 'post' ? (
+                    <RNAnimated.View
+                      pointerEvents={canSend ? 'none' : 'auto'}
+                      aria-hidden={canSend || undefined}
+                      accessibilityElementsHidden={canSend}
+                      importantForAccessibility={canSend ? 'no-hide-descendants' : 'auto'}
+                      style={[StyleSheet.absoluteFill, styles.center, swapLooks.photo]}
+                    >
                       <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" onPress={() => void addPhoto()} style={styles.target}>
                         {({ pressed }) => (
                           <View style={[styles.photoButton, pressed && styles.photoPressed]}>
@@ -469,21 +588,55 @@ export default function CommentsSheet() {
                           </View>
                         )}
                       </Pressable>
+                    </RNAnimated.View>
+                  ) : null}
+                  <RNAnimated.View
+                    pointerEvents={kind === 'post' && !canSend ? 'none' : 'auto'}
+                    aria-hidden={(kind === 'post' && !canSend) || undefined}
+                    accessibilityElementsHidden={kind === 'post' && !canSend}
+                    importantForAccessibility={kind === 'post' && !canSend ? 'no-hide-descendants' : 'auto'}
+                    style={[StyleSheet.absoluteFill, styles.center, kind === 'post' ? swapLooks.send : null]}
+                  >
+                    <Animated.View style={sendStyle}>
+                      <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={styles.target}>
+                        <View style={[styles.send, !canSend && { opacity: 0.4 }]}>
+                          <BrandWash />
+                          <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+                        </View>
+                      </Pressable>
                     </Animated.View>
-                  ) : (
-                    <Animated.View key="send" entering={kind === 'post' ? ZoomIn.duration(160) : undefined} exiting={kind === 'post' ? ZoomOut.duration(110) : undefined} style={[StyleSheet.absoluteFill, styles.center]}>
-                      <Animated.View style={sendStyle}>
-                        <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={styles.target}>
-                          <View style={[styles.send, !canSend && { opacity: 0.4 }]}>
-                            <BrandWash />
-                            <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
-                          </View>
+                  </RNAnimated.View>
+                </View>
+              ) : (
+                // One button at a time, swapped with a quick zoom: drawn one over the other, a browser
+                // let the hidden send arrow catch the tap meant for the photo button (Oct 5 audit).
+                <LayoutAnimationConfig skipEntering>
+                  <View style={styles.action}>
+                    {kind === 'post' && !canSend ? (
+                      <Animated.View key="photo" entering={ZoomIn.duration(160)} exiting={ZoomOut.duration(110)} style={[StyleSheet.absoluteFill, styles.center]}>
+                        <Pressable accessibilityRole="button" accessibilityLabel="Add a photo" onPress={() => void addPhoto()} style={styles.target}>
+                          {({ pressed }) => (
+                            <View style={[styles.photoButton, pressed && styles.photoPressed]}>
+                              <Ionicons name="image-outline" size={19} color={colors.textMuted} />
+                            </View>
+                          )}
                         </Pressable>
                       </Animated.View>
-                    </Animated.View>
-                  )}
-                </View>
-              </LayoutAnimationConfig>
+                    ) : (
+                      <Animated.View key="send" entering={kind === 'post' ? ZoomIn.duration(160) : undefined} exiting={kind === 'post' ? ZoomOut.duration(110) : undefined} style={[StyleSheet.absoluteFill, styles.center]}>
+                        <Animated.View style={sendStyle}>
+                          <Pressable accessibilityRole="button" accessibilityLabel="Post comment" disabled={!canSend} onPress={send} style={styles.target}>
+                            <View style={[styles.send, !canSend && { opacity: 0.4 }]}>
+                              <BrandWash />
+                              <Ionicons name="arrow-up" size={19} color={colors.brandInk} />
+                            </View>
+                          </Pressable>
+                        </Animated.View>
+                      </Animated.View>
+                    )}
+                  </View>
+                </LayoutAnimationConfig>
+              )}
             </View>
           </View>
         </View>
@@ -498,56 +651,21 @@ export default function CommentsSheet() {
  * pulled down and away from anywhere, as on Instagram; anywhere else it is
  * the list's own scroll. The list is held at its top while the sheet moves.
  */
-/**
- * One of the box's extras (Replying to, the attached photo) opening and
- * closing as a glide: its measured height grows from 0 (or shrinks to it)
- * with a fade, the box's top edge following it, and it stays drawn until it
- * has closed. `gap` is the box's own gap, given back while closed; `pullTop`
- * is a negative top margin it has while open (the strip sits flush with the
- * box's top edge). Oct 22 sweep, item 17.
- */
-function Collapse({ show, gap, pullTop = 0, style, children }: { show: boolean; gap: number; pullTop?: number; style?: object; children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(show);
-  const last = useRef<React.ReactNode>(children);
-  if (show) last.current = children;
-  const open = useSharedValue(show ? 1 : 0);
-  const height = useSharedValue(0);
-  // Open and still: see `resting` below.
-  const [rested, setRested] = useState(show);
-  const showRef = useRef(show);
-  showRef.current = show;
-  // Taken down once shut, and only then not at rest: the draw that starts a close keeps the plain open
-  // look (the close's own values win over it as they run). A close that landed just as it was shown
-  // again leaves it up.
-  const gone = useCallback(() => { if (showRef.current) return; setMounted(false); setRested(false); }, []);
-  useEffect(() => {
-    if (show) setMounted(true);
-    open.value = withTiming(show ? 1 : 0, { duration: 180 }, (done) => {
-      if (done && !show) runOnJS(gone)();
-      if (done && show) runOnJS(setRested)(true);
-    });
-  }, [show, open, gone]);
-  const look = useAnimatedStyle(() => ({
-    height: height.value * open.value,
-    opacity: open.value,
-    marginTop: -pullTop * open.value,
-    marginBottom: -gap * (1 - open.value),
-  }));
-  if (!mounted && !show) return null;
-  // Open and still, on a phone: its open look is said by a plain style as well, so a phone that drops the
-  // settled animation values (Reanimated keeps the first frame's: no height, clear) can never fold an open
-  // strip away on a later re-render.
-  const resting = Platform.OS !== 'web' && rested;
-  return (
-    <Animated.View style={[{ overflow: 'hidden' }, style, look, resting && { height: 'auto', opacity: 1, marginTop: -pullTop, marginBottom: 0 }]} pointerEvents={show ? 'auto' : 'none'}>
-      <View onLayout={(e) => { height.value = e.nativeEvent.layout.height; }}>{last.current}</View>
-    </Animated.View>
-  );
+/** Hands the page the sheet's keyboard word (it lives inside the sheet, under the page). */
+function SheetKeyboardProbe({ into }: { into: React.MutableRefObject<SheetKeyboard | null> }) {
+  into.current = useSheetKeyboard();
+  return null;
 }
 
-function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, children }: {
+function CommentList({ listRef, pull, tapsPutKeyboardAway = false, scrollYValue, contentContainerStyle, children }: {
   listRef: AnimatedRef<Animated.ScrollView>;
   pull: boolean;
+  /**
+   * With the keyboard up, the first tap anywhere on the comments only puts it
+   * away (nothing is liked, no profile opens), as on Instagram (COMMENTS_V2
+   * on a phone). Otherwise taps go straight through.
+   */
+  tapsPutKeyboardAway?: boolean;
   /** Where the list is scrolled, for the sheet's taps to read. */
   scrollYValue: SharedValue<number>;
   contentContainerStyle: object;
@@ -563,6 +681,7 @@ function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, child
       scrollYValue.value = e.contentOffset.y;
     },
   });
+  const hideKeyboard = () => Keyboard.dismiss();
   // Made once: the sheet re-draws as you type, and the pull must not be re-made under a finger.
   const gesture = useMemo(() => {
     if (!pull || !drag) return null;
@@ -582,7 +701,17 @@ function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, child
         if (!t) return;
         const dy = t.absoluteY - touchStart.value.y;
         const dx = Math.abs(t.absoluteX - touchStart.value.x);
-        if (listY.value <= 0 && dy > 6 && dx < 12) manager.activate();
+        const pullDown = listY.value <= 0 && dy > 6 && dx < 12;
+        // The keyboard up and riding with the sheet (keyboardSync on an iPhone): the sheet never takes the pull.
+        // At the very top, where the list cannot move, a pull down puts the keyboard away and the sheet comes
+        // down with it (nothing would move until the finger reached the keyboard, past the box); scrolled
+        // down, it is the list's own scroll, the keyboard following the finger once it gets there.
+        if (drag.keyboardUp()) {
+          if (pullDown) { runOnJS(hideKeyboard)(); manager.fail(); }
+          else if (dy < -2 || listY.value > 0 || dx >= 12) manager.fail();
+          return;
+        }
+        if (pullDown) manager.activate();
         else if (dy < -2 || listY.value > 0 || dx >= 12) manager.fail();
       })
       .onStart(() => { 'worklet'; pulling.value = true; drag.start(); })
@@ -600,7 +729,7 @@ function CommentList({ listRef, pull, scrollYValue, contentContainerStyle, child
       ref={listRef}
       style={{ flex: 1 }}
       contentContainerStyle={contentContainerStyle}
-      keyboardShouldPersistTaps="handled"
+      keyboardShouldPersistTaps={tapsPutKeyboardAway ? 'never' : 'handled'}
       // A swipe down the list takes the keyboard with it, following the finger on an iPhone.
       keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
       bounces={!pull}
@@ -622,9 +751,8 @@ const styleDefinitions = StyleSheet.create({
   list: { padding: spacing.lg, paddingTop: spacing.sm, gap: spacing.lg, paddingBottom: spacing.xl },
   empty: { ...typography.small, color: colors.textFaint, paddingVertical: spacing.lg, textAlign: 'center' },
   composer: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 10, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg },
-  // A slim strip across the top of the box while replying, the × on the right.
-  replyingWrap: { marginHorizontal: -spacing.lg },
-  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
+  // A slim strip across the top of the box while replying, the × on the right: edge to edge, flush with the box's top.
+  replying: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, minHeight: 36, marginHorizontal: -spacing.lg, marginTop: -spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 8, backgroundColor: colors.surfaceAlt },
   replyingText: { ...typography.small, color: colors.textMuted, flex: 1 },
   replyingHandle: { ...typography.smallStrong, color: colors.text },
   // Each emoji is a full-height target sharing the row's width; the row gives back the extra height around it.
@@ -632,6 +760,11 @@ const styleDefinitions = StyleSheet.create({
   quickItem: { flex: 1, maxWidth: 48, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: radius.pill },
   quickPressed: { backgroundColor: colors.surfaceAlt, transform: [{ scale: 1.15 }] },
   quickEmoji: { fontSize: 22 },
+  // COMMENTS_V2: a calm row of 44-point slots spread edge to edge, with room above and below; glyphs a touch larger, no bubble.
+  quickV2: { flexDirection: 'row', justifyContent: 'space-evenly', alignItems: 'center', paddingVertical: 2 },
+  quickSlot: { flexBasis: 44, flexShrink: 1, minWidth: 34, height: 44, alignItems: 'center', justifyContent: 'center' },
+  quickSqueeze: { transform: [{ scale: 0.88 }] },
+  quickGlyph: { fontSize: 27, lineHeight: 34 },
   attached: { width: 64, height: 80, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt, marginLeft: 34 + spacing.sm },
   // The × is small on the photo; what takes the tap is the whole top-right corner of it.
   attachedRemoveTarget: { position: 'absolute', top: 0, right: 0, width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },

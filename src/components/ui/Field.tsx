@@ -41,6 +41,8 @@ interface Props {
   /** Tapping in selects what is there, so typing replaces it (a prefilled number, say). */
   selectTextOnFocus?: boolean;
   onBlur?: () => void;
+  /** Where the caret (or the selection) is, each time it moves: a page that inserts something at the caret (the comments' emoji row). */
+  onSelectionChange?: (selection: { start: number; end: number }) => void;
   autoCorrect?: boolean;
   /** Square off the bottom corners so a list can hang straight off the box. */
   flush?: boolean;
@@ -90,6 +92,7 @@ export function Field({
   onFocus,
   selectTextOnFocus,
   onBlur,
+  onSelectionChange,
   autoCorrect,
   flush = false,
   mentions = false,
@@ -158,7 +161,10 @@ export function Field({
           // this keeps the picker tracking on the same keystroke.
           if (mentions) setCaret((c) => c + (text.length - value.length));
         }}
-        onSelectionChange={mentions ? (e) => setCaret(e.nativeEvent.selection.end) : undefined}
+        onSelectionChange={mentions || onSelectionChange ? (e) => {
+          if (mentions) setCaret(e.nativeEvent.selection.end);
+          onSelectionChange?.(e.nativeEvent.selection);
+        } : undefined}
         // On a one-line box on an iPhone, TextBox draws the grey example centred: the phone's own
         // sat low (Oct 7, owner: "it's still not centered"; Oct 23, the Messages search).
         placeholder={placeholder}

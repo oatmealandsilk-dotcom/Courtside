@@ -18,9 +18,17 @@ const SETTLE_MS = 220;
 const FLICK = 0.7;
 
 /** The phone's sheet has a drag for a list inside it to hand a pull over to; a browser's list keeps its own scroll. */
-export interface SheetDrag { start: () => void; to: (translationY: number) => void; release: (velocityY: number) => void }
+export interface SheetDrag { start: () => void; to: (translationY: number) => void; release: (velocityY: number) => void; keyboardUp: () => boolean }
 const DragSheetContext = createContext<SheetDrag | null>(null);
 export const useSheetDrag = () => useContext(DragSheetContext);
+
+/**
+ * The phone's keyboardSync word on where the comments start once the keyboard
+ * is up (see the native twin). A browser reports no keyboard frame by frame,
+ * so it never has one: the page measures on screen instead.
+ */
+export interface SheetKeyboard { bodyTopWithKeyboard: () => number }
+export const useSheetKeyboard = (): SheetKeyboard | null => null;
 
 /**
  * Escape closes whichever sheet is up, with its own animation, and goes no
@@ -100,6 +108,14 @@ export function DragSheet({
   handOverSignal?: number;
   /** No warm glow behind the header (the Send to sheet only; see the native twin). The side panel and the stage ignore it. */
   plain?: boolean;
+  /**
+   * The comments' keyboard on an iPhone (see the native twin). A browser
+   * reports no keyboard height frame by frame, so this sheet keeps its own
+   * keyboard handling and ignores it.
+   */
+  keyboardSync?: boolean;
+  /** The stage's calm open on a phone (see the native twin); a browser's stage already glides. Ignored. */
+  smoothOpen?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
