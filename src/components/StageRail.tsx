@@ -1,11 +1,11 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import { StyleSheet } from 'react-native';
 import Reanimated, { useSharedValue } from 'react-native-reanimated';
 
 import { LikeButton } from '@/components/LikeButton';
-import { Tappable } from '@/components/Tappable';
-import { COUNT_EDGE, GLYPH_EDGE, MAX_GROW, railCount } from '@/components/ReelCaption';
+import { RailSave, RailTap } from '@/components/RailButton';
+import { RailGlyph } from '@/components/RailGlyph';
+import { COUNT_EDGE } from '@/components/ReelCaption';
 import { useRailLive, useStageMotion } from '@/features/feed/useStageMotion';
 import { shareLabel, sharePost } from '@/features/share/sharePost';
 import { useApp } from '@/store/AppContext';
@@ -15,7 +15,8 @@ import { font } from '@/theme';
  * The feed's rail, small, beside the clip on the comments stage: the heart,
  * send and save stay to hand while you read (no speech bubble, the comments
  * are open; no dots). An Instant has its heart only. White on the stage's
- * black, with the feed rail's own edge, labels and counts. It fades in over
+ * black, with the feed rail's own icons (RailGlyph), press and pop
+ * (RailButton), edge and rolling counts. It fades in over
  * the last of the opening, centred on the stage as the sheet moves, and out
  * with the picture as the sheet goes up to full.
  */
@@ -38,22 +39,33 @@ export function StageRail({ kind, id }: { kind: 'post' | 'hit'; id: string }) {
     >
       {post ? (
         <>
-          <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} what="clip" size={26} style={styles.action} glyphStyle={GLYPH_EDGE} labelStyle={styles.count} />
+          <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} what="clip" size={26} style={styles.action} glyphBox={styles.glyph} labelStyle={styles.count} />
           {/* Your own session opens Share session (sharePost.ts); anything else sends, as before.
               Taken down, nobody else could open it: nothing to send (as the feed rail). */}
           {post.removed ? null : (
-            <Tappable accessibilityLabel={shareLabel(post, currentUserId, 'clip')} onPress={() => sharePost(post, currentUserId)} dim style={styles.action}>
-              <Ionicons name="arrow-redo-outline" size={26} color="white" style={GLYPH_EDGE} />
-              <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.shares ?? 0)}</Text>
-            </Tappable>
+            <RailTap
+              accessibilityLabel={shareLabel(post, currentUserId, 'clip')}
+              onPress={() => sharePost(post, currentUserId)}
+              glyph={<RailGlyph name="share" size={26} />}
+              count={post.shares ?? 0}
+              style={styles.action}
+              glyphBox={styles.glyph}
+              labelStyle={styles.count}
+            />
           )}
-          <Tappable accessibilityLabel={isSaved ? 'Remove from saved' : 'Save this clip'} onPress={() => actions.toggleSavePost(post.id)} dim style={styles.action}>
-            <Ionicons name={isSaved ? 'bookmark' : 'bookmark-outline'} size={25} color="white" style={GLYPH_EDGE} />
-            <Text style={styles.count} maxFontSizeMultiplier={MAX_GROW}>{railCount(post.savedBy?.length ?? 0)}</Text>
-          </Tappable>
+          <RailSave
+            ledgerKey={`s:${post.id}`}
+            saved={isSaved}
+            count={post.savedBy?.length ?? 0}
+            onToggle={() => actions.toggleSavePost(post.id)}
+            size={25}
+            style={styles.action}
+            glyphBox={styles.glyph}
+            labelStyle={styles.count}
+          />
         </>
       ) : story ? (
-        <LikeButton ledgerKey={`h:${story.id}`} liked={liked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} what="hit" size={26} style={styles.action} glyphStyle={GLYPH_EDGE} labelStyle={styles.count} />
+        <LikeButton ledgerKey={`h:${story.id}`} liked={liked} count={story.likedBy.length} onToggle={() => actions.toggleLikeStory(story.id)} likesRoute={{ pathname: '/likes', params: { id: story.id, kind: 'hit' } }} what="hit" size={26} style={styles.action} glyphBox={styles.glyph} labelStyle={styles.count} />
       ) : null}
     </Reanimated.View>
   );
@@ -64,6 +76,8 @@ const styles = StyleSheet.create({
   rail: { position: 'absolute', top: 0, right: 12, width: 48, gap: 14, alignItems: 'center' },
   // Every button a full 48 square to the thumb.
   action: { alignItems: 'center', justifyContent: 'center', gap: 2, minWidth: 48, minHeight: 48 },
+  // Each icon centred in the same box (the heart's count line is held now, as the others', so it sits level with them).
+  glyph: { height: 28 },
   // White on the stage's black (the media exception in DESIGN.md), with the rail's darkest edge.
   count: { color: 'white', fontSize: 12, lineHeight: 15, ...font('600'), letterSpacing: 0.1, fontVariant: ['tabular-nums'], ...COUNT_EDGE },
 });
