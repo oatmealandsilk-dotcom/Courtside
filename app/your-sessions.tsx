@@ -190,9 +190,15 @@ export default function YourSessions() {
   const allBuilt = shownWeeks >= Math.min(weeks, groups.length);
   // What each row looks up, found once rather than by searching every list for every row.
   const lookups = useMemo(() => {
-    const activityById = new Map(detectedActivities.map((a) => [a.id, a] as const));
-    const postById = new Map(posts.map((p) => [p.id, p] as const));
-    const userById = new Map(users.map((u) => [u.id, u] as const));
+    // The first of each id wins, as the old search (find) found it, should a list ever hold one twice.
+    const firstById = <T extends { id: string }>(list: readonly T[]) => {
+      const byId = new Map<string, T>();
+      list.forEach((item) => { if (!byId.has(item.id)) byId.set(item.id, item); });
+      return byId;
+    };
+    const activityById = firstById(detectedActivities);
+    const postById = firstById(posts);
+    const userById = firstById(users);
     // A copy from someone's tag: its tag is the first of yours (in the list's order) whose copy is
     // this session, or whose session this one came from.
     const byCopy = new Map<string, { tag: SessionTag; at: number }>();
