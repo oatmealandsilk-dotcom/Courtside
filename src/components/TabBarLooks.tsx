@@ -7,7 +7,7 @@ import { BrandWash } from '@/components/ui/BrandWash';
 import { CLEAR_GLASS_ALPHA, Glass } from '@/components/ui/Glass';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
-import { TAB_BAR_H } from '@/features/navigation/barInset';
+import { BAR_SHAPE, SHAPE } from '@/features/navigation/tabBarLook';
 import { barCompact } from '@/features/navigation/barShrink';
 import { getStage } from '@/features/feed/commentStage';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
@@ -230,7 +230,8 @@ export const LookBar = React.memo(function LookBar({
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom }, outerStyle]}>
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
-        <View style={[styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
+        {/* Split (BAR_SHAPE 'C'): two grounds, each with its own shadow (Face), so this layer holds no shadow of its own. */}
+        <View style={SPLIT ? styles.splitHolder : [styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
           {face(themes[theme], true)}
           {/* The bar as it was before a clip came or went, as see-through as the glass, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
@@ -263,7 +264,7 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
 }) {
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
-  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, 7]) * PX) / PX }] }));
+  const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, S.settle]) * PX) / PX }] }));
   const labelFade = useAnimatedStyle(() => ({ opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp') }));
   // The ground: the old glass bar's Liquid Glass, tinted with the page's own colour (NavBar's 'now'),
   // and on a fading copy that colour solid. Over a picture: dark glass (the page's own colour where it
@@ -283,11 +284,11 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
   };
 
   const plus = (
-    <View style={[styles.slot, styles.plusAbove]} key="create">
+    <View style={[SPLIT ? styles.plusSolo : styles.slot, styles.plusAbove]} key="create">
       <Pressable disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} style={styles.hit}>
         <View ref={live ? tourCreate : undefined} style={[styles.plus, { backgroundColor: c.brand }]}>
           <BrandWash radius={PLUS_RADIUS} />
-          <Ionicons name="add" size={24} color={c.brandInk} />
+          <Ionicons name="add" size={S.plusIcon} color={c.brandInk} />
         </View>
       </Pressable>
     </View>
@@ -295,7 +296,7 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
 
   const row: React.ReactNode[] = [];
   items.forEach((item, index) => {
-    if (index === 2) row.push(plus);
+    if (index === 2 && !SPLIT) row.push(plus);
     const active = item.route === activeRoute;
     const hold = item.route === 'index' ? onFeedHold : undefined;
     row.push(
@@ -324,7 +325,7 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
           <View ref={live ? tourRef(item.route) : undefined} style={styles.target}>
             <Animated.View style={[styles.inner, settle]}>
               <View>
-                <Ionicons name={active ? item.activeIcon : item.icon} size={23} color={active ? litOf(item.route) : idleIcon} />
+                <Ionicons name={active ? item.activeIcon : item.icon} size={S.icon} color={active ? litOf(item.route) : idleIcon} />
                 {item.route === 'profile' && profileAlerts > 0 ? (
                   <View style={[styles.badge, { backgroundColor: c.danger }]}>
                     <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
@@ -360,12 +361,37 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
   // fade can go see-through and stay that way (Oct 17). For a clip's look its ground is as
   // see-through as the glass's own tint, so it reads as the glass it stands for, never as a solid
   // slab over it (Oct 25 audit); for a court being left, solid, as that court's page is under it.
+  if (SPLIT) {
+    // Split: the four tabs on one ground, the + on a round one of its own beside it, each as the
+    // single pill is (glass live, solid on a fading copy), each with its own edge and its own shadow.
+    // The Create box's veil stays on the tabs only, so the + is still the one thing lit.
+    const ground2 = (key: string, wrap: object, shape: object, radius: number, children: React.ReactNode) => (
+      <View key={key} style={[wrap, live ? [styles.shadow, { borderRadius: radius }] : null]}>
+        {live ? (
+          <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={radius} style={shape}>{children}</Glass>
+        ) : (
+          <View style={[shape, { backgroundColor: copyAlpha < 1 ? withAlpha(ground, copyAlpha) : ground }]}>{children}</View>
+        )}
+      </View>
+    );
+    return (
+      <View style={styles.splitRow}>
+        {ground2('tabs', styles.splitTabs, styles.pill, RADIUS, inside)}
+        {ground2('plus', styles.splitPlus, styles.plusPill, SHAPE.height / 2, (
+          <>
+            {plus}
+            <View pointerEvents="none" style={[styles.rim, { borderRadius: SHAPE.height / 2, borderColor: line }]} />
+          </>
+        ))}
+      </View>
+    );
+  }
   if (!live) return <View style={[styles.pill, { backgroundColor: copyAlpha < 1 ? withAlpha(ground, copyAlpha) : ground }]}>{inside}</View>;
   // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades.
   return (
-    <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={PILL_RADIUS} style={styles.pill}>
+    <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={RADIUS} style={styles.pill}>
       {inside}
     </Glass>
   );
@@ -380,36 +406,61 @@ function toward(hex: string, to: string, t: number): string {
   return `#${mixed.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** Less round than today's pill (its ends were half its height). */
-const PILL_RADIUS = 18;
-/** The +'s shape in the quiet pill (Oct 25, owner: "Show me square vs circle"): 'square' a 42×32 rounded square, 'circle' a 38 round button. */
+/**
+ * Each outline's own measures (tabBarLook's BAR_SHAPE; its height and lift are there): the corners,
+ * how far in from each side, the room at the pill's ends, the icons, the words, the +, how far the
+ * icons settle when the words go, and where Profile's count sits on its icon.
+ */
+const SHAPES = {
+  // Today's quiet pill, less round than the old one (its ends were half its height).
+  now: { radius: 18, side: 14, pad: 6, icon: 23, label: 11, plus: 38, plusIcon: 24, settle: 7, badgeLeft: 14 },
+  A: { radius: SHAPE.height / 2, side: 16, pad: 11, icon: 23, label: 11, plus: 40, plusIcon: 24, settle: 7, badgeLeft: 14 },
+  B: { radius: SHAPE.height / 2, side: 16, pad: 10, icon: 21, label: 10, plus: 34, plusIcon: 21, settle: 6, badgeLeft: 13 },
+  C: { radius: SHAPE.height / 2, side: 16, pad: 9, icon: 23, label: 11, plus: 44, plusIcon: 26, settle: 7, badgeLeft: 14 },
+} as const;
+const S = SHAPES[BAR_SHAPE];
+/** The + on a round glass button of its own beside the tabs, not in their row. */
+const SPLIT = BAR_SHAPE === 'C';
+const RADIUS = S.radius;
+/** The air between the tabs and the + when they are apart. */
+const SPLIT_GAP = 10;
+/** The +'s shape in the quiet pill (Oct 25, owner: "Show me square vs circle"): 'square' a 42×32 rounded square, 'circle' a round button. */
 const PLUS_SHAPE = 'circle' as 'square' | 'circle';
-const PLUS_RADIUS = PLUS_SHAPE === 'circle' ? 19 : 11;
+const PLUS_RADIUS = PLUS_SHAPE === 'circle' ? S.plus / 2 : 11;
 
 const styles = StyleSheet.create({
-  float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
+  // Lifted off the bottom by the outline's own lift (tabBarLook counts it in the bar's height).
+  float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30, paddingBottom: SHAPE.lift },
   // As far in from each side as today's pill (the tutorial's lit tab keeps inside it: TourOverlay's BAR_SIDE).
-  pillWrap: { width: '100%', paddingHorizontal: 14 },
+  pillWrap: { width: '100%', paddingHorizontal: S.side },
   // The shadow on a rounded layer of its own around the glass (no fill, never faded), as the old glass bar's.
-  pillShadow: { borderRadius: PILL_RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  pillShadow: { borderRadius: RADIUS, shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
   // The same shadow along the pill's outline (an iPhone's shadowRadius is half a box shadow's blur).
   pillShadowPath: { shadowOpacity: 0, boxShadow: '0px 3px 20px rgba(0, 0, 0, 0.07)' },
-  pill: { height: TAB_BAR_H, borderRadius: PILL_RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6 },
-  rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: PILL_RADIUS, borderWidth: StyleSheet.hairlineWidth },
+  shadow: { shadowColor: '#000', shadowOpacity: 0.07, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 3 },
+  pill: { height: SHAPE.height, borderRadius: RADIUS, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: S.pad },
+  rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: RADIUS, borderWidth: StyleSheet.hairlineWidth },
+  splitHolder: { height: SHAPE.height },
+  splitRow: { flexDirection: 'row', alignItems: 'center', gap: SPLIT_GAP, height: SHAPE.height },
+  splitTabs: { flex: 1 },
+  splitPlus: { width: SHAPE.height, height: SHAPE.height },
+  plusPill: { width: SHAPE.height, height: SHAPE.height, borderRadius: SHAPE.height / 2, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  // The whole round button answers a tap, not just the + in it.
+  plusSolo: { width: SHAPE.height, height: SHAPE.height },
   slot: { flex: 1, alignSelf: 'stretch' },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   target: { alignSelf: 'stretch', alignItems: 'center' },
   inner: { alignItems: 'center', justifyContent: 'center', gap: 3 },
   // The + stands above the Create box's veil (zIndex 2 over the veil's 1), at full strength.
   plusAbove: { zIndex: 2 },
-  plus: { width: PLUS_SHAPE === 'circle' ? 38 : 42, height: PLUS_SHAPE === 'circle' ? 38 : 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
-  label: { ...typography.smallStrong, fontSize: 11, letterSpacing: 0.15 },
+  plus: { width: PLUS_SHAPE === 'circle' ? S.plus : 42, height: PLUS_SHAPE === 'circle' ? S.plus : 32, borderRadius: PLUS_RADIUS, alignItems: 'center', justifyContent: 'center', ...brandShadow },
+  label: { ...typography.smallStrong, fontSize: S.label, letterSpacing: 0.15 },
   // Sits off the icon's shoulder rather than on top of it, as today.
   badge: {
-    position: 'absolute', top: -5, left: 14,
+    position: 'absolute', top: -5, left: S.badgeLeft,
     minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
     alignItems: 'center', justifyContent: 'center',
   },
   badgeText: { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
-  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: PILL_RADIUS },
+  veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: RADIUS },
 });
