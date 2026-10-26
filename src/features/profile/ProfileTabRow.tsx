@@ -23,7 +23,7 @@ import type { useTabUnderline } from '@/features/navigation/useTabUnderline';
  * 'now' keeps the code that was there before, so nothing changes until this is switched.
  */
 export type ProfileTabsLook = 'now' | 'A' | 'B' | 'C';
-export const PROFILE_TABS_LOOK: ProfileTabsLook = 'now';
+export const PROFILE_TABS_LOOK: ProfileTabsLook = 'A';
 
 type Tab = { key: string; label: string; count: number };
 
