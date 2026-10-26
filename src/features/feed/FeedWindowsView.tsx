@@ -34,7 +34,7 @@ import {
   CARD_GAP, CARD_MAX, FOR_YOU, LABEL_HEIGHT, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
   cardAt, feedReadyAt, feedShot, feedShownAt, feedSpot, feedWhole, registerShotNode, setWindowsController, setWindowsState, snapFeed, swipeTarget,
   useWindowsClipped, useWindowsPhase, useWindowsRowSwitched, useWindowsTarget, windowsState,
-  winDrag, winF, winFinger, winGeo, winLive, winOn, winP, winPick, winScrub, winSel, winStill, winTick,
+  winAway, winDrag, winF, winFinger, winGeo, winLive, winOn, winP, winPick, winScrub, winSel, winStill, winTick,
   type FeedKey, type ScrubEnd, type Spot,
 } from './feedWindows';
 
@@ -43,10 +43,11 @@ import {
  * FeedWindowsView, not FeedWindows: a Mac's disk cannot tell FeedWindows.tsx from feedWindows.ts.
  *
  * The pieces, each a small component of its own so the Feed and its pages never redraw for them:
- *  - WindowsLayer: wraps each built feed (For you and each kept one). The one on show is the card you
- *    came from: the real feed, held still, shrunk with the same sums as every other card (the rest
- *    ride with it, hidden or under it). The card picked grows back at its own card as its own feed
- *    (its picture gives way to it on the way), so the landing is the feed itself.
+ *  - WindowsLayer: wraps each built feed (For you and each kept one), each kept one at its own card while
+ *    the windows are up. The one on show is the card you came from: the real feed, held still, shrunk
+ *    with the same sums as every other card (the rest hidden there, For you under it). The card picked
+ *    grows back at its own card as its own feed (its picture gives way to it on the way), so the
+ *    landing is the feed itself, and the card you came from stays up as it slides away.
  *  - WindowsGround: the ground the cards sit on (the middle card's picture, softened), only while they are up.
  *  - WindowsRow: the top row, riding with the real feed's card and fading as it shrinks.
  *  - FeedWindows: the other cards (stills), their names, the swipes and taps, Back, the keys in a
@@ -123,26 +124,33 @@ function WindowsClock() {
 }
 
 const IDENTITY = { transform: [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }], borderRadius: 0 };
-/** Far out of sight: a picked feed the windows closed on before it was handed over, until its layer is hidden. */
+/**
+ * Far out of sight: a feed picked (or left behind by a pick) the windows closed on, until React has
+ * hidden its layer. Only for a frame or two: a look held still for a second is handed back to React.
+ */
 const PARKED = { transform: [{ translateX: 0 }, { translateY: -100000 }, { scale: 1 }], borderRadius: 0 };
 
 /**
  * One built feed (For you, or a kept one; `index` its card): at rest it is exactly the feed (no
- * transform but the identity, nothing cut); while the windows are up it shrinks, moves and rounds
- * with the others, riding with the card you came from (the feed on show is that card; the others
- * are hidden, or under it), except the card picked, which grows back at its own card as itself.
+ * transform but the identity, nothing cut). While the windows are up each kept feed sits at its own
+ * card, shrunk, moved and rounded with the same sums as every picture, so nothing React shows or hides
+ * there ever has to be moved into place first: the feed you came from is its card, the one picked grows
+ * back at its card as itself, and the rest are hidden there (their FeedLayer). `base` (For you) is never
+ * hidden: it is its own card when it is one of those two, and otherwise lies under the card you came
+ * from (which stays up until the windows close).
  */
-export function WindowsLayer({ index, children }: { index: number; children: React.ReactNode }) {
+export function WindowsLayer({ index, base = false, children }: { index: number; base?: boolean; children: React.ReactNode }) {
   const clipped = useWindowsClipped();
   const look = useAnimatedStyle(() => {
     const picked = index >= 0 && winPick.value === index;
-    // Closed (or Reduce Motion): exactly the feed, whatever the other values say.
-    if (!winOn.value || winStill.value) return picked ? PARKED : IDENTITY;
+    // Closed (or Reduce Motion): exactly the feed, whatever the other values say; but a feed picked or left
+    // behind waits out of sight until React has hidden it (FeedWindows' finish), never over the feed on show.
+    if (!winOn.value || winStill.value) return index >= 0 && winAway.value === index ? PARKED : IDENTITY;
     // Read so this look is worked out afresh every frame while they are up (winTick: never handed back to React).
     void winTick.value;
-    const c = cardAt(picked ? index : winLive.value, winP.value, winF.value, winGeo.value);
+    const c = cardAt(index < 0 || (base && !picked) ? winLive.value : index, winP.value, winF.value, winGeo.value);
     return { transform: [{ translateX: c.x }, { translateY: c.y + winDrag.value }, { scale: c.s }], borderRadius: c.r };
-  }, [index]);
+  }, [index, base]);
   return (
     <Animated.View collapsable={false} style={[StyleSheet.absoluteFill, clipped ? styles.clipped : null, look]}>
       {children}
@@ -340,6 +348,8 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
   // Swipes and taps count only while the windows are up (not while a card grows back).
   const interactive = useSharedValue(0);
   const choosing = useRef<Choosing | null>(null);
+  // Counts the closes that kept a feed out of sight (winAway), so only the latest close lets it back.
+  const awaySeq = useRef(0);
   const raf = useRef(0);
   const guard = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prepareTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -355,18 +365,27 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       cancelAnimationFrame(raf.current);
       if (prepareTimer.current) clearTimeout(prepareTimer.current);
       prepareTimer.current = null;
-      // A picked feed the windows close on before it became the one on show (they were taken down at
-      // once): its layer, at full strength until React hides it, waits out of sight (WindowsLayer's
-      // PARKED) rather than jumping to the whole screen over the feed on show for a frame.
-      if (choosing.current && !choosing.current.switched) {
-        requestAnimationFrame(() => requestAnimationFrame(() => { if (windowsState().phase === 'closed') winPick.value = -1; }));
-      } else winPick.value = -1;
+      // As they close, a feed the screen must not show waits out of sight (WindowsLayer's PARKED) until
+      // React has hidden its layer, rather than standing at the whole screen over the feed on show for a
+      // frame: the one a pick left behind (it stayed up as it slid away), or the one picked, if they
+      // closed before it became the one on show (taken down at once). Never For you, which lies under
+      // whichever feed is on show. Written before the close, so it is in place when the close is.
+      const c = choosing.current;
+      const awayKey = !c || !openedRef.current || openedRef.current.still ? null : c.switched ? windowsState().origin : c.key;
+      const away = awayKey && awayKey !== FOR_YOU ? latest.current.feeds.findIndex((f) => f.key === awayKey) : -1;
+      winAway.value = away;
+      if (away >= 0) {
+        const seq = ++awaySeq.current;
+        requestAnimationFrame(() => requestAnimationFrame(() => { if (awaySeq.current === seq && windowsState().phase === 'closed') winAway.value = -1; }));
+      }
       choosing.current = null;
       interactive.value = 0;
       winScrub.value = 0;
       switchArmed.value = 0;
       cancelAnimation(winTick);
       winOn.value = 0;
+      // Only after the close: For you, landed on, never stands for a frame under the card it came from.
+      winPick.value = -1;
       winP.value = 0;
       winDrag.value = 0;
       winLive.value = liveIdx;
@@ -417,6 +436,7 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       coverFrom.value = 0;
       switchArmed.value = 0;
       winPick.value = -1;
+      winAway.value = -1;
       winDrag.value = 0;
       winLive.value = origin;
       winF.value = origin;
@@ -522,9 +542,10 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       c.switchAt = Date.now();
       const spot = feedSpot(c.key);
       setClockOnPage(!!spot?.page && !spot.full);
-      // Its page has been on show with its numbers as the card grew: a session strip keeps them rather
-      // than dropping to 0 to count up as its feed becomes the one on show.
-      if (c.follow && spot?.postId) markStripShown(spot.postId);
+      // Its page is on show with its numbers as the card lands (or as its picture gives way just after):
+      // a session strip keeps them rather than dropping to 0 to count up as its feed becomes the one on show.
+      if (spot?.postId) markStripShown(spot.postId);
+      // The feed you came from stays up at its card as it slides off (its FeedLayer: leaving), until they close.
       latest.current.onChoose(c.key);
       cancelAnimationFrame(raf.current);
       raf.current = requestAnimationFrame(settle);
@@ -547,8 +568,9 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       winScrub.value = 0;
       choosing.current = { key, t, face: o.faces[t], pickAt: Date.now(), switched: false, switchAt: 0, landed: false, follow: false, fading: false };
       if (!o.still) {
-        // Its own feed goes up at its card from now, under the card's picture (before React shows it, so it
-        // is never drawn anywhere else), and is built now if it was not yet.
+        // Its own feed goes up at its card from now, under the card's picture (a kept feed is there
+        // already, hidden, so React only shows it; For you comes out from under the card you came from),
+        // and is built now if it was not yet.
         winPick.value = t;
         coverIdx.value = t;
         coverO.value = 1;
@@ -645,7 +667,7 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       // Taken down while up (signed out, the layout changed): everything back at once.
       if (windowsState().phase !== 'closed') {
         [winP, winF, winDrag, winStill, winTick].forEach((v) => cancelAnimation(v));
-        winOn.value = 0; winP.value = 0; winDrag.value = 0; winStill.value = 0; winScrub.value = 0; winF.value = winLive.value; winPick.value = -1;
+        winAway.value = -1; winOn.value = 0; winP.value = 0; winDrag.value = 0; winStill.value = 0; winScrub.value = 0; winF.value = winLive.value; winPick.value = -1;
         setGround(null);
         setClockOnPage(false);
         setWindowsState({ phase: 'closed', target: null, held: false, clipped: false });

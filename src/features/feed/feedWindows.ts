@@ -69,13 +69,15 @@ export const SWIPE_FLING_S = 0.24;
 /**
  * Where a sideways swipe settles: `f` the middle card as the finger lets go (a float), `start` where it
  * stood when the finger came down, `cardsPerSecond` the finger's speed in cards (right is positive).
+ * At most one card past the card it started from (or past the finger, if it was dragged further): a
+ * quick second flick while the cards are still settling on the first one's card still moves one more.
  */
 export function swipeTarget(f: number, start: number, cardsPerSecond: number, n: number): number {
   'worklet';
   const from = Math.round(start);
   const p = f - cardsPerSecond * SWIPE_FLING_S - from;
   let to = from + (p >= 0 ? Math.floor(p + 1 - SWIPE_MOVE_AT) : -Math.floor(-p + 1 - SWIPE_MOVE_AT));
-  to = Math.max(Math.ceil(f) - 1, Math.min(Math.floor(f) + 1, to));
+  to = Math.max(Math.min(from - 1, Math.ceil(f) - 1), Math.min(Math.max(from + 1, Math.floor(f) + 1), to));
   return Math.max(0, Math.min(n - 1, to));
 }
 
@@ -139,10 +141,17 @@ export const winFinger = makeMutable(0);
  * The card picked, from the pick until the windows have closed (-1 otherwise): its own feed is drawn
  * in it as it grows back (FeedWindowsView's WindowsLayer), so what lands is the feed itself, never a
  * picture of it swapped out at the end (Oct 26, owner: "Make the windows landing a bit smoother it's a
- * tad bit glitchy"). Read on the animation thread to keep that feed out of sight in the moment between
- * the windows closing and its layer being hidden, if they close before it was handed over.
+ * tad bit glitchy"). A kept feed is at its own card anyway; this brings For you out from under the card
+ * you came from to its own. Read only while they are up, and cleared after the close.
  */
 export const winPick = makeMutable(-1);
+/**
+ * As the windows close, the one card whose feed waits out of sight until React has hidden its layer
+ * (-1 otherwise): the card you came from, once a pick made another feed the one on show (it stayed up
+ * at its card as it slid away), or the card picked, if they closed before it became the one on show.
+ * Written before the close itself, so on the animation thread it is in place when the close is.
+ */
+export const winAway = makeMutable(-1);
 export interface WindowsGeo { W: number; H: number; S: number; dy: number; step: number; rDevice: number; rCard: number; n: number }
 export const winGeo = makeMutable<WindowsGeo>({ W: 1, H: 1, S: 1, dy: 0, step: 1, rDevice: 0, rCard: 0, n: 1 });
 
@@ -211,6 +220,14 @@ export function useWindowsRowSwitched(): boolean {
  */
 export function useWindowsRising(key: FeedKey): boolean {
   const get = () => state.phase === 'closing' && state.target === key && state.clipped;
+  return useSyncExternalStore(subscribe, get, get);
+}
+/**
+ * This feed is the one the windows opened on, and another card was picked: its layer stays up at its
+ * own card as that slides off, until the windows have closed (not with Reduce Motion).
+ */
+export function useWindowsLeaving(key: FeedKey): boolean {
+  const get = () => state.phase === 'closing' && state.clipped && state.target !== null && state.target !== key && state.origin === key;
   return useSyncExternalStore(subscribe, get, get);
 }
 /** A tap on the row picked another feed. */

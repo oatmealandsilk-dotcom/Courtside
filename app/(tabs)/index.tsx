@@ -70,7 +70,7 @@ import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
-import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedReady, noteFeedShown, noteFeedSpot, noteFeedWhole, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, useWindowsRising, windowsState, type Spot } from '@/features/feed/feedWindows';
+import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedReady, noteFeedShown, noteFeedSpot, noteFeedWhole, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, useWindowsLeaving, useWindowsRising, windowsState, type Spot } from '@/features/feed/feedWindows';
 import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsLayer, WindowsRow, type WindowMeta } from '@/features/feed/FeedWindowsView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
@@ -2596,6 +2596,10 @@ function FeedLayer({ feed, shown, cut = false, children }: { feed: string; shown
   // (features/feed/FeedWindowsView), at once and whole, as a feed handed over from them is. Two frames on,
   // it counts as drawn there, and the card's picture starts giving way to it.
   const rising = useWindowsRising(feed);
+  // The feed the windows opened on, once a pick has made another the one on show: still up at its own
+  // card as that slides off, until the windows close (never cut out while part of it is on screen).
+  const leaving = useWindowsLeaving(feed);
+  const up = rising || leaving;
   useEffect(() => {
     if (!rising) return undefined;
     cancelAnimation(o);
@@ -2638,16 +2642,16 @@ function FeedLayer({ feed, shown, cut = false, children }: { feed: string; shown
   // Hidden by React now: the fade inside goes back to its rest (1) behind it (unless it has been
   // chosen again meanwhile, and is on its way in from 0).
   useEffect(() => {
-    visV.value = vis || rising ? 1 : 0;
-    if (vis || rising) return undefined;
+    visV.value = vis || up ? 1 : 0;
+    if (vis || up) return undefined;
     const id = requestAnimationFrame(() => { if (!visRef.current && !shownRef.current) o.value = 1; });
     return () => cancelAnimationFrame(id);
-  }, [vis, rising, visV, o]);
+  }, [vis, up, visV, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
   const glassFade = useDerivedValue(() => visV.value * o.value);
   // Its clips' glass (the sound disc, the level pill, See stats) is a plain fill while it cross-fades (Oct 22 sweep, item 5).
   return (
-    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: rising ? 1 : cut ? (shown ? 1 : 0) : vis }]}>
+    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: up ? 1 : cut ? (shown ? 1 : 0) : vis }]}>
       <Reanimated.View style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={glassFade}>{children}</GlassFadeScope></Reanimated.View>
     </View>
   );
@@ -2756,7 +2760,7 @@ function GroupedFeed() {
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
       {/* The windows' dark ground, only while they are up; each built feed below is its own card (WindowsLayer). */}
       <WindowsGround />
-      <WindowsLayer index={windowOrder.indexOf(FOR_YOU)}>
+      <WindowsLayer index={windowOrder.indexOf(FOR_YOU)} base>
         <SnapFrame feed={FOR_YOU}>
           <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} row={row} />
         </SnapFrame>
