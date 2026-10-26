@@ -690,9 +690,9 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
           if (f < 0) f *= 0.3;
           else if (f > last) f = last + (f - last) * 0.3;
           winF.value = f;
-        } else {
-          winDrag.value = Math.max(0, e.translationY) * 0.5;
         }
+        // A downward swipe still closes them (onEnd), but the cards stay level while the finger moves
+        // (Oct 26, owner: "there shouldn't rly be up and down movement").
       })
       .onEnd((e) => {
         'worklet';

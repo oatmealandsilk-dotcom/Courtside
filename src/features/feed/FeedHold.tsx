@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import * as haptics from '@/lib/haptics';
-import { HOLD_MS, SPRING_SCRUB, endFeedScrub, winDrag, winF, winFinger, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
+import { HOLD_MS, SPRING_SCRUB, endFeedScrub, winF, winFinger, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
 
 /*
  * The hold that opens the Feed's windows, and the slide after it, as one gesture (Oct 25, owner:
@@ -103,7 +103,7 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
         aim.value = target;
         winF.value = withSpring(target, SPRING_SCRUB);
       }
-      winDrag.value = Math.max(0, e.absoluteY - y0.value) * 0.25;
+      // The cards never follow the finger up or down (Oct 26, owner: "there shouldn't rly be up and down movement").
     })
     .onEnd((e, success) => {
       'worklet';
