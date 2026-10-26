@@ -55,6 +55,7 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
+import { PROFILE_TABS_LOOK, ProfileTabRow } from '@/features/profile/ProfileTabRow';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -253,11 +254,14 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
      <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text>{savedCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
-   <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
+   {PROFILE_TABS_LOOK !== 'now'
+     // The other looks for this row (Oct 25, owner: "This part could look better"), picked in src/features/profile/ProfileTabRow.tsx.
+     ? <ProfileTabRow look={PROFILE_TABS_LOOK} tabs={TABS.map(t => ({ key: t, label: LABEL[t], count: counts[t] }))} selected={selected} onPress={setTab} tabWidth={tabWidth} onTabWidth={setTabWidth} underlineStyle={live ? underline.style : undefined} />
+     : <View style={styles.tabs} onLayout={e => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>{TABS.map(t => <Pressable key={t} accessibilityRole="tab" accessibilityState={{selected:selected===t}} accessibilityLabel={`${LABEL[t]}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}><Text {...oneLine(TextScale.TITLE)} style={[typography.body, selected===t ? { ...font('600'), color: colors.text } : { color: colors.textMuted }]}>{LABEL[t]}<Text style={[styles.tabCount, selected===t && { color: colors.brand }]}>  {compactNumber(counts[t])}</Text></Text></Pressable>)}
      {tabWidth > 0 && (live
        ? <Reanimated.View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth }, underline.style]} />
        : <View pointerEvents="none" style={[styles.tabIndicator, { width: tabWidth, left: index * tabWidth }]} />)}
-   </View>
+   </View>}
    {live
      // Under the tab line only the grid slides, all four grids riding side by
      // side. A swipe right from Posts is handed up to the tab row (Coaching).

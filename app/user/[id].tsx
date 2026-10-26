@@ -31,6 +31,7 @@ import { SuggestedPlayers } from '@/components/SuggestedPlayers';
 import { HeadToHeadCard } from '@/components/HeadToHeadCard';
 import { PartnerStreakCard, PartnerStreakLine } from '@/components/PartnerStreak';
 import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
+import { PROFILE_TABS_LOOK, ProfileTabRow } from '@/features/profile/ProfileTabRow';
 import { useApp } from '@/store/AppContext';
 import { buttonShape, colors, radius, spacing, typography, font } from '@/theme';
 import { TextScale, oneLine } from '@/theme/textScale';
@@ -323,6 +324,9 @@ function UserProfile() {
           {/* Their tennis, as the player card's banner: the whole of it opens their Tennis profile. */}
           <PlayerCard user={user} variant="banner" onPress={() => router.push(isMe ? { pathname: '/profile-details' } : { pathname: '/profile-details', params: { userId: user.id } })} />
 
+          {PROFILE_TABS_LOOK !== 'now' ? (
+            <ProfileTabRow look={PROFILE_TABS_LOOK} tabs={TABS.map((t) => ({ key: t, label: t, count: counts[t] }))} selected={tab} onPress={(k) => setTab(k as (typeof TABS)[number])} tabWidth={tabWidth} onTabWidth={setTabWidth} underlineStyle={underline.style} />
+          ) : (
           <View style={styles.tabs} onLayout={(e) => setTabWidth(e.nativeEvent.layout.width / TABS.length)}>
             {TABS.map((t) => (
               <Pressable key={t} accessibilityRole="tab" accessibilityState={{ selected: tab === t }} accessibilityLabel={`${t}, ${counts[t]}`} onPress={() => setTab(t)} style={styles.tab}>
@@ -331,6 +335,7 @@ function UserProfile() {
             ))}
             {tabWidth > 0 ? <Reanimated.View pointerEvents="none" style={[styles.tabLine, { width: tabWidth }, underline.style]} /> : null}
           </View>
+          )}
           {/* Posts, Clips, Activity and Tagged side by side: a swipe slides between them,
               the way your own profile does, instead of landing on a tile as a tap. */}
           <SectionPager index={TABS.indexOf(tab)} panes={panes} progress={underline.progress} depth={1} delegateRight bleed={spacing.lg} onIndex={(i) => setTab(TABS[i])} />
