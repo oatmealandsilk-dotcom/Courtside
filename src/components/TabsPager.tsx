@@ -19,6 +19,7 @@ import { useResponsive } from '@/lib/useResponsive';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { followRow } from '@/features/navigation/barShrink';
 import { setRowOnFeed } from '@/features/navigation/barOverMedia';
+import { lensFollow, lensRide, lensSettle } from '@/features/navigation/barLens';
 
 /**
  * The strip, left to right: Community (where the app opens, Find Players
@@ -250,6 +251,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
         startPosition.value = position.value;
         lastHeading.value = -1;
         settled.value = false;
+        // The bar's lens (features/navigation/barLens) rides the row with the finger, from where it stands.
+        lensRide(position.value);
         runOnJS(setPageDragging)(true);
       })
       .onUpdate((e) => {
@@ -259,6 +262,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
         if (next < 0) next = next * 0.25;
         if (next > LAST) next = LAST + (next - LAST) * 0.25;
         position.value = next;
+        lensFollow(next);
         const toward = e.translationX < 0 ? Math.ceil(startPosition.value + 0.001) : Math.floor(startPosition.value - 0.001);
         const wanted = toward < 0 || toward > LAST || Math.abs(e.translationX) < 10 ? -1 : toward;
         if (wanted !== lastHeading.value) {
@@ -280,9 +284,12 @@ export function TabsPager({ pathname }: { pathname: string }) {
         runOnJS(setPageDragging)(false);
         runOnJS(heading)(dest);
         const distance = Math.abs(position.value - dest);
-        position.value = withTiming(dest, { duration: 120 + Math.min(160, distance * 220), easing: EASE }, (finished) => {
+        const ms = 120 + Math.min(160, distance * 220);
+        position.value = withTiming(dest, { duration: ms, easing: EASE }, (finished) => {
           if (finished) runOnJS(land)(dest);
         });
+        // The lens settles with the row, on the same curve and time, and lands with it.
+        lensSettle(dest, ms);
       })
       .onFinalize(() => {
         'worklet';
@@ -297,6 +304,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
           position.value = withTiming(dest, { duration: 160, easing: EASE }, (finished) => {
             if (finished) runOnJS(land)(dest);
           });
+          lensSettle(dest, 160);
         }
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps

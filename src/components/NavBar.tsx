@@ -29,6 +29,7 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
+import { useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
@@ -123,6 +124,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onFeedHold = useFeedWindowsOn() && activeRoute === 'index' && feedUnder ? holdFeed : undefined;
   // The swipe followed (features/feed/swipeFollow, admins first): the bar's look follows a finger's swipe on the Feed.
   const swipeFollow = useSwipeFollow();
+  // The lens under the lit tab (features/navigation/barLens, admins first).
+  const barLens = useBarLens();
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -253,6 +256,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         onVeil={closeVeil}
         onFeedHold={onFeedHold}
         follow={swipeFollow}
+        lens={barLens}
       />
     );
   }

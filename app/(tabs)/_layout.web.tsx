@@ -11,6 +11,7 @@ import { noteTabSwitch } from '@/features/navigation/barShrink';
 import { TABS_SLIDE, listenForSlides, type PageSlide } from '@/features/navigation/pageSlide';
 import { askedSection, requestSection, shownSection, swipeDestination } from '@/features/navigation/swipeOrder';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
+import { lensFollow, lensLand, lensRide, lensSettle } from '@/features/navigation/barLens';
 import { TabFocus, ThemeGate } from '@/features/navigation/tabFocus';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
@@ -93,6 +94,35 @@ function TabsLayoutBody() {
     const done = asked.current;
     if (done) setTimeout(() => { if (asked.current === done) asked.current = null; }, 1000);
   };
+  // The bar's lens (features/navigation/barLens) rides the swipe, as the phone's rides its tab row:
+  // a drag's tab either way is worked out once as it begins (a section of the same tab, or nothing
+  // that way, leaves the lens where it is), and the settle moves it on the page's own 300 ms curve.
+  const lensRun = useRef<{ base: number; next: number; prev: number } | null>(null);
+  const lensSettling = useRef(false);
+  const lensProgress = (fraction: number) => {
+    let run = lensRun.current;
+    if (!run) {
+      const base = TAB_PATHS.indexOf(pathname);
+      if (base < 0) return;
+      const tabOf = (direction: 1 | -1) => {
+        const i = TAB_PATHS.indexOf(destination(direction)?.pathname ?? '');
+        return i < 0 ? base : i;
+      };
+      run = { base, next: tabOf(1), prev: tabOf(-1) };
+      lensRun.current = run;
+      lensRide(base);
+    }
+    const at = run.base + Math.abs(fraction) * ((fraction > 0 ? run.next : run.prev) - run.base);
+    if (!lensSettling.current) { lensFollow(at); return; }
+    lensSettling.current = false;
+    lensSettle(at, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 300);
+  };
+  const lensRest = () => {
+    lensRun.current = null;
+    lensSettling.current = false;
+    const i = TAB_PATHS.indexOf(pathname);
+    if (i >= 0) lensLand(i);
+  };
   const { ready, currentUserId, remoteLoaded, snapshotShown, isGuest } = useApp();
   const { isPhone } = useResponsive();
   // The Feed is built out of sight a moment after the app has opened, while
@@ -155,11 +185,12 @@ function TabsLayoutBody() {
   // A guest reads the tabs (guest mode, Oct 17); only the phone app sends signed-out to sign-in.
   if (ready && !currentUserId && !isGuest) return <Redirect href="/sign-in" />;
   return (
-    <SwipeSurface slideRef={slide} onSwipe={swipe} onCommit={direction => {
+    <SwipeSurface slideRef={slide} onSwipe={swipe} onProgress={lensProgress} onRest={lensRest} onCommit={direction => {
+      lensSettling.current = true;
       const next = destination(direction);
       if (next) setPendingTab(next.pathname);
     }} onDragTo={direction => {
-      if (direction === null) return setPendingTab(null);
+      if (direction === null) { lensSettling.current = true; return setPendingTab(null); }
       const next = destination(direction);
       setPendingTab(next ? next.pathname : null);
     }} delegateLeft={pathname === "/profile"} settledKey={`${pathname}:${shownSection(pathname) ?? params.section ?? ''}`} renderPreview={direction => {

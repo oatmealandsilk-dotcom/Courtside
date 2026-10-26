@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { Dimensions, PixelRatio, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import Animated, { Easing, Extrapolation, interpolate, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { GlassView } from 'expo-glass-effect';
 
 import { BrandWash } from '@/components/ui/BrandWash';
-import { CLEAR_GLASS_ALPHA, Glass } from '@/components/ui/Glass';
+import { CLEAR_GLASS_ALPHA, Glass, liquidGlass } from '@/components/ui/Glass';
+import { LENS_LOOK, lensAt, lensLag, lensPlace, lensReset, lensRides, lensRow, lensTo } from '@/features/navigation/barLens';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { BAR_SHAPE, SHAPE } from '@/features/navigation/tabBarLook';
@@ -79,7 +81,7 @@ export interface LookItem {
  */
 export const LookBar = React.memo(function LookBar({
   items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false,
+  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -108,6 +110,8 @@ export const LookBar = React.memo(function LookBar({
   onFeedHold?: () => void;
   /** The swipe followed (features/feed/swipeFollow, admins first): over the Feed, the bar's look follows a finger's swipe. */
   follow?: boolean;
+  /** The lens under the lit tab (features/navigation/barLens, admins first). */
+  lens?: boolean;
 }) {
   const { theme } = useTheme();
   // Over a clip on the Feed the bar turns dark, as today's glass does over a picture: on the Feed
@@ -350,6 +354,28 @@ export const LookBar = React.memo(function LookBar({
     }
     go();
   }, []);
+  // The lens (features/navigation/barLens) goes to the lit tab in the redraw that lights it: at the
+  // touch for a tap, as the address changes for anything else. Its moves are the animation thread's.
+  const litPlace = lens ? lensPlace(lit) : -1;
+  useLayoutEffect(() => {
+    if (!lens) return;
+    if (Platform.OS === 'web') lensTo(litPlace);
+    else runOnUI(lensTo)(litPlace);
+  }, [lens, litPlace]);
+  // Turned off, or the bar gone: the next lens is placed afresh (cleared before a new one is placed).
+  useLayoutEffect(() => (lens ? () => {
+    if (Platform.OS === 'web') lensReset();
+    else runOnUI(lensReset)();
+  } : undefined), [lens]);
+  // Where each tab's middle is along the bar, from the pill's width (worked out from the window's
+  // until it has been measured; measured only while the lens is on, so the bar is untouched without it).
+  const [measured, setMeasured] = useState<number | null>(null);
+  const onPillLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    setMeasured((was) => (was === w ? was : w));
+  }, []);
+  const pillW = measured ?? Dimensions.get('window').width - 2 * S.side;
+  const lensGeo = useMemo<LensGeo | null>(() => (lens ? lensGeometry(pillW) : null), [lens, pillW]);
   useEffect(() => {
     if (glassHeld === null) return undefined;
     let second = 0;
@@ -380,7 +406,7 @@ export const LookBar = React.memo(function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
-    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts}
+    <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace}
       onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
   // The swipe followed: the two copies' faces, built once as a swipe starts carrying the look (and
@@ -389,7 +415,7 @@ export const LookBar = React.memo(function LookBar({
     key: ++copySeq,
     dark: face(themes[theme], false, true, FOLLOW_ALPHA),
     light: face(themes[theme], false, false, FOLLOW_ALPHA),
-  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil]); // eslint-disable-line react-hooks/exhaustive-deps
+  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, lensGeo]); // eslint-disable-line react-hooks/exhaustive-deps
   // The shadow around the glass: on an iPhone, drawn along the pill's own outline (a box shadow),
   // not worked out from everything inside it, which redrew the bar off screen every frame while a
   // page slid or scrolled under the glass (Oct 25 audit). The same shadow to look at. Quicker press feel only (admins first).
@@ -398,7 +424,7 @@ export const LookBar = React.memo(function LookBar({
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[styles.float, { bottom }, outerStyle]}>
       <Animated.View style={[styles.pillWrap, tuckStyle]}>
         {/* Split (BAR_SHAPE 'C'): two grounds, each with its own shadow (Face), so this layer holds no shadow of its own. */}
-        <View style={SPLIT ? styles.splitHolder : [styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
+        <View onLayout={lens ? onPillLayout : undefined} style={SPLIT ? styles.splitHolder : [styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
           {face(themes[theme], true)}
           {/* The swipe followed: the other look, following the page over the live glass (never glass itself), the
               glass turning under it half way. Each look's copy shows only over the glass of the other, switched in
@@ -440,8 +466,52 @@ const FollowCopy = React.memo(function FollowCopy({ dark, children }: { dark: bo
   return <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="follow-bar" style={[StyleSheet.absoluteFill, look]}>{children}</Animated.View>;
 });
 
+/** Where the lens sits along the bar: each tab's middle (in the row's order) and the lens's width. */
+interface LensGeo { centers: readonly number[]; width: number }
+
+/** How far in the lens sits from the bar's top and bottom, and from its ends on the first and last tab. */
+const LENS_INSET = 4;
+
+/**
+ * The lens's measures on a pill `pillW` wide: the + keeps the middle of five equal slots (the
+ * tabs' slots either side of it), and the lens is as much wider than a slot as keeps it the same
+ * way in from the pill's round ends as from its top and bottom on the first and last tab.
+ */
+function lensGeometry(pillW: number): LensGeo {
+  const tabsW = SPLIT ? pillW - SHAPE.height - SPLIT_GAP : pillW;
+  const slotW = (tabsW - 2 * S.pad) / (SPLIT ? 4 : 5);
+  const centers = [0, 1, 2, 3].map((i) => S.pad + slotW * ((SPLIT || i < 2 ? i : i + 1) + 0.5));
+  return { centers, width: slotW + 2 * S.pad - 2 * LENS_INSET };
+}
+
+/**
+ * The lens behind the lit tab (features/navigation/barLens): moved sideways only, on the animation
+ * thread, never faded. On the live bar on iOS 26 it is Apple's glass, inside the bar's own; anywhere
+ * else, and on every copy laid over the live bar (which fade), a plain capsule in the court's colours.
+ */
+const Lens = React.memo(function Lens({ geo, fallback, fill, glass, glassDark }: {
+  geo: LensGeo; fallback: number; fill: string; glass: boolean; glassDark: boolean;
+}) {
+  const move = useAnimatedStyle(() => {
+    // Each value read here by name, not through a helper: the animation thread redraws a style only
+    // for the values its own code reads (lensShown's, read inside it, would not move the lens).
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return { transform: [{ translateX: interpolate(at, [0, 1, 2, 3], geo.centers as number[], Extrapolation.CLAMP) - geo.width / 2 }] };
+  }, [geo, fallback]);
+  return (
+    <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="bar-lens" style={[styles.lens, { width: geo.width }, move]}>
+      {glass ? (
+        <GlassView glassEffectStyle="regular" isInteractive={false} tintColor={fill} colorScheme={glassDark ? 'dark' : 'light'} style={styles.lensShape} />
+      ) : (
+        <View style={[styles.lensShape, { backgroundColor: fill }]} />
+      )}
+    </Animated.View>
+  );
+});
+
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {
+function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; media: boolean; glassMedia: boolean; live: boolean;
   /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
@@ -451,6 +521,8 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
   onTab: (route: string) => void; onCreate: () => void;
   tourRef: (route: string) => ((node: View | null) => void) | undefined; tourCreate: (node: View | null) => void;
   veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void; onFeedHold?: () => void;
+  /** The lens's measures (null: no lens), and the lit tab's place until it has been placed. */
+  lens: LensGeo | null; lensFallback: number;
 }) {
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
@@ -531,8 +603,13 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
     );
   });
 
+  // The lens: a step darker than the ground on a light court, a step lighter on a dark one and over
+  // a clip, in the ground the glass shows (the live glass may trail a clip's look by two frames).
+  const lensDark = live ? glassMedia : media;
+  const lensFill = lensDark ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, darkPage ? 0.12 : 0.07);
   const inside = (
     <>
+      {lens ? <Lens geo={lens} fallback={lensFallback} fill={lensFill} glass={live && liquidGlass && LENS_LOOK === 'glass'} glassDark={lensDark || darkPage} /> : null}
       {row}
       {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
           Create box's veil, so the bar keeps its own edge while the box is up. */}
@@ -655,4 +732,7 @@ const styles = StyleSheet.create({
   veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1, borderRadius: RADIUS },
   // The swipe followed: the copy of the look the glass shows itself, kept laid down but not shown.
   copyAway: { opacity: 0 },
+  // The lens: from the pill's left edge, moved along by a transform alone.
+  lens: { position: 'absolute', left: 0, top: LENS_INSET, bottom: LENS_INSET },
+  lensShape: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderRadius: SHAPE.height / 2 - LENS_INSET, overflow: 'hidden' },
 });
