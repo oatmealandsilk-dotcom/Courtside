@@ -70,8 +70,8 @@ import { loadSeen, markSeen, seenOnPhone } from '@/features/feed/seenPosts';
 import { challengeFor, entriesFor } from '@/features/challenge/weekly';
 import { ChallengePage } from '@/components/ChallengePage';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
-import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedReady, noteFeedSpot, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, windowsState, type Spot } from '@/features/feed/feedWindows';
-import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsRow, WindowsStack, type WindowMeta } from '@/features/feed/FeedWindowsView';
+import { ACTIVITIES_KEY, FOR_YOU, closeFeedWindows, noteFeedPressIn, noteFeedReady, noteFeedShown, noteFeedSpot, noteFeedWhole, noteRowSwitch, requestFeedWindows, spotOf, spotOfPost, useFeedWindowsOn, useWindowsRising, windowsState, type Spot } from '@/features/feed/feedWindows';
+import { FeedWindows, SnapFrame, WindowsClosedOnly, WindowsGround, WindowsLayer, WindowsRow, type WindowMeta } from '@/features/feed/FeedWindowsView';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useApp } from '@/store/AppContext';
 import { warmOpenOutside } from '@/features/share/openOutside';
@@ -1805,6 +1805,22 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     ? !!(showing.story.imageUrl || showing.story.videoUrl)
     : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
   useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden, pinched: immersive }); }, [onChrome, topOnPicture, chromeHidden, immersive]);
+  // The page on show is whole: the feed has been dealt (an empty one shows its empty page), and its page
+  // has no stand-in of its own over it while its picture comes in (`cover`, below: a photo post's, or a
+  // clip's or an Instant's with no cover picture). The Feed's windows give a picked card's picture way
+  // only to a whole page (features/feed/FeedWindowsView).
+  const showingCovered = showing?.type === 'post'
+    ? !inNow(showing.post.id) && (showing.post.kind !== 'clip' ? !!(showing.post.imageUrl || showing.post.videoUrl) : !!showing.post.videoUrl && !showing.post.thumbnailUrl)
+    : showing?.type === 'hit' ? !inNow(showing.story.id) && !!showing.story.videoUrl && !showing.story.thumbnailUrl : false;
+  const showingWhole = ready && visit > 0 && (!feed.length || (!!activeKey && !showingCovered));
+  // Whether the page on show had its placeholder up just now (it then takes a moment to fade).
+  const hadPlaceholder = useRef(false);
+  useEffect(() => {
+    if (!windowKey) return;
+    if (showingCovered) hadPlaceholder.current = true;
+    noteFeedWhole(windowKey, showingWhole, hadPlaceholder.current);
+    if (showingWhole) hadPlaceholder.current = false;
+  }, [windowKey, showingWhole, showingCovered]);
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
@@ -2569,13 +2585,28 @@ function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: F
  * animated fade inside always rests at 1, so a settled value Reanimated drops
  * unsynced on a phone can never leave a chosen feed invisible (Oct 23).
  */
-function FeedLayer({ shown, cut = false, children }: { shown: boolean; cut?: boolean; children: React.ReactNode }) {
+function FeedLayer({ feed, shown, cut = false, children }: { feed: string; shown: boolean; cut?: boolean; children: React.ReactNode }) {
   const [vis, setVis] = useState(0);
   const visRef = useRef(0);
   const shownRef = useRef(shown);
   shownRef.current = shown;
   const o = useSharedValue(1);
   const visV = useSharedValue(0);
+  // Picked in the Feed's windows: up at its own card while that grows back, before it is the one on show
+  // (features/feed/FeedWindowsView), at once and whole, as a feed handed over from them is. Two frames on,
+  // it counts as drawn there, and the card's picture starts giving way to it.
+  const rising = useWindowsRising(feed);
+  useEffect(() => {
+    if (!rising) return undefined;
+    cancelAnimation(o);
+    o.value = 1;
+    let id = requestAnimationFrame(() => { id = requestAnimationFrame(() => noteFeedShown(feed)); });
+    return () => {
+      cancelAnimationFrame(id);
+      // Down again without becoming the one on show (the windows were taken down on the way): hidden, as before.
+      if (!shownRef.current) { visRef.current = 0; setVis(0); }
+    };
+  }, [rising, feed, o]);
   const hidden = useCallback(() => { if (!shownRef.current) { visRef.current = 0; setVis(0); } }, []);
   // React shows it only once the fade's 0 has landed on the animation thread: shown in the same
   // pass as a write from here, an iPhone could draw the whole feed at full strength for a frame
@@ -2607,16 +2638,16 @@ function FeedLayer({ shown, cut = false, children }: { shown: boolean; cut?: boo
   // Hidden by React now: the fade inside goes back to its rest (1) behind it (unless it has been
   // chosen again meanwhile, and is on its way in from 0).
   useEffect(() => {
-    visV.value = vis;
-    if (vis) return;
+    visV.value = vis || rising ? 1 : 0;
+    if (vis || rising) return undefined;
     const id = requestAnimationFrame(() => { if (!visRef.current && !shownRef.current) o.value = 1; });
     return () => cancelAnimationFrame(id);
-  }, [vis, visV, o]);
+  }, [vis, rising, visV, o]);
   const fade = useAnimatedStyle(() => ({ opacity: o.value }));
   const glassFade = useDerivedValue(() => visV.value * o.value);
   // Its clips' glass (the sound disc, the level pill, See stats) is a plain fill while it cross-fades (Oct 22 sweep, item 5).
   return (
-    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: cut ? (shown ? 1 : 0) : vis }]}>
+    <View pointerEvents={shown ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { opacity: rising ? 1 : cut ? (shown ? 1 : 0) : vis }]}>
       <Reanimated.View style={[StyleSheet.absoluteFill, fade]}><GlassFadeScope value={glassFade}>{children}</GlassFadeScope></Reanimated.View>
     </View>
   );
@@ -2719,24 +2750,28 @@ function GroupedFeed() {
   const windowsOn = useFeedWindowsOn();
   const activitiesTip = useTip('activities', groupId === ACTIVITIES);
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
+  // Each feed's card in the windows, in the top row's order (FeedWindows' feeds, below).
+  const windowOrder = [ACTIVITIES_KEY, FOR_YOU, ...feedGroups.map((g) => g.id)];
   return (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
-      {/* The windows' dark ground, only while they are up; the feeds below are one card (WindowsStack). */}
+      {/* The windows' dark ground, only while they are up; each built feed below is its own card (WindowsLayer). */}
       <WindowsGround />
-      <WindowsStack>
+      <WindowsLayer index={windowOrder.indexOf(FOR_YOU)}>
         <SnapFrame feed={FOR_YOU}>
           <Home topRow paused={!!groupId} onChrome={forYouChrome} onSwipe={markFeedSwiped} row={row} />
         </SnapFrame>
-        {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
-            is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
-        {kept.map((key) => (
-          <FeedLayer key={key} shown={key === groupId} cut={handover}>
+      </WindowsLayer>
+      {/* Feeds already opened stay built (paused, see-through) and cross-fade in, so a switch
+          is a fade rather than building a whole feed on the spot (Oct 4, owner: "way smoother"). */}
+      {kept.map((key) => (
+        <FeedLayer key={key} feed={key} shown={key === groupId} cut={handover}>
+          <WindowsLayer index={windowOrder.indexOf(key)}>
             <SnapFrame feed={key}>
               <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
             </SnapFrame>
-          </FeedLayer>
-        ))}
-      </WindowsStack>
+          </WindowsLayer>
+        </FeedLayer>
+      ))}
       <WindowsClosedOnly>
         <TipBubble tip="activities" shown={activitiesTip.shown} onClose={activitiesTip.close} pointer="up" style={{ top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 4, left: 16, right: 16 }} />
       </WindowsClosedOnly>

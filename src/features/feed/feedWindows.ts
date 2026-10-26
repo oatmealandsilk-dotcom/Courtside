@@ -57,6 +57,35 @@ export const LABEL_HEIGHT = 40;
 /** The biggest a card gets: on a 390-point phone about 273 points wide, with 44 of each neighbour showing. */
 export const CARD_MAX = 0.7;
 
+/**
+ * A sideways swipe between the cards (Oct 26, owner: "make the side to side swipe a bit more
+ * sensitive just a bit"): it moves on once dragged this much of a card (was half), or once a flick's
+ * speed would carry it there in this many seconds (was 0.18), never more than one card past where
+ * the finger let go (a hard flick no longer skips a card).
+ */
+export const SWIPE_MOVE_AT = 0.38;
+export const SWIPE_FLING_S = 0.24;
+
+/**
+ * Where a sideways swipe settles: `f` the middle card as the finger lets go (a float), `start` where it
+ * stood when the finger came down, `cardsPerSecond` the finger's speed in cards (right is positive).
+ */
+export function swipeTarget(f: number, start: number, cardsPerSecond: number, n: number): number {
+  'worklet';
+  const from = Math.round(start);
+  const p = f - cardsPerSecond * SWIPE_FLING_S - from;
+  let to = from + (p >= 0 ? Math.floor(p + 1 - SWIPE_MOVE_AT) : -Math.floor(-p + 1 - SWIPE_MOVE_AT));
+  to = Math.max(Math.ceil(f) - 1, Math.min(Math.floor(f) + 1, to));
+  return Math.max(0, Math.min(n - 1, to));
+}
+
+/**
+ * The finger still down after the hold, sliding between the cards (FeedHold): one card per step,
+ * each step at most this many points (was 76: a step is now about 43 points of slide, was 49).
+ */
+export const SCRUB_PITCH_MIN = 44;
+export const SCRUB_PITCH_MAX = 66;
+
 /** The motion, all springs (mass 1), each landing written plainly afterwards. */
 export const SPRING_OPEN = { mass: 1, stiffness: 260, damping: 28 };
 /**
@@ -106,6 +135,14 @@ export const winSel = makeMutable(0);
  * a finger lifted in that hop must not leave them waiting for a slide that never comes.
  */
 export const winFinger = makeMutable(0);
+/**
+ * The card picked, from the pick until the windows have closed (-1 otherwise): its own feed is drawn
+ * in it as it grows back (FeedWindowsView's WindowsLayer), so what lands is the feed itself, never a
+ * picture of it swapped out at the end (Oct 26, owner: "Make the windows landing a bit smoother it's a
+ * tad bit glitchy"). Read on the animation thread to keep that feed out of sight in the moment between
+ * the windows closing and its layer being hidden, if they close before it was handed over.
+ */
+export const winPick = makeMutable(-1);
 export interface WindowsGeo { W: number; H: number; S: number; dy: number; step: number; rDevice: number; rCard: number; n: number }
 export const winGeo = makeMutable<WindowsGeo>({ W: 1, H: 1, S: 1, dy: 0, step: 1, rDevice: 0, rCard: 0, n: 1 });
 
@@ -168,6 +205,14 @@ export function useWindowsClipped(): boolean {
 export function useWindowsRowSwitched(): boolean {
   return useSyncExternalStore(subscribe, () => state.rowSwitched, () => state.rowSwitched);
 }
+/**
+ * This feed is the card picked, growing back to the whole screen: its layer shows at its own card
+ * meanwhile, under the card's picture, which gives way to it as it grows (not with Reduce Motion).
+ */
+export function useWindowsRising(key: FeedKey): boolean {
+  const get = () => state.phase === 'closing' && state.target === key && state.clipped;
+  return useSyncExternalStore(subscribe, get, get);
+}
 /** A tap on the row picked another feed. */
 export function noteRowSwitch() { if (!state.rowSwitched) setWindowsState({ rowSwitched: true }); }
 
@@ -228,6 +273,8 @@ export interface Spot {
   author?: string;
   /** The post on show, for a written card drawn as its page (header, words, buttons). */
   postId?: string;
+  /** The page is its picture, edge to edge (a clip, an Instant), where the phone's clock is white. */
+  full?: boolean;
 }
 const spots = new Map<FeedKey, Spot>();
 
@@ -237,7 +284,7 @@ export function spotOfPost(post: Post, page: string, author: string | undefined)
   const poster = post.thumbnailUrl ?? post.imageUrl ?? post.imageUrls?.[0];
   // A session posted with no photo: its one line of numbers when it has no words.
   const text = post.body?.trim() || (post.session ? statsLine(post.session) : '') || undefined;
-  return { page, clip, landscape: post.orientation === 'landscape', poster, text, author, postId: post.id };
+  return { page, clip, landscape: post.orientation === 'landscape', poster, text, author, postId: post.id, full: post.kind === 'clip' };
 }
 
 export function spotOf(item: FeedItem | undefined, page: string | undefined, nameOf: (id: string) => string | undefined): Spot {
@@ -245,7 +292,7 @@ export function spotOf(item: FeedItem | undefined, page: string | undefined, nam
   if (item.type === 'post') return spotOfPost(item.post, page, nameOf(item.post.authorId));
   if (item.type === 'hit') {
     const s = item.story;
-    return { page, clip: !!s.videoUrl, landscape: false, poster: s.thumbnailUrl ?? s.imageUrl, author: nameOf(s.authorId) };
+    return { page, clip: !!s.videoUrl, landscape: false, poster: s.thumbnailUrl ?? s.imageUrl, author: nameOf(s.authorId), full: true };
   }
   if (item.type === 'question') return { page, clip: false, landscape: false, text: item.question.title || item.question.body, author: nameOf(item.question.authorId) };
   return { page, clip: false, landscape: false };
@@ -267,6 +314,29 @@ export const feedSpot = (key: FeedKey): Spot | undefined => spots.get(key);
 const readyAt = new Map<FeedKey, number>();
 export function noteFeedReady(key: FeedKey) { readyAt.set(key, Date.now()); }
 export const feedReadyAt = (key: FeedKey) => readyAt.get(key) ?? 0;
+
+/**
+ * A picked feed's layer is up at its own card and drawn (its FeedLayer, two frames after it showed):
+ * the card's picture may start giving way to it. For you is always up (the feeds' ground layer).
+ */
+const shownAt = new Map<FeedKey, number>();
+export function noteFeedShown(key: FeedKey) { shownAt.set(key, Date.now()); }
+export const feedShownAt = (key: FeedKey) => (key === FOR_YOU ? Number.MAX_SAFE_INTEGER : shownAt.get(key) ?? 0);
+
+/**
+ * When a feed's page on show is whole: its picture in and its own placeholder gone (the Feed's
+ * COVER_OUT, 180 ms, once a page that had one gets its picture); 0 while it is not, or the feed is
+ * not in yet. Reported by its Home: a picked card's picture gives way only to a whole page, never
+ * to the page's own placeholder (a feed built at the pick fetches its picture).
+ */
+const wholeAt = new Map<FeedKey, number>();
+const PLACEHOLDER_OUT_MS = 180;
+export function noteFeedWhole(key: FeedKey, whole: boolean, placeholderLeaving: boolean) {
+  if (!whole) wholeAt.set(key, 0);
+  else if (!wholeAt.get(key)) wholeAt.set(key, Date.now() + (placeholderLeaving ? PLACEHOLDER_OUT_MS : 0));
+}
+/** Whether this feed's page on show is whole now. */
+export const feedWhole = (key: FeedKey) => { const at = wholeAt.get(key) ?? 0; return at > 0 && Date.now() >= at; };
 
 // ---------------------------------------------------------------------------
 // Stills: one per built feed at most, taken a moment into a press (noteFeedPressIn), of the feed on show.

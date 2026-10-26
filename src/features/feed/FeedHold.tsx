@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { runOnJS, useSharedValue, withSpring } from 'react-native-reanimated';
 
 import * as haptics from '@/lib/haptics';
-import { HOLD_MS, SPRING_SCRUB, endFeedScrub, winF, winFinger, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
+import { HOLD_MS, SCRUB_PITCH_MAX, SCRUB_PITCH_MIN, SPRING_SCRUB, endFeedScrub, winF, winFinger, winGeo, winLive, winScrub, winSel, type ScrubEnd } from './feedWindows';
 
 /*
  * The hold that opens the Feed's windows, and the slide after it, as one gesture (Oct 25, owner:
@@ -83,8 +83,8 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
       const dx = e.absoluteX - x;
       if (Math.abs(dx) >= 12) far.value = 1;
       // One card per step of the finger, the steps sized so every card can be reached on screen.
-      const pitchR = n - 1 - o > 0 ? clamp((g.W - 20 - x) / (n - 1 - o), 44, 76) : 76;
-      const pitchL = o > 0 ? clamp((x - 20) / o, 44, 76) : 76;
+      const pitchR = n - 1 - o > 0 ? clamp((g.W - 20 - x) / (n - 1 - o), SCRUB_PITCH_MIN, SCRUB_PITCH_MAX) : SCRUB_PITCH_MAX;
+      const pitchL = o > 0 ? clamp((x - 20) / o, SCRUB_PITCH_MIN, SCRUB_PITCH_MAX) : SCRUB_PITCH_MAX;
       const raw = o + (dx >= 0 ? dx / pitchR : dx / pitchL);
       let sel = winSel.value;
       // A little past half a step before it moves on, so it never flickers on the line.

@@ -89,6 +89,12 @@ interface Props {
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 /** Posts whose session strip has already counted up this run. */
 const counted = new Set<string>();
+/**
+ * A post whose page is already on show with its numbers before it is the page on screen (the Feed's
+ * windows growing its feed back to the whole screen): its strip keeps them, never dropping to 0 to
+ * count up as its feed takes over.
+ */
+export function markStripShown(postId: string) { counted.add(postId); }
 /** The breathing room either side of a post on a computer, when the window has it to spare. */
 export const LANE_INSET = 28;
 /**
