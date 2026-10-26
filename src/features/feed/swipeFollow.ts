@@ -33,7 +33,7 @@ import { useApp } from '@/store/AppContext';
  * ?admin=1 makes the demo's player an admin. The same pattern as PRELOAD_MORE_FOR_EVERYONE.
  * Off, everything is exactly as before.
  */
-export const SWIPE_FOLLOW_FOR_EVERYONE = false;
+export const SWIPE_FOLLOW_FOR_EVERYONE = true;
 
 /** Whether this person's Feed follows the swipe. */
 export function useSwipeFollow(): boolean {
