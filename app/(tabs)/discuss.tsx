@@ -1169,7 +1169,8 @@ const styleDefinitions = StyleSheet.create({
   // A row with Follow at its end: the words take the room, the pill keeps the page's right margin.
   playerFollowBody: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingRight: spacing.lg },
   // Above the list, so the Sort menu opens over the threads rather than under them.
-  controls: { gap: spacing.md, paddingBottom: spacing.lg, zIndex: 10, elevation: 10 },
+  // No room of its own under the sort line (Oct 25, owner: "Too much dead space here"): the first thread's own top air is the gap.
+  controls: { gap: spacing.md, zIndex: 10, elevation: 10 },
   topicRow: { flexDirection: 'row', gap: spacing.sm, paddingVertical: 8 },
   list: { gap: spacing.md },
   pinned: { gap: spacing.sm },
