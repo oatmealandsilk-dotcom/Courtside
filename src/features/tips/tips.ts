@@ -36,8 +36,9 @@ export const TIP_WORDS: Record<TipKey, string> = {
   'hit-posted': 'We’ll tell you when someone’s in.',
   // Never shown as a bubble: Profile's ☰ wears a dot for it until the Theme page is opened (Oct 24, owner).
   theme: 'Pick a court theme.',
-  // The Feed's windows (features/feed/feedWindows): once someone switches feeds from the top row.
-  'feed-windows': 'Hold to see all your feeds.',
+  // The Feed's windows (features/feed/feedWindows), pointing up at the top row; the Feed tab's hold
+  // opens them too (Oct 26, owner: "Tip both").
+  'feed-windows': 'Hold here or the Feed tab to see all your feeds.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -115,12 +116,14 @@ export function learned(key: TipKey) {
 const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
 
 /**
- * Tips added after people had already learned every tip there was (Oct 25: the Feed's windows, an
- * admins-first hint). Someone who has learned all the others reads as Tips Off in Settings, and Off
- * means a tip added later never shows (see OFF_MARK), so these never show for them either, and never
- * turn Settings → Tips back On by being new. Everyone else gets them as usual.
+ * Tips kept from anyone who had already learned every other tip (a hint for admins only, say).
+ * Someone who has learned all the others reads as Tips Off in Settings, so these never show for
+ * them and never turn Settings → Tips back On by being new. Empty since Oct 26: the Feed's windows
+ * are for everyone, and the players who learned every tip are the most active ones, the ones the
+ * owner most wants to find them ("This feature is kind of hidden"). Turning Tips off in Settings
+ * still keeps every tip away, this one included (turnOffTips).
  */
-const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['feed-windows']);
+const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>([]);
 const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k));
 const baseAllDone = () => BASE_TIPS.every((k) => done.has(k));
 /** This tip will not show: Tips are off, it is done, or it came later than everything they had learned. */
