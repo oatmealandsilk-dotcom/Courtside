@@ -17,6 +17,7 @@ import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
 import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, type Court, type CourtRow } from '@/features/players/courts';
 import { FirstReveal } from '@/features/feed/FirstReveal';
+import { CourtsGlow, useCourtsGlowOn } from '@/features/community/CourtsGlow';
 import { Fold } from '@/components/ui/Fold';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
@@ -139,6 +140,8 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const LOOK = usePeekLook();
+  // The soft light behind this section (CourtsGlow; Oct 26, owner: "only under courts near you").
+  const glow = useCourtsGlowOn() ? <CourtsGlow /> : null;
   const near = useNearCourts(center);
   const { hitRequests, posts, users, followingIds, currentUserId, blockedIds, mutedIds, followedCourts, seeing, shownAtCourt } = useApp();
   const rows = useMemo(() => {
@@ -183,6 +186,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
   if (!rows.length && (holding || heldShown)) {
     const held = (
       <View style={styles.wrap} accessible accessibilityLabel="Loading courts near you">
+        {glow}
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Courts near you</Text>
         </View>
@@ -211,6 +215,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
   if (!center || !rows.length) return null;
   const strip = (
     <View style={styles.wrap}>
+      {glow}
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Courts near you</Text>
       </View>
