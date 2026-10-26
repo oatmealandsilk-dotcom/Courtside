@@ -104,9 +104,9 @@ export function useJump(): JumpCtx | null {
  * first inside the thing's box). The same timing as a chat's.
  *
  * `calm`: a comment you just posted (Oct 26, owner: "I don't like the color
- * that appears after commenting it's not satisfying"). No colour: the faintest
- * grey of the page's own text, gone within 0.8 s, as Instagram and TikTok just
- * let a new comment settle into place.
+ * that appears after commenting it's not satisfying"; then, of the quick grey
+ * settle, "New comment thing is better, maybe keep the color"). The same wash of
+ * the court's colour, on the quick timing: up at once, a beat, gone within 0.9 s.
  */
 export function JumpFlash({ lit, inset = 0, square = false, calm = false }: {
   lit: number;
@@ -114,7 +114,7 @@ export function JumpFlash({ lit, inset = 0, square = false, calm = false }: {
   inset?: number;
   /** Square corners, for a row inside a rounded list (the list's own corners round it). */
   square?: boolean;
-  /** Your own comment just posted: neutral and quick (see above). */
+  /** Your own comment just posted: quick (see above). */
   calm?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -122,16 +122,14 @@ export function JumpFlash({ lit, inset = 0, square = false, calm = false }: {
   useEffect(() => {
     if (!lit) return;
     o.value = calm
-      ? withSequence(withTiming(1, { duration: 120 }), withDelay(160, withTiming(0, { duration: 500 })))
+      ? withSequence(withTiming(1, { duration: 120 }), withDelay(260, withTiming(0, { duration: 500 })))
       : withSequence(withTiming(1, { duration: 180 }), withDelay(900, withTiming(0, { duration: 700 })));
   }, [lit, o, calm]);
   const look = useAnimatedStyle(() => ({ opacity: o.value }));
-  return <Reanimated.View pointerEvents="none" style={[styles.flash, calm && styles.calm, { left: -inset, right: -inset }, square && styles.square, look]} />;
+  return <Reanimated.View pointerEvents="none" style={[styles.flash, { left: -inset, right: -inset }, square && styles.square, look]} />;
 }
 
 const styleDefinitions = StyleSheet.create({
   flash: { position: 'absolute', top: 0, bottom: 0, borderRadius: radius.md, backgroundColor: `${colors.brand}24` },
-  // About 6% of the page's text colour: a faint grey on a light page, a faint lift on a dark one, never a court's colour.
-  calm: { backgroundColor: `${colors.text}0F` },
   square: { borderRadius: 0 },
 });
