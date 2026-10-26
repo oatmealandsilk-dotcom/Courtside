@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
@@ -13,6 +13,7 @@ import { getStage } from '@/features/feed/commentStage';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
 import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, holdFeedTab, noteFeedPressIn, noteFeedPressOut } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
+import { FLIP_PAST, followHeld, followLook, followOn } from '@/features/feed/swipeFollow';
 import { activeFade, FadeCopy, FadeSpot } from '@/theme/ThemeFade';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -28,8 +29,21 @@ const PX = PixelRatio.get();
 /** The bar going dark over a clip, or light again: the Feed's top row's own 180 ms, so the two change together. */
 const MEDIA_FADE_MS = 180;
 let mediaSeq = 0;
-/** The bar as it was before a clip came or went (`media`), laid over the live bar and fading out. */
-interface MediaLayer { key: number; media: boolean; op: SharedValue<number> }
+/** The bar as it was before a clip came or went (`media`), laid over the live bar and fading out (`alpha`: its ground, the glass's own tint unless said). */
+interface MediaLayer { key: number; media: boolean; op: SharedValue<number>; alpha?: number }
+/**
+ * The swipe followed (features/feed/swipeFollow): how solid the copy of the other look is, laid over
+ * the live glass while a finger moves the Feed between a picture page and a written one. The glass
+ * turns under it half way, and the copy turns to the look the glass had: at half way the copy over
+ * the glass before and the copy over the glass after are the very same mix of the two looks and of
+ * the page showing through (the copy's icons cross at half way too), so the glass turning never
+ * shows. With the glass's own tint `a` that needs the copy's ground at 2a / (1 + a): about 0.82 in
+ * a browser, 0.86 on iOS 26, 0.95 on Android. (Exact where the glass is its tint over the page: a
+ * browser, Android; close to it on an iPhone, whose glass is Apple's.)
+ */
+const FOLLOW_ALPHA = (2 * CLEAR_GLASS_ALPHA) / (1 + CLEAR_GLASS_ALPHA);
+/** After a followed swipe has let go of the bar, how long it may wait for the Feed to say the same look before it takes the Feed's. */
+const FOLLOW_SETTLE_MS = 1200;
 /** A tab lit at the touch whose page has not come (the finger slid off, or the page never answered) goes dark again after this. */
 const LIT_GIVE_UP_MS = 1500;
 /** After a finger lifts, how long a tab lit at the touch waits for the tap itself before it is taken back. */
@@ -63,7 +77,7 @@ export interface LookItem {
  */
 export const LookBar = React.memo(function LookBar({
   items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold,
+  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -90,6 +104,8 @@ export const LookBar = React.memo(function LookBar({
   onVeil: () => void;
   /** A hold on the Feed tab while on the Feed: the Feed's windows (features/feed/feedWindows). Only given while they are on. */
   onFeedHold?: () => void;
+  /** The swipe followed (features/feed/swipeFollow, admins first): over the Feed, the bar's look follows a finger's swipe. */
+  follow?: boolean;
 }) {
   const { theme } = useTheme();
   // Over a clip on the Feed the bar turns dark, as today's glass does over a picture: on the Feed
@@ -100,7 +116,9 @@ export const LookBar = React.memo(function LookBar({
   // over the tabs; in a browser, whose tabs change in one go, the tab on show.
   const rowOnFeed = useRowOnFeed();
   const feedShown = rowOnFeed ?? activeRoute === 'index';
-  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && onPicture;
+  // The bar is over the Feed itself (its look is the Feed's).
+  const overFeed = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder);
+  const media = overFeed && onPicture;
   // A clip coming or going (or a page opened over the Feed) changes the bar's ground: the look being
   // left is laid over the new one in the same redraw and fades out, then is taken away, so the bar
   // never snaps from light to dark under a top row that eases, and nothing rests on an animated value.
@@ -112,11 +130,25 @@ export const LookBar = React.memo(function LookBar({
   const [mediaLayers, setMediaLayers] = useState<readonly MediaLayer[]>([]);
   // The glass's own dark or light: `media`, except for two frames after a clip's comments were up.
   const [glassHeld, setGlassHeld] = useState<boolean | null>(null);
+  // The swipe followed (features/feed/swipeFollow): while a finger moves the Feed between a picture
+  // page and a written one, a copy of the other look lies over the live glass and follows the page
+  // (FollowCopy), and the glass turns under it half way (`followGlass`, until the Feed itself says
+  // the same look, as the page lands). Never on with the switch off: everything below is as before.
+  const followable = follow && overFeed;
+  const [followGlass, setFollowGlass] = useState<boolean | null>(null);
+  const [following, setFollowing] = useState(false);
+  // On the animation thread, so the swipe's own reaction (below) carries on across a change of it.
+  const followableNow = useSharedValue(followable ? 1 : 0);
+  useLayoutEffect(() => { followableNow.value = followable ? 1 : 0; }, [followable, followableNow]);
   if (shownMedia !== media || shownFeed !== feedShown) {
+    // The look the glass showed until now: a followed swipe may have turned it already, and then the
+    // Feed coming to the same look changes nothing on screen.
+    const before = followGlass ?? shownMedia;
     setShownMedia(media);
     setShownFeed(feedShown);
-    if (shownMedia !== media && shownFeed === feedShown) {
-      const layer: MediaLayer = { key: ++mediaSeq, media: shownMedia, op: makeMutable(1) };
+    if (followGlass !== null) setFollowGlass(null);
+    if (before !== media && shownFeed === feedShown) {
+      const layer: MediaLayer = { key: ++mediaSeq, media: before, op: makeMutable(1) };
       setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
     }
     // With a clip's comments up (commentStage) the bar sits under their fade (AppShell's navFade, down
@@ -124,8 +156,86 @@ export const LookBar = React.memo(function LookBar({
     // same redraw that lets the fade go, which reaches the screen only a frame later. Glass re-tinted under
     // a parent at nothing can stay see-through (Oct 17), so there it keeps its look until the bar is whole
     // again. Anywhere else it re-tints at once, as before.
-    if (shownMedia !== media && glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(shownMedia);
+    if (before !== media && glassHeld === null && getStage()?.mode === 'stage') setGlassHeld(before);
   }
+  // The switch turned off: nothing is held for a swipe.
+  if (!follow && (followGlass !== null || following)) {
+    if (followGlass !== null) setFollowGlass(null);
+    if (following) setFollowing(false);
+  }
+  // What the live glass shows: the look a followed swipe turned it to, until the Feed says it too.
+  const glassLook = followGlass ?? media;
+  // The copy that follows the swipe is built afresh each time the bar draws while it is up: its first
+  // frame is then read from where the page stands, so a phone handing an opacity that has been still
+  // a while back to React (components/ui/restMotion) can never put an older one back on it.
+  const followDraw = useRef(0);
+  if (following) followDraw.current += 1;
+  // Told to the animation thread once drawn, for the half-way turn.
+  const glassNow = useSharedValue(glassLook ? 1 : 0);
+  useLayoutEffect(() => { glassNow.value = glassLook ? 1 : 0; }, [glassLook, glassNow]);
+  // The look the swipe has asked the glass for and the glass has not drawn yet (-1 none).
+  const asked = useSharedValue(-1);
+  const settleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (settleTimer.current) clearTimeout(settleTimer.current); }, []);
+  // Read by the timer below, which outlives the redraw that set it.
+  const nowRef = useRef({ media, followGlass });
+  nowRef.current = { media, followGlass };
+  const turnGlass = useCallback((dark: boolean) => { setFollowGlass(dark); }, []);
+  const startFollowing = useCallback(() => {
+    if (settleTimer.current) { clearTimeout(settleTimer.current); settleTimer.current = null; }
+    setFollowing(true);
+  }, []);
+  // The swipe let go of the bar. At rest on a page (`rest` 0 or 1): the glass is that page's look,
+  // and the copy goes (it is at nothing by then). Let go part way (the Feed went from under the bar,
+  // another feed came on show): the copy fades out from where it stands, as a page change's copy
+  // does. The Feed says the same look as the page lands; if it has not within FOLLOW_SETTLE_MS (a
+  // feed dealt again under the finger), the bar takes the Feed's look, fading as it always has.
+  const stopFollowing = useCallback((rest: number, glassDark: number) => {
+    setFollowing(false);
+    if (rest <= 0 || rest >= 1) setFollowGlass(rest >= 1);
+    else {
+      const copyDark = glassDark !== 1;
+      const from = copyDark ? rest : 1 - rest;
+      if (from > 0.01) {
+        const layer: MediaLayer = { key: ++mediaSeq, media: copyDark, op: makeMutable(from), alpha: FOLLOW_ALPHA };
+        setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+      }
+    }
+    if (settleTimer.current) clearTimeout(settleTimer.current);
+    const settle = () => {
+      // A finger still holds the page part way (its look already the next page's): asked again later.
+      if (followHeld.value) { settleTimer.current = setTimeout(settle, FOLLOW_SETTLE_MS / 4); return; }
+      settleTimer.current = null;
+      const { media: feedLook, followGlass: turned } = nowRef.current;
+      if (turned === null) return;
+      if (turned !== feedLook) {
+        const layer: MediaLayer = { key: ++mediaSeq, media: turned, op: makeMutable(1) };
+        setMediaLayers((layers) => [layer, ...layers].slice(0, 3));
+      }
+      setFollowGlass(null);
+    };
+    settleTimer.current = setTimeout(settle, FOLLOW_SETTLE_MS);
+  }, []);
+  useAnimatedReaction(
+    () => (followableNow.value && followOn.value ? followLook.value : -1),
+    (now, before) => {
+      if (now < 0) {
+        if (before !== null && before >= 0) {
+          asked.value = -1;
+          runOnJS(stopFollowing)(followLook.value, glassNow.value);
+        }
+        return;
+      }
+      if (before === null || before < 0) runOnJS(startFollowing)();
+      // Half way (a little past it, so a finger resting near the middle never flickers it): the glass
+      // turns. Worked out from the glass as drawn, so a turn still on its way is never lost or doubled.
+      const glass = glassNow.value;
+      const want = glass === 1 ? (now < 0.5 - FLIP_PAST ? 0 : 1) : (now > 0.5 + FLIP_PAST ? 1 : 0);
+      if (want === glass) { asked.value = -1; return; }
+      if (asked.value !== want) { asked.value = want; runOnJS(turnGlass)(want === 1); }
+    },
+    [],
+  );
   // The tab lit at the touch (Oct 25 audit: the new tab lit only once the router had redrawn about a
   // thousand parts, 60-170 ms after the finger lifted, with no answer to the touch before that). It
   // lights the moment the finger comes down, in a redraw of the bar alone, and the page follows; the
@@ -219,7 +329,7 @@ export const LookBar = React.memo(function LookBar({
     }
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
-  const face = (palette: Palette, live: boolean, overMedia: boolean = media, copyAlpha = 1) => (
+  const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
     <Face palette={palette} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts}
       onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
@@ -233,9 +343,13 @@ export const LookBar = React.memo(function LookBar({
         {/* Split (BAR_SHAPE 'C'): two grounds, each with its own shadow (Face), so this layer holds no shadow of its own. */}
         <View style={SPLIT ? styles.splitHolder : [styles.pillShadow, quick && Platform.OS === 'ios' ? styles.pillShadowPath : null]}>
           {face(themes[theme], true)}
+          {/* The swipe followed: the other look, following the page over the live glass (never glass itself), the glass turning under it half way. */}
+          {following ? (
+            <FollowCopy key={`${glassLook ? 'over-dark' : 'over-light'}-${followDraw.current}`} dark={!glassLook}>{face(themes[theme], false, !glassLook, FOLLOW_ALPHA)}</FollowCopy>
+          ) : null}
           {/* The bar as it was before a clip came or went, as see-through as the glass, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
-            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media, CLEAR_GLASS_ALPHA)}</FadeCopy>
+            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media, layer.alpha ?? CLEAR_GLASS_ALPHA)}</FadeCopy>
           ))}
           {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one (beside
               the glass, never holding it) and fading with the page (ThemeFade). The glass re-tints at the tap, under it. */}
@@ -249,6 +363,16 @@ export const LookBar = React.memo(function LookBar({
 });
 
 const holdNoop = () => undefined;
+
+/**
+ * The swipe followed: a copy of the bar in the other look over the live glass, as solid as the page
+ * is far into the swipe toward that look (followLook), on the animation thread. A sibling laid over
+ * the glass, never around it, and never glass itself: the one thing here whose opacity moves.
+ */
+const FollowCopy = React.memo(function FollowCopy({ dark, children }: { dark: boolean; children: React.ReactNode }) {
+  const look = useAnimatedStyle(() => ({ opacity: dark ? followLook.value : 1 - followLook.value }));
+  return <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="follow-bar" style={[StyleSheet.absoluteFill, look]}>{children}</Animated.View>;
+});
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
 function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold }: {

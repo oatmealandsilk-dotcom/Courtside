@@ -13,7 +13,7 @@ import type { MediaCrop } from '@/data/types';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
-import { usePageLeaving } from '@/features/feed/pageLeaving';
+import { usePageHeading, usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
 
@@ -23,8 +23,14 @@ const SPIN_AFTER_MS = 1000;
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
 
-function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmOnly = false, next = false, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
+function ClipPlaybackInner({ uri, poster, active: asked, onDeck = false, preload = false, warmOnly = false, next = false, onSteady, onDoubleTap, fit = 'cover', trimStart = 0, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain'; trimStart?: number; trimEnd?: number; silent?: boolean;
+  /**
+   * The swipe followed (features/feed/swipeFollow): the Feed would play this clip were it the page
+   * on show. A swipe decided onto its page (pageLeaving's `heading`) then starts it at once, sound
+   * and all, as it slides in, rather than once it has landed (the phone's ClipPlayback does the same).
+   */
+  onDeck?: boolean;
   /** Built ahead on a page not opened yet (the Feed warming up out of sight): fetch only the clip's opening, not the whole file. */
   warmOnly?: boolean;
   /** The page just below the one on screen: the one a swipe lands on next (see the wake-up below). */
@@ -76,6 +82,9 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   const windowsHeld = useWindowsHeld();
   const onTop = (useIsFocused() && !windowsHeld) || held;
   const leaving = usePageLeaving();
+  // On show, or (the swipe followed) its page is where a decided swipe is heading.
+  const heading = usePageHeading(onDeck);
+  const wanted = asked || heading;
   const shown = wanted && onTop;
   const active = shown && !leaving;
   const insets = useSafeAreaInsets();
@@ -146,8 +155,13 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
   };
   // Said once each time it comes on screen or leaves it (onSteady).
   const steady = useRef(false);
+  // Started by a swipe still gliding in (the swipe followed): the Feed hears it once the page has
+  // landed, never mid-glide, when hearing it would draw the whole Feed again under the moving pages.
+  const early = useRef(false);
+  early.current = heading && !asked;
   const steadyCheck = (el: HTMLVideoElement) => {
     if (steady.current || (onScreen.current && el.paused) || (!onScreen.current && !preload)) return;
+    if (early.current && onScreen.current) return;
     const length = el.duration;
     if (!Number.isFinite(length) || length <= 0) return;
     let end = 0;
@@ -264,6 +278,8 @@ function ClipPlaybackInner({ uri, poster, active: wanted, preload = false, warmO
     el.preservesPitch = true;
     el.volume = volume ?? 1;
   }, [speed, volume, fast]);
+  // Landed after starting as it glided in (the swipe followed): the Feed hears now what it held back.
+  useEffect(() => { if (asked && heading && video.current) steadyCheck(video.current); }, [asked]); // eslint-disable-line react-hooks/exhaustive-deps
   // Swiped away or covered, a pause is forgotten; held still under a page
   // opened over the comments stage, a pause the viewer chose is kept. A swipe
   // still gliding away (pageLeaving) has not left yet: turned round, the pause stays.

@@ -12,6 +12,7 @@ import { useTheme } from '@/theme/ThemeProvider';
 import { useTopRowHint } from '@/lib/topRowHint';
 import { AT_REST, NO_DRAG, dragFrom, followRow, offPage, settleRow, showRow, type RowDrag } from '@/features/feed/topRowScroll';
 import { PageKeyContext, PageLeavingContext, makePageLeaving } from '@/features/feed/pageLeaving';
+import { endFollow, followHeld, followPage } from '@/features/feed/swipeFollow';
 
 export interface VerticalPagerHandle { scrollToTop: () => void }
 
@@ -40,7 +41,13 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   pullAlign?: 'center' | 'left';
   /** How far the Feed's top row is away (0 shown, 1 gone): the feed's own movement drives it, a hold or the first page brings it back (features/feed/topRowScroll). Given only to the feed on show. */
   row?: SharedValue<number>;
-}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row }, ref) {
+  /** The swipe followed (features/feed/swipeFollow): each page's look (1 a picture, 0 written), and the look under a swipe is shared frame by frame with the bar and the top row. Given only to the feed on show. */
+  looks?: SharedValue<number[]>;
+  /** The swipe followed: the page a decided swipe heads for counts as the one on screen for its clip (pageLeaving's `heading`) from that moment. */
+  startEarly?: boolean;
+  /** The swipe followed: told the page a decided swipe heads for, and null once it has landed or turned back. */
+  onHead?: (index: number | null) => void;
+}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row, looks, startEarly = false, onHead }, ref) {
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
@@ -108,38 +115,82 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const [leaving] = useState(makePageLeaving);
   const keys = useRef<string[]>([]);
   keys.current = children.map((child, index) => pageKey(child, index));
+  // The swipe followed (features/feed/swipeFollow): the page a decided swipe heads for, told to its
+  // clip (pageLeaving's `heading`) and to the Feed's clock (onHead).
+  const early = useRef({ startEarly, onHead });
+  early.current = { startEarly, onHead };
+  const setHeading = (key: string | null, index: number | null) => {
+    if (leaving.heading() === key) return;
+    leaving.setHeading(key);
+    early.current.onHead?.(key === null ? null : index);
+  };
   // Heading for `index`: the page it leaves is the one it was resting on, unless it is heading
-  // straight back there (a spring back), which leaves nothing.
-  const headFor = (index: number) => {
+  // straight back there (a spring back), which leaves nothing. Followed, the page someone's own
+  // swipe heads for starts in the same moment; a move made in code (back to the top) starts its
+  // last page as it lands, as before.
+  const headFor = (index: number, byUser: boolean) => {
     const here = reported.current;
     leaving.set(index !== here ? keys.current[here] ?? null : null);
+    if (early.current.startEarly) setHeading(byUser && index !== here ? keys.current[index] ?? null : null, index);
   };
   // Landed on another page: the page left goes on counting as left until the Feed has drawn the
   // new page as the active one (the render this landing starts), never a moment before, or its
-  // clip would start again for a moment.
-  const letGoAfterDraw = useRef<string | null>(null);
+  // clip would start again for a moment. The page headed for goes on counting as headed for until
+  // then too, so its clip never stops for a moment in between.
+  const letGoAfterDraw = useRef<{ left: string | null; head: string | null }>({ left: null, head: null });
   const [, drawn] = useState(0);
   useEffect(() => {
-    const key = letGoAfterDraw.current;
-    if (key === null) return;
-    letGoAfterDraw.current = null;
-    if (leaving.get() === key) leaving.set(null);
+    const { left, head } = letGoAfterDraw.current;
+    if (left === null && head === null) return;
+    letGoAfterDraw.current = { left: null, head: null };
+    if (left !== null && leaving.get() === left) leaving.set(null);
+    if (head !== null && leaving.heading() === head) setHeading(null, null);
   });
+  // The swipe followed: the look under the feed where it stands now, shared with the bar and the
+  // top row, while someone moves it themselves (a drag, the wheel, the keys) and as that lands.
+  // A move made in code (back to the top) is not followed: it changes on landing, as before.
+  const looksRef = useRef(looks);
+  looksRef.current = looks;
+  const shareLook = (el: HTMLDivElement) => {
+    const l = looksRef.current;
+    if (!l || !el.clientHeight || !userMoved.current) return;
+    // Moving until it lands (commit): nothing hands the look back to the Feed's own meanwhile.
+    if (!followHeld.value) followHeld.value = 1;
+    followPage(l.value, el.scrollTop / el.clientHeight);
+  };
+  // No longer the feed on show (or gone) part way through a followed swipe: the bar and the top row
+  // are let go of, and take the look of whatever is on show now, as before.
+  useEffect(() => (looks ? endFollow : undefined), [looks]);
+  // Gone (or no longer followed) while a decided swipe still headed somewhere: nothing keeps playing for it.
+  useEffect(() => (startEarly ? () => { if (leaving.heading() !== null) { leaving.setHeading(null); early.current.onHead?.(null); } } : undefined), [startEarly, leaving]);
   // The page in view becomes the active one only once the feed has landed on
   // it, the way Instagram Reels and TikTok do: while you drag, the clip you
   // are leaving keeps playing and the next one shows its first frame (owner,
   // Oct 19: "push 3 only if it's what Instagram does"). Once the finger has
-  // let go towards another page, the clip being left has stopped (headFor).
+  // let go towards another page, the clip being left has stopped (headFor),
+  // and with the swipe followed (features/feed/swipeFollow) the clip it heads
+  // for has started.
   const commit = (el: HTMLDivElement) => {
     if (!el.clientHeight) return;
     const index = Math.round(el.scrollTop / el.clientHeight);
+    // Landed: the look at rest, exactly (followed).
+    shareLook(el);
+    if (looksRef.current) followHeld.value = 0;
     // Back on the page the swipe left (it turned round): its clip carries on at once. On to
-    // another: the page left is let go of once the Feed has drawn the landing (above).
+    // another: the page left is let go of once the Feed has drawn the landing (above), and so is
+    // the page headed for if this is it; landed anywhere else, that page's clip stops now.
     const leftKey = leaving.get();
+    let wait = false;
     if (leftKey !== null) {
       if (leftKey === keys.current[index]) leaving.set(null);
-      else { letGoAfterDraw.current = leftKey; drawn((n) => n + 1); }
+      else { letGoAfterDraw.current.left = leftKey; wait = true; }
     }
+    const headKey = leaving.heading();
+    if (headKey !== null) {
+      if (headKey === keys.current[index]) { letGoAfterDraw.current.head = headKey; wait = true; }
+      else setHeading(null, null);
+    }
+    if (wait) drawn((n) => n + 1);
     const byUser = userMoved.current;
     userMoved.current = false;
     if (index === reported.current) return;
@@ -154,7 +205,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     const from = el.scrollTop;
     const to = Math.max(0, Math.min(el.scrollHeight - el.clientHeight, target));
     // Where it will rest is decided here (a finger let go, a jump made in code): the clip being left stops now.
-    if (el.clientHeight) headFor(Math.round(to / el.clientHeight));
+    if (el.clientHeight) headFor(Math.round(to / el.clientHeight), userMoved.current);
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { el.scrollTop = to; el.style.scrollSnapType = 'y mandatory'; commit(el); return; }
     const started = performance.now();
     const desktop = isDesktopBrowser();
@@ -166,6 +217,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
         ? 0.18 * t + 0.82 * (t * t * t * (10 - 15 * t + 6 * t * t))
         : 1 - Math.pow(1 - t, 2.5);
       el.scrollTop = from + (to - from) * eased;
+      shareLook(el);
       if (t < 1) animation.current = requestAnimationFrame(frame);
       // Landed: now the page it came to is the active one.
       else { gliding.current = false; el.style.scrollSnapType = 'y mandatory'; commit(el); }
@@ -301,7 +353,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
       point.velocity=(point.lastY-event.clientY)/Math.max(1,now-point.lastTime);
       point.lastY=event.clientY;point.lastTime=now;
       if(point.scroll)point.scroll.scrollTop=(point.scrollTop ?? 0)-dy;
-      else event.currentTarget.scrollTop=point.top-Math.max(-event.currentTarget.clientHeight,Math.min(event.currentTarget.clientHeight,dy));
+      else{event.currentTarget.scrollTop=point.top-Math.max(-event.currentTarget.clientHeight,Math.min(event.currentTarget.clientHeight,dy));shareLook(event.currentTarget);}
     }}
     onPointerUp={event=>{
       hint.up();
@@ -325,6 +377,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     onScroll={e => {
       const el = e.currentTarget;
       if (!el.clientHeight) return;
+      shareLook(el);
       // The bar follows the scroll: down tucks it, up lifts it — as on the other tabs.
       const frac = el.scrollTop / el.clientHeight;
       const resized = lastHeight.current !== 0 && lastHeight.current !== el.clientHeight;

@@ -12,6 +12,7 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut, windowsState } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
+import { followHeld, followLook, followOn, useSwipeFollow } from '@/features/feed/swipeFollow';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -64,6 +65,8 @@ const PLUS_GAP = 6;
 const WORD_MAX = 150;
 /** The words' dark edge, faded all the way out (on a written page). */
 const EDGE_NONE = 'rgba(0, 0, 0, 0)';
+/** A change of ink that no swipe carries (a feed picked, a page dealt again): blended over 180 ms. */
+const INK_FADE = { duration: 180, easing: Easing.out(Easing.quad) };
 
 interface Props {
   groups: { id: string; name: string }[];
@@ -146,19 +149,61 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // The plain ink in a shared value, so a view built afresh at rest (below) starts in the theme
   // chosen now, never the one the row was first drawn in.
   const ink = useSharedValue(plainInk);
-  useEffect(() => { pic.value = withTiming(onPicture ? 1 : 0, { duration: 180, easing: Easing.out(Easing.quad) }); }, [onPicture, pic]);
-  const inkLook = useAnimatedStyle(() => ({
-    color: interpolateColor(pic.value, [0, 1], [ink.value, '#FFFFFF']),
-    // The edge's shape always set alongside (a browser writes all three as one text-shadow).
-    textShadowColor: interpolateColor(pic.value, [0, 1], [EDGE_NONE, GLYPH_EDGE.textShadowColor]),
-    textShadowOffset: GLYPH_EDGE.textShadowOffset,
-    textShadowRadius: GLYPH_EDGE.textShadowRadius,
-  }));
-  const markerLook = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(pic.value, [0, 1], [ink.value, '#FFFFFF']) }));
+  // The swipe followed (features/feed/swipeFollow, admins first): between a picture page and a
+  // written one the ink blends in step with the page as a finger moves it (inkOf), done as it lands,
+  // back if it springs back. A change no swipe carries keeps the 180 ms blend. Off, exactly as before.
+  const follow = useSwipeFollow();
+  // The Feed's own look, for the animation thread: where the ink goes once no swipe carries it.
+  const inkTarget = useSharedValue(onPicture ? 1 : 0);
+  const checkLater = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (checkLater.current) clearTimeout(checkLater.current); }, []);
+  useEffect(() => {
+    const to = onPicture ? 1 : 0;
+    if (!follow) { pic.value = withTiming(to, { duration: 180, easing: Easing.out(Easing.quad) }); return; }
+    inkTarget.value = to;
+    // A swipe carrying the ink right now owns it; landed, the swipe has already brought it here.
+    runOnUI(() => { 'worklet'; if (!followOn.value) pic.value = withTiming(to, INK_FADE); })();
+  }, [onPicture, pic, follow, inkTarget]);
+  // A moment after a followed swipe has let go of the ink (and the feed is at rest), it is the
+  // Feed's own, whatever happened (a feed dealt again under the finger).
+  const settleInk = useCallback(() => {
+    if (checkLater.current) clearTimeout(checkLater.current);
+    const check = () => {
+      checkLater.current = null;
+      runOnUI(() => { 'worklet'; if (!followOn.value && !followHeld.value && Math.abs(pic.value - inkTarget.value) > 0.01) pic.value = withTiming(inkTarget.value, INK_FADE); })();
+      // A finger still holding the page part way: asked again later.
+      if (followHeld.value) checkLater.current = setTimeout(check, 300);
+    };
+    checkLater.current = setTimeout(check, 1000);
+  }, [pic, inkTarget]);
+  // `pic` kept with the swipe while it carries the ink, so the row takes it over without a step when
+  // the swipe lets go: at rest on a page, exactly that page's look; let go part way (another feed came
+  // on show), back to the Feed's own over the usual 180 ms.
+  useAnimatedReaction(() => (follow && followOn.value ? followLook.value : -1), (now, before) => {
+    if (now >= 0) { pic.value = now; return; }
+    if (before === null || before < 0) return;
+    const at = followLook.value;
+    pic.value = at <= 0 || at >= 1 ? at : withTiming(inkTarget.value, INK_FADE);
+    runOnJS(settleInk)();
+  }, [follow]);
+  // How far the ink is toward white, as drawn: with the swipe followed, the look a finger's swipe
+  // carries while it carries it, read straight from the pager in the same frame; `pic` otherwise.
+  // (Read in each style itself, so each redraws the moment the pager moves.)
+  const inkLook = useAnimatedStyle(() => {
+    const p = follow && followOn.value ? followLook.value : pic.value;
+    return {
+      color: interpolateColor(p, [0, 1], [ink.value, '#FFFFFF']),
+      // The edge's shape always set alongside (a browser writes all three as one text-shadow).
+      textShadowColor: interpolateColor(p, [0, 1], [EDGE_NONE, GLYPH_EDGE.textShadowColor]),
+      textShadowOffset: GLYPH_EDGE.textShadowOffset,
+      textShadowRadius: GLYPH_EDGE.textShadowRadius,
+    };
+  });
+  const markerLook = useAnimatedStyle(() => ({ backgroundColor: interpolateColor(follow && followOn.value ? followLook.value : pic.value, [0, 1], [ink.value, '#FFFFFF']) }));
   // The "+" is an icon: the two inks cross-fade (nothing in the row is glass).
-  const markerEdgeLook = useAnimatedStyle(() => ({ opacity: pic.value }));
-  const plusPlain = useAnimatedStyle(() => ({ opacity: 1 - pic.value }));
-  const plusOnPicture = useAnimatedStyle(() => ({ opacity: pic.value }));
+  const markerEdgeLook = useAnimatedStyle(() => ({ opacity: follow && followOn.value ? followLook.value : pic.value }));
+  const plusPlain = useAnimatedStyle(() => ({ opacity: 1 - (follow && followOn.value ? followLook.value : pic.value) }));
+  const plusOnPicture = useAnimatedStyle(() => ({ opacity: follow && followOn.value ? followLook.value : pic.value }));
   // Pinched in: out with the clip's words over their 180 ms, and back the same way.
   const pinch = useSharedValue(pinched ? 1 : 0);
   useEffect(() => { pinch.value = withTiming(pinched ? 1 : 0, { duration: 180 }); }, [pinched, pinch]);

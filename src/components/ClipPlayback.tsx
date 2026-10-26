@@ -21,6 +21,7 @@ import { onSpaceBar } from '@/features/feed/keyboard';
 import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
 import { StageChromeContext } from '@/features/feed/useStageMotion';
 import { TopBandContext } from '@/features/feed/topBand';
+import { usePageHeading } from '@/features/feed/pageLeaving';
 
 /**
  * The play badge and the "2×" pill: a quick zoom and fade in (160 ms) and out
@@ -68,8 +69,14 @@ const POSTER_OUT = FadeOut.duration(160);
  * one tap pauses, two likes, a small disc top-right toggles the sound, and a
  * hairline along the bottom shows how far through it is.
  */
-function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
+function ClipPlaybackInner({ uri, poster, active: wanted, onDeck = false, preload = false, onDoubleTap, fit = 'cover', trimStart, trimEnd, speed, volume, silent = false, bare = false, discInk, discPinned = false, letterbox = false, onReady, crop, held = false, onStage = false, onPaused }: {
   uri: string; poster?: string; active: boolean; preload?: boolean; onDoubleTap?: () => void; fit?: 'cover' | 'contain';
+  /**
+   * The swipe followed (features/feed/swipeFollow): the Feed would play this clip were it the page
+   * on show. A swipe decided onto its page (pageLeaving's `heading`) then starts it at once, sound
+   * and all, as it slides in, rather than once it has landed.
+   */
+  onDeck?: boolean;
   trimStart?: number; trimEnd?: number;
   /** The browser's Feed warming up out of sight (ClipPlayback.web). A phone builds its feed from the start, so it never is. */
   warmOnly?: boolean;
@@ -112,6 +119,9 @@ function ClipPlaybackInner({ uri, poster, active, preload = false, onDoubleTap, 
   /** The viewer paused (true) or played (false) this clip with a tap: the Feed's top row comes back on a pause, as on Reels. */
   onPaused?: (paused: boolean) => void;
 }) {
+  // On show, or (the swipe followed) its page is where a decided swipe is heading.
+  const heading = usePageHeading(onDeck);
+  const active = wanted || heading;
   const insets = useSafeAreaInsets();
   // Under the Feed's top row the disc steps down out of its band (features/feed/topBand).
   const drop = useContext(TopBandContext);
