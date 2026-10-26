@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 
 import { CourtSearch, type ChosenPlace } from '@/components/CourtSearch';
 import { DragSheet } from '@/components/DragSheet';
@@ -10,6 +10,7 @@ import { FORMAT_LABEL, hitWhen } from '@/features/hits/format';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { homeFor } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { goBack } from '@/lib/goBack';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -49,8 +50,10 @@ export default function SetCourt() {
   const [saving, setSaving] = useState(false);
   // Set: the note once the sheet has gone.
   const set = useRef<ChosenPlace | null>(null);
-  // Not yours, or no longer flexible (set elsewhere, called off): nothing to do here.
-  useEffect(() => { if (!yours && !set.current && !saving) close(); }, [yours]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Not yours, or no longer flexible (set elsewhere, called off): nothing to do here. Opened from a
+  // link before the hits have come in (a reload), it waits for them rather than closing at once.
+  const listed = hitRequests.length > 0;
+  useEffect(() => { if ((hit || listed) && !yours && !set.current && !saving) close(); }, [yours, listed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     if (!hit || !place || saving) return;
@@ -62,7 +65,8 @@ export default function SetCourt() {
     if (ok) close();
   };
   const done = () => {
-    router.back();
+    // Back to the page under it; opened first (a reload, a link), to the Players page.
+    goBack('/discuss');
     const at = set.current;
     if (!at) return;
     showToast({
@@ -83,7 +87,7 @@ export default function SetCourt() {
       <View style={styles.body}>
         <ScrollView style={styles.scroll} contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
           <Section strong title="Where">
-            {open ? <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} /> : <Text style={styles.gone}>This hit already has a court.</Text>}
+            {open ? <CourtSearch home={home} nearby={courts} chosen={place} onChoose={setPlace} typed={typed} onType={(t) => { setTyped(t); setPlace(null); }} /> : hit ? <Text style={styles.gone}>This hit already has a court.</Text> : null}
           </Section>
         </ScrollView>
         <View style={styles.footer}>
