@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
 import { CLEAR_GLASS_ALPHA, Glass } from '@/components/ui/Glass';
-import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
+import { FEED_BAR_ALWAYS_DARK, useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { BAR_SHAPE, SHAPE } from '@/features/navigation/tabBarLook';
 import { barCompact } from '@/features/navigation/barShrink';
@@ -100,7 +100,9 @@ export const LookBar = React.memo(function LookBar({
   // over the tabs; in a browser, whose tabs change in one go, the tab on show.
   const rowOnFeed = useRowOnFeed();
   const feedShown = rowOnFeed ?? activeRoute === 'index';
-  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && onPicture;
+  // FEED_BAR_ALWAYS_DARK (barOverMedia, option A): on the Feed the bar keeps the dark look over a written
+  // post too, so swiping from a clip to a written post changes nothing down here. Off the Feed, as before.
+  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && (FEED_BAR_ALWAYS_DARK || onPicture);
   // A clip coming or going (or a page opened over the Feed) changes the bar's ground: the look being
   // left is laid over the new one in the same redraw and fades out, then is taken away, so the bar
   // never snaps from light to dark under a top row that eases, and nothing rests on an animated value.
