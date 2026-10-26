@@ -1,22 +1,27 @@
-import React, { useId } from 'react';
+import React, { useId, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import { useApp } from '@/store/AppContext';
 import { spacing } from '@/theme';
-import { themes, useTheme } from '@/theme/ThemeProvider';
+import { themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 
 /**
- * A soft light behind Courts near you on Find Players, bleeding in from the left edge the way
+ * Soft light behind Courts near you on Find Players, bleeding in from the screen's edges the way
  * Strava's sits behind its cards. Oct 26, owner, with Strava's Progress page beside his Community
  * page: "Under this line in community, let's play around with adding a gradient or a depth kinda
- * cool looking thing behind. Like Strava does. Keep it subtle"; shown three looks on the whole page,
- * "the community glow should only appear under courts near you". So it lives in that section and
- * scrolls with it, and nowhere else.
+ * cool looking thing behind. Like Strava does. Keep it subtle"; then "the community glow should
+ * only appear under courts near you"; then "the fade should correspond to the theme, also move it
+ * down a bit. and then even lower lets add another on the righter side".
  *
- * One colour, the court's own (`court` in every palette: Clean's green, New York's blue, Paris's
- * brick), faint, fading to nothing before the section's edges so it never shows a line. It sits
- * behind the cards (it never tints a court's little map), is never animated, and takes no touches.
+ * Two lights, each faded out well before its own edges so neither ever shows a line:
+ *  - from the left, low behind the court cards;
+ *  - from the right, lower still, under the section (it falls behind what comes next).
+ * Each court's own two colours (THEME_LIGHTS): its court colour on the left, its second colour on
+ * the right where it has one that reads on its page (Melbourne's aqua, Paris's amber, London's
+ * purple, CourtSide's peach); Clean, Night and New York keep their one colour on both sides (a warm
+ * light on New York's navy turned a muddy olive). Each is as strong as the next on its own page
+ * (STRENGTH), never animated, behind everything (it never tints a court's little map), no touches.
  *
  * Admins first (the same pattern as the map peek): COURTS_GLOW_FOR_EVERYONE turns it on for all.
  */
@@ -29,13 +34,41 @@ export function useCourtsGlowOn(): boolean {
   return COURTS_GLOW_FOR_EVERYONE || admin;
 }
 
-/** How far past the section's top and bottom the light reaches (it has faded out by then). */
-const BLEED = 28;
-/** On a light page, and on a dark one (Night, New York), where light needs a little more to show. */
-const ALPHA = 0.15;
-const DARK_ALPHA = 0.26;
+/** How far above the section the drawing starts, and how far below it runs (the right light lives down there). */
+const ABOVE = 40;
+const BELOW = 420;
+/** Where each light sits: the left one low in the section, the right one well under it (points). */
+const LEFT_AT = 0.8;
+const RIGHT_BELOW = 210;
 
-/** Smooth at both ends (no ring where the light ends): 1 at the centre, 0 at the edge. */
+/** Which of the palette's colours each side's light takes, per court. */
+const THEME_LIGHTS: Record<ThemeName, readonly ['court' | 'brand', 'court' | 'brand' | 'cardGlowBottom' | 'cardTouch']> = {
+  clean: ['court', 'court'],
+  night: ['brand', 'brand'],
+  'us-open': ['court', 'court'],
+  ao: ['court', 'cardGlowBottom'],
+  'roland-garros': ['court', 'cardGlowBottom'],
+  wimbledon: ['court', 'cardTouch'],
+  default: ['brand', 'cardGlowBottom'],
+};
+
+/**
+ * How far each light moves its page at its centre (RGB distance): the same on every court, so a
+ * pale colour on a pale page shows as much as a deep one, never more. 46 is Clean's green at 15%.
+ */
+const STRENGTH = 46;
+const MAX_ALPHA = 0.5;
+
+const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+/** The strength a colour needs on this page to move it by STRENGTH. */
+function alphaFor(color: string, page: string): number {
+  if (!/^#[0-9a-f]{6}$/i.test(color) || !/^#[0-9a-f]{6}$/i.test(page)) return 0.15;
+  const [a, b] = [rgb(color), rgb(page)];
+  const distance = Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  return distance ? Math.min(MAX_ALPHA, STRENGTH / distance) : 0;
+}
+
+/** Smooth at both ends (no ring where a light ends): 1 at the centre, 0 at the edge. */
 const FALLOFF = [0, 0.2, 0.4, 0.6, 0.8, 1].map((t) => [t, 1 - (3 * t * t - 2 * t * t * t)] as const);
 
 /**
@@ -47,30 +80,53 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   : { cx, cy, rx, ry });
 
 /**
- * The light, laid as the first child of the section (so the heading and the cards draw over it).
- * It reaches out to the screen's edges past the page's side margins, and a little above and below
- * the section, its oval centred off the left edge and gone before either end of it.
+ * The lights, laid as the first child of the section (so the heading and the cards draw over it,
+ * and so does whatever follows the section). The drawing reaches out to the screen's edges past the
+ * page's side margins, from a little above the section to well below it, sized once laid out.
  */
 export const CourtsGlow = React.memo(function CourtsGlow() {
-  const { theme, dark } = useTheme();
-  // The court's name is in the id: iOS keeps a gradient by id and would not repaint one whose colour changed under the same name.
+  const { theme } = useTheme();
+  // The court's name is in the ids: iOS keeps a gradient by id and would not repaint one whose colour changed under the same name.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
-  const alpha = dark ? DARK_ALPHA : ALPHA;
-  const court = themes[theme].court;
+  const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+  const palette = themes[theme];
+  const [leftKey, rightKey] = THEME_LIGHTS[theme] ?? THEME_LIGHTS.clean;
+  const lights = box ? (() => {
+    const { w, h } = box;
+    const section = Math.max(1, h - ABOVE - BELOW);
+    // Left: low in the section, faded out before the drawing's top.
+    const ly = ABOVE + section * LEFT_AT;
+    const left = { color: palette[leftKey], cx: -0.18 * w, cy: ly, rx: 0.95 * w, ry: Math.min(ly, 170) };
+    // Right: under the section, faded out before the drawing's bottom.
+    const rightY = ABOVE + section + RIGHT_BELOW;
+    const right = { color: palette[rightKey], cx: 1.18 * w, cy: rightY, rx: 0.95 * w, ry: Math.min(h - rightY, 190) };
+    return [left, right];
+  })() : [];
   return (
-    <View pointerEvents="none" style={styles.glow}>
-      <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
-        <Defs>
-          <RadialGradient id={`courts${id}`} {...ellipse(-18, 50, 95, 50)} gradientUnits="userSpaceOnUse">
-            {FALLOFF.map(([t, f]) => <Stop key={t} offset={t} stopColor={court} stopOpacity={alpha * f} />)}
-          </RadialGradient>
-        </Defs>
-        <Rect x="0" y="0" width="100" height="100" fill={`url(#courts${id})`} />
-      </Svg>
+    <View
+      pointerEvents="none"
+      style={styles.glow}
+      onLayout={(e) => { const { width, height } = e.nativeEvent.layout; setBox((b) => (b && b.w === width && b.h === height ? b : { w: width, h: height })); }}
+    >
+      {box ? (
+        <Svg width={box.w} height={box.h} viewBox={`0 0 ${box.w} ${box.h}`}>
+          <Defs>
+            {lights.map((light, i) => {
+              const alpha = alphaFor(light.color, palette.bg);
+              return (
+                <RadialGradient key={i} id={`courts${i}${id}`} {...ellipse(light.cx, light.cy, light.rx, light.ry)} gradientUnits="userSpaceOnUse">
+                  {FALLOFF.map(([t, f]) => <Stop key={t} offset={t} stopColor={light.color} stopOpacity={alpha * f} />)}
+                </RadialGradient>
+              );
+            })}
+          </Defs>
+          {lights.map((_, i) => <Rect key={i} x="0" y="0" width={box.w} height={box.h} fill={`url(#courts${i}${id})`} />)}
+        </Svg>
+      ) : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  glow: { position: 'absolute', top: -BLEED, bottom: -BLEED, left: -spacing.lg, right: -spacing.lg },
+  glow: { position: 'absolute', top: -ABOVE, bottom: -BELOW, left: -spacing.lg, right: -spacing.lg },
 });
