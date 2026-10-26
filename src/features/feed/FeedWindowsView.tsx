@@ -30,7 +30,7 @@ import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from
 import { useTheme } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
 import {
-  CARD_GAP, CARD_MAX, FOR_YOU, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
+  CARD_GAP, CARD_MAX, FOR_YOU, LABEL_HEIGHT, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
   cardAt, feedReadyAt, feedShot, feedSpot, registerShotNode, setWindowsController, setWindowsState, snapFeed,
   useWindowsClipped, useWindowsPhase, useWindowsRowSwitched, useWindowsTarget, windowsState,
   winDrag, winF, winFinger, winGeo, winLive, winOn, winP, winScrub, winSel, winStill, winTick,
@@ -88,7 +88,7 @@ function deepOf(): string {
   return pageIsDark() ? towardBlack(colors.bg, 0.38) : colors.text;
 }
 
-/** Under each card but the one you came from: who posted, and how many you have not seen. */
+/** Above each card but the one you came from, under its name: who posted, and how many you have not seen. */
 export interface WindowMeta {
   avatars: { id: string; name: string; seed: string; uri?: string }[];
   /** Posts in that feed this phone has not shown you. */
@@ -363,10 +363,13 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       if (origin < 0 || L.feeds.length < 2) return;
       const { w: W, h: H } = L.size;
       const barTop = H - (Math.max(L.insets.bottom, 12) + BAR_METRICS.height + 10);
+      // The names sit above the cards: names and cards, as one block, fit between the top and the
+      // bar, the cards as large as they may be, the block centred in what is left.
       const top = L.insets.top + 8;
       const room = barTop - LABEL_SPACE - top;
       const S = Math.max(0.3, Math.min(CARD_MAX, room / H));
-      const dy = top + room / 2 - H / 2;
+      const cardTop = top + LABEL_SPACE + Math.max(0, room - H * S) / 2;
+      const dy = cardTop + (H * S) / 2 - H / 2;
       winGeo.value = { W, H, S, dy, step: W * S + CARD_GAP, rDevice: L.insets.bottom > 0 ? 44 : 0, rCard: L.insets.bottom > 0 ? 24 : 16, n: L.feeds.length };
       const still = !!L.reduceMotion;
       coverIdx.value = -1;
@@ -716,7 +719,8 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
         const cy = g.H / 2 + g.dy;
         for (let i = 0; i < g.n; i += 1) {
           const cx = g.W / 2 + (i - winF.value) * g.step;
-          if (Math.abs(e.x - cx) <= w / 2 && e.y >= cy - h / 2 && e.y <= cy + h / 2 + LABEL_SPACE) { runOnJS(choose)(i); return; }
+          // The card, or its name above it.
+          if (Math.abs(e.x - cx) <= w / 2 && e.y >= cy - h / 2 - LABEL_SPACE && e.y <= cy + h / 2) { runOnJS(choose)(i); return; }
         }
         runOnJS(dismiss)();
       });
@@ -898,8 +902,10 @@ function WrittenFace({ face, H }: { face: Extract<Face, { kind: 'text' }>; H: nu
 }
 
 /**
- * A card's name under it, brightest on the middle card, coming in as the cards settle. Under the
- * card you came from, the row's own mark; under the others, who posted and how many you have not seen.
+ * A card's name above it (a finger come up from the bar never covers it), brightest on the middle
+ * card, coming in as the cards settle. Under the name of the card you came from, the row's own mark;
+ * under the others' names, who posted and how many you have not seen. The names stand on one line
+ * across the cards whatever is under them; the block's foot is LABEL_SPACE - LABEL_HEIGHT above the card.
  */
 function Label({ i, W, S, name, origin, meta }: { i: number; W: number; S: number; name: string; origin: boolean; meta: WindowMeta | null }) {
   const look = useAnimatedStyle(() => {
@@ -908,7 +914,7 @@ function Label({ i, W, S, name, origin, meta }: { i: number; W: number; S: numbe
     const near = Math.max(0, Math.min(1, 1 - Math.abs(winF.value - i)));
     return {
       opacity: (0.55 + 0.45 * near) * interpolate(winP.value, [0.55, 1], [0, 1], 'clamp'),
-      transform: [{ translateX: c.x }, { translateY: g.H / 2 + c.y + (g.H * c.s) / 2 + 10 + winDrag.value }],
+      transform: [{ translateX: c.x }, { translateY: g.H / 2 + c.y - (g.H * c.s) / 2 - LABEL_SPACE + winDrag.value }],
     };
   });
   const fresh = meta ? (meta.fresh > 9 ? '9+ new' : meta.fresh > 0 ? `${meta.fresh} new` : meta.newestAt ? relativeTime(meta.newestAt) : '') : '';
@@ -916,9 +922,11 @@ function Label({ i, W, S, name, origin, meta }: { i: number; W: number; S: numbe
     <Animated.View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.label, { width: W }, look]}>
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.labelText, { maxWidth: W * S, color: colors.onMedia }]}>{name}</Text>
       {origin ? (
-        <View style={[styles.labelMark, { backgroundColor: colors.onMedia }]} />
+        <View style={styles.labelLine}>
+          <View style={[styles.labelMark, { backgroundColor: colors.onMedia }]} />
+        </View>
       ) : meta && (meta.avatars.length || fresh) ? (
-        <View style={styles.labelMeta}>
+        <View style={[styles.labelLine, styles.labelMeta]}>
           {meta.avatars.length ? (
             <View style={[styles.labelFaces, { width: 16 + (meta.avatars.length - 1) * 11 }]}>
               {meta.avatars.map((a, k) => (
@@ -940,11 +948,12 @@ const styles = StyleSheet.create({
   shade: { backgroundColor: 'rgba(0, 0, 0, 0.45)' },
   // A little larger than the page, so the softened picture's edges never show.
   groundPicture: { transform: [{ scale: 1.12 }] },
-  label: { position: 'absolute', left: 0, top: 0, alignItems: 'center' },
+  label: { position: 'absolute', left: 0, top: 0, height: LABEL_HEIGHT, alignItems: 'center' },
   labelText: { fontSize: 15, lineHeight: 20, ...font('600') },
-  // The row's own mark, its top 24 points under the name's.
-  labelMark: { marginTop: 4, width: 18, height: 2.5, borderRadius: 1.25 },
-  labelMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4, gap: 6 },
+  // The line under a name: the row's own mark (at its top, 24 points under the name's top), or who posted.
+  labelLine: { marginTop: 4, height: 16, alignItems: 'center' },
+  labelMark: { width: 18, height: 2.5, borderRadius: 1.25 },
+  labelMeta: { flexDirection: 'row', gap: 6 },
   labelFaces: { height: 16 },
   labelFace: { position: 'absolute', top: 0 },
   labelFresh: { fontSize: 12.5, lineHeight: 16, ...font('500') },

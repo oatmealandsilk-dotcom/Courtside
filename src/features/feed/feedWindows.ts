@@ -46,8 +46,14 @@ export function useFeedWindowsOn(): boolean {
 export const HOLD_MS = 400;
 /** The air between two cards. */
 export const CARD_GAP = 14;
-/** Room kept under the cards for their names (and the line under each name). */
-export const LABEL_SPACE = 46;
+/**
+ * Room kept above the cards for their names (and the line under each name): above, not under, so a
+ * finger come up from the bar never covers them (Oct 25, owner: "On changing windows, you should be
+ * able to see the names on top of the tabs"). The name (20) and its line (4 + 16), then 10 of air.
+ */
+export const LABEL_SPACE = 50;
+/** The name and its line, without the air under them. */
+export const LABEL_HEIGHT = 40;
 /** The biggest a card gets: on a 390-point phone about 273 points wide, with 44 of each neighbour showing. */
 export const CARD_MAX = 0.7;
 
