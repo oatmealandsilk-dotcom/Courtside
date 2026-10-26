@@ -121,16 +121,20 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const canOpenCourt = !flex && hit.place.lat !== undefined && hit.place.lng !== undefined;
   // Yours, with no court yet, and still on: "Set court" makes it a hit at a court (the hit sheet's own picker, /set-court).
   const canSetCourt = mine && flex && !hit.cancelled && Date.parse(hit.startsAt) > Date.now() - 3_600_000;
-  // Set court sits at the end of the place's line, in the same look as Chat; every other card's place is as it was.
+  // Set court stands where "Court flexible" was, in the same look as Chat, with the town after it
+  // (Oct 26, owner: "put it where court flexible is and remove court flexible. We can keep the near city").
+  // Everyone else still reads "Court flexible · near Cary"; every other card's place is as it was.
   const wrapPlace = (place: React.ReactElement) => (!canSetCourt ? place : (
     <View style={styles.placeRow}>
-      {place}
       <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="Set court. Pick the court for this hit" onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/set-court', params: { id: hit.id } }); }} style={({ pressed }) => [styles.button, styles.secondary, styles.setCourt, pressed && styles.buttonPressed]}>
         <Ionicons name="location-outline" size={16} color={colors.text} />
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Set court</Text>
       </SwipePressable>
+      {place}
     </View>
   ));
+  // Beside Set court only the town is said ("near Cary"); with no town, just how far.
+  const placeWords = canSetCourt ? (hit.place.near ? `near ${hit.place.near}` : '') : placeLabel(hit.place);
   const milesText = miles === undefined ? null : flex ? formatSpotMiles(miles, true) : formatMiles(miles);
   const roughMiles = miles === undefined ? 0 : Math.max(1, Math.round(miles));
   const placeA11y = flex
@@ -203,7 +207,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{placeLabel(hit.place)}{milesText ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${milesText.replace(/ /g, ' ')}`}</Text> : null}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{placeWords}{milesText ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{`${placeWords ? ' · ' : ''}${milesText.replace(/ /g, ' ')}`}</Text> : null}</Text>
         </SwipePressable>)}
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
@@ -361,10 +365,10 @@ const styleDefinitions = StyleSheet.create({
   whenQuiet: { color: colors.textMuted },
   facts: { gap: spacing.sm },
   place: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', maxWidth: '100%' },
-  // Your flexible hit's place with Set court at the line's end.
+  // Your flexible hit's place: Set court first, the town after it.
   placeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   placeInRow: { alignSelf: 'center', flexShrink: 1 },
-  setCourt: { marginLeft: 'auto', paddingHorizontal: 14 },
+  setCourt: { paddingHorizontal: 14 },
   placeTile: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   placeText: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 20, letterSpacing: -0.15, flexShrink: 1 },
   placeMiles: { ...typography.body, color: colors.textMuted, letterSpacing: 0 },

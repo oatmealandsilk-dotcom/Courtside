@@ -26,7 +26,7 @@ import type { FeedItem } from './rankFeed';
  * and shipping an over-the-air update: no database change, no new native code. In the web demo,
  * ?admin=1 makes the demo's player an admin. The same pattern as PRELOAD_MORE_FOR_EVERYONE.
  */
-export const FEED_WINDOWS_FOR_EVERYONE = false;
+export const FEED_WINDOWS_FOR_EVERYONE = true;
 
 /**
  * Whether a clip's page may be photographed for its card. Off: the phone's video layer is expected
