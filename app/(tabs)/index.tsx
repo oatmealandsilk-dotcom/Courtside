@@ -63,6 +63,8 @@ import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { RemovedActions, RemovedNote } from '@/features/moderation/RemovedNote';
 import { show as showToast } from '@/lib/toast';
 import { ClipPlayback } from '@/components/ClipPlayback';
+import { makeHeadStore, useSwipeFollow } from '@/features/feed/swipeFollow';
+import { FollowClock } from '@/features/feed/FollowClock';
 import { CAUGHT_UP, NEWEST_FIRST, rankFeed, sinkDemoted, type FeedItem, type RankContext } from '@/features/feed/rankFeed';
 import { demotedPosts, onDemotedChange } from '@/features/feed/demoted';
 import { feedScores, loadFeedScores } from '@/features/feed/feedScores';
@@ -243,6 +245,15 @@ export interface FeedChrome { picture: boolean; hidden: boolean; /** Pinched in:
  */
 const unfinishedClip = (p: Post, me: string | null | undefined) =>
   isSupabaseConfigured && p.kind === 'clip' && !p.videoUrl && !p.imageUrl && !p.imageUrls?.length && p.authorId !== me;
+/**
+ * A page that fills the top of the screen with a real picture (a clip or an Instant with its media):
+ * the Feed's top row reads white over it, and the bar turns dark. The demo's court cards are the
+ * page's own light ground. The same rule as Home's `topOnPicture` (keep the two alike), for every page
+ * of the feed at once (the swipe followed: features/feed/swipeFollow).
+ */
+const onPictureLook = (item: FeedItem | undefined) => (item?.type === 'hit'
+  ? !!(item.story.imageUrl || item.story.videoUrl)
+  : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl));
 const forYou = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[]; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
 /**
  * A session posted with no photo or clip (its numbers only) is dealt into
@@ -1928,6 +1939,20 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
 
   // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
   const banded = !!topRow || rowed;
+  // The swipe followed (features/feed/swipeFollow, admins first): each page's look for the pager of
+  // the feed on show (the bar and the top row follow it as it moves; the last page after the feed, the
+  // end or "caught up" one, is a written one), the page a decided swipe heads for (its clip starts
+  // then; the clock turns), and the clock's rule for any page. Off, none of it is used.
+  const swipeFollow = useSwipeFollow();
+  const followLive = swipeFollow && !!onChrome && !paused;
+  const looksKey = followLive ? `${feed.map((item) => (onPictureLook(item) ? '1' : '0')).join('')}${scope?.activities || !(scope || lineLast) ? '0' : ''}` : '';
+  const followLooks = useSharedValue<number[]>([]);
+  useEffect(() => { if (looksKey) followLooks.value = Array.from(looksKey, Number); }, [looksKey, followLooks]);
+  const [headStore] = useState(makeHeadStore);
+  const clockLight = (index: number) => {
+    const item = feed[index];
+    return item?.type === 'hit' ? inNow(item.story.id) : item?.type === 'post' && item.post.kind === 'clip' && inNow(item.post.id);
+  };
 
   return (
     <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
@@ -1961,7 +1986,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}>
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
+            looks={followLive ? followLooks : undefined} startEarly={swipeFollow} onHead={swipeFollow ? headStore.set : undefined}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
               const ahead = index - active;
@@ -2038,7 +2064,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     <View accessibilityLabel={`${author.name}'s Instant`} style={styles.clipFrame}>
                       <View style={phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
                         {story.videoUrl ? (
-                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} next={Platform.OS === 'web' && playing && ahead === 1} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
+                          <ClipPlayback uri={story.videoUrl} poster={story.thumbnailUrl} active={playing && active === index && warmed && playable} onDeck={swipeFollow && playing && warmed && playable} held={held && myStage?.key === hitKey} onStage={myStage?.key === hitKey} preload={near} next={Platform.OS === 'web' && playing && ahead === 1} warmOnly={warming} bare={immersive} onDoubleTap={() => likeHitByTap(story.id, hitLiked)} discInk={theme === 'us-open' ? '#FFFFFF' : colors.brand} discPinned={index === 0 && !scope} onReady={(ok) => markReady(story.id, ok)} onSteady={(onScreen) => markSteady(story.id, onScreen)} onPaused={rowBackOnPause} />
                         ) : (
                           // Two quick taps like a hit, the way they like a clip.
                           <Pressable accessibilityRole="image" accessibilityLabel={`${author.name}'s Instant`} onPress={() => { const now = Date.now(); if (now - lastHitTap.current < 280) { lastHitTap.current = 0; likeHitByTap(story.id, hitLiked); } else lastHitTap.current = now; }} style={StyleSheet.absoluteFill}>
@@ -2215,6 +2241,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                           uri={post.videoUrl}
                           poster={post.thumbnailUrl}
                           active={playing && active === index && warmed && playable}
+                          onDeck={swipeFollow && playing && warmed && playable}
                           preload={near}
                           next={Platform.OS === 'web' && playing && ahead === 1}
                           warmOnly={warming}
@@ -2401,7 +2428,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               the theme's dark clock sank into a dark court, and the top shade keeps a white one clear of a bright sky.
               Only once the picture is in (the cover before it is the page's own ground), and only while this page is in front:
               For you held still under a group's feed keeps quiet, or its white clock vanished on the group's light page. */}
-          {focused && !paused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
+          {!swipeFollow && focused && !paused && activeOnPicture && showing && (showing.type === 'hit' ? inNow(showing.story.id) : showing.type === 'post' && inNow(showing.post.id)) ? <StatusBar style="light" animated /> : null}
+          {/* The swipe followed: the same rule, turning once as a swipe is decided (FollowClock). */}
+          {swipeFollow && focused && !paused ? <FollowClock rest={clockLight(active)} head={headStore} lightAt={clockLight} /> : null}
         </View>
       )}
     </View>

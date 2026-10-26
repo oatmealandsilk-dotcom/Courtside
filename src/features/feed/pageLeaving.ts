@@ -18,16 +18,26 @@ import { createContext, useContext, useSyncExternalStore } from 'react';
  * Held by the page's key rather than its place, so a feed dealt again
  * mid-swipe never stops the wrong page. The pager lets go of it once it has
  * landed and the Feed has drawn the new page on screen as the active one.
+ *
+ * With the swipe followed (features/feed/swipeFollow, admins first) the page
+ * a decided swipe heads for is held the same way (`heading`): its clip starts
+ * at that same moment, as the one being left stops, and plays as it slides in.
+ * The pager lets go of it once the Feed has drawn it as the active page, so
+ * the clip never stops for a moment in between.
  */
 export interface PageLeaving {
   /** The key of the page a decided swipe is leaving, or null. */
   get: () => string | null;
   set: (key: string | null) => void;
   subscribe: (listener: () => void) => () => void;
+  /** The key of the page a decided swipe is heading for, or null (only while the swipe is followed). */
+  heading: () => string | null;
+  setHeading: (key: string | null) => void;
 }
 
 export function makePageLeaving(): PageLeaving {
   let key: string | null = null;
+  let head: string | null = null;
   const listeners = new Set<() => void>();
   return {
     get: () => key,
@@ -39,6 +49,12 @@ export function makePageLeaving(): PageLeaving {
     subscribe: (listener) => {
       listeners.add(listener);
       return () => { listeners.delete(listener); };
+    },
+    heading: () => head,
+    setHeading: (next) => {
+      if (next === head) return;
+      head = next;
+      listeners.forEach((listener) => listener());
     },
   };
 }
@@ -57,6 +73,20 @@ export function usePageLeaving(): boolean {
   return useSyncExternalStore(
     store ? store.subscribe : nothingToHear,
     () => !!store && key !== null && store.get() === key,
+    () => false,
+  );
+}
+
+/**
+ * True while a decided swipe is heading for the page this is drawn on, before it has landed (the
+ * swipe followed: features/feed/swipeFollow). Always false when `on` is false or outside a pager.
+ */
+export function usePageHeading(on: boolean): boolean {
+  const store = useContext(PageLeavingContext);
+  const key = useContext(PageKeyContext);
+  return useSyncExternalStore(
+    on && store ? store.subscribe : nothingToHear,
+    () => on && !!store && key !== null && store.heading() === key,
     () => false,
   );
 }
