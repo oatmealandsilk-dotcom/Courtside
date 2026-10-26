@@ -412,8 +412,11 @@ export default function Thread() {
   const canWrite = !removed && !blockedHere;
   // A hit's chat whose hit has no court yet (Flexible, features/hits/flexible), still ahead and not called off:
   // one line at the top says so, with Send a court, the way it gets picked.
-  const noCourtYet = useMemo(() => !!conversation?.id && hitRequests.some((h) => h.conversationId === conversation.id && !h.cancelled
-    && isFlexibleHit(h) && Date.parse(h.startsAt) > Date.now() - 3_600_000), [hitRequests, conversation?.id]);
+  const flexHit = useMemo(() => (conversation?.id ? hitRequests.find((h) => h.conversationId === conversation.id && !h.cancelled
+    && isFlexibleHit(h) && Date.parse(h.startsAt) > Date.now() - 3_600_000) : undefined), [hitRequests, conversation?.id]);
+  const noCourtYet = !!flexHit;
+  // Its poster also has Set court there (Oct 25): once it's agreed in the chat, the hit is at that court.
+  const setCourtId = flexHit && flexHit.authorId === currentUserId ? flexHit.id : undefined;
 
   // Reaching the top of the list loads the page of messages before the
   // oldest here, like Instagram. The list is upside down, so they go in at
@@ -707,10 +710,12 @@ export default function Thread() {
    * it away would drop the bar in one jump.
    */
   const letGo = () => { composer.current?.blur(); Keyboard.dismiss(); };
-  const openCourtPicker = () => {
+  // Picked while answering a message: the court goes as the answer.
+  const openCourtPicker = () => openSheet(() => router.push({ pathname: '/pick-court', params: { conversation: conversation.id, ...(replyTo && canWrite ? { reply: replyTo.id } : null) } }));
+  // Set court (the hit's poster): the same way up as Send a court.
+  const openSetCourt = (hitId: ID) => openSheet(() => router.push({ pathname: '/set-court', params: { id: hitId } }));
+  const openSheet = (go: () => void) => {
     composer.current?.closePlus();
-    // Picked while answering a message: the court goes as the answer.
-    const go = () => router.push({ pathname: '/pick-court', params: { conversation: conversation.id, ...(replyTo && canWrite ? { reply: replyTo.id } : null) } });
     if (Platform.OS === 'ios' && Keyboard.isVisible()) {
       // The sheet opens the moment the keyboard starts down, the bar riding
       // down on it (keyboardLift.ts; once the sheet is in front, the bar only
@@ -1008,6 +1013,12 @@ export default function Thread() {
               <Ionicons name="location-outline" size={15} color={colors.text} />
               <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Send a court</Text>
             </Tappable>
+            {setCourtId ? (
+              <Tappable accessibilityLabel="Set court. Pick the court for this hit" onPress={() => openSetCourt(setCourtId)} style={styles.noCourtChip}>
+                <Ionicons name="checkmark-circle-outline" size={15} color={colors.text} />
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.helloChipText}>Set court</Text>
+              </Tappable>
+            ) : null}
           </View>
         ) : null}
         {!thread.length && !olderLoading ? (

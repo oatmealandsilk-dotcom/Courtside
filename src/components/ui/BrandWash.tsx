@@ -125,12 +125,14 @@ export const BrandWash = React.memo(function BrandWash({ radius = 999, strength 
  * sessions' row cards on a city court). Lay it as the first child, as
  * BrandWash.
  */
-export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift = 0, curve = false }: { radius?: number; rim?: string | null; lift?: number; curve?: boolean }) {
+export const ShirtWash = React.memo(function ShirtWash({ radius = 999, rim, lift = 0, calm = 0, curve = false }: { radius?: number; rim?: string | null; lift?: number; calm?: number; curve?: boolean }) {
   const { theme } = useTheme();
   // The court's name in the ids, as above: iOS would not repaint a gradient kept under the same name.
-  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}${Math.round(lift * 100)}`;
+  const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}shirt${theme.replace(/-/g, '')}${Math.round(lift * 100)}c${Math.round(calm * 100)}`;
   const top = lift ? mix(colors.cardGlowTop, colors.surface, lift) : colors.cardGlowTop;
-  const bottom = lift ? mix(colors.cardGlowBottom, colors.surface, lift) : colors.cardGlowBottom;
+  // `calm` takes the warm bottom corner part way to the top one first: the same fade, less of its colour.
+  const warm = calm ? mix(colors.cardGlowBottom, colors.cardGlowTop, calm) : colors.cardGlowBottom;
+  const bottom = lift ? mix(warm, colors.surface, lift) : warm;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: radius, overflow: 'hidden' }, curve && CURVE]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">

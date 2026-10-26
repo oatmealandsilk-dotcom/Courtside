@@ -45,6 +45,8 @@ export type CardLook = {
   touch?: string;
   /** How far the shirt's corners are taken toward the page's surface ('shirt', ShirtWash's lift): the quiet dark box's. */
   lift?: number;
+  /** How far the shirt's warm bottom corner is taken toward its cool top one (ShirtWash's calm): the quiet dark box's. */
+  calm?: number;
   /**
    * Drawn the way the stats sheet is (Clean's light box, Oct 24; the quiet light box, Oct 25): the page's own inks,
    * the score in the sheet's colours (your games in the court's accent, theirs grey), small capital labels, no icon and no shadow.
@@ -113,6 +115,8 @@ const QUIET_TINT = 0.42;
  * Night's (OKLab 0.08 to 0.10).
  */
 const QUIET_GLOW_LIFT = 0.4;
+/** How far the quiet dark box's yellow (lettering, the warm corner) is taken toward cooler: a touch (Oct 25). */
+const QUIET_CALM = 0.28;
 
 /**
  * The colours of a session box in the app (a post's stats panel, a post's
@@ -137,7 +141,13 @@ export function boxLook(theme: ThemeName): CardLook {
  * brought toward it, the yellow lettering, the page's hairline.
  */
 function quietLook(theme: ThemeName): CardLook {
-  if (pageIsDark()) return { ...cardLook(theme), fill: colors.surface, lift: QUIET_GLOW_LIFT };
+  if (pageIsDark()) {
+    // Oct 25 (owner, New York: "Just a tiny bit too much yellow"): the same fade, its warm corner and the
+    // yellow lettering each taken a step toward the page's cool ink (QUIET_CALM), never grey.
+    const base = cardLook(theme);
+    const figure = mixHex(base.figure, colors.text, QUIET_CALM);
+    return { ...base, fill: colors.surface, lift: QUIET_GLOW_LIFT, calm: QUIET_CALM, figure, eyebrow: mixHex(base.eyebrow, colors.text, QUIET_CALM), touch: figure };
+  }
   // The court's second colour, where its palette has one (cardTouch, London's purple; every other court's is its brand).
   const touch = colors.cardTouch !== colors.brand ? colors.cardTouch : undefined;
   return {
@@ -338,7 +348,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
       </>
     );
   }
-  return <ShirtWash radius={radius} rim={edge ? look.rim : null} lift={look.lift} />;
+  return <ShirtWash radius={radius} rim={edge ? look.rim : null} lift={look.lift} calm={look.calm} />;
 }
 
 

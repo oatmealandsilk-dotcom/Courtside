@@ -119,6 +119,18 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   // "Flexible" (no court yet, features/hits/flexible): plain words, not a link, with how far its rough area is said roughly.
   const flex = isFlexibleHit(hit);
   const canOpenCourt = !flex && hit.place.lat !== undefined && hit.place.lng !== undefined;
+  // Yours, with no court yet, and still on: "Set court" makes it a hit at a court (the hit sheet's own picker, /set-court).
+  const canSetCourt = mine && flex && !hit.cancelled && Date.parse(hit.startsAt) > Date.now() - 3_600_000;
+  // Set court sits at the end of the place's line, in the same look as Chat; every other card's place is as it was.
+  const wrapPlace = (place: React.ReactElement) => (!canSetCourt ? place : (
+    <View style={styles.placeRow}>
+      {place}
+      <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} accessibilityLabel="Set court. Pick the court for this hit" onPress={(e) => { e.stopPropagation?.(); router.push({ pathname: '/set-court', params: { id: hit.id } }); }} style={({ pressed }) => [styles.button, styles.secondary, styles.setCourt, pressed && styles.buttonPressed]}>
+        <Ionicons name="location-outline" size={16} color={colors.text} />
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Set court</Text>
+      </SwipePressable>
+    </View>
+  ));
   const milesText = miles === undefined ? null : flex ? formatSpotMiles(miles, true) : formatMiles(miles);
   const roughMiles = miles === undefined ? 0 : Math.max(1, Math.round(miles));
   const placeA11y = flex
@@ -186,13 +198,13 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
       </View>
       <View style={styles.facts}>
         {/* Where: a line of its own that wraps, so "Country Club at Wakefield Plantation" is never cut short. */}
-        {atCourt ? null : <SwipePressable accessibilityRole={flex ? 'text' : 'link'} accessibilityLabel={placeA11y} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (canOpenCourt && hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, pressed && canOpenCourt && { opacity: 0.6 }]}>
+        {atCourt ? null : wrapPlace(<SwipePressable accessibilityRole={flex ? 'text' : 'link'} accessibilityLabel={placeA11y} disabled={!canOpenCourt} onPress={(e) => { e.stopPropagation?.(); if (canOpenCourt && hit.place.lat !== undefined && hit.place.lng !== undefined) openCourt({ id: hit.place.id, name: hit.place.name, lat: hit.place.lat, lng: hit.place.lng }); }} style={({ pressed }) => [styles.place, canSetCourt && styles.placeInRow, pressed && canOpenCourt && { opacity: 0.6 }]}>
           {LESS_AI_COURTS ? null : <View style={styles.placeTile}>{flex ? <Ionicons name="chatbubbles-outline" size={13} color={colors.brand} /> : <CourtGlyph size={12} color={colors.brand} />}</View>}
           {/* The distance is held to the name's last word by no-break spaces, so a long name
               wraps inside itself ("Country Club at Wakefield / Plantation · 2.6 mi") and never
               leaves a dot dangling at a line's end or the distance alone on the second line. */}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeText} numberOfLines={2}>{placeLabel(hit.place)}{milesText ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.placeMiles}>{` · ${milesText.replace(/ /g, ' ')}`}</Text> : null}</Text>
-        </SwipePressable>}
+        </SwipePressable>)}
         {/* What, then whether there is room, as a tag at the line's end: a grey "Full" once there is none. */}
         <View style={styles.metaRow}>
           {surface ? <View style={styles.surfaceLead} accessible accessibilityLabel={`${surfaceAdjective[surface]} court`}><View style={[styles.surfaceDot, { backgroundColor: surfaceTint(surface) }]} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.details}>{surfaceLabel[surface]} ·</Text></View> : null}
@@ -349,6 +361,10 @@ const styleDefinitions = StyleSheet.create({
   whenQuiet: { color: colors.textMuted },
   facts: { gap: spacing.sm },
   place: { flexDirection: 'row', alignItems: 'center', gap: 10, alignSelf: 'flex-start', maxWidth: '100%' },
+  // Your flexible hit's place with Set court at the line's end.
+  placeRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  placeInRow: { alignSelf: 'center', flexShrink: 1 },
+  setCourt: { marginLeft: 'auto', paddingHorizontal: 14 },
   placeTile: { width: 26, height: 26, borderRadius: 8, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   placeText: { ...typography.body, ...font('500'), color: colors.text, lineHeight: 20, letterSpacing: -0.15, flexShrink: 1 },
   placeMiles: { ...typography.body, color: colors.textMuted, letterSpacing: 0 },

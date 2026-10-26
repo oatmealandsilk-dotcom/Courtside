@@ -76,6 +76,7 @@ import { placeFor } from '@/features/players/positions';
 import { markFirstMoveDone } from '@/features/onboarding/firstMoveDone';
 import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
+import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
 import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
@@ -847,6 +848,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   postHit: (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled' | 'opensAt'>) => Promise<ID>;
   /** "Open to everyone now" on your own invite-first hit. */
   openHitNow: (hitId: ID) => Promise<void>;
+  /** "Set court" on your own flexible hit: it is at that court now (and its chat named after it). False when it didn't go through (a note says why). */
+  setHitCourt: (hitId: ID, place: HitRequest['place']) => Promise<boolean>;
   /** "I'm in": joins, and resolves the group chat to open (or a sentence saying why not). */
   joinHit: (hitId: ID) => Promise<{ conversationId?: ID; error?: string; reason?: 'age' | 'limit' }>;
   /**
@@ -7215,6 +7218,48 @@ export function AppProvider({ children }: { children: ReactNode }) {
     });
   }, [requireUser, appendMessage, eventLine]);
 
+  /*
+   * "Set court" on your own flexible hit (Oct 25, the owner: "Flexible is good
+   * add set court button"): the hit is at that court now, a normal hit on the
+   * map and the court's page. Its chat, if it still has the name it was given
+   * ("Hit · Court flexible · near Cary"), is called after the court, with the
+   * usual line saying so (the server's, migration 188; the demo writes its own).
+   * Shown at once; put back with a note when the server says no.
+   */
+  const setHitCourt = useCallback(async (hitId: ID, place: HitRequest['place']): Promise<boolean> => {
+    const me = requireUser();
+    const had = stateRef.current.hitRequests.find((h) => h.id === hitId);
+    if (!had || had.authorId !== me || had.cancelled || !isFlexibleHit(had) || isFlexiblePlace(place) || !place.name.trim()) return false;
+    haptics.commit();
+    const court: HitRequest['place'] = { name: place.name.trim().slice(0, 120), ...(place.id ? { id: place.id } : {}), ...(place.lat !== undefined && place.lng !== undefined ? { lat: place.lat, lng: place.lng } : {}) };
+    const chatId = had.conversationId;
+    const fromTitle = cleanTitle(`Hit · ${had.place.name || 'Court'}`);
+    const toTitle = cleanTitle(`Hit · ${court.name}`);
+    const chat = chatId ? stateRef.current.conversations.find((c) => c.id === chatId) : undefined;
+    const renames = !!chat && isGroupChat(chat) && cleanTitle(chat.title) === fromTitle && fromTitle !== toTitle;
+    const put = (from: HitRequest['place'], to: HitRequest['place'], titleFrom: string | undefined, titleTo: string | undefined) => setState((prev) => ({
+      ...prev,
+      hitRequests: prev.hitRequests.map((h) => (h.id === hitId && h.place === from ? { ...h, place: to } : h)),
+      conversations: renames ? prev.conversations.map((c) => (c.id === chatId && cleanTitle(c.title) === titleFrom ? { ...c, title: titleTo } : c)) : prev.conversations,
+    }));
+    put(had.place, court, fromTitle, toTitle);
+    if (!live(me, hitId)) {
+      if (renames && chatId) {
+        const line = eventLine(chatId, me, { type: 'renamed', title: toTitle });
+        setState((prev) => appendMessage(prev, line));
+      }
+      return true;
+    }
+    try {
+      await remote.setHitCourt(hitId, court);
+      return true;
+    } catch (e) {
+      if (stateRef.current.currentUserId === me) put(court, had.place, toTitle, fromTitle);
+      showToast({ title: e instanceof Error ? e.message : 'That didn’t go through. Try again.', icon: 'alert-circle-outline' });
+      return false;
+    }
+  }, [requireUser, appendMessage, eventLine]);
+
   /** A group photo picked on this device (uploaded here, into your own folder), or null to take it off. Anyone in the group can. */
   const setGroupPhoto = useCallback((conversationId: ID, uri: string | null) => {
     const me = requireUser();
@@ -9461,6 +9506,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadLastSeen,
       postHit,
       openHitNow,
+      setHitCourt,
       joinHit,
       leaveHit,
       cancelHit,
@@ -9708,6 +9754,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadLastSeen,
       postHit,
       openHitNow,
+      setHitCourt,
       joinHit,
       leaveHit,
       cancelHit,
