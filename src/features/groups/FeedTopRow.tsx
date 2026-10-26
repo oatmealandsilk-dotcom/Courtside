@@ -12,9 +12,10 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut, windowsState } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
+import { FEED_DARK } from '@/features/navigation/barOverMedia';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
 
 /*
@@ -141,7 +142,9 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   // Over a picture: white, as Reels does. The New York ground is navy, so its ink is white too.
   // Swiping between a clip and a written post blends the words' colour and their dark edge
   // over 180 ms rather than flipping them (Oct 22 sweep, item 16).
-  const plainInk = theme === 'us-open' ? '#FFFFFF' : colors.text;
+  // On the dark Feed (barOverMedia's FEED_BAR_LOOK 'C') the ink of the row's own court, read from it, never the
+  // live colours: the row redraws on its own too (a word measured), when those are the court picked again.
+  const plainInk = theme === 'us-open' ? '#FFFFFF' : FEED_DARK ? themes[theme].text : colors.text;
   const pic = useSharedValue(onPicture ? 1 : 0);
   // The plain ink in a shared value, so a view built afresh at rest (below) starts in the theme
   // chosen now, never the one the row was first drawn in.
