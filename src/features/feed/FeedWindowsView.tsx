@@ -259,6 +259,8 @@ const EASE_OUT = Easing.out(Easing.quad);
 const SWITCH_AT_P = 0.15;
 /** The longest a picked card's cover waits for its feed to draw, before it fades anyway. */
 const READY_WAIT_MS = 600;
+/** How long the Feed is on screen in a visit before the windows' tip may show (it waits for a quiet moment, not the first swipe). */
+const TIP_AFTER_MS = 20_000;
 /** How long the middle card rests before its feed is built behind the cards, ready to be picked. */
 const PREPARE_AFTER_MS = 150;
 
@@ -727,7 +729,17 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
     return Gesture.Exclusive(pan, tap);
   }, [ctl, interactive, axis, from]);
 
-  const tip = useTip('feed-windows', focused && phase === 'closed' && feeds.length >= 3 && rowSwitched && !blocked);
+  // The tip (Oct 26, owner: "This feature is kind of hidden"): at once after a feed is switched from
+  // the top row, or once the Feed has been on screen a while this visit (TIP_AFTER_MS), never in the
+  // tutorial. Like every tip it waits its turn: one a visit, never over another.
+  const [dwelled, setDwelled] = useState(false);
+  const watching = focused && phase === 'closed' && !blocked && !tourOpen;
+  useEffect(() => {
+    if (dwelled || !watching) return undefined;
+    const t = setTimeout(() => setDwelled(true), TIP_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [dwelled, watching]);
+  const tip = useTip('feed-windows', watching && feeds.length >= 2 && (rowSwitched || dwelled));
   const fadeLook = useAnimatedStyle(() => ({ opacity: fade.value }));
   const hairline = withAlpha(colors.onMedia, 0.16);
 
