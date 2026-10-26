@@ -4528,6 +4528,27 @@ export const remote = {
     const { error } = await need().rpc('open_hit_now', { hit: hitId });
     if (error) { fail('open hit')(error); throw new Error('That didn’t go through. Try again.'); }
   },
+  /**
+   * "Set court" on your own flexible hit (migration 188): the court it is at
+   * now, and its chat renamed after it. Before 188 the place is set directly
+   * (the poster may, migration 43; guard_hit_place strips what made it
+   * flexible), with the chat keeping its name. Throws a plain sentence.
+   */
+  async setHitCourt(hitId: ID, place: HitRequest['place']) {
+    const court = { name: place.name, ...(place.id ? { id: place.id } : {}), ...(place.lat !== undefined && place.lng !== undefined ? { lat: place.lat, lng: place.lng } : {}) };
+    const db = need();
+    const { error } = await db.rpc('set_hit_court', { hit: hitId, court });
+    if (!error) return;
+    if (missingFunction(error)) {
+      const direct = await db.from('hit_requests').update({ place: court }).eq('id', hitId).select('id');
+      if (!direct.error && direct.data?.length) return;
+      if (direct.error) fail('set hit court')(direct.error);
+      throw new Error('That didn’t go through. Try again.');
+    }
+    fail('set hit court')(error);
+    const plain = error.message.match(/That hit[^.]*\./);
+    throw new Error(plain ? plain[0] : 'That didn’t go through. Try again.');
+  },
   /** "I'm in": the hit's group chat comes back, or a plain sentence saying why not. */
   async joinHit(hitId: ID): Promise<{ conversationId?: ID; error?: string; reason?: 'age' | 'limit' }> {
     const { data, error } = await need().rpc('join_hit', { hit: hitId });

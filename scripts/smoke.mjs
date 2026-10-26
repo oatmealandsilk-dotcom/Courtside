@@ -1519,6 +1519,50 @@ const STEPS = [
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ text: 'Pick the court together in the chat' }); },
   },
   {
+    // Oct 25, owner: "Flexible is good add set court button". Your own flexible hit, posted, has Set court at
+    // the end of its place's line (nobody else's does: Rosa's, checked above, has none).
+    name: 'set-court-button',
+    title: 'Your flexible hit: Set court',
+    async run(page) {
+      if (await page.find({ label: 'Set court. Pick the court for this hit' })) throw new Error('Set court shows before you have a flexible hit of your own');
+      await page.reveal({ label: 'Post a hit' }, 20000);
+      await page.tap({ label: 'Post a hit' });
+      await page.waitFor({ text: 'Choose where to play' });
+      await page.reveal({ label: 'Flexible. Pick the court together in the chat' }, 20000);
+      await page.tap({ label: 'Flexible. Pick the court together in the chat' });
+      await page.tap({ text: 'Post' });
+      await page.gone({ text: 'Whoever joins picks the court with you in the chat.' });
+      await page.reveal({ label: 'Set court. Pick the court for this hit' }, 20000);
+    },
+    expect: [{ label: 'Set court. Pick the court for this hit' }, { text: 'Your hit' }],
+  },
+  {
+    // Set court opens the hit sheet's own court picker (without Flexible); a court picked, Set court is ready.
+    name: 'set-court-sheet',
+    title: 'Set court: pick a court',
+    async run(page) {
+      await page.tap({ label: 'Set court. Pick the court for this hit' });
+      await page.waitFor({ text: 'Set the court' });
+      await page.waitFor({ text: 'Choose a court' });
+      if (await page.find({ label: 'Flexible. Pick the court together in the chat' })) throw new Error('Set court offers Flexible again');
+      await page.tap({ label: /^.+, (\d+(\.\d)? mi|right here)$/ }, 20000);
+      await page.gone({ text: 'Choose a court' });
+    },
+    expect: [{ text: 'Set the court' }, { text: 'Change' }, { text: 'It goes on the map and the court’s page.' }],
+  },
+  {
+    // Set: the sheet goes, the hit is at that court (a court link now), and Set court is gone from it.
+    name: 'set-court-done',
+    title: 'Set court: your hit is at that court',
+    async run(page) {
+      await page.tap({ text: 'Set court' });
+      await page.gone({ text: 'Set the court' });
+      await page.waitFor({ text: 'Court set' });
+      await page.gone({ label: 'Set court. Pick the court for this hit' });
+    },
+    expect: [{ text: 'Your hit' }],
+  },
+  {
     // The Session sheet (Oct 16, owner: "do a with week strip"): + → Session opens your week, Start a session,
     // the demo's tracker sessions each with its Log it, and Log one yourself. Closed again, nothing logged,
     // so the next step still finds a session to post. Before it, since that one adds a post.
