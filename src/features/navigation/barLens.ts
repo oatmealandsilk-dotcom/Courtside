@@ -8,9 +8,9 @@ import { useApp } from '@/store/AppContext';
  * and, about tab changes: "could be even more seamless, as well as tab switching").
  *
  * A rounded capsule sits behind the lit tab's icon and word, a little in from the bar's edges
- * (components/TabBarLooks). On iOS 26 it is Apple's Liquid Glass, inside the bar's own glass; on
- * older iPhones, Android and the web a quiet capsule a step darker than the bar (a step lighter on a
- * dark court and over a clip). Never on the round +.
+ * (components/TabBarLooks): a quiet capsule a step darker than the bar (a step lighter on a dark
+ * court and over a clip), inside the bar's own Liquid Glass on iOS 26, as iOS 26's own tab bar marks
+ * its tab at rest. Never on the round +.
  *
  * It only ever moves sideways (a transform, on the animation thread; never a fade, never a redraw
  * per frame):
@@ -39,10 +39,14 @@ export function useBarLens(): boolean {
 }
 
 /**
- * On iOS 26: 'glass', the lens is Apple's Liquid Glass inside the bar's glass; 'fill', the same quiet
- * capsule as everywhere else. One line back if the glass lens looks wrong on the phone.
+ * On iOS 26: 'fill', the quiet capsule as everywhere else, inside the bar's Liquid Glass; 'glass', a
+ * second piece of Apple's glass inside the bar's own. 'fill' by default (review, Oct 26): Apple's own
+ * advice is never to lay glass on glass (glass cannot see through other glass, so a lens of it inside
+ * the bar's can turn flat, muddy or blank, and the lens's copies laid over the bar during a followed
+ * swipe are plain fills, so a glass lens would not match them), and things on glass are fills. The
+ * glass lens is kept one line away for a look on the phone.
  */
-export const LENS_LOOK = 'glass' as 'glass' | 'fill';
+export const LENS_LOOK = 'fill' as 'glass' | 'fill';
 
 /** The four tabs in the row's order (the bar's, TabsPager's TAB_PATHS): a tab's place is its index here. */
 export const LENS_TABS = ['discuss', 'index', 'coaches', 'profile'] as const;
@@ -129,9 +133,12 @@ export function lensLand(to: number) {
 /**
  * The lit tab is `to` (-1 none): the lens goes there. Placed straight there the first time (and after
  * no tab was lit), so it never slides in from an old spot. While a finger has the row, the swipe
- * decides; once it lifts, a tap on another tab takes the lens over from where it stands.
+ * decides; once it lifts and the row settles, only a tap on the bar (`tap`) takes the lens over from
+ * where it stands. Anything else lit meanwhile is the swipe's own word reaching the bar late (review,
+ * Oct 26: the tab a drag headed for, told to the bar after the finger had already let the row spring
+ * back, sent the lens off the row to that tab and back again), and the row lands where it says.
  */
-export function lensTo(to: number) {
+export function lensTo(to: number, tap = false) {
   'worklet';
   if (to < 0) {
     cancelAnimation(lensAt);
@@ -140,7 +147,7 @@ export function lensTo(to: number) {
     lensRides.value = 0;
     return;
   }
-  if (lensHeld.value && lensRides.value) return;
+  if (lensRides.value && (lensHeld.value || !tap)) return;
   if (lensAt.value < 0 || lensGoal.value < 0) {
     cancelAnimation(lensAt);
     lensAt.value = to;

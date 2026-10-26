@@ -356,12 +356,14 @@ export const LookBar = React.memo(function LookBar({
   }, []);
   // The lens (features/navigation/barLens) goes to the lit tab in the redraw that lights it: at the
   // touch for a tap, as the address changes for anything else. Its moves are the animation thread's.
+  // A tab lit by a finger on the bar may take it off a swipe that is settling; nothing else may.
   const litPlace = lens ? lensPlace(lit) : -1;
+  const litByTap = pressed !== null;
   useLayoutEffect(() => {
     if (!lens) return;
-    if (Platform.OS === 'web') lensTo(litPlace);
-    else runOnUI(lensTo)(litPlace);
-  }, [lens, litPlace]);
+    if (Platform.OS === 'web') lensTo(litPlace, litByTap);
+    else runOnUI(lensTo)(litPlace, litByTap);
+  }, [lens, litPlace, litByTap]);
   // Turned off, or the bar gone: the next lens is placed afresh (cleared before a new one is placed).
   useLayoutEffect(() => (lens ? () => {
     if (Platform.OS === 'web') lensReset();
