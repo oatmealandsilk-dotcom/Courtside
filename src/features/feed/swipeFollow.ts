@@ -59,6 +59,14 @@ export const followOn = makeMutable(0);
  * meanwhile.
  */
 export const followHeld = makeMutable(0);
+/**
+ * Counts each time that pager lets go of its look at once (endFollow): it stops sharing it (paused
+ * under a group's feed, gone), or a move made in code begins (back to the top), which is never
+ * followed. Whatever followed the swipe goes back to the Feed's own look then, from where it stands,
+ * rather than waiting for the Feed to say a look it may never say (the page it was heading for is
+ * never landed on).
+ */
+export const followDrop = makeMutable(0);
 
 /**
  * The look changes over the middle of the way from one page to the next, eased in and out: the
@@ -97,10 +105,16 @@ export function followPage(looks: readonly number[], pos: number) {
   if (followOn.value !== between) followOn.value = between;
 }
 
-/** That pager stops sharing its look (paused, gone): whatever followed it is let go. */
+/**
+ * That pager lets go of its look at once (paused, gone, or a move made in code begins): whatever
+ * followed it goes back to the Feed's own look (followDrop). Called from the JavaScript side, or on
+ * the animation thread inside a runOnUI, so the three change in one step there.
+ */
 export function endFollow() {
+  'worklet';
   followOn.value = 0;
   followHeld.value = 0;
+  followDrop.value += 1;
 }
 
 /** The glass turns to the other look once the look is this far past half way (and back the same), so a finger resting near the middle never flickers it. */

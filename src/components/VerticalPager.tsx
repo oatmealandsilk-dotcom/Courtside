@@ -80,7 +80,15 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (node?.scrollTo) { node.scrollTo({ x: 0, y: target, animated }); return; }
     runOnUI(() => { 'worklet'; scrollTo(list, 0, target, animated); })();
   }, [list, top]);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { fingerMoved.current = false; setAroundRef.current(0); headForRef.current(0, false); jump(0, true); } }), [jump]);
+  // The swipe followed (features/feed/swipeFollow): a move made in code (back to the top) is never
+  // followed, even begun while a finger's swipe still glides: the bar and the top row go back to the
+  // Feed's own look as it begins (endFollow), and stay the Feed's until a finger moves the feed again.
+  const followCode = useSharedValue(0);
+  useImperativeHandle(ref, () => ({ scrollToTop: () => {
+    fingerMoved.current = false; setAroundRef.current(0); headForRef.current(0, false);
+    if (looks) runOnUI(() => { 'worklet'; followCode.value = 1; endFollow(); })();
+    jump(0, true);
+  } }), [jump, looks, followCode]);
   const setAroundRef = useRef<(index: number) => void>(() => undefined);
   const headForRef = useRef<(index: number, byFinger?: boolean) => void>(() => undefined);
 
@@ -336,7 +344,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       // The swipe followed: the look under a finger's swipe (from the finger down until the feed is
       // at rest), shared with the bar and the top row in this same frame. A move made in code (back
       // to the top, a resize) is not followed: those change on landing, as before.
-      if (looks && swiping.value) followPage(looks.value, (y - top) / h);
+      if (looks && swiping.value && !followCode.value) followPage(looks.value, (y - top) / h);
       const index = Math.max(0, Math.min(count - 1, Math.round((y - top) / h)));
       if (index !== lastIndex.value) { lastIndex.value = index; if (!swiping.value) runOnJS(landed)(index); }
     },
@@ -347,7 +355,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
       dragging.value = true;
       swiping.value = true;
       awaitHead.value = false;
-      if (looks) followHeld.value = 1;
+      if (looks) { followCode.value = 0; followHeld.value = 1; }
       // A second swipe within the last one's 140ms settle wait: drop that wait, or it would land
       // the old page mid-gesture (found in review, Oct 19).
       runOnJS(cancelSettle)();
@@ -430,8 +438,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // Gone mid-drag (the feed rebuilt under the finger): the drag can't still be on.
   useEffect(() => () => setPageScrolling(false), []);
   // No longer the feed on show (or gone) part way through a followed swipe: the bar and the top row
-  // are let go of, and take the look of whatever is on show now, as before.
-  useEffect(() => (looks ? endFollow : undefined), [looks]);
+  // are let go of, and take the look of whatever is on show now, as before (in one step on the
+  // animation thread, so nothing there sees half of it).
+  useEffect(() => (looks ? () => { runOnUI(endFollow)(); } : undefined), [looks]);
   // Gone (or no longer followed) while a decided swipe still headed somewhere: nothing keeps playing for it.
   useEffect(() => (startEarly ? () => { setHeading(null, null); } : undefined), [startEarly, setHeading]);
 

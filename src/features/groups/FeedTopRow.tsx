@@ -12,7 +12,7 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, noteFeedPressOut, windowsState } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
 import { stageFrame, stageGeo, stageTop } from '@/features/feed/commentStage';
-import { followHeld, followLook, followOn, useSwipeFollow } from '@/features/feed/swipeFollow';
+import { followDrop, followHeld, followLook, followOn, useSwipeFollow } from '@/features/feed/swipeFollow';
 import { useRestKey } from '@/components/ui/restMotion';
 import { colors, font } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -178,8 +178,18 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
   }, [pic, inkTarget]);
   // `pic` kept with the swipe while it carries the ink, so the row takes it over without a step when
   // the swipe lets go: at rest on a page, exactly that page's look; let go part way (another feed came
-  // on show), back to the Feed's own over the usual 180 ms.
-  useAnimatedReaction(() => (follow && followOn.value ? followLook.value : -1), (now, before) => {
+  // on show), back to the Feed's own over the usual 180 ms. The pager letting go at once (followDrop:
+  // a move made in code, back to the top, or the feed no longer on show) hands the ink back to the
+  // Feed's own then, from where it stands, never waiting on a look the Feed may never say.
+  const dropSeen = useSharedValue(-1);
+  useAnimatedReaction(() => { void followDrop.value; return follow && followOn.value ? followLook.value : -1; }, (now, before) => {
+    const drop = followDrop.value;
+    if (dropSeen.value < 0) dropSeen.value = drop;
+    else if (drop !== dropSeen.value) {
+      dropSeen.value = drop;
+      if (follow) pic.value = withTiming(inkTarget.value, INK_FADE);
+      return;
+    }
     if (now >= 0) { pic.value = now; return; }
     if (before === null || before < 0) return;
     const at = followLook.value;

@@ -99,7 +99,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const lastHeight = useRef(0);
   // Someone moved the feed themselves since it last landed (a drag, the wheel, a key): where it lands is a swipe (onSwiped).
   const userMoved = useRef(false);
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { userMoved.current = false; if (pager.current) settle(pager.current, 0); } }), []);
+  // A move made in code (back to the top) is never followed (features/feed/swipeFollow), even begun while
+  // someone's own swipe still glides: the bar and the top row go back to the Feed's own look as it begins.
+  useImperativeHandle(ref, () => ({ scrollToTop: () => { userMoved.current = false; if (looksRef.current) endFollow(); if (pager.current) settle(pager.current, 0); } }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
   const animation = useRef(0);

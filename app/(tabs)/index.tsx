@@ -248,7 +248,8 @@ const unfinishedClip = (p: Post, me: string | null | undefined) =>
 /**
  * A page that fills the top of the screen with a real picture (a clip or an Instant with its media):
  * the Feed's top row reads white over it, and the bar turns dark. The demo's court cards are the
- * page's own light ground.
+ * page's own light ground. The same rule as Home's `topOnPicture` (keep the two alike), for every page
+ * of the feed at once (the swipe followed: features/feed/swipeFollow).
  */
 const onPictureLook = (item: FeedItem | undefined) => (item?.type === 'hit'
   ? !!(item.story.imageUrl || item.story.videoUrl)
@@ -1811,21 +1812,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // The top row reads white over a picture and in the theme's ink on a written page, and steps aside while pinched in.
   const chromeHidden = immersive || myStage?.mode === 'stage';
   // A real picture, that is: the demo's court cards are the page's own light ground.
-  const topOnPicture = onPictureLook(showing);
+  const topOnPicture = showing?.type === 'hit'
+    ? !!(showing.story.imageUrl || showing.story.videoUrl)
+    : showing?.type === 'post' && showing.post.kind === 'clip' && !!(showing.post.videoUrl || showing.post.thumbnailUrl || showing.post.imageUrl);
   useEffect(() => { onChrome?.({ picture: topOnPicture, hidden: chromeHidden, pinched: immersive }); }, [onChrome, topOnPicture, chromeHidden, immersive]);
-  // The swipe followed (features/feed/swipeFollow, admins first): each page's look for the pager of
-  // the feed on show (the bar and the top row follow it as it moves), the page a decided swipe heads
-  // for (its clip starts then; the clock turns), and the clock's rule for any page. Off, none of it is used.
-  const swipeFollow = useSwipeFollow();
-  const followLive = swipeFollow && !!onChrome && !paused;
-  const looksKey = followLive ? feed.map((item) => (onPictureLook(item) ? '1' : '0')).join('') : '';
-  const followLooks = useSharedValue<number[]>([]);
-  useEffect(() => { if (looksKey) followLooks.value = Array.from(looksKey, Number); }, [looksKey, followLooks]);
-  const [headStore] = useState(makeHeadStore);
-  const clockLight = (index: number) => {
-    const item = feed[index];
-    return item?.type === 'hit' ? inNow(item.story.id) : item?.type === 'post' && item.post.kind === 'clip' && inNow(item.post.id);
-  };
   // A group's feed calls its posts after the group, where For you's say "For you".
   const groupName = scope?.groupId ? app.feedGroups.find((g) => g.id === scope.groupId)?.name : undefined;
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
@@ -1933,6 +1923,20 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
 
   // A feed with the For you / groups row keeps its band clear; the empty page centres in what is left, above the floating bar.
   const banded = !!topRow || rowed;
+  // The swipe followed (features/feed/swipeFollow, admins first): each page's look for the pager of
+  // the feed on show (the bar and the top row follow it as it moves; the last page after the feed, the
+  // end or "caught up" one, is a written one), the page a decided swipe heads for (its clip starts
+  // then; the clock turns), and the clock's rule for any page. Off, none of it is used.
+  const swipeFollow = useSwipeFollow();
+  const followLive = swipeFollow && !!onChrome && !paused;
+  const looksKey = followLive ? `${feed.map((item) => (onPictureLook(item) ? '1' : '0')).join('')}${scope?.activities || !(scope || lineLast) ? '0' : ''}` : '';
+  const followLooks = useSharedValue<number[]>([]);
+  useEffect(() => { if (looksKey) followLooks.value = Array.from(looksKey, Number); }, [looksKey, followLooks]);
+  const [headStore] = useState(makeHeadStore);
+  const clockLight = (index: number) => {
+    const item = feed[index];
+    return item?.type === 'hit' ? inNow(item.story.id) : item?.type === 'post' && item.post.kind === 'clip' && inNow(item.post.id);
+  };
 
   return (
     <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
