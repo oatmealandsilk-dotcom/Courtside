@@ -12,9 +12,12 @@ import { useApp } from '@/store/AppContext';
 import { font } from '@/theme';
 
 /**
- * The feed's rail, small, beside the clip on the comments stage: the heart,
- * send and save stay to hand while you read (no speech bubble, the comments
- * are open; no dots). An Instant has its heart only. White on the stage's
+ * The feed's rail, small, beside the clip on the stage under a session's stats
+ * sheet (session-stats): the heart, send and save stay to hand while you read
+ * (no speech bubble; no dots). The comments no longer show it: there the rail
+ * goes with the clip's other buttons, as on TikTok and Instagram (Oct 26,
+ * owner: "When I open comments likes comment etc should not be there").
+ * An Instant has its heart only. White on the stage's
  * black, with the feed rail's own icons (RailGlyph), press and pop
  * (RailButton), edge and rolling counts. It fades in over
  * the last of the opening, centred on the stage as the sheet moves, and out

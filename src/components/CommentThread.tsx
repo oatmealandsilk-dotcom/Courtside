@@ -1,7 +1,7 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
+import Animated, { Easing, FadeIn, FadeInDown, FadeOut, LinearTransition } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { CommentRow, replyIndent } from '@/components/CommentRow';
@@ -122,8 +122,16 @@ export function useReplyDraft(setDraft: React.Dispatch<React.SetStateAction<stri
 const ROW_GLIDE = LinearTransition.duration(220);
 const ROW_OUT = FadeOut.duration(160);
 const REPLY_IN = FadeIn.duration(200);
-/** A comment you just sent fades in where it lands, without moving (a slide up drew it over the row above for a moment). */
-const FRESH_IN = FadeIn.duration(220);
+/**
+ * A comment you just sent settles in where it lands (Oct 26, owner: "not
+ * satisfying"): it fades in as it rises the last 6 points into its place,
+ * easing to a stop, the way a new comment arrives on Instagram and TikTok. Only
+ * from below and only 6 points (the old 25-point slide drew it over the row
+ * above for a moment).
+ */
+const SETTLE_EASE = Easing.bezier(0.2, 0.8, 0.2, 1);
+const settleIn = () => FadeInDown.duration(280).easing(SETTLE_EASE).withInitialValues({ transform: [{ translateY: 6 }] });
+const FRESH_IN = settleIn();
 /**
  * In a browser the rows below glide out of the way first (ROW_GLIDE); what
  * comes in (your reply, the replies it unfolds, "Hide replies") waits for
@@ -132,7 +140,7 @@ const FRESH_IN = FadeIn.duration(220);
  */
 const AFTER_GLIDE = 200;
 const REPLY_IN_WEB = FadeIn.duration(200).delay(AFTER_GLIDE);
-const FRESH_IN_WEB = FadeIn.duration(220).delay(AFTER_GLIDE);
+const FRESH_IN_WEB = settleIn().delay(AFTER_GLIDE);
 const TOGGLE_IN_WEB = FadeIn.duration(160).delay(AFTER_GLIDE);
 
 export function CommentThread({ thread, big = false, open, onToggle, onReply, onPressBody, onRowLayout, isFresh, glide = false }: {
@@ -172,7 +180,7 @@ export function CommentThread({ thread, big = false, open, onToggle, onReply, on
       layout={moves ? ROW_GLIDE : undefined}
       onLayout={onRowLayout ? (e) => onRowLayout(c.id, e.nativeEvent.layout.y, e.nativeEvent.layout.height) : undefined}
     >
-      {jump && jump.at === c.id ? <JumpFlash lit={jump.lit} inset={8} /> : null}
+      {jump && jump.at === c.id ? <JumpFlash lit={jump.lit} inset={8} calm={jump.calm} /> : null}
       <CommentRow
         comment={c}
         big={big}

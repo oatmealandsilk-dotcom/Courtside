@@ -12,13 +12,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { LayoutAnimationConfig, ZoomIn, ZoomOut, runOnJS, scrollTo, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming, type AnimatedRef, type SharedValue } from 'react-native-reanimated';
 
 import { CommentThread, threadOf, threadsOf, useReplyDraft, type Thread } from '@/components/CommentThread';
-import { JumpProvider } from '@/components/JumpTo';
+import { JumpProvider, type JumpCtx } from '@/components/JumpTo';
 import { CommentsCaption } from '@/components/CommentsCaption';
 import { CommentRow } from '@/components/CommentRow';
 import { HiddenComments } from '@/components/HiddenComments';
 import { DragSheet, useSheetDrag, useSheetKeyboard, type SheetKeyboard } from '@/components/DragSheet';
 import { pickFromDevice } from '@/components/MediaPicker';
-import { StageRail } from '@/components/StageRail';
 import { Avatar, BrandWash, Field } from '@/components/ui';
 import type { Comment, ID } from '@/data/types';
 import { LIST_PULL, getStage, markGone, markMounted, setCovered, stageKeyOf, useStageSelect } from '@/features/feed/commentStage';
@@ -60,7 +59,10 @@ const drafts = new Map<string, string>();
  *
  * Opened from a clip's words or its speech bubble in the Feed, on a phone, it
  * is the comments stage: the clip stays playing above the sheet, shrunk into
- * the room left, with its heart, send and save beside it (see commentStage).
+ * the room left (see commentStage). Its heart, send and save go with the rest
+ * of its buttons while the comments are open and come back as they close, as
+ * on TikTok and Instagram (Oct 26, owner: "When I open comments likes comment
+ * etc should not be there").
  * From anywhere else (an alert, a link, a post's page) it is the plain sheet.
  *
  * At the top of the list, the post itself: who, the whole caption and its
@@ -156,20 +158,21 @@ export default function CommentsSheet() {
     }, 420);
     return () => clearTimeout(t);
   }, [at]); // eslint-disable-line react-hooks/exhaustive-deps
-  // COMMENTS_V2: the comment you just posted gets the same soft light once, as the list brings it into view.
-  // Taken off again once it has faded (about 1.8 s): a light that rests at off after being on can be put back
-  // on by a later redraw on an iPhone (components/ui/restMotion), so it is not left in the row.
+  // COMMENTS_V2: the comment you just posted gets a faint grey light once, as the list brings it into view
+  // (JumpFlash's calm look: no court colour, Oct 26). Taken off again once it has faded (under 0.8 s): a light
+  // that rests at off after being on can be put back on by a later redraw on an iPhone (components/ui/restMotion),
+  // so it is not left in the row.
   const [fresh, setFresh] = useState<{ id: ID; lit: number } | null>(null);
   const freshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (freshTimer.current) clearTimeout(freshTimer.current); }, []);
   const lightUp = (commentId: ID) => {
     setFresh({ id: commentId, lit: Date.now() });
     if (freshTimer.current) clearTimeout(freshTimer.current);
-    freshTimer.current = setTimeout(() => setFresh((f) => (f && f.id === commentId ? null : f)), 2000);
+    freshTimer.current = setTimeout(() => setFresh((f) => (f && f.id === commentId ? null : f)), 1100);
   };
-  const jumpCtx = useMemo(() => (
+  const jumpCtx = useMemo<JumpCtx | null>(() => (
     at ? { at, ref: () => undefined, onLayout: () => undefined, lit: atLit }
-      : fresh ? { at: fresh.id, ref: () => undefined, onLayout: () => undefined, lit: fresh.lit }
+      : fresh ? { at: fresh.id, ref: () => undefined, onLayout: () => undefined, lit: fresh.lit, calm: true }
         : null
   ), [at, atLit, fresh]);
   useEffect(() => {
@@ -560,7 +563,7 @@ export default function CommentsSheet() {
     />
   )), [threads, allThreads, openThreads, canReply]); // eslint-disable-line react-hooks/exhaustive-deps
   const count = all.length;
-  // The header, the small rail and the whole list, made again only when what they show changes: a keystroke
+  // The header and the whole list, made again only when what they show changes: a keystroke
   // (the draft lives here) redraws the box alone, never the caption, the comments or the sheet's header under
   // a finger that is typing (Oct 25, v3: "way smoother").
   const header = useMemo(() => (
@@ -571,7 +574,6 @@ export default function CommentsSheet() {
       </Pressable>
     </View>
   ), [styles, count, close]);
-  const rail = useMemo(() => (staged ? <StageRail kind={kind} id={id} /> : undefined), [staged, kind, id]);
   const listEl = useMemo(() => (
     <CommentList
       listRef={list}
@@ -613,7 +615,6 @@ export default function CommentsSheet() {
         active={focused}
         side
         stage={stage}
-        stageOverlay={rail}
         onSettled={onSettled}
         keyboardSync={v2}
         smoothOpen={v2}

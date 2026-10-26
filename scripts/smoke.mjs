@@ -1237,8 +1237,14 @@ const STEPS = [
     title: 'A clip’s comments',
     async run(page) {
       await page.tap({ label: 'Clip comments' });
+      // Post one: it settles into the list (Oct 26: a short rise and fade, no coloured flash).
+      await page.tap({ label: /^Add a comment/ });
+      await page.type('Smoke test: nice rally');
+      await page.tap({ label: 'Post comment' });
+      await page.waitFor({ text: 'Smoke test: nice rally', any: true });
     },
-    expect: [{ text: 'Comments' }, { label: /^Add a comment/ }],
+    // The header counts it now ("Comments · 1").
+    expect: [{ text: /^Comments( · \d+)?$/ }, { label: /^Add a comment/ }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: /^Add a comment/ }); },
   },
   {
