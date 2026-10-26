@@ -22,18 +22,33 @@ export function useFeedOnPicture(): boolean {
 
 /**
  * The bottom bar on the Feed (Oct 26, owner: "Right now in feed the bottom bar keeps changing
- * between dark and light when I land on post vs reel. What's a solution for this").
+ * between dark and light when I land on post vs reel. What's a solution for this"). Pictures
+ * only so far:
  *
- *   false  Today: the bar turns dark over a picture (a clip, an Instant) and light again over a
+ *   'now'  Today: the bar turns dark over a picture (a clip, an Instant) and light again over a
  *          written post, so it changes as you swipe from one to the next.
- *   true   Option A: while the Feed is the tab on show, the bar keeps its dark look for every
- *          post, written ones included, the way TikTok's and Instagram Reels' bars stay put.
- *          The other tabs, and a page opened over the Feed (a player, a court), keep today's bar.
- *
- * Only the bar reads this. The Feed's top row and the phone's clock still follow the picture
- * (white over a clip, the theme's own ink over a written post).
+ *   'A'    While the Feed is the tab on show, the bar keeps today's dark look for every post,
+ *          written ones included. The other tabs, and a page opened over the Feed (a player, a
+ *          court), keep today's bar. The Feed's top row and the phone's clock still follow the
+ *          picture (white over a clip, the theme's own ink over a written post).
+ *   'A2'   A, with that dark look as a deliberate black bar, as TikTok's and Reels' are: the
+ *          glass's tint nearly solid (Glass `solid`, still Apple's glass at its edge on iOS 26),
+ *          its icons and words brighter, the lit tab a brighter shade of the court's own colour.
+ *          The top row and the clock as in A.
+ *   'C'    A2's bar on a Feed that is always dark, TikTok-style: on a light court the Feed (For
+ *          you, Activities, a group's feed) is drawn in the app's own dark court (Night, whose
+ *          page is Clean's ink), written posts and session cards included, its top row white and
+ *          the phone's clock light, so nothing at the top or the bottom changes as you swipe.
+ *          A dark court (Night, New York) is dark already. Every other page keeps its court.
  */
-export const FEED_BAR_ALWAYS_DARK: boolean = false;
+export type FeedBarLook = 'now' | 'A' | 'A2' | 'C';
+export const FEED_BAR_LOOK = 'now' as FeedBarLook;
+/** The bar keeps its dark look on the Feed for every post ('A', 'A2', 'C'). */
+export const FEED_BAR_STAYS_DARK = FEED_BAR_LOOK !== 'now';
+/** That dark look as a near-solid black bar with brighter marks ('A2', 'C'). */
+export const FEED_BAR_SOLID = FEED_BAR_LOOK === 'A2' || FEED_BAR_LOOK === 'C';
+/** The Feed itself drawn dark ('C'). */
+export const FEED_DARK = FEED_BAR_LOOK === 'C';
 
 /**
  * On the phone: whether the Feed is the tab the tab row (TabsPager) mostly

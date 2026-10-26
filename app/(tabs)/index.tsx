@@ -2,7 +2,7 @@ import { asTabRoute } from '@/features/navigation/tabFocus';
 import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
-import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
+import { ThemeScope, liveTheme, themes, useTheme, useThemedStyles, type ThemeName } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
@@ -54,7 +54,7 @@ import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { markFeedSwiped } from '@/features/feed/firstSwipe';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
-import { setFeedOnPicture } from '@/features/navigation/barOverMedia';
+import { FEED_DARK, setFeedOnPicture } from '@/features/navigation/barOverMedia';
 import { hasSessionStats } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
@@ -423,7 +423,14 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
 } = {}) {
   const styles = useThemedStyles(styleDefinitions);
   // The US Open ground is navy; the green wordmark sinks into it, white does not.
-  const { theme } = useTheme();
+  const { theme, scoped } = useTheme();
+  // FEED_BAR_LOOK 'C' (barOverMedia): inside the Feed's dark court (GroupedFeed's ThemeScope) this feed's own
+  // redraws (a swipe landing, a like) are drawn in that court too, not only the ones the scope starts: the
+  // live colours are the dark court's while this feed draws, and the court picked again straight after
+  // (LiveColoursBack, last in the tree, and once more when it lands).
+  const darkFeed = FEED_DARK && scoped && theme === FEED_DARK_COURT;
+  if (darkFeed) Object.assign(colors, themes[FEED_DARK_COURT]);
+  useLayoutEffect(() => { if (darkFeed) Object.assign(colors, themes[liveTheme()]); });
   const app = useApp();
   const { posts, questions, comments, stories, users, currentUserId, saved, actions, ready: appReady, followingIds, mutedIds, blockedIds, conversations } = app;
   // Whether this feed's page has slid in (a profile's grid, a court's clips) or a moment has passed (the tab): see the stand-ins below.
@@ -2389,8 +2396,23 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         </View>
       )}
     </View>
+    {/* FEED_BAR_LOOK 'C': the Feed is dark on every page, so the clock is light on every page too, as on TikTok. */}
+    {darkFeed && focused && !paused ? <StatusBar style="light" animated /> : null}
+    {darkFeed ? <LiveColoursBack /> : null}
     </TopBandContext.Provider>
   );
+}
+
+/**
+ * FEED_BAR_LOOK 'C' (barOverMedia): the court a light court's Feed is drawn in, the app's own dark one.
+ * Night's page (#0F1412) is Clean's ink (#0F1419) to the eye, and every colour in it is made for a dark page.
+ */
+const FEED_DARK_COURT: ThemeName = 'night';
+
+/** FEED_BAR_LOOK 'C': the live colours back to the court picked once a dark Feed has drawn (as ThemeScope's own). */
+function LiveColoursBack() {
+  Object.assign(colors, themes[liveTheme()]);
+  return null;
 }
 
 /** "INSTANT · 22h left", ticking once a minute so it never reads stale. */
@@ -2673,6 +2695,9 @@ function windowMetaOf(key: string, app: ReturnType<typeof useApp>): WindowMeta |
 function GroupedFeed() {
   const app = useApp();
   const { feedGroups, feedGroupInvites, currentUserId, actions } = app;
+  // FEED_BAR_LOOK 'C' (barOverMedia): the whole Feed (For you, Activities, a group's feed, the top row, the
+  // windows) in a dark court: a light court's in Night's colours, a dark court's (Night, New York) in its own.
+  const { theme: court, dark: darkCourt } = useTheme();
   const [groupId, setGroupId] = useState<string | null>(null);
   const [chrome, setChrome] = useState<FeedChrome>({ picture: false, hidden: false, pinched: false });
   // How far the top row is away (0 shown, 1 gone), moved by the scroll of whichever feed is on show.
@@ -2719,7 +2744,7 @@ function GroupedFeed() {
   const windowsOn = useFeedWindowsOn();
   const activitiesTip = useTip('activities', groupId === ACTIVITIES);
   const waiting = feedGroups.some((g) => g.requests.length > 0 && g.members.some((m) => m.id === currentUserId && m.admin));
-  return (
+  const feedBody = (
     <View style={{ flex: 1, alignSelf: 'stretch' }}>
       {/* The windows' dark ground, only while they are up; the feeds below are one card (WindowsStack). */}
       <WindowsGround />
@@ -2748,7 +2773,8 @@ function GroupedFeed() {
           onHold={windowsOn ? showWindowsFromRow : undefined}
           onHoldStart={windowsOn ? noteFeedPressIn : undefined}
           onPlus={() => router.push('/find-groups')}
-          onPicture={chrome.picture}
+          // FEED_BAR_LOOK 'C': the row is white on every page of a dark Feed, as over a clip.
+          onPicture={FEED_DARK || chrome.picture}
           hidden={chrome.hidden}
           pinched={chrome.pinched}
           row={row}
@@ -2769,6 +2795,8 @@ function GroupedFeed() {
       ) : null}
     </View>
   );
+  // Always inside the scope when it is on, whatever the court, so a change between a light and a dark court never builds the Feed afresh.
+  return FEED_DARK ? <ThemeScope theme={darkCourt ? court : FEED_DARK_COURT}>{feedBody}</ThemeScope> : feedBody;
 }
 
 /** A hold on the Feed's top row. */

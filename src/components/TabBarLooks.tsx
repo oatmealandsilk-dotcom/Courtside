@@ -4,8 +4,8 @@ import Animated, { Easing, interpolate, makeMutable, runOnJS, useAnimatedStyle, 
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandWash } from '@/components/ui/BrandWash';
-import { CLEAR_GLASS_ALPHA, Glass } from '@/components/ui/Glass';
-import { FEED_BAR_ALWAYS_DARK, useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
+import { CLEAR_GLASS_ALPHA, Glass, SOLID_GLASS_ALPHA } from '@/components/ui/Glass';
+import { FEED_BAR_SOLID, FEED_BAR_STAYS_DARK, useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { BAR_SHAPE, SHAPE } from '@/features/navigation/tabBarLook';
 import { barCompact } from '@/features/navigation/barShrink';
@@ -100,9 +100,9 @@ export const LookBar = React.memo(function LookBar({
   // over the tabs; in a browser, whose tabs change in one go, the tab on show.
   const rowOnFeed = useRowOnFeed();
   const feedShown = rowOnFeed ?? activeRoute === 'index';
-  // FEED_BAR_ALWAYS_DARK (barOverMedia, option A): on the Feed the bar keeps the dark look over a written
+  // FEED_BAR_LOOK 'A', 'A2' and 'C' (barOverMedia): on the Feed the bar keeps the dark look over a written
   // post too, so swiping from a clip to a written post changes nothing down here. Off the Feed, as before.
-  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && (FEED_BAR_ALWAYS_DARK || onPicture);
+  const media = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder) && (FEED_BAR_STAYS_DARK || onPicture);
   // A clip coming or going (or a page opened over the Feed) changes the bar's ground: the look being
   // left is laid over the new one in the same redraw and fades out, then is taken away, so the bar
   // never snaps from light to dark under a top row that eases, and nothing rests on an animated value.
@@ -237,7 +237,7 @@ export const LookBar = React.memo(function LookBar({
           {face(themes[theme], true)}
           {/* The bar as it was before a clip came or went, as see-through as the glass, fading out over the live glass (already re-tinted). */}
           {mediaLayers.map((layer) => (
-            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media, CLEAR_GLASS_ALPHA)}</FadeCopy>
+            <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="media-fade-bar">{face(themes[theme], false, layer.media, layer.media && FEED_BAR_SOLID ? SOLID_GLASS_ALPHA : CLEAR_GLASS_ALPHA)}</FadeCopy>
           ))}
           {/* A theme picked on the Theme page: the bar in the court being left, laid over the live one (beside
               the glass, never holding it) and fading with the page (ThemeFade). The glass re-tints at the tap, under it. */}
@@ -274,14 +274,19 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
   const darkPage = inkOn(c.bg) === '#FFFFFF';
   const groundOf = (overMedia: boolean) => (overMedia ? (darkPage ? c.bg : darkColors.bg) : c.bg);
   const ground = groundOf(media);
+  // The Feed's black bar (barOverMedia's FEED_BAR_LOOK 'A2' and 'C'): the same dark ground nearly solid
+  // (the glass `solid`), its icons and words close to white, so it reads as a bar meant to be black.
+  const solid = FEED_BAR_SOLID && media;
   const line = media ? withAlpha(c.onMedia, 0.14) : c.border;
-  const idleIcon = media ? withAlpha(c.onMedia, 0.66) : c.textMuted;
-  const idleLabel = media ? withAlpha(c.onMedia, 0.6) : c.textFaint;
+  const idleIcon = media ? withAlpha(c.onMedia, solid ? 0.9 : 0.66) : c.textMuted;
+  const idleLabel = media ? withAlpha(c.onMedia, solid ? 0.84 : 0.6) : c.textFaint;
   // The lit tab in today's colours: Community amber, Coaching blue, the rest the court's own colour.
   // Over a clip on a light court (its ground gone near-black) that colour is lifted a little toward
-  // white so it still reads, in the same hue.
+  // white so it still reads, in the same hue. On the black bar, a brighter shade of it instead: the
+  // same hue at full colour, not paled toward white (a court whose colour is bright already keeps it).
   const litOf = (route: string) => {
     const base = route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
+    if (solid) return brighter(base, LIT_ON_BLACK);
     return media && !darkPage ? toward(base, c.onMedia, 0.35) : base;
   };
 
@@ -370,7 +375,7 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
     const ground2 = (key: string, wrap: object, shape: object, radius: number, children: React.ReactNode) => (
       <View key={key} style={[wrap, live ? [styles.shadow, { borderRadius: radius }] : null]}>
         {live ? (
-          <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={radius} style={shape}>{children}</Glass>
+          <Glass clear solid={FEED_BAR_SOLID && glassMedia} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={radius} style={shape}>{children}</Glass>
         ) : (
           <View style={[shape, { backgroundColor: copyAlpha < 1 ? withAlpha(ground, copyAlpha) : ground }]}>{children}</View>
         )}
@@ -393,10 +398,36 @@ function Face({ palette: c, media, glassMedia, live, copyAlpha, items, activeRou
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades.
   return (
-    <Glass clear tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={RADIUS} style={styles.pill}>
+    <Glass clear solid={FEED_BAR_SOLID && glassMedia} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={RADIUS} style={styles.pill}>
       {inside}
     </Glass>
   );
+}
+
+/** How light the lit tab's colour is at least on the black bar (HSL lightness, 0 to 1). */
+const LIT_ON_BLACK = 0.62;
+
+/**
+ * `hex` (#RRGGBB) with its lightness raised to at least `l` (0 to 1), its hue and saturation kept:
+ * the court's own colour in a shade that reads on the black bar. Anything else comes back as it was.
+ */
+function brighter(hex: string, l: number): string {
+  const a = hex.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(a)) return hex;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(a.slice(i, i + 2), 16) / 255);
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const lightness = (max + min) / 2;
+  if (lightness >= l) return hex;
+  const d = max - min;
+  const sat = d === 0 ? 0 : d / (1 - Math.abs(2 * lightness - 1));
+  let hue = d === 0 ? 0 : max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  hue = (hue * 60 + 360) % 360;
+  const chroma = (1 - Math.abs(2 * l - 1)) * sat;
+  const x = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const m = l - chroma / 2;
+  const [rr, gg, bb] = hue < 60 ? [chroma, x, 0] : hue < 120 ? [x, chroma, 0] : hue < 180 ? [0, chroma, x] : hue < 240 ? [0, x, chroma] : hue < 300 ? [x, 0, chroma] : [chroma, 0, x];
+  return `#${[rr, gg, bb].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
 
 /** `hex` moved part of the way (`t`, 0 to 1) toward `to`; both `#RRGGBB`, anything else comes back as it was. */

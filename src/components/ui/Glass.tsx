@@ -23,24 +23,29 @@ export const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
  * York's navy), with two warnings each time; nearly solid also keeps the
  * labels readable over a busy clip.
  */
-export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, behind = false, dark: darkGlass }: {
+export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, behind = false, dark: darkGlass, solid = false }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean;
   /** A hint of colour in the glass; the theme's ground by default. */ tint?: string;
   /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean;
   /** The glass a layer of its own behind what it holds (a toast's tick drawing itself in). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
   /** Dark glass whatever the court (the tab bar over a clip on the Feed, with a dark `tint`); the court's own by default. */ dark?: boolean;
+  /**
+   * Nearly solid: the tint at about 95% (SOLID_GLASS_ALPHA) wherever it is drawn, over `clear`. On iOS 26
+   * it is still Apple's glass at its edge (the light along the rim). The Feed's black bar (barOverMedia's
+   * FEED_BAR_LOOK 'A2' and 'C').
+   */ solid?: boolean;
 }) {
   // Dark glass on a dark page (Night, and New York's navy).
   const { dark: darkPage } = useTheme();
   const dark = darkGlass ?? darkPage;
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
-  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
+  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${solid ? SOLID_HEX : clear ? 'B3' : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
     // Answering a touch (Apple's glass swelling and shimmering under the finger) only when asked
     // for: the tab bar's `clear` glass did it too, so every tap wobbled the whole bar with every
     // icon in it, and the icons went soft while it was scaled (Oct 25 audit).
-    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
+    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: solid && tint ? `${tint.slice(0, 7)}${SOLID_HEX}` : clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
     if (behind) {
       // Out under the hairline edge too, as when it held what it shows: no ring of bare page inside the edge.
       const edge = -(StyleSheet.flatten(style)?.borderWidth ?? 0);
@@ -57,7 +62,7 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
     return <BlurView intensity={clear ? 80 : 55} tint={dark ? 'dark' : 'light'} style={[rounded, veil, style]}>{children}</BlurView>;
   }
   if (Platform.OS === 'android') {
-    return <View style={[rounded, { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'E6' : 'F2'}` }, style]}>{children}</View>;
+    return <View style={[rounded, { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${solid ? SOLID_HEX : clear ? 'E6' : 'F2'}` }, style]}>{children}</View>;
   }
   return <View style={[rounded, veil, clear ? styles.webClear : styles.web, style]}>{children}</View>;
 }
@@ -68,6 +73,11 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
  * (the tab bar's look as a clip goes), so it reads as the glass, not a slab.
  */
 export const CLEAR_GLASS_ALPHA = liquidGlass ? 0xbf / 255 : Platform.OS === 'android' ? 0xe6 / 255 : 0xb3 / 255;
+
+/** `solid` glass's tint, everywhere: about 95%. */
+const SOLID_HEX = 'F2';
+/** How much of its tint `solid` glass shows (0 to 1), for a copy of it laid over it for a moment, as CLEAR_GLASS_ALPHA. */
+export const SOLID_GLASS_ALPHA = 0xf2 / 255;
 
 /**
  * The fades a piece of glass sits under (1 shown, 0 gone): a clip's words
