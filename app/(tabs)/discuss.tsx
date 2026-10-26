@@ -78,6 +78,7 @@ import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, us
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { LESS_AI, LESS_AI_ROUND2, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
+import { COMMUNITY_GLOW, COMMUNITY_GLOW_ON_DISCUSSIONS, CommunityGlow } from '@/features/community/CommunityGlow';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -114,6 +115,12 @@ const hitKey = (x: { hit: { id: string } }) => x.hit.id;
 const userKey = (u: { id: string }) => u.id;
 const NO_HITS: never[] = [];
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
+/**
+ * The light behind each section's page, under the row (CommunityGlow; nothing while it is 'off').
+ * Each from its own tab's side: Find Players from the left, Discussions from the right.
+ */
+const playersGlow = COMMUNITY_GLOW === 'off' ? undefined : (top: number) => <CommunityGlow top={top} side="left" />;
+const threadsGlow = COMMUNITY_GLOW === 'off' || !COMMUNITY_GLOW_ON_DISCUSSIONS ? undefined : (top: number) => <CommunityGlow top={top} side="right" />;
 /** "Joined 3 days ago", for New on CourtSide. */
 const joinedLabel = (iso: string) => {
   const days = Math.floor((Date.now() - Date.parse(iso)) / 86_400_000);
@@ -1043,8 +1050,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{content('players')}</PaneScroller>,
-          <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
+          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} backdrop={playersGlow}>{content('players')}</PaneScroller>,
+          <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column} backdrop={threadsGlow}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}
         jumpRef={previewSection ? undefined : jumpPages}

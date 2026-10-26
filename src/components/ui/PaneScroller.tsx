@@ -49,6 +49,12 @@ export interface PaneScrollerProps {
   inStrip?: SharedValue<boolean>;
   /** On a computer: the width the section's content keeps to, centred in a scroller as wide as the window. */
   column?: number;
+  /**
+   * Drawn behind the section's content, scrolling with it (Community's light, CommunityGlow). Handed
+   * where the section's top sits in it: below a phone's pull strip, 0 elsewhere. Kept to the content's
+   * column on a computer and to the content's length, so it never makes a page longer.
+   */
+  backdrop?: (top: number) => ReactNode;
   children: ReactNode;
 }
 
@@ -71,7 +77,7 @@ export interface PaneScrollerProps {
  *  - a section not on show only obeys a jump to its top (the tab being left,
  *    or the bar bringing you to the map), never a glide meant for the other.
  */
-export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, children }: PaneScrollerProps) {
+export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, backdrop, children }: PaneScrollerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const barInset = useBarInset();
   const insets = useSafeAreaInsets();
@@ -384,6 +390,11 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
             }
           }}
         >
+          {backdrop ? (
+            <View pointerEvents="none" style={styles.backdrop}>
+              <View style={[styles.backdropColumn, column ? { maxWidth: column } : null]}>{backdrop(strip)}</View>
+            </View>
+          ) : null}
           {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
           <View style={[styles.body, column ? { width: '100%', maxWidth: column, alignSelf: 'center' } : null, { paddingBottom: room + spacing.xxxl }]}>
             {children}
@@ -417,6 +428,9 @@ const styleDefinitions = StyleSheet.create({
   // The page's side margins, and the gap under the section row, which scrolls away with the content.
   // 10 under the section row (Oct 24, owner: less space above the search so the map can be bigger).
   body: { paddingHorizontal: spacing.lg, paddingTop: 10 },
+  // Behind the content, as long as it and no longer; what is drawn there is kept to the column across.
+  backdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden' },
+  backdropColumn: { flex: 1, width: '100%', alignSelf: 'center' },
   pullRow: { position: 'absolute', top: 0, left: 0, right: 0, height: PULL_DISC, alignItems: 'center', justifyContent: 'center' },
   webRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   updated: { position: 'absolute', alignSelf: 'center', top: 8, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },
