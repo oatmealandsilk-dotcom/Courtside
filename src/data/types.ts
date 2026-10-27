@@ -1501,9 +1501,9 @@ export interface CourtNote {
 }
 
 /**
- * Where a player last had Location on, to about a kilometre, and when
- * (migration 46). Only adults see adults' spots; seenAt is left out for
- * someone who hides their activity status.
+ * Where a friend checked in, and when (migrations 46, 189): only friends who
+ * follow each other see it, only until the check-in ends. seenAt is left out
+ * for someone who hides their activity status.
  */
 export interface LastSeen {
   userId: ID;
@@ -1528,18 +1528,20 @@ export interface LastSeen {
   openMiles?: number;
   /**
    * A friend who follows each other with you (map_players, migration 98).
-   * Friends come back from anywhere in the world; everyone else only near
-   * you. Absent for yourself, for anyone else, and before migration 98.
+   * Since migration 189 nobody else ever comes back. Absent for yourself.
    */
   mutual?: boolean;
+  /** Your own row only (migration 189): when your check-in ends (until 10pm, or 2 hours late in the day). */
+  until?: string;
 }
 
 /** How exact a player's pin is. */
 export type MapPlace = 'court' | 'exact' | 'approx';
 
 /**
- * Who can see you on the map (migration 63): Players nearby, Only people
- * you follow back, or Only me.
+ * Whether friends may see your check-ins (migration 189): 'mutuals' yes
+ * (friends who follow each other), 'none' no. 'nearby' is an answer from
+ * before 189 ("Players nearby"); the server treats it as 'mutuals'.
  */
 export type MapVisibility = 'nearby' | 'mutuals' | 'none';
 

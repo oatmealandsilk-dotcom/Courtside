@@ -112,10 +112,10 @@ export function playingLine(now: CourtRightNow | undefined, users: User[]): stri
   return now.playing >= 2 ? `${now.playing} on court now` : null;
 }
 
-/** "Sam and Dev, who you follow, play here", from the people the server named (from posts and hits there, never from phones). */
+/** "Sam and Dev, friends, play here": friends who follow each other with you (migration 189), from posts and hits there, never from phones. */
 export function regularsLine(people: User[]): string | null {
   const first = people.map((u) => u.name.split(' ')[0]);
   if (!first.length) return null;
   const names = first.length === 1 ? first[0] : first.length === 2 ? `${first[0]} and ${first[1]}` : `${first[0]}, ${first[1]} and ${first.length - 2} more`;
-  return `${names}, who you follow, ${first.length === 1 ? 'plays' : 'play'} here`;
+  return `${names}, ${first.length === 1 ? 'a friend, plays' : 'friends, play'} here`;
 }

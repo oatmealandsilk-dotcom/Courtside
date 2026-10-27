@@ -57,6 +57,7 @@ import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition } from '@/lib/geo';
+import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import { smallCoverOf } from '@/lib/smallCover';
 import { carouselFor } from '@/features/compose/carousel';
@@ -651,8 +652,16 @@ function signedOut(prev: AppState): AppState {
 interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionActions {
   /* Location */
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
-  /** "Who can see you on the map?": takes effect at once. Resolves false when it could not be saved. */
+  /** "Can friends see your check-ins?": takes effect at once ('none' also checks you out). Resolves false when it could not be saved. */
   setMapVisibility: (v: MapVisibility) => Promise<boolean>;
+  /**
+   * Check in (migration 189): reads the phone's location once and shows your
+   * pin to friends who follow each other with you until 10pm (2 hours after
+   * 8pm). Never called on its own. Resolves with a message to show, or null.
+   */
+  checkInOnMap: () => Promise<string | null>;
+  /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
+  checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
   loadNewOnCourtside: () => Promise<void>;
   /**
@@ -4045,8 +4054,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // court's card and a live session stop saying friends see you playing, as Location off does.
     const leaveCourts = () => {
       if (v !== 'none') return;
+      if (me) { delete seenAround.current[me]; delete seenInView.current[me]; }
       setState((prev) => (prev.currentUserId !== me ? prev : {
         ...prev,
+        // Not now: your check-in goes too (the server drops it, migration 189).
+        lastSeen: me && prev.lastSeen[me] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== me)) : prev.lastSeen,
         courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
         followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
         liveSession: prev.liveSession?.checkedIn ? { ...prev.liveSession, checkedIn: false } : prev.liveSession,
@@ -4062,17 +4074,72 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!ok && stateRef.current.currentUserId === me) setState((prev) => ({ ...prev, mapVisibility: was }));
     if (ok) {
       leaveCourts();
-      // Your spot again at once, so the choice takes effect now: the server
-      // keeps your exact spot only for Players nearby or follow-back only.
-      const s = stateRef.current;
-      if (s.locationEnabled && s.detectedCoords) {
-        markedAt.current = { lat: s.detectedCoords.lat, lng: s.detectedCoords.lng, at: Date.now() };
-        await remote.markLastSeen(s.detectedCoords.lat, s.detectedCoords.lng, s.detectedLocation ?? undefined);
-      }
-      // Who you see does not change, but your own row's look does: fetch again.
+      // Nothing is sent from here (migration 189): a spot goes up only with Check in.
+      // 'none' took any check-in away on the server; your own row's look is fetched again.
       void loadLastSeen();
     }
     return ok;
+  }, [loadLastSeen]);
+
+  /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
+  const checkInOnMap = useCallback(async (): Promise<string | null> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return 'Sign in to check in.';
+    const fix = await getPosition();
+    if (!fix.ok) {
+      return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
+        : fix.reason === 'unavailable' ? 'Location isn’t available on this device.' : 'Couldn’t find you. Try again.';
+    }
+    if (stateRef.current.currentUserId !== me) return null;
+    const place = nearestPlace(fix.lat, fix.lng);
+    const ends = checkInEnds().toISOString();
+    // The phone may use where it is for courts near you from now on, as Location on does (never sent on its own).
+    setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
+    try { if (Platform.OS === 'web') localStorage.setItem('courtside-location', 'on'); else void AsyncStorage.setItem('courtside-location', 'on').catch(() => {}); } catch {}
+    const placeMine = (until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
+      ...prev,
+      lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: fix.lat, lng: fix.lng, place: 'exact', city: place.name.split(',')[0], seenAt: new Date().toISOString(), until } },
+    }));
+    if (!live(me)) {
+      haptics.commit();
+      placeMine(ends);
+      return null;
+    }
+    const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
+    if ('error' in got) {
+      return got.error === 'ask_first' ? 'Say yes to friends seeing your check-ins first.'
+        : got.error === 'missing' ? 'Check in isn’t available yet. Update the app and try again.'
+          : 'That didn’t go through. Try again.';
+    }
+    haptics.commit();
+    placeMine(got.until);
+    void loadLastSeen();
+    return null;
+  }, [loadLastSeen]);
+
+  const checkOutOfMap = useCallback(async () => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return;
+    haptics.tap();
+    dropPeopleShots();
+    forgetPlaces(me);
+    delete seenAround.current[me];
+    delete seenInView.current[me];
+    // Gone from this phone's map at once, with any "I'm playing here" (the server drops both).
+    setState((prev) => ({
+      ...prev,
+      lastSeen: prev.lastSeen[me] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== me)) : prev.lastSeen,
+      courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
+      followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
+      liveSession: prev.liveSession?.checkedIn ? { ...prev.liveSession, checkedIn: false } : prev.liveSession,
+    }));
+    if (!live(me)) return;
+    spotGen.current += 1;
+    if (!(await remote.checkOutOfMap().catch(() => false))) {
+      showToast({ title: 'Couldn’t check you out yet', body: 'Friends may still see your pin. Try again.', icon: 'cloud-offline-outline' });
+      return;
+    }
+    void loadLastSeen();
   }, [loadLastSeen]);
 
   const loadTournamentPlans = useCallback(async () => {
@@ -8148,8 +8215,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * keeps only the nearest city name. Resolves with a message for the screen
    * to show, or null when everything went fine.
    */
-  /** When and where your spot was last sent (see the effect below). */
-  const markedAt = useRef<{ lat: number; lng: number; at: number } | null>(null);
   const setLocationEnabled = useCallback(async (enabled: boolean): Promise<string | null> => {
     const remember = (on: boolean) => {
       try {
@@ -8193,7 +8258,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return loadLastSeen();
         }).catch(() => undefined);
       }
-      markedAt.current = null;
       return null;
     }
     const result = await getPosition();
@@ -8215,30 +8279,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return null;
   }, [loadLastSeen]);
 
-  // Where you are, for other players' maps: the database keeps the exact spot
-  // to itself and shows each player only what they may see (about a kilometre
-  // out, on your court, or exact for people who follow each other with you;
-  // migration 63). Sent again only after a real move or a quarter of an hour.
-  useEffect(() => {
-    const me = state.currentUserId;
-    const at = state.detectedCoords;
-    if (!state.locationEnabled || !at || !live(me)) return;
-    const last = markedAt.current;
-    // A real move: about a kilometre before migration 63 (the spot was kept no finer); since it,
-    // about 150 m, the reach of "at a court", so arriving at one moves your pin onto it.
-    const step = stateRef.current.mapLive ? 0.0015 : 0.01;
-    const moved = !last || Math.abs(last.lat - at.lat) > step || Math.abs(last.lng - at.lng) > step;
-    if (!moved && Date.now() - last!.at < 15 * 60 * 1000) return;
-    // "Players nearby" are the ones near the spot the database has for you
-    // (migration 98), so the first spot sent in a session, or one far from
-    // the last (about 20 km, a trip to another town), asks the map again
-    // once it is in: the first load may have run before it, from yesterday's
-    // spot or from none at all (friends only).
-    const refresh = !last || Math.abs(last.lat - at.lat) > 0.2 || Math.abs(last.lng - at.lng) > 0.2;
-    markedAt.current = { lat: at.lat, lng: at.lng, at: Date.now() };
-    const marked = remote.markLastSeen(at.lat, at.lng, state.detectedLocation ?? undefined);
-    if (refresh) void marked.then(() => loadLastSeen()).catch(() => undefined);
-  }, [state.currentUserId, state.detectedCoords, state.detectedLocation, state.locationEnabled, loadLastSeen]);
+  // Nothing here sends your spot anywhere (migration 189, Apple 5.1.2(i)): not on opening the
+  // app, not on a timer, not when you move. Friends see you only after you tap Check in.
 
   // Find Players' own copy for the next open (data/snapshot's MapCopy): a moment after the map's
   // load has settled, and again whenever it changes, so the page the app opens on has its pins at once.
@@ -9450,6 +9492,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rejectCoachApplication,
       setLocationEnabled,
       setMapVisibility,
+      checkInOnMap,
+      checkOutOfMap,
       loadNewOnCourtside,
       loadTournamentPlans,
       setDefaultPayment,
@@ -9704,6 +9748,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rejectCoachApplication,
       setLocationEnabled,
       setMapVisibility,
+      checkInOnMap,
+      checkOutOfMap,
       loadNewOnCourtside,
       loadTournamentPlans,
       setDefaultPayment,

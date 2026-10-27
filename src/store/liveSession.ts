@@ -63,8 +63,6 @@ export interface LiveSessionActions {
 
 /** This phone's copy, one session per account. */
 const KEY = 'courtside-live-session';
-/** A check-in lasts two hours (migration 63): one this old is put in again while the session goes on. */
-const RENEW_MS = 100 * 60_000;
 
 async function readAll(): Promise<Record<ID, LiveSession>> {
   try {
@@ -228,20 +226,8 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
     return () => { on = false; };
   }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A check-in lasts two hours: a longer session puts it in again, quietly, while you are still checked in there.
-  const renewing = !!session && session.checkedIn && liveState(session) !== 'finished' && live(currentUserId);
-  useEffect(() => {
-    if (!renewing) return undefined;
-    const look = () => {
-      const s = latest.current;
-      if (!s?.court || !s.checkedIn || liveState(s) === 'finished') return;
-      if (!stateRef.current.courtNow[s.court.id]?.youHere) return;
-      if (Date.now() - Date.parse(s.checkedInAt ?? s.startedAt) < RENEW_MS) return;
-      void checkIn(s);
-    };
-    const t = setInterval(look, 60_000);
-    return () => clearInterval(t);
-  }, [renewing, stateRef, checkIn]);
+  // (A check-in lasts two hours and is never put in again on its own: Apple 5.1.2(i), migration 189.
+  // "I'm playing here" again on the session's page does it, by hand.)
 
   return useMemo(() => ({
     startLiveSession, pauseLiveSession, resumeLiveSession, finishLiveSession, discardLiveSession, endLiveSession, checkInLiveSession, keepGoingLiveSession,

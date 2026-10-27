@@ -10,140 +10,131 @@ import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import type { MapVisibility } from '@/data/types';
-import { TEEN_NOTICE, choicesFor, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
+import { CONSENT_CHOICES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
 import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
-import { LESS_AI } from '@/theme/look';
-
-/** The hand-made look's short labels (Oct 24): a label and the radio, as in Ask-to-hit's Who sees it. A screen reader still hears the whole sentence. */
-const SHORT: Partial<Record<MapVisibility, string>> = { nearby: 'Players nearby · rough area', mutuals: 'People you follow back', none: 'Only me' };
-
-const ICON: Record<MapVisibility, keyof typeof Ionicons.glyphMap> = { nearby: 'people-outline', mutuals: 'swap-horizontal-outline', none: 'eye-off-outline' };
 
 /**
- * "Who can see you on the map?" (migration 63): Players nearby (the
- * default), Only people you follow back, or Only me.
+ * "Who can see you on the map?" (migration 189, after Apple's 5.1.2(i)
+ * review): a plain yes or no. Yes: friends who follow each other with you
+ * see your pin, but only after you tap Check in, and only until 10pm that
+ * day. Strangers never see where you are. No: nothing of yours is ever on
+ * the map.
  *
- * `mode=first`: the first time Location goes on (or the full map opens)
- * without an answer. Continue saves it; then the device's own prompt, then
- * the one tip by the location button (useLocationToggle). Closing it
- * without Continue changes nothing, and it asks again next time.
- * `mode=manage`: from the full map's location button, your card on the map,
- * or Settings → Privacy. A tap saves at once; Location off is at the bottom.
+ * `mode=first`: the first time you tap Check in. "Friends · people you both
+ * follow" saves the yes; then Apple's own location prompt, then the check-in.
+ * "Not now" (or closing it) saves nothing and shares nothing; it asks again
+ * the next time you tap Check in.
+ * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
+ * also takes any live check-in off the map.
  *
- * Someone not known to be an adult (migration 78) gets two answers instead:
- * Friends who follow you back (their rough area, just for them) or Only me,
- * under a short notice: only friends who follow them back can see where
- * they are, and turning Location off on the map hides them. Nothing of
- * theirs is shared until they answer here, and the screen starts on Only
- * me, so Continue alone never turns sharing on. Under 16s get exactly this
- * too (migration 119): the same two answers, off until they choose.
+ * A teen (migration 78) reads the same two answers under a short notice;
+ * their rule is unchanged: only friends who follow each other, only their
+ * rough area, off until they say yes here (under 16s too, migration 119).
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ mode?: string }>();
   const first = params.mode !== 'manage';
-  const { actions, mapVisibility, currentUser, locationEnabled, teenMap } = useApp();
+  const { actions, mapVisibility, currentUser, teenMap } = useApp();
   const teen = onTeenMap(currentUser, teenMap);
-  const choices = choicesFor(teen);
-  // A teen's "Players nearby" is kept as friends only, so it reads as that here.
-  // A teen who has never answered starts on Only me (as the server keeps them, and as
-  // visibilityLabel says): sharing takes a tap of their own on "Friends who follow you back".
-  const shownAs = (v: MapVisibility | null | undefined): MapVisibility => (teen ? (v === 'nearby' || v === 'mutuals' ? 'mutuals' : 'none') : v ?? 'nearby');
-  const [picked, setPicked] = useState<MapVisibility>(shownAs(mapVisibility));
-  const [busy, setBusy] = useState(false);
+  const yesNow = mapVisibility === 'mutuals' || mapVisibility === 'nearby';
+  const [picked, setPicked] = useState<MapVisibility>(first || yesNow ? 'mutuals' : 'none');
+  const [busy, setBusy] = useState<MapVisibility | null>(null);
   const [error, setError] = useState('');
   const [closeSignal, setCloseSignal] = useState(0);
   // What the screen closes with: the answer once it is saved, else nothing.
   const answer = useRef<MapVisibility | null>(null);
   const close = () => setCloseSignal((n) => n + 1);
+  const settled = () => answer.current ?? (first ? null : mapVisibility ?? null);
   // However the screen goes (a phone's Back as well as Close), whoever asked hears how it ended.
-  useEffect(() => () => { settleWhoSeesYou(answer.current ?? (first ? null : mapVisibility ?? null)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { settleWhoSeesYou(settled()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pick = async (v: MapVisibility) => {
+  const save = async (v: MapVisibility) => {
+    if (busy) return;
     setPicked(v);
     setError('');
-    if (first || v === mapVisibility) return;
+    if (!first && (v === 'mutuals' ? yesNow : mapVisibility === 'none')) { answer.current = v; return; }
+    setBusy(v);
     const ok = await actions.setMapVisibility(v);
-    if (ok) answer.current = v;
-    else { setError('Couldn’t save that. Try again.'); setPicked(shownAs(mapVisibility)); }
-  };
-  const proceed = async () => {
-    if (busy) return;
-    setBusy(true);
-    setError('');
-    const ok = await actions.setMapVisibility(picked);
-    setBusy(false);
-    if (!ok) { setError('Couldn’t save that. Try again.'); return; }
-    answer.current = picked;
-    close();
-  };
-  const locationOff = () => {
-    void actions.setLocationEnabled(false);
-    close();
+    setBusy(null);
+    if (!ok) { setError('Couldn’t save that. Try again.'); setPicked(first || yesNow ? 'mutuals' : 'none'); return; }
+    answer.current = v;
+    if (first) close();
   };
 
   return (
     <DragSheet
-      peekFraction={LESS_AI ? (first ? 0.52 : 0.5) : first ? 0.8 : 0.7}
+      peekFraction={first ? 0.8 : 0.7}
       fitContent
       closeSignal={closeSignal}
-      onDismissed={() => { router.back(); settleWhoSeesYou(answer.current ?? (first ? null : mapVisibility ?? null)); }}
+      onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
-      header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first && !LESS_AI ? 'You can change this any time.' : undefined} onClose={close} />}
+      header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time in Settings → Privacy.' : undefined} onClose={close} />}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        {LESS_AI ? null : <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />}
+        <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />
+        <View style={styles.facts}>
+          {FACTS.map((f) => (
+            <View key={f.text} style={styles.fact}>
+              <Ionicons name={f.icon} size={17} color={colors.brand} />
+              <Text style={styles.factText}>{f.text}</Text>
+            </View>
+          ))}
+        </View>
         {teen ? (
           <View style={styles.notice} accessibilityRole="text">
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
             <View style={styles.noticeWords}>
               <Text style={styles.noticeText}>{TEEN_NOTICE}</Text>
-              <Text style={styles.noticeSmall}>Under 18, only people you follow who follow you back can see you, and you only see them. Strangers never see you.</Text>
+              <Text style={styles.noticeSmall}>Under 18, only people you follow who follow you back can see you, and only your rough area.</Text>
               {/* No birthday given (it is optional since Oct 17): say what adding one opens up. */}
               {ageUnknown(currentUser) ? <Text style={styles.noticeSmall}>{BIRTHDAY_OPENS_IT}</Text> : null}
             </View>
           </View>
         ) : null}
-        <View style={LESS_AI ? styles.choicesPlain : styles.choices} accessibilityRole="radiogroup">
-          {choices.map((c, i) => {
-            const on = picked === c.value;
-            if (LESS_AI) return (
-              <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void pick(c.value); }} style={({ pressed }) => [styles.choicePlain, i > 0 && styles.choiceLine, pressed && { backgroundColor: colors.surfaceAlt }]}>
-                <Text style={[styles.labelPlain, on && styles.labelOn]} numberOfLines={1}>{teen ? c.label : SHORT[c.value] ?? c.label}</Text>
-                <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
-              </Pressable>
-            );
-            return (
-              <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void pick(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
-                <View style={[styles.tile, on && styles.tileOn]}><Ionicons name={ICON[c.value]} size={19} color={on ? colors.bg : colors.textMuted} /></View>
-                <View style={styles.words}>
-                  <Text style={styles.label}>{c.label}</Text>
-                  <Text style={styles.line}>{c.line}</Text>
-                </View>
-                <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
-              </Pressable>
-            );
-          })}
-        </View>
+        {first ? null : (
+          <View style={styles.choices} accessibilityRole="radiogroup">
+            {CONSENT_CHOICES.map((c) => {
+              const on = picked === c.value;
+              return (
+                <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on, busy: busy === c.value }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void save(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
+                  <View style={[styles.tile, on && styles.tileOn]}><Ionicons name={c.value === 'none' ? 'eye-off-outline' : 'swap-horizontal-outline'} size={19} color={on ? colors.bg : colors.textMuted} /></View>
+                  <View style={styles.words}>
+                    <Text style={styles.label}>{c.label}</Text>
+                    <Text style={styles.line}>{c.line}</Text>
+                  </View>
+                  <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </ScrollView>
-      {/* The way forward sits under the list, never scrolled off a short phone (iPhone SE: Continue was below the edge). */}
+      {/* The way forward sits under the list, never scrolled off a short phone. */}
       <View style={styles.footer}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {first ? (
-          <Submit label="Continue" busy={busy} busyLabel="Saving…" onPress={() => { void proceed(); }} />
-        ) : locationEnabled ? (
-          <Pressable accessibilityRole="button" onPress={locationOff} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
-            <Ionicons name="navigate-outline" size={16} color={colors.textMuted} />
-            <Text style={styles.offText}>Turn off location</Text>
-          </Pressable>
+          <>
+            <Submit label={CONSENT_CHOICES[0].label} busy={busy === 'mutuals'} busyLabel="Saving…" onPress={() => { void save('mutuals'); }} />
+            <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
+              <Text style={styles.offText}>Not now</Text>
+            </Pressable>
+          </>
         ) : null}
       </View>
     </DragSheet>
   );
 }
+
+/** What a yes means, said plainly before it is given. */
+const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
+  { icon: 'hand-left-outline', text: 'You show on the map only when you tap Check in. Never on your own.' },
+  { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
+  { icon: 'time-outline', text: 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Check out to hide at once.' },
+];
 
 /** Where the six faces round you sit, and which two follow you back. */
 const AROUND = [
@@ -156,10 +147,9 @@ const REACH = 62;
 
 /**
  * The answer, drawn: you in the middle of your patch of map, six players
- * round you, two of them people you follow back. Players nearby: all six
- * see you. Only people you follow back: only those two stay. Only me:
- * everyone fades, and your face shows the eye shut. Each change eases over
- * (Reduce Motion: quicker, still a fade).
+ * round you, two of them friends who follow you back. Friends: only those
+ * two see you. No one: everyone fades, and your face shows the eye shut.
+ * Each change eases over (Reduce Motion: quicker, still a fade).
  */
 function WhoSeesArt({ choice, name, seed, uri }: { choice: MapVisibility; name: string; seed: string; uri?: string }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -210,14 +200,12 @@ const styleDefinitions = StyleSheet.create({
   youWrap: { alignItems: 'center', justifyContent: 'center' },
   youRing: { padding: 3, borderRadius: 30, backgroundColor: colors.surface, ...lift },
   eye: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
+  facts: { gap: spacing.sm },
+  fact: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  factText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 21 },
   choices: { gap: spacing.sm },
   choice: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
   choiceOn: { borderColor: colors.text },
-  choicesPlain: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
-  choicePlain: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 54, paddingHorizontal: spacing.lg },
-  choiceLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  labelPlain: { ...typography.body, color: colors.text, flex: 1 },
-  labelOn: { ...font('600') },
   tile: { width: 38, height: 38, borderRadius: 12, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   tileOn: { backgroundColor: colors.text },
   words: { flex: 1, gap: 2 },

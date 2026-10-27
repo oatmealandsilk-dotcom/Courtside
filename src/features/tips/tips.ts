@@ -12,7 +12,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows';
 
 export const TIP_WORDS: Record<TipKey, string> = {
-  'map-who-sees': 'Tap here to choose who sees you: players nearby, only friends, or just you.',
+  'map-who-sees': 'Tap Check in to show friends where you are, until 10pm.',
   activities: 'Your friends’ matches and practices show up here.',
   'double-tap': 'Double-tap a clip to like it.',
   'see-stats': 'Tap for the full stats.',

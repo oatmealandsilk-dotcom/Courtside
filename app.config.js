@@ -82,7 +82,7 @@ module.exports = {
         // Purpose-string changes like these reach phones only with the next App Store build.
         NSCameraUsageDescription: 'CourtSide uses the camera to take photos and videos you post and photos you send in chats.',
         NSPhotoLibraryUsageDescription: 'CourtSide uses your photo library to choose clips and photos to post or send in chats.',
-        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
+        NSLocationWhenInUseUsageDescription: 'CourtSide uses your location while the app is open to show courts near you, and when you tap Check in, to show friends who follow you back where you are until 10pm.',
         // Saving a chat photo to your camera roll from the share sheet (from build 11).
         NSPhotoLibraryAddUsageDescription: 'CourtSide saves the photos and videos you choose to your library.',
       },
@@ -179,9 +179,9 @@ module.exports = {
       // given (they stay in the app even though CourtSide never asks for them), so each gets honest words instead.
       // None can be left out: the add-on's own code still mentions them. Next App Store build (Oct 5).
       ['expo-location', {
-        locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts and players near you. You choose who can see you.',
-        locationAlwaysAndWhenInUsePermission: 'CourtSide uses your location only while the app is open, to show courts and players near you. It never tracks you in the background.',
-        locationAlwaysPermission: 'CourtSide uses your location only while the app is open, to show courts and players near you. It never tracks you in the background.',
+        locationWhenInUsePermission: 'CourtSide uses your location while the app is open to show courts near you, and when you tap Check in, to show friends who follow you back where you are until 10pm.',
+        locationAlwaysAndWhenInUsePermission: 'CourtSide uses your location only while the app is open, to show courts near you and, when you tap Check in, to show friends where you are. It never tracks you in the background.',
+        locationAlwaysPermission: 'CourtSide uses your location only while the app is open, to show courts near you and, when you tap Check in, to show friends where you are. It never tracks you in the background.',
         motionUsagePermission: 'CourtSide does not use motion data.',
       }],
       // Android draws the status-bar alert icon in white from the picture's shape alone, so

@@ -9,51 +9,36 @@ import { isDemo } from '@/features/activity/flags';
 import { notKnownAdult } from '@/features/players/age';
 
 /*
- * "Who can see you on the map?" (migration 63), and the one tip after it.
+ * "Who can see you on the map?" (migration 63; a plain yes or no since
+ * migration 189, after Apple's 5.1.2(i) review), and the one tip after it.
  *
- * The first time someone turns Location on, or opens the full map, without
- * ever having chosen, the choice comes first (the screen at
- * app/map-visibility), then Apple's own location prompt, then one tip
- * pointing at the location button: "Tap here any time to hide yourself."
- * The same screen opens later from that button on the full map, from your
- * own card on the map, and from Settings → Privacy.
+ * The first time someone taps Check in without a yes, the question comes
+ * first (the screen at app/map-visibility), then Apple's own location
+ * prompt, then the check-in and one tip by the Check in button: "Tap here
+ * any time to check out." Said no (or closed it): nothing is shared. The
+ * same screen opens later from Settings → Privacy and your own card.
  */
 
 /**
- * The three answers, in the screen's order, with the words it uses. Players
- * nearby: a rough area to everyone (the court too, while you check in
- * there: migration 63), your exact spot to people you follow back.
+ * The two answers, in the screen's order. Friends: your pin, after you tap
+ * Check in and until 10pm, to friends who follow each other with you. No
+ * one: never on the map. ('nearby', an answer from before 189, reads as
+ * Friends: the server treats it so.)
  */
-export const VISIBILITY_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
-  { value: 'nearby', label: 'Players nearby', line: 'Your rough area, or your court when you check in. Exact for people you follow back.' },
-  { value: 'mutuals', label: 'Only people you follow back', line: 'Your exact spot, just for them.' },
-  { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
-];
-
-/**
- * The two answers for someone not known to be an adult (migration 78): the
- * map is only ever between friends who follow each other, so there is no
- * "Players nearby", and their spot is only ever their rough area.
- */
-export const TEEN_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
-  { value: 'mutuals', label: 'Friends who follow you back', line: 'Your rough area, just for them. Strangers never see you.' },
-  { value: 'none', label: 'Only me', line: 'No one sees you on the map.' },
+export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
+  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Check in, until 10pm.' },
+  { value: 'none', label: 'No one', line: 'You never show on the map.' },
 ];
 
 /** What a teen is told the first time, before anything is shared (the owner's words). */
-export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Turn off location on the map anytime to hide.';
+export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Check out on the map anytime to hide.';
 
-/** The choices to offer: the adults' three, or the teens' two. */
-export const choicesFor = (teen: boolean) => (teen ? TEEN_CHOICES : VISIBILITY_CHOICES);
+/** Whether friends may see your check-ins: a yes ('mutuals', or 'nearby' from before migration 189). */
+export const saidYes = (v: MapVisibility | null | undefined) => v === 'mutuals' || v === 'nearby';
 
-/**
- * The answer as a settings row says it: the screen's own words, so the two
- * never differ. For a teen, no answer yet means nobody sees them (Only me).
- */
-export const visibilityLabel = (v: MapVisibility | null | undefined, teen = false) => {
-  if (teen) return (v === 'nearby' || v === 'mutuals' ? TEEN_CHOICES[0] : TEEN_CHOICES[1]).label;
-  return (VISIBILITY_CHOICES.find((c) => c.value === (v ?? 'nearby')) ?? VISIBILITY_CHOICES[0]).label;
-};
+/** The answer as a settings row says it. No answer yet: No one (nothing is shared until a yes). */
+export const visibilityLabel = (v: MapVisibility | null | undefined, _teen = false) =>
+  (saidYes(v) ? 'Friends' : 'No one');
 
 /**
  * Where someone not known to be an adult stands with the map (migration
@@ -131,10 +116,10 @@ export function useWhoSeesYouUp(): boolean {
 }
 
 /**
- * Opens "Who can see you on the map?". `first`: the first-time screen, with
- * Continue (and then Apple's prompt, if Location is off). `manage`: the same
- * choices, saved as they are tapped, with Location off at the bottom.
- * Resolves with the answer, or null if it was closed without one.
+ * Opens "Who can see you on the map?". `first`: before the first Check in,
+ * a yes or Not now (then Apple's prompt, with the check-in). `manage`: the
+ * same two answers, saved as they are tapped. Resolves with the answer, or
+ * null if it was closed without one.
  */
 export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility | null> {
   learnedTip('map-who-sees');
@@ -147,20 +132,6 @@ export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility |
   });
 }
 
-let launchAsked = false;
-/**
- * Someone already sharing their location who has never answered (from
- * before the map asked, or from an older version of the app): asked once
- * each time the app is opened, until they answer, then the tip. Until then
- * the server keeps them to about a kilometre for everyone, as before.
- */
-export async function askWhoSeesYouOnLaunch(where: TipSpot): Promise<void> {
-  if (launchAsked) return;
-  launchAsked = true;
-  const chose = await askWhoSeesYou('first');
-  if (chose) void showHideTip(where, chose);
-}
-
 /** The screen has closed: with what was chosen, or null. */
 export function settleWhoSeesYou(v: MapVisibility | null) {
   const done = waiting;
@@ -171,13 +142,13 @@ export function settleWhoSeesYou(v: MapVisibility | null) {
 
 /* ---------------------------------------------------------------- the tip */
 
-/** Where the tip points: the Find Players card's location switch, or the full map's location button. */
+/** Where the tip points: the Find Players card's Check in button, or the full map's. */
 export type TipSpot = 'card' | 'map';
 
 const TIP_KEY = 'courtside-hide-tip';
 let tipAt: TipSpot | null = null;
-/** What the tip says: how to hide, or, for someone who chose Only me (already hidden), how to change it. */
-let tipText = 'Tap here any time to hide yourself.';
+/** What the tip says: how to hide again. */
+let tipText = 'Tap here any time to check out.';
 let tipSeen: boolean | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
@@ -198,11 +169,11 @@ function markSeen() {
   } catch { /* the tip may show once more; nothing else depends on it */ }
 }
 
-/** Shows the tip once, ever, by that location button. `chose`: the answer just given (Only me gets the other line). */
-export async function showHideTip(where: TipSpot, chose?: MapVisibility | null) {
+/** Shows the tip once, ever, by that Check in button, after a first check-in. */
+export async function showHideTip(where: TipSpot) {
   if (await readSeen()) return;
   markSeen();
-  tipText = chose === 'none' ? 'Tap here to change who sees you.' : 'Tap here any time to hide yourself.';
+  tipText = 'Tap here any time to check out.';
   tipAt = where;
   emit();
 }

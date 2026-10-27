@@ -28,11 +28,11 @@ export const DEMO_FOLLOWING: ID[] = ['u-sam', 'u-marcus', 'u-omar', 'u-tomas', '
 
 /**
  * Some of the people who follow the demo player, so Followers has someone in
- * it under "184 followers" rather than "No followers yet": Omar (who follows
- * back) and five more adults. None of them has a post in the demo feed, so
- * the feed's order is as it was.
+ * it under "184 followers" rather than "No followers yet": Omar, Sam and
+ * Marcus (who follow back, so they are the demo's friends on the map since
+ * migration 189) and five more adults.
  */
-export const DEMO_FOLLOWERS: ID[] = ['u-omar', 'u-rosa', 'u-kai', 'u-noor', 'u-theo', 'u-lena'];
+export const DEMO_FOLLOWERS: ID[] = ['u-omar', 'u-sam', 'u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-theo', 'u-lena'];
 
 const blankFacts = (courtId: string): CourtFacts => ({
   courtId, access: 'unknown', players: 0, lights: { yes: 0, no: 0 }, nets: { good: 0, bad: 0 }, surface: { good: 0, cracked: 0, wetProne: 0 }, busy: {}, busyAnswers: 0, busyNever: 0, notes: [],
@@ -125,7 +125,7 @@ export function demoRings(posts: Post[], hits: HitRequest[], s: Seeing, box: { m
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
 }
 
-/** "Sam and Marcus, who you follow, play here": people you follow who posted, posted a hit or joined one at each court in 90 days (court_people_you_follow). */
+/** "Sam and Marcus, friends, play here": friends who follow each other with you (since migration 189) who posted, posted a hit or joined one at each court in 90 days (court_people_you_follow). */
 export function demoRegulars(courtIds: string[], posts: Post[], hits: HitRequest[], s: Seeing): Record<string, ID[]> {
   const since = Date.now() - 90 * 86_400_000;
   const acts: { court: string; who: ID; at: string }[] = [];
@@ -139,7 +139,7 @@ export function demoRegulars(courtIds: string[], posts: Post[], hits: HitRequest
   for (const id of courtIds) {
     const latest = new Map<ID, string>();
     for (const a of acts) {
-      if (a.court !== id || a.who === s.me || !s.followingIds.includes(a.who) || !showsAtCourt(a.who, s)) continue;
+      if (a.court !== id || a.who === s.me || !s.followingIds.includes(a.who) || !DEMO_FOLLOWERS.includes(a.who) || !showsAtCourt(a.who, s)) continue;
       if (!latest.has(a.who) || a.at > latest.get(a.who)!) latest.set(a.who, a.at);
     }
     out[id] = [...latest.entries()].sort((a, b) => b[1].localeCompare(a[1])).slice(0, 5).map(([who]) => who);

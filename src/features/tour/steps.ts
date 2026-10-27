@@ -86,8 +86,8 @@ export const TOUR_STEPS: TourStep[] = [
     onPage: { phone: { id: 'map-lead', shape: 'box' }, wide: { id: 'map-lead', shape: 'box' } },
     barOnlyIfNotOnPage: true,
     page: MAP,
-    phone: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
-    wide: { title: 'Your map', body: 'Courts near you, and the players who shared their spot.' },
+    phone: { title: 'Your map', body: 'Courts near you, and friends who checked in.' },
+    wide: { title: 'Your map', body: 'Courts near you, and friends who checked in.' },
     byLead: {
       // Short: the lit card says "Send them your link", and a short tip keeps clear of the map's own lines above it.
       // The clause about hits (Oct 7, audit item 3) is the only word of them a new city's player gets here; it
@@ -97,7 +97,7 @@ export const TOUR_STEPS: TourStep[] = [
       // Never "Tap I'm free" now: a tap during the tutorial only moves it on, so the ring stayed
       // off while a new player thought they had turned it on (Oct 5). The words say what the ring
       // is for, for whenever they are free.
-      free: { title: 'Up for a hit?', body: 'Tap your ring any time you’re free. Players nearby see it on the map.' },
+      free: { title: 'Up for a hit?', body: 'Tap your ring any time you’re free. Friends see it on the map.' },
       'free-friends': { title: 'Up for a hit?', body: 'Tap your ring any time you’re free. Friends who follow you back see it.' },
     },
   },

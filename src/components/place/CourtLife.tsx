@@ -171,7 +171,7 @@ export function useCourtSaid(courtId: string, note = true) {
 }
 
 /**
- * "Sam and Marcus, who you follow, play here", from their posts and hits
+ * "Sam and Marcus, friends, play here" (friends who follow each other, migration 189), from their posts and hits
  * there (never from where their phones were), with their faces and Ask to
  * hit: a hit here sent to the ones you can message. Anyone already on court
  * now is left out (the "on court now" tag names them), so each person shows

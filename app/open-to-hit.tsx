@@ -9,7 +9,7 @@ import { ChipStrip, Chips, Section, SheetTitle, Submit, formBody } from '@/compo
 import { onTeenMap } from '@/features/players/mapPrivacy';
 import { ageUnknown } from '@/features/players/age';
 import { HIT_MILES, asHitMiles, clockWords, endOfToday, isOpenToHit, onTheMinute, tillLabel, todayAt } from '@/features/players/openToHit';
-import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -42,9 +42,9 @@ const HALF_HOUR_MS = 30 * 60_000;
  */
 export default function OpenToHitSheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, locationEnabled, teenMap } = useApp();
+  const { currentUser, teenMap } = useApp();
   const toggleOpen = useOpenToHitToggle();
-  const location = useLocationToggle();
+  const checkIn = useCheckIn();
   const [closeSignal, setCloseSignal] = useState(0);
   const close = () => setCloseSignal((n) => n + 1);
   // The moment the sheet opened: the quick picks and the picker's times are worked out from it.
@@ -124,13 +124,13 @@ export default function OpenToHitSheet() {
     setSaving(false);
     if (!on) return;
     haptics.commit();
-    // Open, but not on the map: say so, with the one tap that fixes it (as the ring's tap does).
-    if (!locationEnabled) {
+    // Open, but not on the map: say so, with the one tap that fixes it (Check in, migration 189).
+    if (!checkIn.on) {
       showToast({
         title: 'You’re open to hit',
-        body: teen ? 'Friends see it once Location is on.' : 'Off the map until Location is on.',
+        body: 'Friends see it on the map once you check in.',
         icon: 'navigate-outline',
-        action: { label: 'Turn on', onPress: () => { void location.toggle(); } },
+        action: { label: 'Check in', onPress: checkIn.press },
       });
     }
     close();
@@ -191,8 +191,8 @@ export default function OpenToHitSheet() {
 
         <Section title="How far you’ll go" hint={teen
           // No birthday given (optional since Oct 17): what adding one opens up, said once, here.
-          ? (ageUnknown(currentUser) ? 'Friends who follow you back see it on your card. 18 or over? Add your birthday in Settings → Account center so players nearby can see it too.' : 'Friends who follow you back see it on your card.')
-          : 'Players farther away still see you.'}>
+          ? 'Friends who follow you back see it on your card.'
+          : 'Friends farther away still see you.'}>
           <Chips value={distance} onChange={(v) => { if (v) setDistance(v); }} options={[...HIT_MILES.map((m) => ({ value: String(m) as Distance, label: `${m} mi` })), { value: 'any' as const, label: 'Any' }]} />
         </Section>
 

@@ -57,6 +57,8 @@ import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
+import type { CheckInControl } from '@/features/players/useLocationToggle';
+import { CheckInBar } from '@/components/map/CheckInBar';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -101,7 +103,7 @@ export const PIN_FIT_TOP = 120;
  * see-through fill (MapGlass, Oct 22): never Apple's glass, so never put up
  * again, and the same every time the map opens.
  */
-export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onToggleLocation, results, onPickCourt, places, onPickPlace, players = 0, locationMenu = false, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** With Location on, the button opens who can see you (and Location off) rather than switching off. */ locationMenu?: boolean; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
+export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCourt, places, onPickPlace, players = 0, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; /** The Check in button (useCheckIn, migration 189): the only way your spot is shared. */ checkIn?: CheckInControl; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
@@ -141,16 +143,14 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
   const say = city ? `Search ${city}` : 'Search a place or park';
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
-  // One lit value for the button's green, its edge and its icon, so the icon never runs ahead of the fill (a spinner ending as Location comes on).
-  const locLit = useLit(!!locationOn);
+  // One lit value for the Check in button's green and its edge.
+  const locLit = useLit(!!checkIn?.on);
   const locV = locLit.v;
   // The edge's two colours for the animation thread, kept to the theme now (the button is rebuilt in a new one).
   const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
   const edgeOn = useInk(colors.brand, locLit.bump);
   const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
-  const locationIcon = locating ? <ActivityIndicator size="small" color={locationOn ? colors.brandInk : colors.text} /> : (
-    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
-  );
+  const locationIcon = checkIn ? <CheckInWords control={checkIn} size={16} /> : null;
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
@@ -209,12 +209,12 @@ export function MapTopBar({ onBack, query, onQuery, locationOn, locating, onTogg
           ) : null}
         </MapGlass>
       </Pressable>
-      {onToggleLocation ? (
+      {checkIn ? (
         <View>
           <TipPulse where="map" size={44} />
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? (locationMenu ? 'Location on. Who can see you' : 'Turn location off') : 'Turn location on'} onPress={onToggleLocation} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} onPress={checkIn.press} style={({ pressed }) => [styles.barPillHit, pressed && styles.barPressed]}>
             {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
+            <MapGlass key={locLit.key} radius={22} style={[styles.barPill, locEdge]}>
               <GreenFill v={locLit.v} radius={22} />
               {locationIcon}
             </MapGlass>
@@ -481,6 +481,26 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
+/** What a Check in button says to a screen reader: what a tap does, and for how long. */
+const checkInLabel = (c: CheckInControl) => (c.on ? `Checked in, friends see you ${c.span}. Check out` : `Check in. Friends who follow you back see you ${c.span}`);
+
+/**
+ * The Check in button's own words (migration 189): "Check in", or while you
+ * are checked in, how long for ("Until 10pm"; a tap checks you out).
+ */
+function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const ink = control.on ? colors.brandInk : colors.text;
+  return (
+    <View pointerEvents="none" style={styles.checkInRow}>
+      {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
+        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : 'Check in'}
+      </Text>
+    </View>
+  );
+}
+
 function GreenFill({ v, radius: r, edge = 0 }: { v: SharedValue<number>; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
@@ -1597,7 +1617,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, locationOn, locating, onToggleLocation, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; locationOn?: boolean; locating?: boolean; onToggleLocation?: () => void; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   const edge = labelEdge(themes[theme].bg);
@@ -1632,12 +1652,12 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
               : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Be the first player on the map</Text> : null}
         </View>
       </View>
-      {onToggleLocation ? (
+      {checkIn ? (
         <>
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: !!locationOn }} accessibilityLabel={locationOn ? 'Turn location off' : 'Turn location on'} hitSlop={6} onPress={onToggleLocation} style={[styles.previewSwitch, locationOn && styles.roundOn]}>
-            {locationOn ? <BrandWash /> : null}
-            {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name={locationOn ? 'navigate' : 'navigate-outline'} size={15} color={locationOn ? colors.brandInk : colors.text} />}
+          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} hitSlop={6} onPress={checkIn.press} style={[styles.previewSwitch, checkIn.on && styles.roundOn]}>
+            {checkIn.on ? <BrandWash /> : null}
+            <CheckInWords control={checkIn} size={14} />
           </Pressable>
           <HideTip where="card" style={{ top: 52, right: 8 }} />
         </>
@@ -1648,6 +1668,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
         </View>
       ) : null}
+      {/* Not checked in: one quiet ask over the card (Not now: gone for today). Clear of the map's credit at the right. */}
+      {checkIn ? <CheckInBar compact control={checkIn} style={styles.previewBar} /> : null}
     </>
   );
 }
@@ -1785,6 +1807,10 @@ const styleDefinitions = StyleSheet.create({
   pillMeasure: { position: 'absolute', right: 0, top: 0, width: 2000, flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'flex-start', opacity: 0, pointerEvents: 'none' },
   playersPillText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
   // The map's top row (Oct 11): Back, the bar and Location, 44 tall, one glass, one soft lift each.
+  barPillHit: { height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
+  barPill: { height: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
+  checkInRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  checkInWord: { ...typography.smallStrong, ...font('600') },
   barRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
@@ -1992,6 +2018,7 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  previewSwitch: { position: 'absolute', right: 12, top: 12, width: 32, height: 32, borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  previewSwitch: { position: 'absolute', right: 12, top: 12, height: 32, paddingHorizontal: 12, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

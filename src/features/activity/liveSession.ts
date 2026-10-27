@@ -141,13 +141,13 @@ export function seenLine({ here, seenBy, why, problem, starting = false }: {
   const can = starting ? 'will see' : 'can see';
   // Only me shares nothing, even with a check-in not yet cleared on this phone (the server drops it).
   if (here && seenBy !== 'none') {
-    if (seenBy === 'nearby') return { line: `Friends and players nearby ${can} you’re playing here`, shared: true };
-    if (seenBy === 'mutuals') return { line: `Friends who follow you back ${can} you’re playing here`, shared: true };
+    // Since migration 189 only friends see who is playing (anyone else, a count).
+    if (seenBy === 'nearby' || seenBy === 'mutuals') return { line: `Friends who follow you back ${can} you’re playing here`, shared: true };
     return { line: `Friends ${can} you’re playing here`, shared: true };
   }
   const only = starting ? 'Only you will see this session' : 'Only you can see this session';
   if (why === 'location-off') return { line: only, shared: false, note: 'Turn on Location to let friends see you’re here.' };
-  if (why === 'only-me') return { line: only, shared: false, note: 'You chose Only me on the map.' };
+  if (why === 'only-me') return { line: only, shared: false, note: 'You chose No one on the map.' };
   if (problem) return { line: only, shared: false, note: problem };
   return { line: only, shared: false };
 }
@@ -165,12 +165,11 @@ export function seenShort({ here, seenBy, why }: {
   why?: ReturnType<typeof checkInPlan>['why'];
 }): { line: string; shared: boolean } {
   if (here && seenBy !== 'none') {
-    if (seenBy === 'nearby') return { line: 'Friends and players nearby see you here', shared: true };
-    if (seenBy === 'mutuals') return { line: 'Friends who follow you back see you here', shared: true };
+    if (seenBy === 'nearby' || seenBy === 'mutuals') return { line: 'Friends who follow you back see you here', shared: true };
     return { line: 'Friends can see you’re playing here', shared: true };
   }
   if (why === 'location-off') return { line: 'Only you · Location is off', shared: false };
-  if (why === 'only-me') return { line: 'Only you · you chose Only me', shared: false };
+  if (why === 'only-me') return { line: 'Only you · you chose No one', shared: false };
   return { line: 'Only you can see this', shared: false };
 }
 

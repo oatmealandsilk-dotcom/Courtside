@@ -45,7 +45,7 @@ const META_LINE = 14;
 const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
-interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string }
+interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
 
 /**
  * The people near you who are up for a hit today, from the map's own pins
@@ -57,10 +57,10 @@ interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; unti
  * city), so the two never disagree. With no spot at all there is no "near",
  * so nobody is listed (and the row says how to fix that).
  */
-export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: User[]; lastSeen: Record<ID, LastSeen>; me: ID | null; from: LatLng | null; blockedIds: ID[] }): Up[] {
+export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '', friendsOnly = false }: { users: User[]; lastSeen: Record<ID, LastSeen>; me: ID | null; from: LatLng | null; blockedIds: ID[]; /** Your profile's town ("Raleigh"), for players free today there. */ myTown?: string; /** A teen: friends only, never strangers. */ friendsOnly?: boolean }): Up[] {
   // Every "open until" the row could show, so it looks again the moment the soonest one ends (someone's "till 6pm" goes at 6pm).
   const byId = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
-  const ends = useMemo(() => Object.values(lastSeen).flatMap((row) => (row.userId === me ? [] : [row.openUntil, byId.get(row.userId)?.openToHitUntil])), [lastSeen, byId, me]);
+  const ends = useMemo(() => [...Object.values(lastSeen).flatMap((row) => (row.userId === me ? [] : [row.openUntil, byId.get(row.userId)?.openToHitUntil])), ...users.flatMap((u) => (u.id !== me && u.openToHitUntil ? [u.openToHitUntil] : []))], [lastSeen, byId, users, me]);
   const now = useOpenClock(ends);
   return useMemo(() => {
     if (!from) return [];
@@ -76,10 +76,26 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
       if (miles > IN_TOWN_MILES) continue;
       list.push({ user, miles, rough: isRoughSpot(row), seenAt: row.seenAt, until: laterUntil(isOpenToHit(user) ? user.openToHitUntil : undefined, mapUntil) });
     }
-    // In the order the distances read (a rough "~1 mi" never before "0.8 mi"); on a tie, a pin on a court or exact first, then the most recent.
-    return list.sort((a, b) => spotMilesKey(a.miles ?? 0, a.rough) - spotMilesKey(b.miles ?? 0, b.rough)
-      || Number(a.rough) - Number(b.rough) || (b.seenAt ?? '').localeCompare(a.seenAt ?? ''));
-  }, [byId, lastSeen, me, from?.lat, from?.lng, blockedIds, now]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Free today in your town (Oct 26, owner: "free to hit in this city"): a player who turned on
+    // "I'm free" themselves today, shown by the town on their profile, never a spot or a distance
+    // (migration 189: a stranger's live position never reaches the phone). A teen's ring is private
+    // to their friends (keep_open_to_hit_private), so never here; a teen sees friends only.
+    if (!friendsOnly) {
+      const listed = new Set(list.map((u) => u.user.id));
+      const mine = myTown.trim().toLowerCase();
+      for (const user of users) {
+        if (user.id === me || listed.has(user.id) || blockedIds.includes(user.id) || !isOpenToHit(user)) continue;
+        const town = user.location.split(',')[0].trim();
+        if (!town) continue;
+        const inTown = user.cityAt ? milesBetween(from, user.cityAt) <= IN_TOWN_MILES : !!mine && town.toLowerCase() === mine;
+        if (inTown) list.push({ user, rough: true, town, until: user.openToHitUntil });
+      }
+    }
+    // Friends checked in first, in the order the distances read (a rough "~1 mi" never before "0.8 mi"); on a tie,
+    // a pin on a court or exact first, then the most recent. Then those free today in town, soonest to end last.
+    return list.sort((a, b) => Number(!!a.town) - Number(!!b.town) || spotMilesKey(a.miles ?? 0, a.rough) - spotMilesKey(b.miles ?? 0, b.rough)
+      || Number(a.rough) - Number(b.rough) || (b.seenAt ?? '').localeCompare(a.seenAt ?? '') || (b.until ?? '').localeCompare(a.until ?? ''));
+  }, [byId, users, lastSeen, me, from?.lat, from?.lng, blockedIds, now, myTown, friendsOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -100,7 +116,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds }: { users: U
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, finding = false, onLocation, onTurnOnLocation, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Location off: the "Turn on" on the note that says your ring is not on the map yet. */ onTurnOnLocation?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -112,16 +128,16 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   const flip = () => {
     const next = !up;
     haptics.tap();
-    // Up, but not on the map: say so, with the one tap that fixes it. Only once the ring is really on.
-    const noting = next && !locationOn;
+    // Up, but not on the map (not checked in, migration 189): say so, with the one tap that fixes it. Only once the ring is really on.
+    const noting = next && !checkedIn;
     if (!noting) setTapped(true);
     void onToggle(next).then((on) => {
       if (on && noting) {
         showToast({
           title: 'You’re open to hit',
-          body: teen ? 'Friends see it once Location is on.' : 'Off the map until Location is on.',
+          body: 'Friends see it on the map once you check in.',
           icon: 'navigate-outline',
-          ...(onTurnOnLocation ? { action: { label: 'Turn on', onPress: onTurnOnLocation } } : {}),
+          ...(onCheckIn ? { action: { label: 'Check in', onPress: onCheckIn } } : {}),
         });
       }
     });
@@ -167,10 +183,11 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         </View>
         {people.map((p) => {
           const theirs = tillLabel(p.until);
-          const far = p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
+          // A friend's check-in: how far. Anyone else: only the town they chose ("Raleigh"), never a distance.
+          const far = p.town ? p.town : p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
           return (
             <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
-              <Pressable accessibilityRole="link" accessibilityLabel={`${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => router.push({ pathname: '/map', params: { user: p.user.id } })} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
+              <Pressable accessibilityRole="link" accessibilityLabel={p.town ? `${p.user.name}, free today in ${p.town}${theirs ? `, ${theirs}` : ''}. Open profile` : `${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => (p.town ? router.push(`/user/${p.user.id}`) : router.push({ pathname: '/map', params: { user: p.user.id } }))} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
                 <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}

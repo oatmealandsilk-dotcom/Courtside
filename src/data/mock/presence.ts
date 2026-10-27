@@ -1,7 +1,6 @@
 import type { ID, LastSeen } from '../types';
 import { DEMO_PARK } from './courts';
 import { endOfToday } from '@/features/players/openToHit';
-import { DIEGO_TILL, LENA_TILL, NOOR_TILL } from './openTimes';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
 
@@ -12,31 +11,17 @@ const atPark = (n: number, name: string) => {
 };
 
 /**
- * Where the demo's adults were last seen, as map_players (migration 63)
- * would show them to the demo player: Sam, Noor and Theo said "I'm playing
- * here" at Alder Park and Lena at Cypress Hollow, so they show on the court
- * itself (a stranger sees anyone on a court only while they are checked in
- * there); Omar follows you back, so he shows exactly where he was; everyone
- * else is about a kilometre out. Marcus's and Jonah's rough spots happen to
- * land a few doors from Omar, the three about 50 m apart (Oct 7), so the demo
- * has a small group of three that the map splits as you zoom in. Priya hides her activity, so her spot has no time. Up for a
- * hit today: Sam, Noor, Lena and Bea (`openUntil`, as their profiles say), and Diego,
- * over in Pasadena, who would rather hit within 5 miles (`openMiles`, migration 120).
- * Never a row for Ella, the teen: the database shows a teen's spot only
- * to friends who follow each other with them (migration 78), and Ella and
- * the demo player don't, so the demo keeps that rule.
+ * The demo player's friends on the map, as map_players (migration 189)
+ * would show them: only friends who follow each other with you, only while
+ * their Check in lasts (until 10pm), never a stranger. Sam said "I'm playing
+ * here" at Alder Park, so he shows on the court itself, up for a hit today;
+ * Omar and Marcus checked in where they were (exact, for a friend). Everyone
+ * else in the demo is a stranger to you, so their spots never reach the
+ * phone: they show only through a court they chose (an open hit, a count of
+ * who is playing). Never a row for Ella, the teen.
  */
 export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
-  { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday() },
-  { userId: 'u-noor', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(26), openUntil: NOOR_TILL },
-  { userId: 'u-theo', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(41) },
-  { userId: 'u-lena', ...atPark(3, 'Cypress Hollow Park'), city: 'Los Angeles', seenAt: minutesAgo(64), openUntil: LENA_TILL },
-  { userId: 'u-omar', lat: 34.0662, lng: -118.2431, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(190) },
-  { userId: 'u-bea', lat: 34.05515, lng: -118.24677, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(130), openUntil: endOfToday() },
-  // Marcus and Jonah: rough spots that land (after positionFor's nudge) about 50 m from Omar and from each other.
-  { userId: 'u-marcus', lat: 34.06518, lng: -118.240602, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(120) },
-  { userId: 'u-jonah', lat: 34.066145, lng: -118.244171, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(300) },
-  { userId: 'u-ivy', lat: 34.04255, lng: -118.23488, place: 'approx', city: 'Los Angeles', seenAt: minutesAgo(1500) },
-  { userId: 'u-diego', lat: 34.14781, lng: -118.14452, place: 'approx', city: 'Pasadena', seenAt: minutesAgo(33), openUntil: DIEGO_TILL, openMiles: 5 },
-  { userId: 'u-priya', lat: 34.04, lng: -118.22, place: 'approx', city: 'Los Angeles' },
+  { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday(), mutual: true },
+  { userId: 'u-omar', lat: 34.0662, lng: -118.2431, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(48), mutual: true },
+  { userId: 'u-marcus', lat: 34.05518, lng: -118.24872, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(95), mutual: true },
 ] satisfies LastSeen[]).map((r) => [r.userId, r]));

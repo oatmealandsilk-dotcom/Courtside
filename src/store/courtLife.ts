@@ -237,21 +237,20 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (!s.locationEnabled) return 'Turn on Location first, so players know you’re really here.';
     if (live(me)) {
       // Where the phone is now, not where it was when the app opened: the
-      // server checks you are within 5 km of the court, and a spot from this
-      // morning at home would say no. The new spot goes up first.
+      // server checks you are within 5 km of the court (migration 189) and
+      // never keeps it. Your pin is the court; nothing else is shared.
       const fix = await getPosition({ recentMs: 2 * 60_000 });
       if (!fix.ok) return fix.reason === 'denied' ? 'Location is blocked, so we can’t tell you’re here.' : 'Couldn’t find you. Try again.';
       if (stateRef.current.currentUserId !== me) return null;
       setState((prev) => ({ ...prev, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
-      await remote.markLastSeen(fix.lat, fix.lng, stateRef.current.detectedLocation ?? undefined);
-      const got = await remote.checkInAtCourt(courtId);
+      const got = await remote.checkInAtCourt(courtId, { lat: fix.lat, lng: fix.lng });
       if ('error' in got) {
         return got.error === 'too_far' ? 'You need to be at the court to check in.'
           : got.error === 'location_off' ? 'Turn on Location first, so players know you’re really here.'
             : got.error === 'adults_only' ? 'Checking in is for adults only.'
               : got.error === 'closed_court' ? 'Check-ins are only for courts anyone can play at.'
                 : got.error === 'slow_down' ? 'That’s a lot of check-ins today. Try again tomorrow.'
-                  : got.error === 'hidden' ? 'You chose Only me on the map, so you can’t check in.'
+                  : got.error === 'hidden' ? 'You turned off map check-ins. Turn them on in Settings → Privacy.'
                   : 'That didn’t go through. Try again.';
       }
     }

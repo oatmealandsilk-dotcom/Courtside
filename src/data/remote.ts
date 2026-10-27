@@ -796,8 +796,8 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   services: services.filter((s) => s.coach_id === r.id && (s.active || r.user_id === me)).sort((a, b) => a.position - b.position).map(toService),
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
-/** One pin from map_players (migration 63; `mutual` since 98). */
-interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null }
+/** One pin from map_players (migration 63; `mutual` since 98; `until`, your own check-in's end, since 189). */
+interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
@@ -4243,16 +4243,13 @@ export const remote = {
   },
   /**
    * Everyone the map may show you, each where you may see them (migration
-   * 63's map_players): on their court, exactly (you, and people who follow
-   * each other with you) or about a kilometre out; with until when they are
-   * up for a hit today. Since migration 98 every answer carries all your
-   * friends who follow each other with you, wherever they are (`mutual`),
-   * and anyone else only inside `view` (at most 2° each way round its
-   * middle) and within about 50 miles of your own shared spot: the server
-   * decides "near you", whatever view is asked for, and with Location off
-   * or on Only me nobody is near you (nearbyLock). With no view: you and
-   * your friends. 'missing' on a database without it (the app reads
-   * last_seen instead); null when the ask failed.
+   * 63's map_players): since migration 189 only you and friends who follow
+   * each other with you (`mutual`), wherever they are, and only while their
+   * Check in lasts; on their court or exactly (a teen: about a kilometre
+   * out); with until when they are up for a hit today. Your own row carries
+   * when your check-in ends (`until`). The server ignores `view` since 189.
+   * 'missing' on a database without it (the app reads last_seen instead);
+   * null when the ask failed.
    */
   async fetchMapPlayers(view?: { minLat: number; minLng: number; maxLat: number; maxLng: number } | null): Promise<LastSeen[] | null | 'missing'> {
     const area = view ? { min_lat: view.minLat, min_lng: view.minLng, max_lat: view.maxLat, max_lng: view.maxLng } : {};
@@ -4265,6 +4262,7 @@ export const remote = {
       place: r.place === 'court' || r.place === 'exact' ? r.place : 'approx',
       courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
       ...(r.mutual ? { mutual: true } : {}),
+      ...(r.until ? { until: r.until } : {}),
     }));
   },
   /**
@@ -4311,10 +4309,26 @@ export const remote = {
     if (error) { if (!missingFunction(error)) fail('new on courtside')(error); return null; }
     return ((data ?? []) as { user_id: ID; joined_at: string }[]).map((r) => ({ userId: r.user_id, joinedAt: r.joined_at }));
   },
-  /** Your own spot; the database keeps it to itself and shows others only what each may see. */
-  async markLastSeen(lat: number, lng: number, city?: string) {
-    const { error } = await need().rpc('mark_last_seen', { p_lat: lat, p_lng: lng, p_city: city ?? null });
-    if (error) fail('mark last seen')(error);
+  /**
+   * Check in (migration 189): your spot, read once when you tapped Check in,
+   * for friends who follow each other with you until `until` (the server
+   * holds it to 15 minutes .. 16 hours from now). Resolves when it ends, or
+   * why not: 'ask_first' (no yes to friends seeing your check-ins yet),
+   * 'missing' (a database before 189), 'failed'.
+   */
+  async checkInOnMap(lat: number, lng: number, city: string | undefined, until: string): Promise<{ until: string } | { error: 'ask_first' | 'missing' | 'failed' }> {
+    const { data, error } = await need().rpc('check_in_on_map', { p_lat: lat, p_lng: lng, p_city: city ?? null, p_until: until });
+    if (!error && typeof data === 'string') return { until: data };
+    if (error && missingFunction(error)) return { error: 'missing' };
+    if (error) fail('check in on map')(error);
+    return { error: /ask_first/.test(error?.message ?? '') ? 'ask_first' : 'failed' };
+  },
+  /** Check out (migration 189): off friends' maps at once, and out of any court. Resolves false when it could not. */
+  async checkOutOfMap(): Promise<boolean> {
+    const { error } = await need().rpc('check_out_of_map');
+    if (error && missingFunction(error)) return remote.forgetLastSeen();
+    if (error) fail('check out of map')(error);
+    return !error;
   },
   /** Location off: the server drops your spots. Resolves false when it could not. */
   async forgetLastSeen(): Promise<boolean> {
@@ -4402,8 +4416,9 @@ export const remote = {
     return 'That didn’t go through. Try again.';
   },
   /** "I'm playing here": when it ends, or why not, as the server says it. */
-  async checkInAtCourt(courtId: string): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'failed' }> {
-    const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId });
+  async checkInAtCourt(courtId: string, at: { lat: number; lng: number }): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'failed' }> {
+    // Where the phone is now, only so the server can check you are at the court (migration 189): it is never kept; the pin is the court.
+    const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId, p_lat: at.lat, p_lng: at.lng });
     if (!error && typeof data === 'string') return { until: data };
     if (error) fail('check in')(error);
     const said = error?.message ?? '';

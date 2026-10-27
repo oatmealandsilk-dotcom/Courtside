@@ -56,9 +56,8 @@ export default function Settings() {
   const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, autoLogLive, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
-    // Never said who can see you on the map (migration 63): that comes first, the same as on the map.
-    // A teen (migration 78) gets the same screen, with its short notice: nothing is shared until they answer.
-    if (next && canChooseVisibility(mapLive, currentUser, teenMap) && mapVisibility === null && !(await askWhoSeesYou('first'))) return;
+    // Location here is this phone's own (courts near you): since migration 189 it never shares anything;
+    // only Check in on the map does, after "Who can see you on the map?".
     setLocationNote(next ? 'Asking…' : '');
     const problem = await actions.setLocationEnabled(next);
     setLocationNote(problem ?? '');
@@ -218,7 +217,7 @@ export default function Settings() {
           detail: LESS_AI ? 'Private until you post it' : 'Private until you post it · keeps your streak',
           toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
         }] : []),
-        { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Showing players near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see who is near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
+        { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Courts near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see courts near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },
       ],
     },

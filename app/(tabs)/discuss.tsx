@@ -27,7 +27,7 @@ import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { UpToday, useUpToday } from '@/components/UpToday';
 import { PostHitField } from '@/components/PostHitField';
-import { useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { useCheckIn, useLocationToggle, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { QuestionCard, TOPIC_META } from '@/components/QuestionCard';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { HitCard } from '@/components/HitCard';
@@ -45,7 +45,7 @@ import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
 import { notKnownAdult } from '@/features/players/age';
-import { askWhoSeesYouOnLaunch, canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
+import { canChooseVisibility, onTeenMap } from '@/features/players/mapPrivacy';
 import { isTourOpen, useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { setMapLead, type MapLead } from '@/features/tour/mapLead';
 import { IN_TOWN_MILES, measureFrom } from '@/features/players/mapModel';
@@ -252,23 +252,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     playersRef.current?.scrollTo({ y: pageTop, animated: true });
   };
   const location = useLocationToggle();
-  // One function for the row's "Turn on" (location.toggle is itself stable), so UpToday is not redrawn with every render here.
-  const turnOnLocation = useCallback(() => { void location.toggle(); }, [location.toggle]);
-  // Already sharing your location but never asked who can see you on the
-  // map (migration 63; from before it, or an older version of the app): the
-  // question comes here, where the app opens, a moment after the page has
-  // drawn, once per launch until answered (never over the tutorial). Until
-  // then the server shows you to about a kilometre for everyone, as before.
-  // Never for a teen (migration 78): they are asked only when they turn
-  // Location or "up today" on themselves, and stay hidden until they answer.
+  // Check in (migration 189), for the Open to hit row's note: your ring is on the map only for friends, and only once you check in.
+  const checkIn = useCheckIn();
+  // (No ask on opening any more, migration 189: "Who can see you on the map?" comes only when you tap Check in.)
   const tourOpen = useTourOpen();
-  const askOnLaunch = !previewSection && section === 'players' && !!onboardingComplete && !tourOpen && locationEnabled
-    && mapVisibility === null && canChooseVisibility(mapLive, currentUser, teenMap) && !!currentUser && !notKnownAdult(currentUser);
-  useEffect(() => {
-    if (!askOnLaunch) return undefined;
-    const t = setTimeout(() => { if (!isTourOpen()) void askWhoSeesYouOnLaunch('card'); }, 1200);
-    return () => clearTimeout(t);
-  }, [askOnLaunch]);
   // The account that threads are pulled in under (Reddit) is not a player.
   const myCity = (currentUser?.location ?? '').split(',')[0].trim().toLowerCase();
   const sameCity = (u: (typeof users)[number]) => !!myCity && (u.location ?? '').toLowerCase().startsWith(myCity);
@@ -490,7 +477,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // and Near you used to disagree (Oct 5): the row said nobody was up while Near you, a few
   // rows down, marked five people "open to hit".
   const ownSpot = detectedCoords ?? ownLastSpot;
-  const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: nearFrom, blockedIds });
+  const upToday = useUpToday({ users, lastSeen, me: currentUserId, from: nearFrom, blockedIds, myTown: (currentUser?.location ?? '').split(',')[0], friendsOnly: onTeenMap(currentUser, teenMap) || (!!currentUser && notKnownAdult(currentUser)) });
   // A teen (migration 78) has it too: only friends who follow each other with
   // them are in it, and only those friends see theirs. Under 16s too (migration 119), the same way.
   const teen = onTeenMap(currentUser, teenMap);
@@ -716,7 +703,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onTurnOnLocation={location.locationOn ? undefined : turnOnLocation} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others
@@ -825,12 +812,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         </Fold>
         {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
-        {/* Near you: who shared a spot within 30 miles, the same "near" as the map. */}
+        {/* Near you: friends checked in within 30 miles (only friends since migration 189), the same "near" as the map. */}
         {!search && nearPlayers.length ? (
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Shared their spot within 30 miles</Text>}
+              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Friends checked in within 30 miles</Text>}
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>

@@ -54,9 +54,8 @@ export default function PrivacyCentre() {
             <Toggle value={prefs.contactsFindable} onChange={(v) => actions.setPref('contactsFindable', v)} accessibilityLabel="Let people find me from their contacts" />
           </View>
         ) : null}
-        {/* Who sees you on the map (migration 63): the same screen as the map's own location button.
-            A teen (migration 78), under 16 too since 119, sees it as well: friends who follow them back, or only them. */}
-        {canChooseVisibility(mapLive, currentUser, teenMap) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility, onTeenMap(currentUser, teenMap)), () => { void askWhoSeesYou(onTeenMap(currentUser, teenMap) && mapVisibility === null ? 'first' : 'manage'); }) : null}
+        {/* Who sees your check-ins on the map (migration 189): Friends or No one. A teen too (78, 119). */}
+        {canChooseVisibility(mapLive, currentUser, teenMap) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility, onTeenMap(currentUser, teenMap)), () => { void askWhoSeesYou('manage'); }) : null}
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
@@ -69,7 +68,7 @@ export default function PrivacyCentre() {
           <Ionicons name="people-outline" size={19} color={colors.textMuted} />
           <View style={{ flex: 1, gap: 1 }}>
             <Text style={styles.rowLabel}>Check-ins are kept for 2 days</Text>
-            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off or “Only me”, it’s gone; activity status off, it isn’t shown.</Text>
+            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, or No one on the map, it’s gone; activity status off, it isn’t shown.</Text>
           </View>
         </View>
       </View>

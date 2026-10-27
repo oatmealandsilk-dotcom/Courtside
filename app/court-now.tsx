@@ -59,10 +59,9 @@ export default function CourtNowSheet() {
   // Who sees you here follows who can see you on the map, once you have said (migration 63).
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const hereNote = !locationEnabled ? 'Turn on Location to check in.'
-    : seenBy === 'none' ? 'You chose Only me on the map, so no one sees you here.'
-      : seenBy === 'nearby' ? 'For 2 hours. Players nearby see you on this court.'
-        : seenBy === 'mutuals' ? 'For 2 hours. Only people you follow back see you here.'
-          : 'For 2 hours. People who follow you back see your name; others only see a count, once 2 or more are here.';
+    : seenBy === 'none' ? 'You chose No one on the map, so no one sees you here.'
+      // Since migration 189: names only to friends; anyone else only a count, never a face.
+      : 'For 2 hours. Friends who follow you back see your name; others only see a count, once 2 or more are here.';
 
   const pick = async (status: CourtNow) => {
     if (!courtId || busy) return;

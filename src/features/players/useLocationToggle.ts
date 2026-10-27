@@ -2,71 +2,32 @@ import { useCallback, useRef, useState } from 'react';
 import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
-import { askWhoSeesYou, canChooseVisibility, dismissHideTip, onTeenMap, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
+import { checkInSpan, liveCheckIn, untilWords } from '@/features/players/checkIn';
+import { useOpenClock } from '@/features/players/useOpenClock';
 
 /**
- * The map's Location switch. Turning it on asks the device where it is,
- * which can take a few seconds or be refused; the switch says "Finding
- * you…" while it asks, and a refusal is said out loud instead of the
- * switch quietly staying off.
- *
- * With the map's round 2 on the database (migration 63), someone who has
- * never said who can see them on the map is asked that first ("Who can see
- * you on the map?"), then the device's own prompt, then one tip by this
- * button: "Tap here any time to hide yourself." `where` says which button
- * that is. On the full map, the button with Location on opens the same
- * choices (and Location off) rather than switching straight off.
- *
- * A teen (migration 78) is asked the same question the first time, with a
- * short notice on top: only friends who follow them back can see where they
- * are, and turning Location off here hides them. Nothing is shared until
- * they answer.
+ * Location on this phone (Settings, "Use my location"): where you are, for
+ * the courts near you and where the map opens. Since migration 189 it is
+ * never sent anywhere on its own; only Check in (useCheckIn) shares a spot.
+ * Turning it on asks the device, which can take a few seconds or be
+ * refused; "Finding you…" while it asks, and a refusal is said out loud.
+ * Turning it off also checks you out.
  */
-export function useLocationToggle(where: TipSpot = 'card') {
-  const { locationEnabled, actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
+export function useLocationToggle() {
+  const { locationEnabled, actions } = useApp();
   const [locating, setLocating] = useState(false);
-  const choosing = canChooseVisibility(mapLive, currentUser, teenMap);
-  /** Never chosen who can see you: the screen comes first. */
-  const mustChoose = choosing && mapVisibility === null;
 
-  const switchOn = async (chose: MapVisibility | null) => {
+  const toggleNow = async () => {
+    if (locating) return;
+    if (locationEnabled) { void actions.setLocationEnabled(false); return; }
     setLocating(true);
     try {
       const problem = await actions.setLocationEnabled(true);
       if (problem) showToast({ title: 'Location is still off', body: problem, icon: 'navigate-outline' });
-      else if (chose) void showHideTip(where, chose);
     } finally {
       setLocating(false);
     }
-  };
-
-  const toggleNow = async () => {
-    if (locating) return;
-    dismissHideTip();
-    if (locationEnabled) {
-      if (where === 'map' && choosing) { await askWhoSeesYou('manage'); return; }
-      void actions.setLocationEnabled(false);
-      return;
-    }
-    let chose: MapVisibility | null = null;
-    if (mustChoose) {
-      // Closed without an answer: nothing changes, and it asks again next time.
-      chose = await askWhoSeesYou('first');
-      if (!chose) return;
-    }
-    await switchOn(chose);
-  };
-
-  /**
-   * The full map, opened by someone who has never chosen: the screen, then
-   * (only if Location was never asked) the device's prompt, then the tip.
-   */
-  const chooseFirst = async (ask: boolean): Promise<MapVisibility | null> => {
-    const chose = await askWhoSeesYou('first');
-    if (!chose) return null;
-    if (locationEnabled || !ask) { void showHideTip(where, chose); return chose; }
-    await switchOn(chose);
-    return chose;
   };
 
   // One function for the life of the screen that always runs the latest toggle, so a row handed it
@@ -75,7 +36,63 @@ export function useLocationToggle(where: TipSpot = 'card') {
   toggleRef.current = toggleNow;
   const toggle = useCallback(() => toggleRef.current(), []);
 
-  return { locationOn: locationEnabled, locating, toggle, mustChoose, chooseFirst };
+  return { locationOn: locationEnabled, locating, toggle };
+}
+
+/** What a Check in button shows and does (MapTopBar, the Find Players card). */
+export interface CheckInControl {
+  /** Checked in right now. */
+  on: boolean;
+  /** Asking the phone where it is, or the server. */
+  busy: boolean;
+  /** "until 10pm" (how long a check-in now would last, or how long yours still does). */
+  span: string;
+  press: () => void;
+}
+
+/**
+ * Check in (migration 189, Apple 5.1.2(i)): the only way your spot is ever
+ * shared. A tap reads the phone's location once and shows your pin to
+ * friends who follow each other with you until 10pm (2 hours after 8pm);
+ * then it goes by itself. Tapped again: Check out, gone at once. The first
+ * time, "Who can see you on the map?" comes first (yes, or Not now: then
+ * nothing happens), then Apple's own prompt. `where` says which button the
+ * one tip after the first check-in points at.
+ */
+export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
+  const { actions, mapVisibility, lastSeen, currentUserId } = useApp();
+  const [busy, setBusy] = useState(false);
+  const mine = currentUserId ? lastSeen[currentUserId]?.until : undefined;
+  // Looks again the moment your check-in ends, so the button says Check in again by itself.
+  const now = useOpenClock(mine ? [mine] : []);
+  const until = liveCheckIn(lastSeen, currentUserId, now);
+
+  const pressNow = async () => {
+    if (busy) return;
+    dismissHideTip();
+    if (until) { await actions.checkOutOfMap(); return; }
+    let first = false;
+    if (!saidYes(mapVisibility)) {
+      // Not now, or closed: nothing is shared, and it asks again next time.
+      const chose = await askWhoSeesYou('first');
+      if (!saidYes(chose)) return;
+      first = true;
+    }
+    setBusy(true);
+    try {
+      const problem = await actions.checkInOnMap();
+      if (problem) { showToast({ title: 'Not checked in', body: problem, icon: 'navigate-outline' }); return; }
+      showToast({ title: `Checked in ${checkInSpan()}`, body: 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      if (first) void showHideTip(where);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const ref = useRef(pressNow);
+  ref.current = pressNow;
+  const press = useCallback(() => { void ref.current(); }, []);
+
+  return { on: !!until, busy, span: until ? untilWords(until) : checkInSpan(), press };
 }
 
 /**
