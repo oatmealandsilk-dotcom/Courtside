@@ -7,6 +7,12 @@
  * 2): the hours are the whole hours so far, the minutes what is left over.
  */
 export type CountPart = 'int' | 'hours' | 'minutes2' | 'dec1' | 'clockHours' | 'clockMinutes2';
+/**
+ * When a number counts: false, it shows in full, still; true, it counts up (once); 'wait', it shows its
+ * starting point, ready to count the moment it turns true (a Feed page on its way in, Oct 27, owner: "It
+ * starts too late the numbers counting").
+ */
+export type CountPlay = boolean | 'wait';
 
 /** The number as it reads at `v` on its way up. A worklet, so a phone can run it on the UI thread. */
 export function countText(v: number, part: CountPart): string {

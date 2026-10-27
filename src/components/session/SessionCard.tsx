@@ -1,3 +1,4 @@
+import type { CountPlay } from './countFormat';
 import React from 'react';
 import { StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { SwipePressable } from '@/components/SwipePressable';
@@ -402,7 +403,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
    */
   clear?: boolean;
   /** Count the numbers up (once, when the card comes into view). */
-  play?: boolean;
+  play?: CountPlay;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
   people?: CardPerson[];
   /** People the viewer blocked: never shown. */
@@ -594,7 +595,7 @@ function Sideways({ session, look, width, height, play, top, result, score, stat
   look: CardLook;
   width: number;
   height: number;
-  play: boolean;
+  play: CountPlay;
   top: string;
   result: string | null;
   /** The score's sets and the two sides' names, for the ScoreBoard. */
