@@ -26,12 +26,12 @@ import { notKnownAdult } from '@/features/players/age';
  * Friends: the server treats it so.)
  */
 export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
-  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap the arrow, until 10pm.' },
+  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Check in, until 10pm.' },
   { value: 'none', label: 'No one', line: 'You never show on the map.' },
 ];
 
 /** What a teen is told the first time, before anything is shared (the owner's words). */
-export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap the arrow on the map anytime to hide.';
+export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Check out on the map anytime to hide.';
 
 /** Whether friends may see your check-ins: a yes ('mutuals', or 'nearby' from before migration 189). */
 export const saidYes = (v: MapVisibility | null | undefined) => v === 'mutuals' || v === 'nearby';

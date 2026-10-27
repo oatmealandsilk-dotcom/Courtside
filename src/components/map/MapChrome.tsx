@@ -150,8 +150,9 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
   const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
   const edgeOn = useInk(colors.brand, locLit.bump);
   const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
-  // The round arrow, as before the check-in change (Oct 27, owner: "can we just keep it as this. like the circle
-  // arrow"): outlined while you are hidden, filled on green while you are checked in; a tap checks in or out.
+  // Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
+  // arrow. On the map cover it was fine"): outlined while you are hidden, filled on green while you are
+  // checked in; a tap checks in or out. The Find Players card keeps its "Check in" pill.
   const locationIcon = !checkIn ? null : checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : (
     <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
   );
@@ -486,7 +487,7 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
 /** What a Check in button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `Friends can see you ${c.span}. Hide from the map` : `Show friends where you are. Friends who follow you back see you ${c.span}`);
+const checkInLabel = (c: CheckInControl) => (c.on ? `Checked in, friends see you ${c.span}. Check out` : `Check in. Friends who follow you back see you ${c.span}`);
 
 /**
  * The Check in button's own words (migration 189): "Check in", or while you
@@ -1661,7 +1662,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
           <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} hitSlop={6} onPress={checkIn.press} style={[styles.previewSwitch, checkIn.on && styles.roundOn]}>
             {checkIn.on ? <BrandWash /> : null}
-            {checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : <Ionicons name={checkIn.on ? 'navigate' : 'navigate-outline'} size={15} color={checkIn.on ? colors.brandInk : colors.text} />}
+            <CheckInWords control={checkIn} size={14} />
           </Pressable>
           <HideTip where="card" style={{ top: 52, right: 8 }} />
         </>
@@ -2022,7 +2023,7 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  previewSwitch: { position: 'absolute', right: 12, top: 12, width: 32, height: 32, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  previewSwitch: { position: 'absolute', right: 12, top: 12, height: 32, paddingHorizontal: 12, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

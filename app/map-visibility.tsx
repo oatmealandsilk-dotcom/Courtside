@@ -128,9 +128,9 @@ export default function MapVisibilitySheet() {
 
 /** What a yes means, said plainly before it is given. */
 const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-  { icon: 'navigate-outline', text: 'You only show on the map when you tap the arrow. Never on your own.' },
-  { icon: 'people-outline', text: 'Only friends you both follow see you. Strangers never see where you are.' },
-  { icon: 'time-outline', text: 'It ends by itself at 10pm, or after 2 hours late in the day. Tap the arrow again to hide.' },
+  { icon: 'hand-left-outline', text: 'You show on the map only when you tap Check in. Never on your own.' },
+  { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
+  { icon: 'time-outline', text: 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Check out to hide at once.' },
 ];
 
 /** Where the six faces round you sit, and which two follow you back. */

@@ -82,7 +82,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
     try {
       const problem = await actions.checkInOnMap();
       if (problem) { showToast({ title: 'Not checked in', body: problem, icon: 'navigate-outline' }); return; }
-      showToast({ title: `Friends can see you ${checkInSpan()}`, body: 'Only people you both follow. Tap the arrow to hide.', icon: 'navigate' });
+      showToast({ title: `Checked in ${checkInSpan()}`, body: 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);
