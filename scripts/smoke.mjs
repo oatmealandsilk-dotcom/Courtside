@@ -1042,7 +1042,7 @@ const STEPS = [
     },
     // Open hits sits further down since the map card grew to 400 (Oct 25): on the page, maybe below the bar.
     // Check in (migration 189, Apple 5.1.2(i)): the card's own button and the one-tap ask over the map; never shared on its own.
-    expect: [{ text: 'Open to hit' }, { text: 'Open hits', any: true }, { label: /^Check in\. Friends who follow you back see you / }, { text: 'Check in so friends can see you?' }],
+    expect: [{ text: 'Open to hit' }, { text: 'Open hits', any: true }, { label: /^Check in\. Friends who follow you back see you / }],
   },
   {
     // Oct 22, owner: "The map blips in". A search hides the map card rather than taking it down, so

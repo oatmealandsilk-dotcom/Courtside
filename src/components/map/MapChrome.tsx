@@ -58,7 +58,6 @@ import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
-import { CheckInBar } from '@/components/map/CheckInBar';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -1673,8 +1672,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
         </View>
       ) : null}
-      {/* Not checked in: one quiet ask over the card (Not now: gone for today). Clear of the map's credit at the right. */}
-      {checkIn ? <CheckInBar compact control={checkIn} style={styles.previewBar} /> : null}
+      {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
     </>
   );
 }

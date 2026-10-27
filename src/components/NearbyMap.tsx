@@ -26,7 +26,6 @@ import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
-import { CheckInBar } from '@/components/map/CheckInBar';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -542,7 +541,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         <MapLoadPill status={mapStatus} onRetry={() => canvas.current?.retry()} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
-        {onToggleLocation ? <CheckInBar control={checkIn} style={styles.checkInBar} /> : null}
+        {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
       </View>
       <View pointerEvents="box-none" style={styles.bottom}>
         {/* What is up along the bottom (a card, or nothing) glides in and out, the map's buttons riding on top of it: CardStage. */}
