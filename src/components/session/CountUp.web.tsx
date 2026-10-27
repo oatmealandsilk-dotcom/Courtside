@@ -27,8 +27,11 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(play && !reduced ? from : value);
   const frame = useRef<number | null>(null);
+  // Counts up once: a number already shown in full never falls back to 0 to count again when `play` comes on (as CountUp).
+  const settled = useRef(!(play && !reduced));
   useEffect(() => {
-    if (!play || reduced || typeof requestAnimationFrame !== 'function') { setShown(value); return undefined; }
+    if (!play || reduced || settled.current || typeof requestAnimationFrame !== 'function') { settled.current = true; setShown(value); return undefined; }
+    settled.current = true;
     setShown(from);
     let start = 0;
     const timer = setTimeout(() => {
