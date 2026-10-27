@@ -150,7 +150,11 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
   const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
   const edgeOn = useInk(colors.brand, locLit.bump);
   const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
-  const locationIcon = checkIn ? <CheckInWords control={checkIn} size={16} /> : null;
+  // The round arrow, as before the check-in change (Oct 27, owner: "can we just keep it as this. like the circle
+  // arrow"): outlined while you are hidden, filled on green while you are checked in; a tap checks in or out.
+  const locationIcon = !checkIn ? null : checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : (
+    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
+  );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
@@ -212,9 +216,9 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
       {checkIn ? (
         <View>
           <TipPulse where="map" size={44} />
-          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} onPress={checkIn.press} style={({ pressed }) => [styles.barPillHit, pressed && styles.barPressed]}>
+          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} onPress={checkIn.press} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
             {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass key={locLit.key} radius={22} style={[styles.barPill, locEdge]}>
+            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
               <GreenFill v={locLit.v} radius={22} />
               {locationIcon}
             </MapGlass>
@@ -482,7 +486,7 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
 /** What a Check in button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `Checked in, friends see you ${c.span}. Check out` : `Check in. Friends who follow you back see you ${c.span}`);
+const checkInLabel = (c: CheckInControl) => (c.on ? `Friends can see you ${c.span}. Hide from the map` : `Show friends where you are. Friends who follow you back see you ${c.span}`);
 
 /**
  * The Check in button's own words (migration 189): "Check in", or while you
@@ -1657,7 +1661,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
           <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} hitSlop={6} onPress={checkIn.press} style={[styles.previewSwitch, checkIn.on && styles.roundOn]}>
             {checkIn.on ? <BrandWash /> : null}
-            <CheckInWords control={checkIn} size={14} />
+            {checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : <Ionicons name={checkIn.on ? 'navigate' : 'navigate-outline'} size={15} color={checkIn.on ? colors.brandInk : colors.text} />}
           </Pressable>
           <HideTip where="card" style={{ top: 52, right: 8 }} />
         </>
@@ -2018,7 +2022,7 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  previewSwitch: { position: 'absolute', right: 12, top: 12, height: 32, paddingHorizontal: 12, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  previewSwitch: { position: 'absolute', right: 12, top: 12, width: 32, height: 32, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

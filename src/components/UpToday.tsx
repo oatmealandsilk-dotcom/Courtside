@@ -135,9 +135,9 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
       if (on && noting) {
         showToast({
           title: 'You’re open to hit',
-          body: 'Friends see it on the map once you check in.',
+          body: 'Friends see you on the map once you tap Show me.',
           icon: 'navigate-outline',
-          ...(onCheckIn ? { action: { label: 'Check in', onPress: onCheckIn } } : {}),
+          ...(onCheckIn ? { action: { label: 'Show me', onPress: onCheckIn } } : {}),
         });
       }
     });

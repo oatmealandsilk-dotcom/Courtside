@@ -75,13 +75,10 @@ export default function MapVisibilitySheet() {
       header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time in Settings → Privacy.' : undefined} onClose={close} />}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
-        <WhoSeesArt choice={picked} name={currentUser?.name ?? 'You'} seed={currentUser?.avatarSeed ?? 'you'} uri={currentUser?.avatarUrl} />
+        {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
         <View style={styles.facts}>
           {FACTS.map((f) => (
-            <View key={f.text} style={styles.fact}>
-              <Ionicons name={f.icon} size={17} color={colors.brand} />
-              <Text style={styles.factText}>{f.text}</Text>
-            </View>
+            <Text key={f.text} style={styles.factText}>{f.text}</Text>
           ))}
         </View>
         {teen ? (
@@ -131,9 +128,9 @@ export default function MapVisibilitySheet() {
 
 /** What a yes means, said plainly before it is given. */
 const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-  { icon: 'hand-left-outline', text: 'You show on the map only when you tap Check in. Never on your own.' },
-  { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
-  { icon: 'time-outline', text: 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Check out to hide at once.' },
+  { icon: 'navigate-outline', text: 'You only show on the map when you tap the arrow. Never on your own.' },
+  { icon: 'people-outline', text: 'Only friends you both follow see you. Strangers never see where you are.' },
+  { icon: 'time-outline', text: 'It ends by itself at 10pm, or after 2 hours late in the day. Tap the arrow again to hide.' },
 ];
 
 /** Where the six faces round you sit, and which two follow you back. */
