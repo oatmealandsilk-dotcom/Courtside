@@ -59,7 +59,11 @@ export function usePeopleYouMayKnow() {
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const suggested = useSuggestedPlayers({ keep: kept, exclude: on ? mutedIds : [], friendsOf: on ? followingIds : [] });
+  const resting = !!memory && memory.restUntil > Date.now();
+  const [closed, setClosed] = useState(false);
+  // Off (flag, not read yet, resting or closed): no suggestions worked out and nobody asked about on the server
+  // (open_to_you counts toward the day's limit), so Find Players is exactly as before.
+  const suggested = useSuggestedPlayers({ keep: kept, exclude: mutedIds, friendsOf: followingIds, off: !on || !memory || resting || closed });
 
   const cards = useMemo<PymkCard[]>(() => {
     if (!on || !memory || !currentUserId) return [];
@@ -84,8 +88,6 @@ export function usePeopleYouMayKnow() {
     timers.current.push(setTimeout(() => setGone((g) => [...g, id]), LINGER_MS));
   }, [kept, actions]);
 
-  const resting = !!memory && memory.restUntil > Date.now();
-  const [closed, setClosed] = useState(false);
   const close = useCallback(() => { setClosed(true); notNow(); }, [notNow]);
 
   if (!on || !memory || resting || closed || !cards.length) return null;
