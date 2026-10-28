@@ -2,19 +2,19 @@
 --
 -- NOT A MIGRATION (it lives outside supabase/migrations on purpose). Run it in
 -- the Supabase SQL editor as one piece only to take 193 back out. It puts
--- back, word for word, the live versions of the ten functions 193 changed,
+-- back, word for word, the live versions of the twelve functions 193 changed,
 -- as read from the live database on Oct 27 2026 before 193 (185's
 -- auto_log_activity, send_activity_pushes and session_unposted, and
 -- mark_first_post, share_preview, group_feed, invite_first_action,
--- invite_second_day, invite_back_at, first_day_stats), and takes out 193's
--- read rule, triggers and new functions. All-or-nothing; safe to run more
--- than once.
+-- invite_second_day, invite_back_at, first_day_stats, feed_post_scores,
+-- admin_new_players), and takes out 193's read rules (posts, likes),
+-- triggers and new functions. All-or-nothing; safe to run more than once.
 --
 -- The posts the server made for sessions that logged themselves are DELETED
 -- (with their likes and comments): without 193's read rule they would show
 -- to anyone who can see their player's posts. The sessions themselves stay
 -- in their players' logs, private, as under 185. What stays, unused: the new
--- columns (posts.auto_logged, user_state.auto_log_audience and unsure_yes).
+-- columns (posts.auto_logged and auto_held, user_state.auto_log_audience and unsure_yes).
 -- An app with 193's update still shows Settings' choice and its words; after
 -- this undo nothing of it reaches anyone else until 193 runs again (sessions
 -- that log themselves are private, as under 185). The undo of the functions
@@ -27,10 +27,12 @@ begin;
 delete from public.posts where auto_logged;
 
 drop policy if exists "sessions that log themselves: only their audience" on public.posts;
+drop policy if exists "sessions that log themselves: liked by their audience" on public.post_likes;
 drop trigger if exists auto_post_guard on public.posts;
 drop trigger if exists auto_post_emptied on public.posts;
 drop trigger if exists auto_post_follows_session on public.practice_sessions;
 drop trigger if exists count_unsure_answers on public.detected_activities;
+drop trigger if exists unsure_yes_taken_back on public.practice_sessions;
 
 CREATE OR REPLACE FUNCTION public.auto_log_activity(a_id uuid, by_id uuid)
  RETURNS boolean
@@ -440,11 +442,62 @@ begin
   return out;
 end $function$;
 
+CREATE OR REPLACE FUNCTION public.feed_post_scores()
+ RETURNS TABLE(post_id text, viewers integer, looks integer, watch_seconds real, skips integer, profile_taps integer, seen_by_me boolean, my_last_seen timestamp with time zone)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select f.target_id,
+         (count(*) filter (where f.times_seen > 0 and f.user_id <> p.author_id))::int,
+         coalesce(sum(f.times_seen) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(sum(f.watch_seconds) filter (where f.user_id <> p.author_id), 0)::real,
+         coalesce(sum(f.skips) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(sum(f.profile_taps) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(bool_or(f.user_id = auth.uid() and f.times_seen > 0), false),
+         max(f.last_seen_at) filter (where f.user_id = auth.uid() and f.times_seen > 0)
+  from public.feed_signals f
+  join public.posts p on p.id::text = f.target_id
+  where f.target_kind = 'post' and auth.uid() is not null and p.removed_at is null
+    and not p.archived and p.group_id is null
+  group by f.target_id
+  -- Newest posts first: the API hands back at most 1000 rows, so once more
+  -- posts than that have been looked at, the ones it leaves out are the
+  -- oldest, never a random handful of new ones you have already seen.
+  order by max(p.created_at) desc, f.target_id
+$function$;
+
+CREATE OR REPLACE FUNCTION public.admin_new_players(p_days integer DEFAULT 7)
+ RETURNS TABLE(id uuid, joined_at timestamp with time zone, adult boolean, posted boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+#variable_conflict use_column
+begin
+  -- new_players_168
+  if not public.is_admin() then raise exception 'admins only'; end if;
+  return query
+    select p.id, p.created_at, public.known_adult(p.id),
+           exists (select 1 from public.posts x where x.author_id = p.id and x.removed_at is null)
+    from public.profiles p
+    where p.created_at > now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 30))
+      and p.suspended_at is null
+      and p.id <> auth.uid()
+      and not exists (select 1 from public.blocks b
+                      where (b.blocker_id = auth.uid() and b.blocked_id = p.id) or (b.blocker_id = p.id and b.blocked_id = auth.uid()))
+    order by p.created_at desc, p.id
+    limit 200;
+end $function$;
+
 drop function if exists public.auto_post_follows_session();
 drop function if exists public.guard_auto_post();
 drop function if exists public.drop_emptied_auto_post();
 drop function if exists public.count_unsure_answers();
 drop function if exists public.auto_post_for_session(uuid);
+drop function if exists public.auto_post_for_session(uuid, boolean);
+drop function if exists public.unsure_yes_taken_back();
+drop function if exists public.auto_log_src_of(uuid, uuid, text);
 drop function if exists public.log_unsure_tennis();
 drop function if exists public.set_auto_log_sharing(text);
 drop function if exists public.auto_post_shown(uuid);
@@ -466,7 +519,9 @@ declare
     "invite_first_action(uuid,uuid)": "921304feccd26712d5098653ecce73b6",
     "invite_second_day(uuid,timestamp with time zone)": "f1c199bd787c4e2f55115e25d8b8156d",
     "invite_back_at(uuid,timestamp with time zone)": "8e321ac7fda0998f6a61d9b25a5522dc",
-    "first_day_stats()": "abbab0e1c72f2d6447867428944ed0a9"
+    "first_day_stats()": "abbab0e1c72f2d6447867428944ed0a9",
+    "feed_post_scores()": "410042789f673344c269fe682f0eae0e",
+    "admin_new_players(integer)": "326953796d896a3fd58bab643025fa02"
   }';
 begin
   for k in select jsonb_object_keys(want) loop
@@ -476,8 +531,10 @@ begin
   end loop;
   if exists (select 1 from pg_proc where pronamespace = 'public'::regnamespace and proname in
                ('auto_post_follows_session', 'guard_auto_post', 'drop_emptied_auto_post', 'count_unsure_answers', 'auto_post_for_session', 'log_unsure_tennis',
-                'set_auto_log_sharing', 'auto_post_shown', 'auto_log_seen_by', 'auto_log_audience_of', 'unsure_learned'))
+                'set_auto_log_sharing', 'auto_post_shown', 'auto_log_seen_by', 'auto_log_audience_of', 'unsure_learned',
+                'unsure_yes_taken_back', 'auto_log_src_of'))
      or exists (select 1 from pg_policy where polrelid = 'public.posts'::regclass and polname = 'sessions that log themselves: only their audience')
+     or exists (select 1 from pg_policy where polrelid = 'public.post_likes'::regclass and polname = 'sessions that log themselves: liked by their audience')
      or exists (select 1 from public.posts where auto_logged) then
     raise exception 'Undo 193 stopped: something of 193 is still there. Nothing was changed.';
   end if;

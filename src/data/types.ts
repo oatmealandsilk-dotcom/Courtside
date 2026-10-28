@@ -600,6 +600,12 @@ export interface Post {
    * puts their own post in its place.
    */
   autoLogged?: boolean;
+  /**
+   * One of those held back until its player chooses who sees them (migration
+   * 193): logged on Apple Health's word, or saved privately before 193. Only
+   * its player sees it until then.
+   */
+  autoHeld?: boolean;
 }
 
 /** Who sees a session that logged itself (migration 193): friends who follow each other with you, whoever can see your posts, or only you. */

@@ -345,7 +345,7 @@ export default function PostMenu() {
       // Your session that logged itself (migration 193): the server's card, seen by whoever you chose. A caption,
       // photo, score, tags or the court go on by posting it, from its own page, as from "Tennis logged".
       const activityId = post.session?.activityId;
-      rows.push({ key: 'edit', icon: 'create-outline', label: 'Add the score or post it', note: seenByLine(shownTo(autoLogSharing, post.session?.source, currentUser)), onPress: () => router.replace(activityId ? { pathname: '/log-session', params: { activity: activityId } } : '/your-sessions') });
+      rows.push({ key: 'edit', icon: 'create-outline', label: 'Add the score or post it', note: seenByLine(shownTo(autoLogSharing, post.session?.source, currentUser, !!post.autoHeld)), onPress: () => router.replace(activityId ? { pathname: '/log-session', params: { activity: activityId } } : '/your-sessions') });
       rows.push({ key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', onPress: () => { actions.togglePinPost(post.id); close(); } });
     } else if (!removed) {
       rows.push({ key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) });

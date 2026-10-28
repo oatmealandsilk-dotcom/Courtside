@@ -75,7 +75,7 @@ import { goHome } from '@/lib/goBack';
 import { liveDay, liveHour, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { seenByLine, shownTo } from '@/features/activity/autoLogSharing';
+import { isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -563,8 +563,10 @@ function Compose() {
   // and the score can still change here; Keep private just closes; Not
   // tennis? Remove takes it away for good.
   const autoOpen = !!openedLog?.autoLogged && opened?.type === 'tracker' && isTennisActivity(opened.activity) && !openedPosted;
-  // Who sees it (migration 193): friends who follow you back unless you chose otherwise; Apple Health's only you until you choose.
-  const autoSeen = shownTo(autoLogSharing, opened?.type === 'tracker' ? opened.activity.source : null, currentUser);
+  // Who sees it (migration 193): friends who follow you back unless you chose otherwise; Apple Health's (and
+  // one the server holds back, Post.autoHeld) only you until you choose.
+  const autoHeld = opened?.type === 'tracker' && posts.some((p) => !!p.autoHeld && isOwnAutoPostOf(p, currentUserId, opened.activity.id, openedLog?.id));
+  const autoSeen = shownTo(autoLogSharing, opened?.type === 'tracker' ? opened.activity.source : null, currentUser, autoHeld);
   const autoKind = liveLog?.kind ?? openedLog?.kind ?? 'practice';
   const [autoError, setAutoError] = useState('');
   const changeAutoKind = (k: PracticeSession['kind'], result?: boolean) => {

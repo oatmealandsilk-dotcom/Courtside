@@ -4160,7 +4160,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /** "Friends who follow you back can see it": the line under "Tennis logged" for a session from `a`, by your setting. */
   const seenNow = useCallback((a: DetectedActivity) => {
     const s = stateRef.current;
-    return seenByLine(shownTo(s.autoLogSharing, a.source, s.users.find((u) => u.id === s.currentUserId)));
+    const held = s.posts.some((p) => !!p.autoHeld && isOwnAutoPostOf(p, s.currentUserId, a.id, a.sessionId));
+    return seenByLine(shownTo(s.autoLogSharing, a.source, s.users.find((u) => u.id === s.currentUserId), held));
   }, []);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */

@@ -42,8 +42,11 @@
 --      with a clear yes): a session from Apple Health or Health Connect is
 --      shown to anyone only once the player has made the choice in step 1
 --      (the connect screens and Settings say who sees them; the app saves
---      the choice). Until then it stays private, as today. WHOOP, Fitbit,
---      Oura and Polar follow the default at once.
+--      the choice). Until then it stays private, as today. So does one
+--      logged on Apple Health's word (review): a WHOOP or Fitbit copy that
+--      could not log itself (under 20 minutes, or only "Sport") logged
+--      because the Apple Watch's twin of it said Tennis (posts.auto_held).
+--      WHOOP, Fitbit, Oura and Polar otherwise follow the default at once.
 --   5. The alert says who can see it: "Tennis logged" / "Friends who follow
 --      you back can see it · tap to add the score or post it." ("On your
 --      profile" for public, "Saved privately" for only me). Still no length
@@ -53,12 +56,20 @@
 --      practice, a match or drills), their Fitbit Sport sessions of 20
 --      minutes or more log themselves like any tennis. A no (hiding one,
 --      logging it as fitness, or removing one that logged itself) puts the
---      count back to 0 and stops it (user_state.unsure_yes). Their own
+--      count back to 0 and stops it (user_state.unsure_yes); taking back a
+--      yes (removing a session they logged from one) takes that yes back,
+--      so logging the same one again never counts twice (review). Their own
 --      log_unsure_tennis() logs every "Was this tennis?" session waiting, in
---      one tap ("Yes, these were tennis"), and counts as that many yeses.
+--      one tap ("Yes, these were tennis"), and counts as that many yeses;
+--      one already logged by hand is filed as that, never logged twice (review).
 --   7. Existing sessions the server logged before this (185, none posted)
---      each get their post now, at the time they were played, under their
---      player's setting (the default unless they choose).
+--      each get their post now, at the time they were played. They were
+--      announced "Saved privately", so they stay with the player until the
+--      player makes the choice in step 1 (posts.auto_held, review); every
+--      session logged from now on follows the setting at once.
+--   8. Only the people who see one can like it (a read rule on likes), and
+--      the feed's view counts (feed_post_scores) never name one to anyone
+--      else (review). Admins' "posted" for new players leaves them out.
 --
 -- Left as they are: posts and sessions the players made themselves, 185's
 -- auto log rules (20 minutes, Settings → Log tennis automatically), alerts'
@@ -74,7 +85,7 @@ declare
   r record;
   want jsonb := '{
     "auto_log_activity": ["1798d5cf3efbfa7ae723372209347ff4", "f5061800a77fbb088e12ba2b2402540e"],
-    "send_activity_pushes": ["42d79ffd3e542dd6c7bf0d59a26e67b5", "88d262d1f8a89ef9599af800696a06f9"],
+    "send_activity_pushes": ["42d79ffd3e542dd6c7bf0d59a26e67b5", "32fe8c6289aab99ec0afb421005b7e63"],
     "session_unposted": ["67a5c254f1a37d6c700f64fb88fa05d6", "b2f215cfec2c5bedcb2a708ce2fcd551"],
     "mark_first_post": ["8de9ff13561a56b6d1668ce5369101cb", "f91afaf25816b2cb5b0904cb15312be6"],
     "share_preview": ["766840b69cde1c289d5f906ad2d9dc6b", "de1106c76c98906fe7804b53613f13c4"],
@@ -82,7 +93,9 @@ declare
     "invite_first_action": ["921304feccd26712d5098653ecce73b6", "53aeb183876852b75fedfe61c517926f"],
     "invite_second_day": ["f1c199bd787c4e2f55115e25d8b8156d", "dc03a465e834a74712b455327345d1fb"],
     "invite_back_at": ["8e321ac7fda0998f6a61d9b25a5522dc", "11a4ea4eefe9f84cd9c86b7fec05a76b"],
-    "first_day_stats": ["abbab0e1c72f2d6447867428944ed0a9", "0c3035690a2912d05759871ed9b4fe5e"]
+    "first_day_stats": ["abbab0e1c72f2d6447867428944ed0a9", "0c3035690a2912d05759871ed9b4fe5e"],
+    "feed_post_scores": ["410042789f673344c269fe682f0eae0e", "5c47960c124d4f6941dc222921391108"],
+    "admin_new_players": ["326953796d896a3fd58bab643025fa02", "f56c6f4274e83bbcdba74c7d2befeb1a"]
   }';
 begin
   if to_regclass('public.posts') is null or to_regclass('public.practice_sessions') is null or to_regclass('public.detected_activities') is null
@@ -107,6 +120,9 @@ end $$;
 -- ------------------------------------------------------------- 1. new columns
 -- A post the server made for a session that logged itself (step 2). Never set by a phone.
 alter table public.posts add column if not exists auto_logged boolean not null default false;
+-- One of those held back until its player has chosen who sees them (step 4 and 7, review): logged
+-- on Apple Health's word, or saved privately before this file. Never set by a phone.
+alter table public.posts add column if not exists auto_held boolean not null default false;
 -- Settings → Sessions that log themselves: 'mutuals', 'public' or 'private'. Null until the player
 -- chooses (read as 'mutuals', except Apple Health's: private until they choose).
 alter table public.user_state add column if not exists auto_log_audience text;
@@ -136,6 +152,16 @@ language sql stable security definer set search_path = public as $$
   from (select (select us.auto_log_audience from public.user_state us where us.user_id = u) as aud) x
 $$;
 
+-- The source the alert judges tracker row a_id by: Apple Health's ("only once
+-- the player has chosen") when the server's post of it is held back (auto_held,
+-- review), else its tracker's `src`.
+create or replace function public.auto_log_src_of(u uuid, a_id uuid, src text) returns text
+language sql stable security definer set search_path = public as $$
+  select case when exists (select 1 from public.posts p where p.author_id = u and p.auto_logged and p.auto_held
+                             and jsonb_typeof(p.session) = 'object' and lower(p.session->>'activityId') = a_id::text)
+              then 'apple-health' else src end
+$$;
+
 -- The alert's words for it: "Friends who follow you back can see it".
 create or replace function public.auto_log_seen_by(u uuid, src text, many boolean) returns text
 language sql stable security definer set search_path = public as $$
@@ -149,7 +175,8 @@ $$;
 -- The read rule's question (step 3): may whoever is asking see post p_id?
 -- True for any post the server did not make (the other rules decide those).
 -- One it made: its player, and their audience, while the player has not
--- posted the session themselves. Signed out: never.
+-- posted the session themselves. Signed out: never. One held back
+-- (auto_held) goes by Apple Health's rule: nobody else until they chose.
 create or replace function public.auto_post_shown(p_id uuid) returns boolean
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -157,9 +184,10 @@ declare
   v_author uuid;
   v_session jsonb;
   v_auto boolean;
+  v_held boolean;
   v_aud text;
 begin
-  select p.author_id, p.session, p.auto_logged into v_author, v_session, v_auto from public.posts p where p.id = p_id;
+  select p.author_id, p.session, p.auto_logged, p.auto_held into v_author, v_session, v_auto, v_held from public.posts p where p.id = p_id;
   if not found then return false; end if;
   if not v_auto then return true; end if;
   if v_me is null or jsonb_typeof(v_session) is distinct from 'object' then return false; end if;
@@ -171,7 +199,7 @@ begin
             or (v_session ? 'activityId' and lower(q.session->>'activityId') = lower(v_session->>'activityId')))) then
     return false;
   end if;
-  v_aud := public.auto_log_audience_of(v_author, v_session->>'source');
+  v_aud := public.auto_log_audience_of(v_author, case when v_held then 'apple-health' else v_session->>'source' end);
   if v_aud = 'private' then return false; end if;
   if v_me = v_author or v_aud = 'public' then return true; end if;
   return public.follow_each_other(v_me, v_author);
@@ -187,9 +215,12 @@ create or replace function public.guard_auto_post() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
-    if new.auto_logged and coalesce(current_setting('courtside.auto_post', true), '') <> 'on' then new.auto_logged := false; end if;
+    if coalesce(current_setting('courtside.auto_post', true), '') <> 'on' then new.auto_logged := false; end if;
+    -- Held back only on one of the server's (review).
+    new.auto_held := coalesce(new.auto_logged, false) and coalesce(new.auto_held, false);
   else
     new.auto_logged := old.auto_logged;
+    new.auto_held := old.auto_held;
   end if;
   if new.auto_logged then
     new.feature_ok := false;
@@ -208,12 +239,18 @@ end $$;
 -- length, day, and the heart rate, zones, calories and WHOOP's Strain the
 -- tracker recorded. Dated when it was played. Never raises: anything in the
 -- way leaves the session as it is, without a post. The new post's id, or null.
-create or replace function public.auto_post_for_session(s_id uuid) returns uuid
+-- Held back until the player chooses who sees them (auto_held, review): `held`
+-- (a session saved privately before this file), one from Apple Health or
+-- Health Connect, and one logged on Apple Health's word: a copy that could
+-- not log itself (under 20 minutes, or only "Sport" not yet learned) logged
+-- because its Apple Watch twin said Tennis (185's twin rule).
+create or replace function public.auto_post_for_session(s_id uuid, held boolean default false) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
   v_s public.practice_sessions;
   v_a public.detected_activities;
   v_id uuid;
+  v_held boolean;
 begin
   select * into v_s from public.practice_sessions where id = s_id;
   if not found or not v_s.auto_logged or v_s.activity_id is null then return null; end if;
@@ -223,10 +260,14 @@ begin
                and (lower(p.session->>'activityId') = v_a.id::text or lower(p.session->>'sessionId') = v_s.id::text)) then
     return null;
   end if;
+  v_held := coalesce(held, false) or v_a.source in ('apple-health', 'health-connect')
+    or ((v_a.unsure and not public.unsure_learned(v_a.user_id, v_a.source)) or v_a.minutes < 20)
+       and exists (select 1 from public.detected_activities d
+                    where d.user_id = v_a.user_id and d.duplicate_of = v_a.id and d.source in ('apple-health', 'health-connect'));
   begin
     perform set_config('courtside.auto_post', 'on', true);
-    insert into public.posts (author_id, kind, body, session, auto_logged)
-      values (v_s.user_id, 'note', '', jsonb_build_object('activityId', v_a.id, 'drills', '[]'::jsonb, 'share', '["hr", "zones", "strain", "kcal"]'::jsonb), true)
+    insert into public.posts (author_id, kind, body, session, auto_logged, auto_held)
+      values (v_s.user_id, 'note', '', jsonb_build_object('activityId', v_a.id, 'drills', '[]'::jsonb, 'share', '["hr", "zones", "strain", "kcal"]'::jsonb), true, v_held)
       returning id into v_id;
     perform set_config('courtside.auto_post', '', true);
     -- When it was played, not when the tracker sent it (a week caught up arrives at once).
@@ -245,13 +286,15 @@ end $$;
 -- After a session is saved or removed: one that logged itself gets its post;
 -- removing it ("Not tennis? Remove", Your sessions, the tracker taking it
 -- back, the player's own log taking its place) takes the post with it.
+-- Any session removed takes the server's post of it (review: never one left
+-- behind for a session that is gone, whatever its flag says by then).
 -- Named to run before session_posts_follow_log, so that one never touches it.
 create or replace function public.auto_post_follows_session() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   if tg_op = 'INSERT' then
     if new.auto_logged and new.activity_id is not null then perform public.auto_post_for_session(new.id); end if;
-  elsif old.auto_logged then
+  else
     delete from public.posts p
      where p.author_id = old.user_id and p.auto_logged and jsonb_typeof(p.session) = 'object'
        and (lower(p.session->>'sessionId') = old.id::text or (old.activity_id is not null and lower(p.session->>'activityId') = old.activity_id::text));
@@ -304,10 +347,28 @@ begin
   return null;
 end $$;
 
+-- A yes taken back (review): the player removes a session they logged from a
+-- Fitbit "Was this tennis?" as practice, a match or drills. Its yes goes, so
+-- logging the same one again counts once, never twice. (One that logged
+-- itself, taken away, is a no: count_unsure_answers. The player's own log
+-- taking the place of one that logged itself is not a removal.)
+create or replace function public.unsure_yes_taken_back() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  if not old.auto_logged and old.activity_id is not null and old.kind in ('practice', 'match', 'drills')
+     and coalesce(current_setting('courtside.replacing_auto', true), '') <> '1'
+     and exists (select 1 from public.detected_activities d
+                  where d.id = old.activity_id and d.user_id = old.user_id and d.source = 'fitbit' and d.unsure) then
+    update public.user_state set unsure_yes = greatest(unsure_yes - 1, 0) where user_id = old.user_id and unsure_yes > 0;
+  end if;
+  return null;
+end $$;
+
 -- "Yes, these were tennis": every "Was this tennis?" session of yours still
 -- waiting is logged as practice, as if it had logged itself (so it shows to
 -- your audience like one, unless Log tennis automatically is off), and
--- counts as a yes each. {"logged": n, "learned": true once Fitbit's Sport logs itself}.
+-- counts as a yes each. One already logged by hand is filed as that instead
+-- (review). {"logged": n, "already": n, "learned": true once Fitbit's Sport logs itself}.
 create or replace function public.log_unsure_tennis() returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
@@ -315,30 +376,44 @@ declare
   v_auto boolean;
   r record;
   v_n int := 0;
+  v_had int := 0;
   v_fit int := 0;
 begin
   if v_me is null then raise exception 'not signed in'; end if;
   perform pg_advisory_xact_lock(hashtextextended('activity:' || v_me::text, 0));
   v_auto := coalesce((select us.auto_log from public.user_state us where us.user_id = v_me), true);
-  for r in select d.id, d.source, d.started_at, d.tz_offset_min, d.minutes from public.detected_activities d
+  for r in select d.id, d.source, d.started_at, d.ended_at, d.tz_offset_min, d.minutes from public.detected_activities d
             where d.user_id = v_me and d.status = 'new' and d.unsure and d.sport = 'tennis' and d.session_id is null
             order by d.started_at limit 60 loop
     if not public.tennis_allowed(v_me, r.source) then continue; end if;
+    -- Already logged by hand (review), as 185 reads it: a tennis session of
+    -- theirs saved between its start and 12 hours after its end. Filed as
+    -- that (note_detected_activity's 'logged-by-hand'), never logged twice.
+    if exists (select 1 from public.practice_sessions s where s.user_id = v_me and s.activity_id is null
+                 and s.kind in ('practice', 'match', 'drills')
+                 and s.created_at between r.started_at and r.ended_at + interval '12 hours') then
+      update public.detected_activities set status = 'duplicate', updated_at = now() where id = r.id and status = 'new';
+      delete from public.notifications where user_id = v_me and kind = 'activity' and target_id = r.id::text;
+      v_had := v_had + 1;
+      -- Still a yes, tennis (count_unsure_answers counts only rows logged).
+      if r.source = 'fitbit' then v_fit := v_fit + 1; end if;
+      continue;
+    end if;
     begin
       insert into public.practice_sessions (user_id, day, minutes, kind, activity_id, auto_logged)
         values (v_me, public.activity_day(v_me, r.started_at, r.tz_offset_min), r.minutes, 'practice', r.id, v_auto);
       v_n := v_n + 1;
-      if r.source = 'fitbit' then v_fit := v_fit + 1; end if;
+      -- Logged as one that logged itself: count_unsure_answers leaves it to here.
+      if r.source = 'fitbit' and v_auto then v_fit := v_fit + 1; end if;
     exception when others then
       null;
     end;
   end loop;
-  -- Logged as sessions that logged themselves, so count_unsure_answers left them to here.
-  if v_auto and v_fit > 0 then
+  if v_fit > 0 then
     insert into public.user_state (user_id, unsure_yes) values (v_me, v_fit)
       on conflict (user_id) do update set unsure_yes = least(public.user_state.unsure_yes + v_fit, 1000);
   end if;
-  return jsonb_build_object('logged', v_n, 'learned', public.unsure_learned(v_me, 'fitbit'));
+  return jsonb_build_object('logged', v_n, 'already', v_had, 'learned', public.unsure_learned(v_me, 'fitbit'));
 end $$;
 
 -- Settings → Sessions that log themselves. Saves the choice (it is also the
@@ -455,7 +530,7 @@ begin
       if r.status = 'logged' then
         -- Opens its post page (photo, score, tags, court, caption).
         -- Who can see it, in the player's own setting (193): "Friends who follow you back can see it".
-        perform public.send_push(u, 'Tennis logged', public.auto_log_seen_by(u, r.source, false) || ' · tap to add the score or post it.', '/log-session?activity=' || r.id);
+        perform public.send_push(u, 'Tennis logged', public.auto_log_seen_by(u, public.auto_log_src_of(u, r.id, r.source), false) || ' · tap to add the score or post it.', '/log-session?activity=' || r.id);
       elsif r.sport = 'tennis' and r.unsure then
         perform public.send_push(u, 'Was this tennis?', 'Tap to log it on CourtSide.', '/log-session?activity=' || r.id);
       elsif r.sport = 'tennis' then
@@ -473,7 +548,7 @@ begin
     from public.detected_activities d where d.id = any(v_due || v_ones);
   perform public.send_push(u,
     v_n || case when v_auto then ' tennis sessions logged' when v_tennis then ' tennis sessions found' else ' workouts found' end,
-    case when v_auto then public.auto_log_seen_by(u, (select d.source from public.detected_activities d where d.id = v_go[1]), true) || ' · tap to post one.' else 'Tap to log them on CourtSide.' end,
+    case when v_auto then public.auto_log_seen_by(u, public.auto_log_src_of(u, v_go[1], (select d.source from public.detected_activities d where d.id = v_go[1])), true) || ' · tap to post one.' else 'Tap to log them on CourtSide.' end,
     '/notifications?workouts=' || array_to_string(v_go[1:40], ','));
   update public.detected_activities set pushed_at = now(), pushed_as = case when id = v_due[1] then 'found' else 'folded' end where id = any(v_due);
   return 'pushed-found';
@@ -784,6 +859,60 @@ begin
   return out;
 end $function$;
 
+-- The feed's view counts (review): never a session that logged itself to anyone outside its audience
+-- (its id alone said a session was there, and whose, through author_of_post).
+CREATE OR REPLACE FUNCTION public.feed_post_scores()
+ RETURNS TABLE(post_id text, viewers integer, looks integer, watch_seconds real, skips integer, profile_taps integer, seen_by_me boolean, my_last_seen timestamp with time zone)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  select f.target_id,
+         (count(*) filter (where f.times_seen > 0 and f.user_id <> p.author_id))::int,
+         coalesce(sum(f.times_seen) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(sum(f.watch_seconds) filter (where f.user_id <> p.author_id), 0)::real,
+         coalesce(sum(f.skips) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(sum(f.profile_taps) filter (where f.user_id <> p.author_id), 0)::int,
+         coalesce(bool_or(f.user_id = auth.uid() and f.times_seen > 0), false),
+         max(f.last_seen_at) filter (where f.user_id = auth.uid() and f.times_seen > 0)
+  from public.feed_signals f
+  join public.posts p on p.id::text = f.target_id
+  where f.target_kind = 'post' and auth.uid() is not null and p.removed_at is null
+    and not p.archived and p.group_id is null
+    -- 193: a session that logged itself, only to the people who see it.
+    and (not p.auto_logged or public.auto_post_shown(p.id))
+  group by f.target_id
+  -- Newest posts first: the API hands back at most 1000 rows, so once more
+  -- posts than that have been looked at, the ones it leaves out are the
+  -- oldest, never a random handful of new ones you have already seen.
+  order by max(p.created_at) desc, f.target_id
+$function$;
+
+-- Admins' new players (168): "posted" is the player posting, not the server's post of a session that logged itself.
+CREATE OR REPLACE FUNCTION public.admin_new_players(p_days integer DEFAULT 7)
+ RETURNS TABLE(id uuid, joined_at timestamp with time zone, adult boolean, posted boolean)
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+#variable_conflict use_column
+begin
+  -- new_players_168
+  if not public.is_admin() then raise exception 'admins only'; end if;
+  return query
+    select p.id, p.created_at, public.known_adult(p.id),
+           -- 193: a post the server made for a session that logged itself is not them posting.
+           exists (select 1 from public.posts x where x.author_id = p.id and x.removed_at is null and not x.auto_logged)
+    from public.profiles p
+    where p.created_at > now() - make_interval(days => least(greatest(coalesce(p_days, 7), 1), 30))
+      and p.suspended_at is null
+      and p.id <> auth.uid()
+      and not exists (select 1 from public.blocks b
+                      where (b.blocker_id = auth.uid() and b.blocked_id = p.id) or (b.blocker_id = p.id and b.blocked_id = auth.uid()))
+    order by p.created_at desc, p.id
+    limit 200;
+end $function$;
+
 -- ------------------------------------------------------------- 6. triggers, the read rule, who may call what
 -- Named to come first among posts' triggers (they run in name order), so the rest see it settled.
 drop trigger if exists auto_post_guard on public.posts;
@@ -799,23 +928,32 @@ create trigger auto_post_follows_session after insert or delete on public.practi
 drop trigger if exists count_unsure_answers on public.detected_activities;
 create trigger count_unsure_answers after update of status on public.detected_activities
   for each row execute function public.count_unsure_answers();
+drop trigger if exists unsure_yes_taken_back on public.practice_sessions;
+create trigger unsure_yes_taken_back after delete on public.practice_sessions
+  for each row execute function public.unsure_yes_taken_back();
 
 -- On top of every other rule for reading posts (restrictive: it must pass as well).
 drop policy if exists "sessions that log themselves: only their audience" on public.posts;
 create policy "sessions that log themselves: only their audience" on public.posts as restrictive for select
   using (case when auto_logged then public.auto_post_shown(id) else true end);
+-- Liking one (review): only the people who see it (likes' own rule asks only about blocks).
+drop policy if exists "sessions that log themselves: liked by their audience" on public.post_likes;
+create policy "sessions that log themselves: liked by their audience" on public.post_likes as restrictive for insert
+  with check (public.auto_post_shown(post_id));
 
 revoke all on function public.auto_log_audience_of(uuid, text) from public, anon, authenticated;
 revoke all on function public.auto_log_seen_by(uuid, text, boolean) from public, anon, authenticated;
+revoke all on function public.auto_log_src_of(uuid, uuid, text) from public, anon, authenticated;
 -- The read rule calls it as whoever reads, signed out too.
 revoke all on function public.auto_post_shown(uuid) from public;
 grant execute on function public.auto_post_shown(uuid) to anon, authenticated;
 revoke all on function public.guard_auto_post() from public, anon, authenticated;
 revoke all on function public.drop_emptied_auto_post() from public, anon, authenticated;
-revoke all on function public.auto_post_for_session(uuid) from public, anon, authenticated;
+revoke all on function public.auto_post_for_session(uuid, boolean) from public, anon, authenticated;
 revoke all on function public.auto_post_follows_session() from public, anon, authenticated;
 revoke all on function public.unsure_learned(uuid, text) from public, anon, authenticated;
 revoke all on function public.count_unsure_answers() from public, anon, authenticated;
+revoke all on function public.unsure_yes_taken_back() from public, anon, authenticated;
 revoke all on function public.log_unsure_tennis() from public, anon;
 grant execute on function public.log_unsure_tennis() to authenticated;
 revoke all on function public.set_auto_log_sharing(text) from public, anon;
@@ -823,8 +961,9 @@ grant execute on function public.set_auto_log_sharing(text) to authenticated;
 
 -- ------------------------------------------------------------- 7. sessions logged before this
 -- Each session the server logged before this file (185) gets its post, at
--- the time it was played, under its player's setting (none chose yet:
--- friends who follow each other; Apple Health's stay private until they choose).
+-- the time it was played. Each was announced "Saved privately", so it is held
+-- back (auto_held, review): only the player sees it until they choose who sees
+-- these (Settings, or a connect screen that says so); then it follows that choice.
 do $$
 declare
   r record;
@@ -833,7 +972,7 @@ declare
 begin
   for r in select s.id from public.practice_sessions s where s.auto_logged and s.activity_id is not null order by s.created_at loop
     v_all := v_all + 1;
-    if public.auto_post_for_session(r.id) is not null then v_made := v_made + 1; end if;
+    if public.auto_post_for_session(r.id, true) is not null then v_made := v_made + 1; end if;
   end loop;
   raise notice 'Sessions that logged themselves before this: %. Posts made for them: %.', v_all, v_made;
 end $$;
@@ -845,7 +984,7 @@ declare
   k text;
   want jsonb := '{
     "auto_log_activity(uuid,uuid)": "f5061800a77fbb088e12ba2b2402540e",
-    "send_activity_pushes(uuid,uuid[])": "88d262d1f8a89ef9599af800696a06f9",
+    "send_activity_pushes(uuid,uuid[])": "32fe8c6289aab99ec0afb421005b7e63",
     "session_unposted(uuid,uuid)": "b2f215cfec2c5bedcb2a708ce2fcd551",
     "mark_first_post()": "f91afaf25816b2cb5b0904cb15312be6",
     "share_preview(text,text)": "de1106c76c98906fe7804b53613f13c4",
@@ -856,15 +995,19 @@ declare
     "first_day_stats()": "0c3035690a2912d05759871ed9b4fe5e",
     "auto_log_audience_of(uuid,text)": "293871d300210378c59492ba6cf530f6",
     "auto_log_seen_by(uuid,text,boolean)": "5bef48ae8ad986f188a8455ad5572910",
-    "auto_post_shown(uuid)": "25731a2d8f7cb688468e9276eedffa0b",
-    "guard_auto_post()": "0ca40ad6d598e2ccf0e74fd6065b13d3",
-    "auto_post_for_session(uuid)": "28da61bfc7b7850151da62397d62ee8e",
-    "auto_post_follows_session()": "8c26049d850bef6305bc8da23a517d91",
+    "auto_post_shown(uuid)": "e0bc185ffa5d520e51e17cc14b290970",
+    "guard_auto_post()": "7a56a8f8282dd1d7b4d54219135d3e5f",
+    "auto_post_for_session(uuid,boolean)": "a922725c8beee32d80959b8ab502067a",
+    "auto_post_follows_session()": "a943542e975922638c38f9ddc7d89f20",
     "drop_emptied_auto_post()": "a157819b85b79b73af9d14d79ba5e628",
     "unsure_learned(uuid,text)": "bb9425abf3dab9ab466ad47eb65f91bf",
     "count_unsure_answers()": "2ad4564a9b94e2bbf3bd885dfb5aaf4e",
-    "log_unsure_tennis()": "2480fe349c7d6ea199bc3822d30dc1a6",
-    "set_auto_log_sharing(text)": "8ccde8a3e0b051bfa363936cca55170c"
+    "log_unsure_tennis()": "1ed7ec9f57389a0eb5a7336e2b6a4f20",
+    "set_auto_log_sharing(text)": "8ccde8a3e0b051bfa363936cca55170c",
+    "auto_log_src_of(uuid,uuid,text)": "3400f6e57ec30e03154421addba7b022",
+    "unsure_yes_taken_back()": "e0e5ad92e2f0e78054487b81e41f9cb2",
+    "feed_post_scores()": "5c47960c124d4f6941dc222921391108",
+    "admin_new_players(integer)": "f56c6f4274e83bbcdba74c7d2befeb1a"
   }';
   -- Who may call it: [signed out, signed in]. Anything not listed: neither.
   callers jsonb := '{
@@ -874,7 +1017,9 @@ declare
     "share_preview(text,text)": [true, true],
     "group_feed(uuid,timestamp with time zone,integer)": [false, true],
     "mark_first_post()": [true, true],
-    "first_day_stats()": [true, true]
+    "first_day_stats()": [true, true],
+    "feed_post_scores()": [false, true],
+    "admin_new_players(integer)": [false, true]
   }';
 begin
   for k in select jsonb_object_keys(want) loop
@@ -892,6 +1037,9 @@ begin
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'auto_logged')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'auto_log_audience')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'user_state' and column_name = 'unsure_yes')
+     or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'auto_held')
+     or not exists (select 1 from pg_policy where polrelid = 'public.post_likes'::regclass and polname = 'sessions that log themselves: liked by their audience' and not polpermissive)
+     or not exists (select 1 from pg_trigger where tgrelid = 'public.practice_sessions'::regclass and tgname = 'unsure_yes_taken_back')
      or not exists (select 1 from pg_policy where polrelid = 'public.posts'::regclass and polname = 'sessions that log themselves: only their audience' and not polpermissive)
      or not exists (select 1 from pg_trigger where tgrelid = 'public.posts'::regclass and tgname = 'auto_post_guard')
      or not exists (select 1 from pg_trigger where tgrelid = 'public.posts'::regclass and tgname = 'auto_post_emptied')
@@ -913,7 +1061,7 @@ commit;
 -- Read-only. Paste into the SQL editor (remove the leading "-- ").
 --
 -- (a) The server's posts, by who sees them (counts only):
--- select public.auto_log_audience_of(p.author_id, p.session->>'source') as seen_by, count(*)
+-- select public.auto_log_audience_of(p.author_id, case when p.auto_held then 'apple-health' else p.session->>'source' end) as seen_by, count(*)
 --   from public.posts p where p.auto_logged group by 1;
 --
 -- (b) Players whose Fitbit Sport now logs itself (count only):

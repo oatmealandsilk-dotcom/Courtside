@@ -35,11 +35,12 @@ export const friendsAtMost = (user: Pick<User, 'ageGroup'> | null | undefined) =
  * Who sees one from `source` right now, by the player's setting (`chosen`,
  * null if never chosen), exactly as the server decides (auto_log_audience_of).
  * Undefined: a database before migration 193 (or not heard yet), where they
- * stay with the player only (185).
+ * stay with the player only (185). `held`: the server's post of it is held
+ * back until the player chooses (Post.autoHeld), as Apple Health's are.
  */
-export function shownTo(chosen: AutoLogAudience | null | undefined, source: string | undefined | null, user: Pick<User, 'ageGroup'> | null | undefined): AutoLogAudience {
+export function shownTo(chosen: AutoLogAudience | null | undefined, source: string | undefined | null, user: Pick<User, 'ageGroup'> | null | undefined, held = false): AutoLogAudience {
   if (chosen === undefined) return 'private';
-  if (!chosen && askFirst(source)) return 'private';
+  if (!chosen && (held || askFirst(source))) return 'private';
   const v = chosen ?? 'mutuals';
   return v === 'public' && friendsAtMost(user) ? 'mutuals' : v;
 }

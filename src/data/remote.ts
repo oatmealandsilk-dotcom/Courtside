@@ -276,6 +276,8 @@ type PostRow = {
   court_id?: string | null; court_name?: string | null; court_lat?: number | null; court_lng?: number | null;
   /** Made by the server for a session that logged itself (migration 193). Absent before it. */
   auto_logged?: boolean | null;
+  /** One of those held back until its player chooses who sees them (migration 193). */
+  auto_held?: boolean | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string; parent_id?: string | null }[];
 } & RemovedColumns;
 type CommentRow = {
@@ -425,6 +427,7 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   editedAt: row.edited_at ?? undefined,
   groupId: row.group_id ?? undefined,
   autoLogged: row.auto_logged || undefined,
+  autoHeld: (row.auto_logged && row.auto_held) || undefined,
 }, row);
 
 const toComment = (row: CommentRow): Comment => withHidden(withRemoved<Comment>({
@@ -4317,14 +4320,16 @@ export const remote = {
   },
   /**
    * "Yes, these were tennis" (migration 193): every Fitbit "Was this
-   * tennis?" session of yours still waiting is logged. How many, and whether
+   * tennis?" session of yours still waiting is logged. How many (and how many
+   * were already logged by hand), and whether
    * Fitbit's Sport now logs itself as tennis; 'missing' on a database without it.
    */
-  async logUnsureTennis(): Promise<{ logged: number; learned: boolean } | 'missing'> {
+  async logUnsureTennis(): Promise<{ logged: number; already: number; learned: boolean } | 'missing'> {
     const { data, error } = await need().rpc('log_unsure_tennis');
     if (error) { if (missingFunction(error)) return 'missing'; throw new Error(error.message); }
-    const r = (data ?? {}) as { logged?: unknown; learned?: unknown };
-    return { logged: typeof r.logged === 'number' ? r.logged : 0, learned: r.learned === true };
+    const r = (data ?? {}) as { logged?: unknown; already?: unknown; learned?: unknown };
+    // `already`: ones logged by hand before, filed as that rather than logged twice.
+    return { logged: typeof r.logged === 'number' ? r.logged : 0, already: typeof r.already === 'number' ? r.already : 0, learned: r.learned === true };
   },
   /** "Who can see you on the map?" (migration 63). Resolves false when it could not be saved. */
   async setMapVisibility(v: MapVisibility): Promise<boolean> {

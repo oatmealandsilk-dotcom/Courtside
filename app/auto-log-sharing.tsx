@@ -71,8 +71,8 @@ export default function AutoLogSharing() {
         })}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {/* Never chosen: Friends applies, except to Apple Health's, which wait for a tap here. */}
-      {autoLogSharing === null ? <Text style={[styles.note, styles.after]}>You haven’t chosen yet. Until you do, Friends applies, except to sessions from Apple Health, which only you see.</Text> : null}
+      {/* Never chosen: Friends applies, except to Apple Health's (and those saved privately before, migration 193), which wait for a tap here. */}
+      {autoLogSharing === null ? <Text style={[styles.note, styles.after]}>You haven’t chosen yet. Until you do, Friends applies, except to sessions from Apple Health and ones saved privately before, which only you see.</Text> : null}
       {friendsOnly ? <Text style={[styles.note, styles.after]}>Under 18, or with no birthday given, only people you follow who follow you back can see them.</Text> : null}
       <View style={styles.facts}>
         {FACTS.map((text) => <Text key={text} style={styles.note}>{text}</Text>)}

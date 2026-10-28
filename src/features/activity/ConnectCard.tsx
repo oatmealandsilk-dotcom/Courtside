@@ -57,6 +57,8 @@ export function ConnectCard() {
   if (!here || !decided || !offer || !source) return null;
   const both = auto.apple && auto.whoop;
   const names = both ? 'Apple Health or WHOOP' : source === 'whoop' ? 'WHOOP' : 'Apple Health';
+  // Who sees the tennis that logs itself, said before connecting (migration 193): read aloud too, as it is the yes.
+  const line = `Connect ${names}: your tennis logs itself${auto.seenBy === 'private' ? ', for you only' : auto.seenBy === 'public' ? ' to your profile, with its heart rate' : ', and friends who follow you back see it, with its heart rate'}.`;
   const connect = async () => {
     if (busy) return;
     haptics.tap();
@@ -74,11 +76,11 @@ export function ConnectCard() {
   };
   return (
     <View style={styles.row}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Log your hits automatically. Connect ${names}`} disabled={busy} onPress={() => { void connect(); }} style={styles.rowMain}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Log your hits automatically. ${line}`} disabled={busy} onPress={() => { void connect(); }} style={styles.rowMain}>
         <Ionicons name="pulse-outline" size={20} color={colors.brand} />
         <View style={{ flex: 1 }}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Log your hits automatically</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : `Connect ${names}: your tennis logs itself${auto.seenBy === 'private' ? ', for you only' : auto.seenBy === 'public' ? ' to your profile' : ', and friends who follow you back see it'}.`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : line}</Text>
         </View>
       </Pressable>
       {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}

@@ -25,7 +25,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import type { DetectedActivity, HitRequest, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
 import { hitSpot } from '@/features/hits/visible';
 import { isTennisActivity } from '@/features/activity/workouts';
-import { seenByLine, shownTo, unsureWaiting } from '@/features/activity/autoLogSharing';
+import { isOwnAutoPostOf, seenByLine, shownTo, unsureWaiting } from '@/features/activity/autoLogSharing';
 import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -323,7 +323,9 @@ export default function Notifications() {
   const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions, autoLogSharing } = useApp();
   // Tracker sessions the server logged for you (migration 185), by the tracker session's id.
   const autoLogged = useMemo(() => new Set(sessions.filter((x) => x.autoLogged && x.activityId).map((x) => x.activityId!)), [sessions]);
-  const nowOf = (a: DetectedActivity | undefined) => activityNow(a, !!a && autoLogged.has(a.id), a ? seenByLine(shownTo(autoLogSharing, a.source, currentUser)) : undefined);
+  // Held back by the server until you choose (Post.autoHeld, migration 193), by the tracker session's id.
+  const autoHeld = useMemo(() => new Set(posts.filter((p) => p.autoHeld && isOwnAutoPostOf(p, currentUserId, p.session?.activityId)).map((p) => p.session!.activityId!)), [posts, currentUserId]);
+  const nowOf = (a: DetectedActivity | undefined) => activityNow(a, !!a && autoLogged.has(a.id), a ? seenByLine(shownTo(autoLogSharing, a.source, currentUser, autoHeld.has(a.id))) : undefined);
   // Fitbit's "Sport" sessions still asking "Was this tennis?" (migration 193): one tap logs them all.
   const unsure = useMemo(() => unsureWaiting(detectedActivities.filter((a) => a.userId === currentUserId)), [detectedActivities, currentUserId]);
   const [unsureBusy, setUnsureBusy] = useState(false);
@@ -333,6 +335,8 @@ export default function Notifications() {
     const r = await actions.confirmUnsureTennis();
     setUnsureBusy(false);
     if (!r) { showToast({ title: 'Couldn’t log them', body: 'Try again in a moment.', icon: 'alert-circle-outline' }); return; }
+    // Every one was already logged by hand: filed as that, nothing logged twice (migration 193).
+    if (!r.logged) { showToast({ title: 'Already in Your sessions', body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'You logged these yourself.', icon: 'checkmark-circle-outline' }); return; }
     showToast({
       title: r.logged === 1 ? 'Tennis logged' : `${r.logged} tennis sessions logged`,
       body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'In Your sessions.',
