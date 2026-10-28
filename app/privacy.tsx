@@ -18,9 +18,11 @@ import { corner } from '@/theme/look';
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, cityBoardsVisible, cityBoards } = useApp();
-  // City boards (migration 196), admins first: adults only (a teen is never named on a board, whatever this says),
-  // once the database has the switch. Your sessions count for your city either way; off, nobody sees your name or clips there.
-  const showCityBoards = cityBoardOn(currentUser) && !!currentUser && !notKnownAdult(currentUser) && cityBoardsVisible !== null;
+  // City boards (migration 196), admins first, once the database has the switch. Your sessions count for your city
+  // either way; off, nobody sees your name or clips there. A teen too (migration 197; owner, Oct 28: "Ok it shows
+  // mutual"): a teen is named only to friends who follow each other with them, never to anyone else, and can say no.
+  const teenBoards = !!currentUser && notKnownAdult(currentUser);
+  const showCityBoards = cityBoardOn(currentUser) && !!currentUser && cityBoardsVisible !== null;
   const boardCity = Object.values(cityBoards).find((e) => e.board?.me.cityName)?.board?.me.cityName ?? null;
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
@@ -65,7 +67,11 @@ export default function PrivacyCentre() {
             <Ionicons name="podium-outline" size={19} color={colors.textMuted} />
             <View style={{ flex: 1, gap: 1 }}>
               <Text style={styles.rowLabel}>Show me on city boards</Text>
-              <Text style={styles.rowDetail}>Your sessions always count for {boardCity ?? 'your city'}. Off: your name and clips stay off the boards.</Text>
+              <Text style={styles.rowDetail}>
+                {teenBoards
+                  ? `Only friends who follow each other with you see your name there. Your sessions always count for ${boardCity ?? 'your city'}. Off: friends don't see you either.`
+                  : `Your sessions always count for ${boardCity ?? 'your city'}. Off: your name and clips stay off the boards.`}
+              </Text>
             </View>
             <Toggle value={cityBoardsVisible !== false} onChange={(v) => { void actions.setCityBoardsVisible(v); }} accessibilityLabel="Show me on city boards" />
           </View>
