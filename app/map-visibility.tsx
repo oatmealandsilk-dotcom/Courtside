@@ -88,7 +88,7 @@ export default function MapVisibilitySheet() {
         {first ? (
           <View style={styles.short}>
             {/* Apple 5.1.2(i) / 5.1.1: who (only friends you both follow, never strangers), when (only on a tap), and that it ends by itself. */}
-            <Text style={styles.shortLine}>Only friends you both follow see you, only when you tap Up to hit, and it ends by itself {endsWords()}. Never strangers.</Text>
+            <Text style={styles.shortLine}>Only friends you both follow see you, never strangers, and only when you tap Up to hit. It ends by itself {endsWords()}.</Text>
             <Text style={styles.shortSmall}>Change any time in Settings → Privacy.</Text>
           </View>
         ) : (
