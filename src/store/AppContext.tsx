@@ -57,7 +57,7 @@ import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getPosition } from '@/lib/geo';
+import { getPosition, recentPosition } from '@/lib/geo';
 import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import { smallCoverOf } from '@/lib/smallCover';
@@ -366,6 +366,8 @@ async function readLocation(): Promise<{ flag: string | null; owner: string | nu
 
 /** The longest signing out waits for your check-in to end on the server (endCheckInFor); the request goes on after. */
 const SIGN_OUT_CHECK_OUT_MS = 3000;
+/** Up to hit's instant pin (checkInOnMap): where the phone last was counts as where you are for this long, until the new reading lands. */
+const EARLY_PIN_MS = 2 * 60_000;
 
 /**
  * A Location off that has not reached the server yet: the account whose spot
@@ -739,7 +741,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * hears that the phone said yes to its own location question (or had
    * before), as it starts finding you (the check-in zoom readies its pictures).
    */
-  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void) => Promise<string | null>;
+  /**
+   * `instant` (Up to hit for someone who has said yes before, useCheckIn): the button is already on, and its tap already
+   * felt; your pin goes down at once where the phone last was when that is under 2 minutes old, then moves to the new
+   * reading. A failure takes that early pin away again (the button says why).
+   */
+  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant?: boolean) => Promise<string | null>;
   /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
@@ -4225,41 +4232,66 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const locationTurn = useRef(0);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
-  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void): Promise<string | null> => {
+  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant = false): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
     if (!me) return 'Sign in first.';
+    const ends = checkInEnds().toISOString();
+    const placeMine = (at: { lat: number; lng: number }, until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
+      ...prev,
+      lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: at.lat, lng: at.lng, place: 'exact', city: nearestPlace(at.lat, at.lng).name.split(',')[0], seenAt: new Date().toISOString(), until } },
+    }));
+    // Instant: your pin at once where the phone last was, if that is fresh (under 2 minutes), until the new reading
+    // lands; what was there before comes back if it does not go through.
+    const before = stateRef.current.lastSeen[me];
+    let read = false;
+    let early = false;
+    if (instant) {
+      void recentPosition(EARLY_PIN_MS).then((at) => {
+        if (!at || read || stateRef.current.currentUserId !== me) return;
+        early = true;
+        placeMine(at, ends);
+      });
+    }
+    const undoEarly = () => {
+      if (!early) return;
+      setState((prev) => {
+        if (prev.currentUserId !== me) return prev;
+        const rest = Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== me));
+        return { ...prev, lastSeen: before ? { ...rest, [me]: before } : rest };
+      });
+    };
     // onAllowed: the phone said yes to its location question (or had before), and is finding you now (the check-in zoom's pictures).
     const fix = await getPosition({ onAllowed });
+    read = true;
     if (!fix.ok) {
+      undoEarly();
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
         : fix.reason === 'unavailable' ? 'Location isn’t available on this device.' : 'Couldn’t find you. Try again.';
     }
     if (stateRef.current.currentUserId !== me) return null;
     const place = nearestPlace(fix.lat, fix.lng);
-    const ends = checkInEnds().toISOString();
     // The phone may use where it is for courts near you from now on, as Location on does (never sent on its own).
     // Yours on this device, as Location on is (rememberLocation).
     locationTurn.current += 1;
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
     rememberLocation(true, me);
-    const placeMine = (until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
-      ...prev,
-      lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: fix.lat, lng: fix.lng, place: 'exact', city: place.name.split(',')[0], seenAt: new Date().toISOString(), until } },
-    }));
     if (!live(me)) {
-      haptics.commit();
-      placeMine(ends);
+      if (!instant) haptics.commit();
+      placeMine(fix, ends);
       onFix?.({ lat: fix.lat, lng: fix.lng });
       return null;
     }
+    // Instant: the pin moves to the new reading now, while the server is told.
+    if (instant) placeMine(fix, ends);
     const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
     if ('error' in got) {
+      if (instant) { early = true; undoEarly(); }
       return got.error === 'ask_first' ? 'Say yes to friends seeing you on the map first.'
         : got.error === 'missing' ? 'Up to hit isn’t available yet. Update the app and try again.'
           : 'That didn’t go through. Try again.';
     }
-    haptics.commit();
-    placeMine(got.until);
+    if (!instant) haptics.commit();
+    placeMine(fix, got.until);
     void loadLastSeen();
     onFix?.({ lat: fix.lat, lng: fix.lng });
     return null;

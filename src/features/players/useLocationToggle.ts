@@ -1,4 +1,5 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { MapVisibility } from '@/data/types';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -11,6 +12,7 @@ import { useOpenClock } from '@/features/players/useOpenClock';
 import { learned } from '@/features/tips/tips';
 import { afterLanding, swoopAsks, swoopFinding, swoopFound } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
+import { locationAllowed } from '@/lib/geo';
 
 /**
  * Location on this phone (Settings, "Use my location"): where you are, for
@@ -120,6 +122,24 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
   // Looks again the moment your check-in ends, so the button says Check in again by itself.
   const now = useOpenClock(mine ? [mine] : []);
   const until = liveCheckIn(lastSeen, currentUserId, now);
+  // Instant (Oct 28, owner: "there is a lag when I click the up to hit button too. Should instantanious"): for someone
+  // who has said yes to both questions before (who can see you, and the phone's own), the button is on the moment the
+  // finger lifts, its green and tick running at once, while the phone finds you and the server is told behind it. If
+  // that fails it goes back off, with the shake and the toast. The first time stays as it was: nothing is on before
+  // both yeses. Whether the phone already allows it is looked up quietly ahead of the tap (never a prompt).
+  const [instantOn, setInstantOn] = useState(false);
+  const allowed = useRef(false);
+  const yes = saidYes(mapVisibility);
+  useEffect(() => {
+    if (!yes) { allowed.current = false; return undefined; }
+    let live = true;
+    const look = () => { void locationAllowed().then((ok) => { if (live) allowed.current = ok; }); };
+    look();
+    // Looked at again whenever the app comes back: a permission taken away in Settings (or an "Allow Once" run out)
+    // must not light the button before the phone's own prompt says yes again.
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { allowed.current = false; look(); } });
+    return () => { live = false; sub.remove(); };
+  }, [yes]);
 
   const pressNow = async () => {
     if (busy) return;
@@ -149,19 +169,26 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
     const zooming = !!zoomRef.current;
     if (zooming) { swoopFinding(); zoomRef.current?.finding?.(); }
+    // Said yes to both before, and no check-in zoom to play (its own pictures wait for where you are): on at once.
+    const instant = !first && !zooming && allowed.current;
+    if (instant) { setInstantOn(true); haptics.commit(); }
     setBusy(true);
     try {
       let at: { lat: number; lng: number } | null = null;
       // Both questions said yes and the phone finding you: the card readies its grow meanwhile (never before).
-      const allowed = () => { if (turn.current === tap) zoomRef.current?.allowed?.(); };
-      const problem = await actions.checkInOnMap((fix) => { at = fix; }, zooming ? allowed : undefined);
+      const allowedNow = () => { if (turn.current === tap) zoomRef.current?.allowed?.(); };
+      const problem = await actions.checkInOnMap((fix) => { at = fix; }, zooming ? allowedNow : undefined, instant);
       // It could not put you up: the button shakes once (UpToHit), the hand feels the same, and the toast says why.
       if (problem) {
+        // Instant: back off again first (the green going back out), so the shake reads as "that didn't take".
+        if (instant) setInstantOn(false);
+        if (problem.startsWith('Location is blocked')) allowed.current = false;
         setFailed((n) => n + 1);
         haptics.reject();
         setTimeout(() => { if (turn.current === tap) showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); }, FAIL_TOAST_AFTER_MS);
         return;
       }
+      allowed.current = true;
       const upAt = Date.now();
       const spot: { lat: number; lng: number } | null = at;
       // The check-in zoom: the full map swoops down to you (opening first, from the card).
@@ -184,6 +211,8 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
       tip();
     } finally {
       if (zooming) { swoopFound(); zoomRef.current?.over?.(); }
+      // Up for real by now (your own check-in says so), or back off after a failure.
+      setInstantOn(false);
       setBusy(false);
     }
   };
@@ -191,7 +220,7 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
   ref.current = pressNow;
   const press = useCallback(() => { void ref.current(); }, []);
 
-  return { on: !!until, busy, span: until ? litTill(until) : litSpan(), until, failed, press };
+  return { on: !!until || instantOn, busy, span: until ? litTill(until) : litSpan(), until, failed, press };
 }
 
 /**
