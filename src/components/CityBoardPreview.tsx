@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { BOARD_MONTH, MIN_PLAYERS, cityById, ordinal, rankCities, type RankedCity } from '@/features/cityBoard/mock';
+import { DAYS_LEFT_LABEL, MIN_PLAYERS, cityById, neighbours, ordinal, rankCities, type RankedCity } from '@/features/cityBoard/mock';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -33,9 +33,10 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
 
   type Item = RankedCity | 'gap';
   const items: Item[] = useMemo(() => {
-    if (!mine || mine.rank <= 4) return board.slice(0, Math.max(5, (mine?.rank ?? 0) + 2));
-    const near = board.slice(mine.rank - 2, mine.rank + 1);
-    return [...board.slice(0, 2), 'gap', ...near];
+    // By position on the board, not by place: level cities share a place.
+    const at = mine ? board.indexOf(mine) : -1;
+    if (at < 4) return board.slice(0, Math.max(5, at + 3));
+    return [...board.slice(0, 2), 'gap', ...board.slice(at - 1, at + 2)];
   }, [board, mine]);
 
   // One line under the title: where your city stands, in words.
@@ -47,8 +48,9 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
     if (!mine) return 'Tennis logged this month, city by city.';
     const per = perBoard.find((c) => c.id === mine.id);
     if (per && per.rank <= 3 && per.rank < mine.rank) return `${mine.name} is ${ordinal(mine.rank)}, and ${ordinal(per.rank)} per player.`;
-    if (mine.rank === 1) return `${mine.name} leads, ${mine.hits - board[1].hits} hits ahead of ${board[1].name}.`;
-    const above = board[mine.rank - 2];
+    const { above, below } = neighbours(board, mine.id);
+    if (!above) return below ? `${mine.name} leads, ${mine.hits - below.hits} hits ahead of ${below.name}.` : `${mine.name} leads.`;
+    if (above.hits === mine.hits) return `${mine.name} is ${ordinal(mine.rank)}, level with ${above.name}.`;
     return `${mine.name} is ${ordinal(mine.rank)}, ${above.hits - mine.hits} hits behind ${above.name}.`;
   })();
 
@@ -66,9 +68,16 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
     >
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Cities this month</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.month}>{BOARD_MONTH}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.month}>{DAYS_LEFT_LABEL}</Text>
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.line}>{line}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.line, unranked && styles.lineTight]}>{line}</Text>
+      {/* Not on the board yet: the one ask that gets it there, with the words that ask for it, so the
+          faded rows and "See all cities" still run straight into the next section (the owner's fade). */}
+      {unranked ? (
+        <Pressable accessibilityRole="link" accessibilityLabel={`Invite a hitting partner to put ${unranked.name} on the board`} hitSlop={6} onPress={() => router.push('/invite')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.rows}>
         {items.map((c, i) => (c === 'gap'
           ? <View key="gap" style={styles.gap}><Text style={styles.gapDots}>⋮</Text></View>
@@ -80,13 +89,6 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>See all cities</Text>
         <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
       </View>
-      {/* Not on the board yet: the one ask that gets it there. */}
-      {unranked ? (
-        <Pressable accessibilityRole="link" accessibilityLabel={`Invite a hitting partner to put ${unranked.name} on the board`} hitSlop={8} onPress={() => router.push('/invite')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
-          <Ionicons name="paper-plane-outline" size={14} color={colors.brand} />
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
-        </Pressable>
-      ) : null}
     </Pressable>
   );
 }
@@ -155,6 +157,8 @@ const styleDefinitions = StyleSheet.create({
   // On the fade, at the very bottom: what the owner asked for ("towards the bottom it says, tap to see more").
   more: { marginTop: -18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },
   moreText: { ...typography.smallStrong, color: colors.textMuted },
-  invite: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 40, alignSelf: 'center' },
+  lineTight: { marginBottom: 0 },
+  // Under the line, left, as on the full board: a word, not a second button.
+  invite: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', marginBottom: spacing.xs },
   inviteText: { ...typography.smallStrong, color: colors.brand },
 });

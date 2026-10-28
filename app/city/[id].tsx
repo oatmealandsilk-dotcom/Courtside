@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
 import { LevelPill } from '@/components/LevelPill';
 import { OpenRing } from '@/components/map/OpenRing';
-import { CITIES_ACTIVE, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MY_DEMO_HITS, cityById, ordinal, rankCities } from '@/features/cityBoard/mock';
+import { DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MY_DEMO_HITS, cityById, neighbours, ordinal, rankCities } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { notKnownAdult } from '@/features/players/age';
 import { openPlayer } from '@/features/navigation/openPlayer';
@@ -37,11 +37,15 @@ const MOCK_ID = 'mock-';
 
 /**
  * DESIGN MOCK (design/city-board). A city's page, opened from the board.
- * Short on purpose: three things, each one a reason to tap.
+ * Short on purpose: three things, each one a reason to tap, in the same
+ * order for every city, since it is opened from a leaderboard and the
+ * leaderboard inside the city is what the owner asked for:
  *
- *   Your city:    where it stands (and the gap), Top players this month, Busiest courts, then the invite.
- *   Another city: who is Free today there (by town, never a spot), Busiest courts, Top players,
- *                 and the map there: the traveller's page ("Visiting Austin?").
+ *   Every city:   where it stands (and the gap), Top players this month, Busiest courts.
+ *   Your city:    then the invite ("Help Los Angeles climb").
+ *   Another city: then the traveller's part, "Visiting Austin?": who is free today there
+ *                 (by town, never a spot; adults only, and never shown to a teen, whose
+ *                 "free today" is friends only) and the map there.
  *
  * Left out on purpose: clips and sessions logged there (the Feed has them,
  * and a list of who played where and when is a list of where people are),
@@ -57,6 +61,8 @@ export default function CityPage() {
   const city = cityById(String(id ?? ''));
   const homeId = useHomeCityId();
   const { users, currentUser, currentUserId, followingIds, blockedIds, lastSeen } = useApp();
+  // A teen sees friends only in anything about who is free (the rule UpToday keeps): no strangers' "free today".
+  const viewerTeen = !currentUser || notKnownAdult(currentUser);
   const mine = !!city && city.id === homeId;
   const board = useMemo(() => rankCities('total'), []);
   const ranked = board.find((c) => c.id === city?.id) ?? null;
@@ -85,18 +91,17 @@ export default function CityPage() {
   const top = players.slice(0, TOP);
   const pinMe = me && me.rank > TOP ? me : null;
 
-  const free = useMemo(() => (city && !mine ? (DEMO_FREE[city.id] ?? []).flatMap(({ id: uid, till }) => {
+  const free = useMemo(() => (city && !mine && !viewerTeen ? (DEMO_FREE[city.id] ?? []).flatMap(({ id: uid, till }) => {
     const u = users.find((x) => x.id === uid);
     // Never a teen here, whoever is looking: their ring is for their friends.
     return u && !notKnownAdult(u) && !blockedIds.includes(u.id) ? [{ user: u, till }] : [];
-  }).concat(extras.flatMap((x) => (x.free ? [{ user: x.user, till: x.free }] : []))) : []), [city, mine, users, blockedIds, extras]);
+  }).concat(extras.flatMap((x) => (x.free ? [{ user: x.user, till: x.free }] : []))) : []), [city, mine, viewerTeen, users, blockedIds, extras]);
   const courts = city ? DEMO_BUSY_COURTS[city.id] ?? [] : [];
 
   if (!city) return <Screen title="City" compactTitle onBack={() => goBack()}><EmptyState icon="location-outline" title="No board for this city" body="It may not have enough players yet." /></Screen>;
 
-  const above = ranked && ranked.rank > 1 ? board[ranked.rank - 2] : null;
-  const below = ranked ? board[ranked.rank] : null;
-  const race = ranked ? [above ? `${above.hits - ranked.hits} behind ${above.name}` : null, below ? `${ranked.hits - below.hits} ahead of ${below.name}` : null].filter(Boolean).join(', ') : null;
+  const { above, below } = ranked ? neighbours(board, ranked.id) : { above: null, below: null };
+  const race = ranked ? [above ? (above.hits === ranked.hits ? `level with ${above.name}` : `${above.hits - ranked.hits} behind ${above.name}`) : null, below ? `${ranked.hits - below.hits} ahead of ${below.name}` : null].filter(Boolean).join(', ') : null;
 
   const topPlayers = (
     <View key="top" style={styles.section}>
@@ -132,34 +137,27 @@ export default function CityPage() {
     </View>
   ) : null;
 
-  const freeToday = !mine ? (
-    <View key="free" style={styles.section}>
-      <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Free today</Text>
-        {free.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>{free.length === 1 ? '1 player' : `${free.length} players`}</Text> : null}
-      </View>
-      {free.length ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.faces} style={styles.facesScroll}>
-          {free.map(({ user, till }) => (
-            <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, free today in ${city.name}, ${till}. Open profile`} onPress={() => { if (!user.id.startsWith(MOCK_ID)) openPlayer(user.id, currentUserId); }} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
-              <OpenRing open size={52} halo="small"><Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} /></OpenRing>
-              <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>{user.name.split(' ')[0]}</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}>{till}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : <Text style={styles.sub}>No one’s free in {city.name} today.</Text>}
-    </View>
+  // Visiting: who is free there today, by town only, then the map. Faces, not a count, so the city reads as alive.
+  const freeFaces = free.length ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.faces} style={styles.facesScroll}>
+      {free.map(({ user, till }) => (
+        <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, free today in ${city.name}, ${till}. Open profile`} onPress={() => { if (!user.id.startsWith(MOCK_ID)) openPlayer(user.id, currentUserId); }} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
+          <OpenRing open size={52} halo="small"><Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} /></OpenRing>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>{user.name.split(' ')[0]}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}>{till}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
   ) : null;
 
   return (
-    <Screen title={city.name} subtitle={mine ? 'Your city' : `${city.state} · this month`} compactTitle onBack={() => goBack()}>
+    <Screen title={city.name} subtitle={mine ? `${city.state} · your city` : city.state} compactTitle onBack={() => goBack()}>
       {/* Where it stands, in a line or two of words: no tiles, no chart. */}
       <View style={styles.standing}>
         {ranked ? (
           <View style={styles.rankLine}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rankBig}>{ordinal(ranked.rank)}</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {CITIES_ACTIVE} cities this month</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {board.length} cities this month</Text>
           </View>
         ) : <Text style={styles.rankOf}>Not ranked yet: {city.name} needs {MIN_PLAYERS - city.players} more players.</Text>}
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.facts}>
@@ -168,7 +166,8 @@ export default function CityPage() {
         {race ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.race}>{race.charAt(0).toUpperCase() + race.slice(1)}.</Text> : null}
       </View>
 
-      {mine ? [topPlayers, busy] : [freeToday, busy, topPlayers]}
+      {topPlayers}
+      {busy}
 
       <View style={styles.footer}>
         {mine ? (
@@ -180,7 +179,8 @@ export default function CityPage() {
         ) : (
           <>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Visiting {city.name}?</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>See its courts and open hits on the map.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>{free.length ? `${free.length === 1 ? '1 player is' : `${free.length} players are`} free to hit there today.` : 'See its courts and open hits on the map.'}</Text>
+            {freeFaces}
             <View style={styles.footButton}><Button label={`See ${city.name} on the map`} variant="secondary" onPress={() => router.push('/map')} full /></View>
           </>
         )}
@@ -231,8 +231,8 @@ const styleDefinitions = StyleSheet.create({
   gapDots: { ...typography.bodyStrong, color: colors.textFaint, width: 18, textAlign: 'right', lineHeight: 20 },
   courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.md },
   courtWords: { flex: 1, minWidth: 0, gap: 1 },
-  facesScroll: { marginHorizontal: -spacing.lg },
-  faces: { paddingHorizontal: spacing.lg - 6, gap: 2, paddingVertical: 8 },
+  facesScroll: { alignSelf: 'stretch', marginHorizontal: -spacing.lg, marginTop: spacing.sm },
+  faces: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg - 6, gap: 2, paddingVertical: 8 },
   face: { width: 86, alignItems: 'center', gap: 3 },
   faceName: { ...typography.smallStrong, color: colors.text, marginTop: 2 },
   faceMeta: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, ...font('500') },

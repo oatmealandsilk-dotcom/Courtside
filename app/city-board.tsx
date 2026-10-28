@@ -5,7 +5,7 @@ import { router } from 'expo-router';
 
 import { Screen, SegmentedControl } from '@/components/ui';
 import { BoardRow } from '@/components/CityBoardPreview';
-import { BOARD_MONTH, MIN_PLAYERS, RESETS_ON, cityById, ordinal, rankCities, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
+import { BOARD_MONTH, CITIES_ACTIVE, MIN_PLAYERS, RESETS_ON, cityById, neighbours, ordinal, rankCities, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -39,12 +39,14 @@ export default function CityBoard() {
   const standing = (() => {
     if (!mine) return null;
     const where = `${mine.name} is ${ordinal(mine.rank)}${per ? ' per player' : ''}`;
-    const other = mine.rank === 1 ? board[1] : board[mine.rank - 2];
+    // By position, not place: a city level with the one above shares its place.
+    const { above, below } = neighbours(board, mine.id);
+    const other = above ?? below;
     if (!other) return `${where}.`;
     const diff = Math.abs(per ? mine.value - other.value : mine.hits - other.hits);
     if (diff < (per ? 0.05 : 1)) return `${where}, level with ${other.name}.`;
     const amount = per ? `${diff.toFixed(1)} a player` : `${diff} hits`;
-    return mine.rank === 1 ? `${mine.name} leads${per ? ' per player' : ''}, ${amount} ahead of ${other.name}.` : `${where}, ${amount} behind ${other.name}.`;
+    return !above ? `${mine.name} leads${per ? ' per player' : ''}, ${amount} ahead of ${other.name}.` : `${where}, ${amount} behind ${other.name}.`;
   })();
   // Below the first screenful, your row is pinned on top as well, so you never scroll to find it.
   const pinRow = !!mine && mine.rank > 6;
@@ -62,7 +64,7 @@ export default function CityBoard() {
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.standing}>{standing}</Text>
           {pinRow ? (
             <Pressable accessibilityRole="link" onPress={() => open(mine.id)} style={({ pressed }) => [styles.pinRow, pressed && { opacity: PRESS_DIM }]}>
-              <BoardRow city={mine} mine first value={valueOf(mine)} unit={per ? '' : 'hits'} sub={subOf(mine)} />
+              <BoardRow city={mine} mine first value={valueOf(mine)} unit={per ? 'each' : 'hits'} sub={subOf(mine)} />
             </Pressable>
           ) : null}
           <Pressable accessibilityRole="link" accessibilityLabel={`Invite a hitting partner to help ${mine.name} climb`} hitSlop={6} onPress={() => router.push('/invite')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
@@ -82,14 +84,14 @@ export default function CityBoard() {
       <View style={styles.list}>
         {board.map((c, i) => (
           <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${valueOf(c)} ${per ? 'hits per player' : 'hits'}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-            <BoardRow city={c} mine={c.id === mine?.id} first={i === 0 || board[i - 1].id === mine?.id} value={valueOf(c)} unit={per ? '' : 'hits'} sub={subOf(c)} />
+            <BoardRow city={c} mine={c.id === mine?.id} first={i === 0 || board[i - 1].id === mine?.id} value={valueOf(c)} unit={per ? 'each' : 'hits'} sub={subOf(c)} />
           </Pressable>
         ))}
       </View>
 
       <View style={styles.notes}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>
-          {per ? 'Hits per player who logged this month. ' : ''}A hit is a tennis session logged by a player whose home city it is. Cities need {MIN_PLAYERS} players to be ranked.
+          {per ? 'Hits per player who logged this month. ' : ''}A hit is a tennis session logged by a player whose home city it is. {CITIES_ACTIVE} cities logged tennis this month; these {board.length} have the {MIN_PLAYERS} players a city needs to be ranked.
         </Text>
       </View>
     </Screen>

@@ -74,13 +74,28 @@ export interface RankedCity extends BoardCity { rank: number; value: number; mov
 
 const perPlayer = (c: BoardCity) => Math.round((c.hits / c.players) * 10) / 10;
 
-/** The month's board, best first: by hits, or by hits per player. */
+/**
+ * The month's board, best first: by hits, or by hits per player. Level
+ * cities share a place (two on 5.8 are both 9th, as "level with" says);
+ * the next one down skips a place, as on any sports table.
+ */
 export function rankCities(mode: BoardMode): RankedCity[] {
   const value = (c: BoardCity) => (mode === 'per' ? perPlayer(c) : c.hits);
-  return CITIES.filter((c) => c.players >= MIN_PLAYERS)
+  const sorted = CITIES.filter((c) => c.players >= MIN_PLAYERS)
     .map((c) => ({ ...c, value: value(c) }))
-    .sort((a, b) => b.value - a.value || b.hits - a.hits)
-    .map((c, i) => ({ ...c, rank: i + 1, moved: mode === 'total' ? c.lastRank - (i + 1) : 0 }));
+    .sort((a, b) => b.value - a.value || b.hits - a.hits);
+  const out: RankedCity[] = [];
+  sorted.forEach((c, i) => {
+    const rank = i > 0 && sorted[i - 1].value === c.value ? out[i - 1].rank : i + 1;
+    out.push({ ...c, rank, moved: mode === 'total' ? c.lastRank - rank : 0 });
+  });
+  return out;
+}
+
+/** The cities either side of one on a board (by position, so a shared place still finds its neighbours). */
+export function neighbours(board: RankedCity[], id: string): { above: RankedCity | null; below: RankedCity | null } {
+  const i = board.findIndex((c) => c.id === id);
+  return i < 0 ? { above: null, below: null } : { above: board[i - 1] ?? null, below: board[i + 1] ?? null };
 }
 
 export const cityById = (id: string) => CITIES.find((c) => c.id === id) ?? null;
@@ -102,6 +117,19 @@ export const CITIES_ACTIVE = 42;
 /** The month the board is for, and when it starts again. */
 export const BOARD_MONTH = 'October';
 export const RESETS_ON = 'November 1';
+
+/**
+ * The quiet word beside "Cities this month" on Find Players: how long the
+ * race has left ("5 days left", "Last day"), which says the board is live
+ * and gives a reason to log today. "October" alone repeated "this month".
+ */
+export const DAYS_LEFT_LABEL: string = (() => {
+  const now = new Date();
+  // The mock's month is October 2026; on any other day the picture falls back to the month's name.
+  if (now.getFullYear() !== 2026 || now.getMonth() !== 9) return BOARD_MONTH;
+  const left = 31 - now.getDate() + 1;
+  return left <= 1 ? 'Last day' : `${left} days left`;
+})();
 
 /**
  * This month's hits for the demo's own players (made up), for a city's
