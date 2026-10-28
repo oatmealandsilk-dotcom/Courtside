@@ -1800,13 +1800,19 @@ export interface CityPageFill {
   sessions: number | null;
 }
 
-/** One of a city's Busiest courts (city_page().courts): courts only, never people or times. */
-export interface BusyCourt {
+/**
+ * One of a city's Most active courts (city_page().active_courts, migration
+ * 198): courts only, never people, days or times. A visit is one player there
+ * one day (a session logged there, an open hit posted there or "I'm playing
+ * here"), counted only for courts 3+ different players used this month, worked
+ * out once a week. `lat`/`lng`: the court's own map spot, for its page.
+ */
+export interface ActiveCourt {
   courtId: string;
-  name: string | null;
-  /** Courts in the park. */
-  courts: number;
-  sessions: number;
+  name: string;
+  lat: number;
+  lng: number;
+  visits: number;
 }
 
 /** The city's most watched clip this month (city_page().clip): a public adult's, checked for you. */
@@ -1823,7 +1829,8 @@ export interface CityPage {
   fill: CityPageFill[];
   /** Up to hit today, ringed: your own city's Find Players rule; another city, friends who follow each other with you only. */
   up: ID[];
-  courts: BusyCourt[];
+  /** Most active courts this month, most visits first (at most 5); empty when none have 3+ different players yet. */
+  activeCourts: ActiveCourt[];
   clip: CityClip | null;
 }
 

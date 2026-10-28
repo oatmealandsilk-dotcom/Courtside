@@ -1731,8 +1731,11 @@ const STEPS = [
       await page.tap({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ });
       await page.waitFor({ text: /^of \d+$/ }, 20000);
       await page.reveal({ text: 'Top players' }, 20000);
+      await page.waitFor({ label: 'Rank, Player, Sessions' }, 20000);
+      // Most active courts, right under Top players (migration 198; owner, Oct 28: "Under here should be most active courts").
+      await page.reveal({ text: 'Most active courts' }, 20000);
     },
-    expect: [{ text: 'Top players' }, { label: 'Rank, Player, Sessions' }],
+    expect: [{ text: 'Most active courts' }, { label: 'Court, Visits' }],
     after: async (page) => {
       // Admin no more for anything after this: the next visit starts as everyone else does.
       await page.eval("sessionStorage.removeItem('courtside-demo-admin')");

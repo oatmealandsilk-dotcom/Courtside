@@ -90,7 +90,7 @@ export default function PrivacyCentre() {
           <Ionicons name="people-outline" size={19} color={colors.textMuted} />
           <View style={{ flex: 1, gap: 1 }}>
             <Text style={styles.rowLabel}>“I’m playing here” is kept for 2 days</Text>
-            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, or No one on the map, it’s gone; activity status off, it isn’t shown.</Text>
+            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, or No one on the map, it’s gone; activity status off, it isn’t shown. After that, a court’s visit count on city boards may hold one more, with no name.</Text>
           </View>
         </View>
       </View>

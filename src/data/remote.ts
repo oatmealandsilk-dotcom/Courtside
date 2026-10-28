@@ -4529,7 +4529,7 @@ export const remote = {
   },
   /**
    * One city's page (city_page, migration 196): Top players, Up to hit
-   * (ringed and filled), Busiest courts and the clip, every person checked
+   * (ringed and filled), Most active courts and the clip, every person checked
    * again for you by the server. Null as fetchCityBoard (off, or no city
    * boards yet); a page whose `city` is null is a city you may not open (not
    * ranked, and not yours). Throws when it could not be asked.
@@ -4562,9 +4562,13 @@ export const remote = {
         ? [{ userId: f.id, habit: habit(f.habit), lastDay: typeof f.last_day === 'string' && DAY_RE.test(f.last_day) ? f.last_day : null, sessions: int(f.sessions) }]
         : [])),
       up: ids(r.up),
-      courts: (Array.isArray(r.courts) ? r.courts as Record<string, unknown>[] : []).flatMap((k) => (typeof k.court_id === 'string' && isMapCourtId(k.court_id)
-        ? [{ courtId: k.court_id, name: typeof k.name === 'string' && k.name.trim() ? k.name : null, courts: Math.max(1, num(k.courts)), sessions: num(k.sessions) }]
-        : [])),
+      // Most active courts (migration 198). Before it, the page has none: the section says how to put one there.
+      activeCourts: (Array.isArray(r.active_courts) ? r.active_courts as Record<string, unknown>[] : []).flatMap((k) => (
+        typeof k.court_id === 'string' && isMapCourtId(k.court_id) && typeof k.name === 'string' && k.name.trim()
+          && typeof k.lat === 'number' && Number.isFinite(k.lat) && Math.abs(k.lat) <= 90
+          && typeof k.lng === 'number' && Number.isFinite(k.lng) && Math.abs(k.lng) <= 180
+          ? [{ courtId: k.court_id, name: k.name.trim(), lat: k.lat, lng: k.lng, visits: Math.max(0, num(k.visits)) }]
+          : [])).slice(0, 5),
       clip: (() => {
         const k = (r.clip ?? null) as Record<string, unknown> | null;
         return k && typeof k.post_id === 'string' && UUID_RE.test(k.post_id) && typeof k.author_id === 'string' && UUID_RE.test(k.author_id)

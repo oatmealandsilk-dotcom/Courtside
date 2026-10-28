@@ -15,11 +15,12 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
-import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords } from '@/features/cityBoard/board';
+import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useBarInset } from '@/features/navigation/barInset';
 import { isOpenToHit, tillLabel } from '@/features/players/openToHit';
 import { openPlayer } from '@/features/navigation/openPlayer';
+import { courtHref } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
@@ -55,9 +56,12 @@ interface PlayerLine { user: User; sessions: number; rank: number; me: boolean }
  *   3. Where it stands, in one short line ("a tiny bit too much words").
  *   4. Top players, each row rising in as it scrolls into view, one by one
  *      (on the animation thread); your own row under them, set apart by space.
- *   5. Busiest courts (none yet: no section).
+ *   5. Most active courts, right under Top players (owner, Oct 28: "Under
+ *      here should be most active courts"): the city's courts by visits this
+ *      month, a tap opening the court's page; none yet, one calm line saying
+ *      how to put one there (never a missing section).
  *   (Round 5: both lists carry a head row, Rank · Player · Sessions and
- *   Court · Sessions, and their numbers stand bare.)
+ *   Court · Visits, and their numbers stand bare.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
  * Who is shown is the server's call, for you (city_page): players by the
@@ -119,7 +123,7 @@ export default function CityPage() {
   // Round 3 (owner, Oct 28: "if no one is active in up to hit today ... put like, most active players in the
   // city. that way it stays full"): who is up first, ringed; then the city's regulars, plain, to FILL_TO faces.
   const fill = useCityFill(page, upShown.map((x) => x.user.id));
-  const courts = page?.courts ?? [];
+  const activeCourts = page?.activeCourts ?? [];
 
   // The clip on top: the month's most watched there, a public adult's, checked for you by the server.
   const clip = page?.clip ?? null;
@@ -238,25 +242,27 @@ export default function CityPage() {
         </View>
       ) : null}
 
-      {/* 5. Busiest courts: none counted yet, no section. */}
-      {courts.length ? (
-        <View style={styles.section}>
-          <View style={styles.head}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Busiest courts</Text>
-          </View>
-          {/* Not ranked (its rows have no places), so no "Rank". */}
-          <BoardHead name="Court" value="Sessions" rankWidth={null} style={styles.boardHead} />
-          {courts.map((c, i) => (
-            <View key={c.courtId} accessible accessibilityLabel={`${c.name ?? 'Court'}, ${c.courts} ${c.courts === 1 ? 'court' : 'courts'}, ${sessionsWords(c.sessions)} this month`} style={[styles.courtRow, i > 0 && styles.line]}>
-              <View style={styles.courtWords}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.name}>{c.name ?? 'Court'}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sub}>{c.courts} {c.courts === 1 ? 'court' : 'courts'}</Text>
-              </View>
-              <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.sessions}</Text>
-            </View>
-          ))}
+      {/* 5. Most active courts: courts only (a visit is one player there one day), most first; a tap opens the court.
+          None with 3+ different players yet: the section stays, with one calm line. */}
+      <View style={styles.section}>
+        <View style={styles.head}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Most active courts</Text>
         </View>
-      ) : null}
+        {activeCourts.length ? (
+          <>
+            {/* Not ranked (its rows have no places), so no "Rank". */}
+            <BoardHead name="Court" value="Visits" rankWidth={null} style={styles.boardHead} />
+            {activeCourts.map((c, i) => (
+              <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={`${c.name}, ${visitsWords(c.visits)} this month. Open court`} onPress={() => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }))} style={({ pressed }) => [styles.courtRow, i > 0 && styles.line, pressed && { opacity: PRESS_DIM }]}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, styles.courtName]}>{c.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.visits}</Text>
+              </Pressable>
+            ))}
+          </>
+        ) : (
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtsEmpty}>Log a session at a court to put it here</Text>
+        )}
+      </View>
 
       {/* 6. Yours: help it climb. Another: the way there. */}
       <View style={styles.footer}>
@@ -494,7 +500,8 @@ const styleDefinitions = StyleSheet.create({
   subMine: { ...typography.small, ...font('500'), color: colors.text },
   value: { ...font('700'), fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
   courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 58, paddingHorizontal: spacing.md },
-  courtWords: { flex: 1, minWidth: 0, gap: 1 },
+  courtName: { flex: 1, minWidth: 0 },
+  courtsEmpty: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.md, paddingTop: spacing.xs },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
   footHead: { ...typography.heading, color: colors.text, textAlign: 'center' },
   footBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },

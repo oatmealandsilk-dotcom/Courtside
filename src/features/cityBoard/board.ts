@@ -41,6 +41,8 @@ export const isHot = (c: Pick<RankedCity, 'moved'>) => c.moved >= 3;
 
 /** "512 sessions", "1 session": what VoiceOver hears for a board's number. */
 export const sessionsWords = (n: number | string) => `${n} ${Number(n) === 1 ? 'session' : 'sessions'}`;
+/** "1 visit", "9 visits": Most active courts (one player at a court one day). */
+export const visitsWords = (n: number | string) => `${n} ${Number(n) === 1 ? 'visit' : 'visits'}`;
 
 /** "2 more players", "1 more player". */
 export const morePlayersWords = (n: number) => `${n} more ${n === 1 ? 'player' : 'players'}`;

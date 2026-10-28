@@ -28,7 +28,7 @@ import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
-import { DEMO_BOARD_CITIES, DEMO_BOARD_EVENTS, DEMO_BOARD_PLACES, DEMO_BUSY_COURTS, DEMO_CITY_CLIPS, DEMO_PLAYER_SESSIONS, DEMO_PLAY_LOG, type DemoBoardCity } from './mock/cityBoard';
+import { DEMO_BOARD_CITIES, DEMO_BOARD_EVENTS, DEMO_BOARD_PLACES, DEMO_ACTIVE_COURTS, DEMO_CITY_CLIPS, DEMO_PLAYER_SESSIONS, DEMO_PLAY_LOG, type DemoBoardCity } from './mock/cityBoard';
 import { FILL_TO, MIN_PLAYERS, monthAfter, rankRows } from '@/features/cityBoard/board';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { localDay } from '@/features/practice/stats';
@@ -651,7 +651,7 @@ function demoPlayWords(id: ID): Pick<CityPageFill, 'habit' | 'lastDay'> {
 
 /**
  * The demo's city_page(): one city's Top players, Up to hit (ringed, then
- * filled), Busiest courts and clip, by the server's rules, for you:
+ * filled), Most active courts and clip, by the server's rules, for you:
  *   - named: adults only (never a teen, to anyone), not suspended; never you,
  *     anyone blocked either way or muted; a private account only once you
  *     follow it; a teen viewer sees friends who follow each other only;
@@ -678,7 +678,7 @@ export async function cityPage({ cityId, month, me, users: everyone, posts: all,
   const row = rows.find((c) => c.id === cityId) ?? null;
   const r = ranked.find((c) => c.id === cityId) ?? null;
   const isMine = cityId === myCity;
-  const empty: CityPage = { month, refreshedAt: new Date().toISOString(), city: null, top: [], me: null, fill: [], up: [], courts: [], clip: null };
+  const empty: CityPage = { month, refreshedAt: new Date().toISOString(), city: null, top: [], me: null, fill: [], up: [], activeCourts: [], clip: null };
   const known = DEMO_BOARD_CITIES.find((c) => c.id === cityId);
   if (!known || (!r && !isMine)) return clone(empty);
 
@@ -733,7 +733,7 @@ export async function cityPage({ cityId, month, me, users: everyone, posts: all,
     me: isMine ? { rank: placed.find((p) => p.userId === me)?.rank ?? null, sessions: mine.now, inTotal: mine.inTotal } : null,
     fill,
     up,
-    courts: (DEMO_BUSY_COURTS[cityId] ?? []).map((k, i) => ({ courtId: `demo-${cityId}-${i}`, name: k.name, courts: k.courts, sessions: k.sessions })),
+    activeCourts: (DEMO_ACTIVE_COURTS[cityId] ?? []).slice(0, 5).map((k, i) => ({ courtId: `demo-${cityId}-${i}`, name: k.name, lat: k.lat, lng: k.lng, visits: k.visits })),
     clip,
   });
 }

@@ -96,22 +96,35 @@ export const DEMO_PLAY_LOG: Record<string, DemoPlayLog> = {
   'u-mira': { sessions: [[6, 8], [0, 9], [6, 9], [0, 8], [6, 10], [2, 18]], lastDaysAgo: 2 },
 };
 
-/** Busiest courts this month, by sessions logged there (made up; only parks with 3+ different players count). */
-export const DEMO_BUSY_COURTS: Record<string, { name: string; sessions: number; courts: number }[]> = {
+/**
+ * Most active courts this month (made up): visits, one player one day at the
+ * court, from sessions, open hits and "I'm playing here"; only courts 3+
+ * different players used count (city_page().active_courts, migration 198).
+ * Their spots are where the courts really are, so a tap opens the court's page.
+ * A city not listed here (Chicago, say) shows the section's empty line.
+ */
+export const DEMO_ACTIVE_COURTS: Record<string, { name: string; visits: number; lat: number; lng: number }[]> = {
+  'new-york-ny': [
+    { name: 'Central Park Tennis Center', visits: 84, lat: 40.78962, lng: -73.96166 },
+    { name: 'McCarren Park', visits: 57, lat: 40.72068, lng: -73.95154 },
+    { name: 'Riverside Park Clay Courts', visits: 41, lat: 40.79571, lng: -73.97441 },
+    { name: 'Hudson River Park Pier 40', visits: 26, lat: 40.72963, lng: -74.01126 },
+    { name: 'Prospect Park Tennis Center', visits: 18, lat: 40.65306, lng: -73.97389 },
+  ],
   'los-angeles-ca': [
-    { name: 'Alder Park', sessions: 64, courts: 4 },
-    { name: 'Cypress Hollow Park', sessions: 51, courts: 6 },
-    { name: 'Juniper Community Park', sessions: 29, courts: 3 },
+    { name: 'Alder Park', visits: 64, lat: 34.0907, lng: -118.3064 },
+    { name: 'Cypress Hollow Park', visits: 51, lat: 34.0632, lng: -118.3441 },
+    { name: 'Juniper Community Park', visits: 29, lat: 34.1162, lng: -118.2701 },
   ],
   'austin-tx': [
-    { name: 'Austin High Tennis Center', sessions: 72, courts: 12 },
-    { name: 'Pharr Tennis Center', sessions: 58, courts: 8 },
-    { name: 'Caswell Tennis Center', sessions: 41, courts: 9 },
+    { name: 'Austin High Tennis Center', visits: 72, lat: 30.27397, lng: -97.76751 },
+    { name: 'Pharr Tennis Center', visits: 58, lat: 30.30891, lng: -97.71547 },
+    { name: 'Caswell Tennis Center', visits: 41, lat: 30.28768, lng: -97.75249 },
   ],
   'raleigh-nc': [
-    { name: 'Millbrook Exchange Park', sessions: 31, courts: 23 },
-    { name: 'Pullen Park', sessions: 22, courts: 4 },
-    { name: 'Lions Park', sessions: 14, courts: 5 },
+    { name: 'Millbrook Exchange Park', visits: 31, lat: 35.86764, lng: -78.61531 },
+    { name: 'Pullen Park', visits: 22, lat: 35.77874, lng: -78.66273 },
+    { name: 'Lions Park', visits: 14, lat: 35.79201, lng: -78.61501 },
   ],
 };
 
