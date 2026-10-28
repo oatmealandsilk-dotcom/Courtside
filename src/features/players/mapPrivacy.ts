@@ -30,6 +30,13 @@ export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: strin
   { value: 'none', label: 'No one', line: 'You never show on the map.' },
 ];
 
+/**
+ * The yes on the first ask, "Show friends you're up to hit?" (Oct 28, the short
+ * version): it saves Friends ('mutuals'), the same answer as Settings → Privacy's
+ * "Friends · people you both follow".
+ */
+export const FIRST_YES = 'Turn on for friends';
+
 /** What a teen is told the first time, before anything is shared (the owner's words). */
 export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Turn off on the map anytime to hide.';
 

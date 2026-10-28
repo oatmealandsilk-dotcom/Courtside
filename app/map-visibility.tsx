@@ -10,7 +10,8 @@ import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import type { MapVisibility } from '@/data/types';
-import { CONSENT_CHOICES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
+import { CONSENT_CHOICES, FIRST_YES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
+import { checkInEnds, clock } from '@/features/players/checkIn';
 import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -23,10 +24,13 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  * day. Strangers never see where you are. No: nothing of yours is ever on
  * the map.
  *
- * `mode=first`: the first time you tap Check in. "Friends · people you both
- * follow" saves the yes; then Apple's own location prompt, then the check-in.
- * "Not now" (or closing it) saves nothing and shares nothing; it asks again
- * the next time you tap Check in.
+ * `mode=first`: the first time you tap Up to hit, the short version (Oct 28,
+ * owner: "I don't like the at big who can see you on the map screen"): "Show
+ * friends you're up to hit?", one line saying who sees you (only friends you
+ * both follow, never strangers), when (only when you tap Up to hit) and that
+ * it ends by itself. "Turn on for friends" saves the yes; then Apple's own
+ * location prompt, then Up to hit. "Not now" (or closing it) saves nothing
+ * and shares nothing; it asks again the next time you tap Up to hit.
  * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
  * also takes any live check-in off the map.
  *
@@ -77,15 +81,23 @@ export default function MapVisibilitySheet() {
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
-      header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time in Settings → Privacy.' : undefined} onClose={close} />}
+      header={<SheetTitle title={first ? 'Show friends you’re up to hit?' : 'Who can see you on the map?'} titleSize={21} onClose={close} />}
     >
       <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
-        <View style={styles.facts}>
-          {FACTS.map((f) => (
-            <Text key={f.text} style={styles.factText}>{f.text}</Text>
-          ))}
-        </View>
+        {first ? (
+          <View style={styles.short}>
+            {/* Apple 5.1.2(i) / 5.1.1: who (only friends you both follow, never strangers), when (only on a tap), and that it ends by itself. */}
+            <Text style={styles.shortLine}>Only friends you both follow see you, only when you tap Up to hit, and it ends by itself {endsWords()}. Never strangers.</Text>
+            <Text style={styles.shortSmall}>Change any time in Settings → Privacy.</Text>
+          </View>
+        ) : (
+          <View style={styles.facts}>
+            {FACTS.map((f) => (
+              <Text key={f.text} style={styles.factText}>{f.text}</Text>
+            ))}
+          </View>
+        )}
         {teen ? (
           <View style={styles.notice} accessibilityRole="text">
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
@@ -120,7 +132,7 @@ export default function MapVisibilitySheet() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {first ? (
           <>
-            <Submit label={CONSENT_CHOICES[0].label} busy={busy === 'mutuals'} busyLabel="Saving…" onPress={() => { void save('mutuals'); }} />
+            <Submit label={FIRST_YES} busy={busy === 'mutuals'} busyLabel="Saving…" onPress={() => { void save('mutuals'); }} />
             <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
               <Text style={styles.offText}>Not now</Text>
             </Pressable>
@@ -131,7 +143,12 @@ export default function MapVisibilitySheet() {
   );
 }
 
-/** What a yes means, said plainly before it is given. */
+/** When Up to hit tapped now ends by itself: "at 10pm", or "after 2 hours" from 8pm on (checkInEnds). */
+function endsWords(now: Date = new Date()): string {
+  return now.getHours() >= 20 ? 'after 2 hours' : `at ${clock(checkInEnds(now))}`;
+}
+
+/** What a yes means, said plainly before it is given (Settings → Privacy). */
 const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
   { icon: 'hand-left-outline', text: 'You show on the map only when you tap Up to hit. Never on your own.' },
   { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
@@ -204,6 +221,9 @@ const styleDefinitions = StyleSheet.create({
   youRing: { padding: 3, borderRadius: 30, backgroundColor: colors.surface, ...lift },
   eye: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   facts: { gap: spacing.md },
+  short: { gap: spacing.sm },
+  shortLine: { ...typography.body, color: colors.text, lineHeight: 22 },
+  shortSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   factText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 21 },
   choices: { gap: spacing.sm },

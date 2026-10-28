@@ -17,8 +17,8 @@ import { UTH_TIP_FOR_EVERYONE } from '@/features/players/upToHitTip';
  *
  *  - Who: on "No one", or tapped "Not now" on "Who can see you on the map?" and never said yes since. Teens too
  *    (their rule is unchanged: friends who follow each other, their rough area).
- *  - Turn on: our "Who can see you on the map?" (its first look: Friends, or Not now). Never Apple's prompt: that
- *    still comes only after Friends, on their next tap of Up to hit, exactly as before.
+ *  - Turn on: our "Who can see you on the map?" (its first look: Turn on for friends, or Not now). Never Apple's
+ *    prompt: that still comes only after that yes, on their next tap of Up to hit, exactly as before.
  *  - When (trust first, never a nag; Apple 5.1.1): the first time only once they have used the app on 3 different
  *    days since saying no (or 7 days have gone by), then at most once every 14 days, never twice in a session, never
  *    in the tutorial or over another tip (useTip). Gone for good after 3 "Not now"s, or once they say Friends.
