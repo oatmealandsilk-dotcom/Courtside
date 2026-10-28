@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import type { CourtAccess, CourtRightNow, ID, User } from '@/data/types';
@@ -268,9 +268,15 @@ function nearestKey(courts: Court[]): string {
  * courts sit round its name and lines in the middle, so lit badges there piled
  * onto the words and the faces (Oct 27 review); and the card shows people and
  * hits only, courts live on the full map (Oct 3, owner).
+ *
+ * Except the Community card drawing the full map's pins (the check-in zoom's v5, admins: `card.full`): it glows exactly as
+ * the full map will, from the same courts and the same answers (kept in the app, so the full map opens already lit). It
+ * asks once for its courts, and again every few minutes only while it is on the screen (`card.seen`).
  */
-export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[], playingAt?: string | null): Map<string, CourtGlow> | null {
-  const on = useLightUpCourts() && expanded;
+export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[], playingAt?: string | null, card?: { full: boolean; seen: () => boolean }): Map<string, CourtGlow> | null {
+  const on = useLightUpCourts() && (expanded || !!card?.full);
+  const seen = useRef(card?.seen);
+  seen.current = card?.seen;
   const { courtNow, actions, currentUserId, users } = useApp();
   const pool = model.courts;
   const key = useMemo(() => (on ? nearestKey(pool) : ''), [on, pool]);
@@ -279,7 +285,7 @@ export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[]
     if (!key) return undefined;
     const ids = key.split(',');
     void loadCourtsNow(ids);
-    const timer = setInterval(() => { if (AppState.currentState === 'active') void loadCourtsNow(ids); }, REFRESH_MS);
+    const timer = setInterval(() => { if (AppState.currentState === 'active' && (seen.current?.() ?? true)) void loadCourtsNow(ids); }, REFRESH_MS);
     return () => clearInterval(timer);
   }, [key, loadCourtsNow]);
   return useMemo(

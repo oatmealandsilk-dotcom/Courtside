@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react';
 import { Platform, type View } from 'react-native';
-import { Easing, cancelAnimation, makeMutable, useAnimatedStyle, withSequence, withTiming } from 'react-native-reanimated';
+import { Easing, cancelAnimation, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { LatLng } from '@/features/players/positions';
+import type { Court } from '@/features/players/courts';
 
 /*
  * The check-in zoom, v2: the card grows into the full map (Oct 28, owner: "The check in zoom is not what
@@ -43,6 +44,23 @@ import type { LatLng } from '@/features/players/positions';
  * push-in is still moving, its camera diving on at that same speed (growHandOver): before, the push-in came all but to
  * rest first, and the camera then waited for its last streets to come in before it moved, two still moments.
  *
+ * v5 (Oct 28, owner, of v4: "Check in zoom is good, the only thing is that. The courts lit up and stuff appear after the
+ * zoom starts. When it should already appear on the cover screen. Everything should show on cover screen so transition is
+ * super smooth"): the card itself shows what the full map shows (NearbyMap's `fullCard`, admins with the zoom): the
+ * courts (lit ones with their faces, counts and light), open hits, friends up to hit and your own pin, laid out exactly as
+ * the full map lays them out. They stay through the push-in: the page grows round them while each keeps its size on the
+ * screen and stands on its spot (the pin engine's lens), gathering and splitting as the full map would at the zoom the
+ * card is showing, so when the full map takes over its pins are the same pins in the same places (growCamera puts its
+ * camera exactly where the pushed-in card is looking). Only your own pin steps out with the card's words: it lands on you
+ * at the end of the dive. The card's words still fade as in v4.
+ *  - The website: the card's pins follow the push-in frame by frame (useGrowLens), the full map's pins are made at once,
+ *    hidden with it, and come in with it as one (no wave).
+ *  - iPhone and Android: the card's map follows the push-in on its own clock (PUSH_JS, the same curve) inside its page. A
+ *    phone covers the Community page when the full map opens, so its pictures carry the push-in on from there: the full
+ *    map's own page now lies over them, see-through, its streets hidden and its pins showing, its camera following the
+ *    push-in on that same clock (growFollow) and its pins clipped to the card, until its streets have drawn and come in.
+ *    Its pins can only show once its page has started (a moment after it opens).
+ *
  * Only the Community tab's card grows (it is the page that pushes in); the For you copy of the card,
  * Reduce Motion, a phone whose pictures of the map come out blank, and Only me keep the plain way in
  * (the page opening as it always has, the map on you). Admins first, with the rest of the zoom
@@ -75,6 +93,8 @@ export interface GrowPlan {
   /** When the push-in started (Date.now()): the full map carries it on from there, never starting it again. */
   started: number;
   at: number;
+  /** The courts the card was drawing (v5): the full map starts with them, so its pins at the hand-over are the card's. */
+  courts?: Court[];
 }
 
 /**
@@ -141,6 +161,22 @@ export function useGrowClear(on: boolean, clear: (clear: boolean) => void) {
     return () => { clearers.delete(l); };
   }, [on]);
 }
+/**
+ * The full map has taken over (v5, the website): its pins show in this very moment, on the card's, while its streets come
+ * in over the card's; the card's pins go in the same moment (useGrowHanded), so no pin is ever seen twice.
+ */
+const handers = new Set<() => void>();
+export function growHanded() { handers.forEach((h) => h()); }
+export function useGrowHanded(on: boolean, fn: () => void) {
+  const latest = useRef(fn);
+  latest.current = fn;
+  useEffect(() => {
+    if (!on) return undefined;
+    const h = () => latest.current();
+    handers.add(h);
+    return () => { handers.delete(h); };
+  }, [on]);
+}
 /** 0 → 1 as what sits on the card slips out of it (starts with the push-in). */
 const slip = makeMutable(0);
 export function useGrowLabels() {
@@ -196,6 +232,81 @@ export function growHandOver(p: GrowPlan, targetZoom: number): { zoom: number; e
   return { zoom, ease: [0.3, 0.3 * Math.min(1.6, Math.max(0.3, slope)), 0.16, 1] };
 }
 
+/** The push-in's progress `ms` after it started (growT's own curve, worked out rather than read): the phone's clocks. */
+export function growTAt(ms: number): number {
+  if (ms <= 0) return 0;
+  if (ms < GROW_MS) return (1 + OVER) * GROW_C.y(ms / GROW_MS);
+  const u = Math.min(1, (ms - GROW_MS) / CREEP_MS);
+  return 1 + OVER + CREEP * (1 - (1 - u) * (1 - u));
+}
+
+/**
+ * The same curve for a map's own page (MapCanvas), as plain old JavaScript: a function of the milliseconds since the push-in
+ * started, so the page can follow it frame by frame on its own clock (Date.now() is the phone's one clock, so both agree).
+ */
+export const PUSH_JS = `(function(){var G=${GROW_MS},X1=${GROW_CURVE[0]},Y1=${GROW_CURVE[1]},X2=${GROW_CURVE[2]},Y2=${GROW_CURVE[3]},O=${OVER},C=${CREEP},CM=${CREEP_MS};
+function bz(t,a,b){return ((1-3*b+3*a)*t+(3*b-6*a))*t*t+3*a*t}
+function y(x){if(x<=0)return 0;if(x>=1)return 1;var lo=0,hi=1;for(var i=0;i<40;i++){var m=(lo+hi)/2;if(bz(m,X1,X2)<x)lo=m;else hi=m}return bz((lo+hi)/2,Y1,Y2)}
+return function(ms){if(ms<=0)return 0;if(ms<G)return (1+O)*y(ms/G);var u=Math.min(1,(ms-G)/CM);return 1+O+C*(1-(1-u)*(1-u))}})()`;
+
+/** The fixed point the page grows round (page coordinates), the card's middle, and the screen's middle in the page: aimGrow's geometry. */
+function growGeometry(p: Pick<GrowPlan, 'page' | 'card' | 'screen' | 'scale'>) {
+  const kx = p.card.x - p.page.x + p.card.w / 2;
+  const ky = p.card.y - p.page.y + p.card.h / 2;
+  const sx = p.screen.w / 2 - p.page.x;
+  const sy = p.screen.h / 2 - p.page.y;
+  const k = p.scale > 1.001 ? p.scale : 1.001;
+  return { kx, ky, sx, sy, px: (k * kx - sx) / (k - 1), py: (k * ky - sy) / (k - 1) };
+}
+
+/** A spot as world pixels at a zoom (MapLibre's 512-wide world), and back. */
+const worldX = (lng: number, z: number) => ((lng + 180) / 360) * 512 * 2 ** z;
+const worldY = (lat: number, z: number) => { const s = Math.sin((Math.max(-85, Math.min(85, lat)) * Math.PI) / 180); return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * 512 * 2 ** z; };
+const lngOf = (x: number, z: number) => (x / (512 * 2 ** z)) * 360 - 180;
+const latOf = (y: number, z: number) => { const n = Math.PI - (2 * Math.PI * y) / (512 * 2 ** z); return (180 / Math.PI) * Math.atan(Math.sinh(n)); };
+
+/**
+ * What the full map's own page needs to look exactly where the pushed-in card is looking, at any moment (v5), in the card's
+ * world pixels at its own zoom `z0`: the screen's middle shows the card's spot `w0 + a + b/s` when the page is drawn `s`
+ * times bigger. (The card's middle reaches the screen's middle at s = scale, and the page keeps going past it.)
+ */
+export interface GrowFollow { z0: number; w0x: number; w0y: number; ax: number; ay: number; bx: number; by: number; S: number; t0: number }
+export function growFollow(p: GrowPlan): GrowFollow {
+  const g = growGeometry(p);
+  const z0 = p.zoom - Math.log2(Math.max(1.001, p.scale));
+  return { z0, w0x: worldX(p.center.lng, z0), w0y: worldY(p.center.lat, z0), ax: g.px - g.kx, ay: g.py - g.ky, bx: g.sx - g.px, by: g.sy - g.py, S: p.scale, t0: p.started };
+}
+/** Where the full map's camera is when the page is drawn `s` times bigger: exactly what the pushed-in card shows then. */
+export function growCamera(p: GrowPlan, s: number): { center: LatLng; zoom: number } {
+  const f = growFollow(p);
+  const k = Math.max(1e-3, s);
+  const x = f.w0x + f.ax + f.bx / k;
+  const y = f.w0y + f.ay + f.by / k;
+  return { center: { lat: latOf(y, f.z0), lng: lngOf(x, f.z0) }, zoom: f.z0 + Math.log2(k) };
+}
+/** The same, for a map's own page (MapCanvas), as plain old JavaScript: `(f, s) => [lng, lat, zoom]`. */
+export const GROW_CAMERA_JS = `(function(f,s){s=Math.max(1e-3,s);var W=512*Math.pow(2,f.z0),x=f.w0x+f.ax+f.bx/s,y=f.w0y+f.ay+f.by/s,n=Math.PI-2*Math.PI*y/W;return [x/W*360-180,180/Math.PI*Math.atan(Math.sinh(n)),f.z0+Math.log(s)/Math.LN2]})`;
+/** The card's rectangle on the screen when the page is drawn `s` times bigger, and its corner's radius (for a page to clip to). */
+export function growCardAt(p: GrowPlan, s: number, radius: number): { x: number; y: number; w: number; h: number; r: number } {
+  const g = growGeometry(p);
+  const x0 = p.card.x - p.page.x;
+  const y0 = p.card.y - p.page.y;
+  return { x: p.page.x + g.px + (x0 - g.px) * s, y: p.page.y + g.py + (y0 - g.py) * s, w: p.card.w * s, h: p.card.h * s, r: radius * s };
+}
+/** How much bigger the page is drawn now (the website: the live value; 1 when no grow is on). */
+export function growScaleNow(): number {
+  'worklet';
+  return growT.value > 0 ? Math.pow(geo.value.s, growT.value) : 1;
+}
+/**
+ * The website's card (v5): `apply` with how much bigger the page is drawn, on every frame of the push-in, in the same
+ * moment the page is moved (so the pins never lag it by a frame), and 1 when it is over.
+ */
+export function useGrowLens(on: boolean, apply: (s: number) => void) {
+  // The shared values read here directly (not through growScaleNow), so the browser's Reanimated knows to run it as they change.
+  useAnimatedReaction(() => (on && growT.value > 0 ? Math.pow(geo.value.s, growT.value) : 1), (s, was) => { if (s !== was) runOnJS(apply)(s); }, [on]);
+}
+
 /** The plan for a card at `card` in a page at `page`, growing to fill `screen`; `center`/`zoom`: the card's map. */
 export function growPlan(o: { page: Rect; card: Rect; screen: { w: number; h: number }; center: LatLng; zoom: number }): GrowPlan {
   // Big enough to cover the screen both ways, and a touch more, so the card's rounded corners and edge go off the screen.
@@ -247,16 +358,10 @@ export const growArmed = (): boolean => armedAt > 0 && Date.now() - armedAt < 10
 
 /** The push-in's aim: where the page grows round, and how far. Before startGrow; the page is as it was until then. */
 export function aimGrow(p: GrowPlan) {
-  // In the page's own coordinates: its middle, the card's middle, the screen's middle.
-  const cx = p.page.w / 2;
-  const cy = p.page.h / 2;
-  const kx = p.card.x - p.page.x + p.card.w / 2;
-  const ky = p.card.y - p.page.y + p.card.h / 2;
-  const sx = p.screen.w / 2 - p.page.x;
-  const sy = p.screen.h / 2 - p.page.y;
-  // The one point that stays put: grown by `scale` round it, the card's middle lands on the screen's middle.
-  const k = p.scale > 1.001 ? p.scale : 1.001;
-  geo.value = { cx, cy, px: (k * kx - sx) / (k - 1), py: (k * ky - sy) / (k - 1), s: p.scale };
+  // In the page's own coordinates: its middle, and the one point that stays put (grown by `scale` round it, the card's
+  // middle lands on the screen's middle: growGeometry).
+  const g = growGeometry(p);
+  geo.value = { cx: p.page.w / 2, cy: p.page.h / 2, px: g.px, py: g.py, s: p.scale };
   cancelAnimation(growT);
   growT.value = 0;
   cancelAnimation(slip);

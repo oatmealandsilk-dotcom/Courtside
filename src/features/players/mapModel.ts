@@ -85,6 +85,14 @@ const TRAY_MILES = 50;
 /** The box court rings are asked for around a spot: about 10 miles each way, a town and its edges. */
 export const ringBox = (at: LatLng) => ({ minLat: at.lat - 0.15, maxLat: at.lat + 0.15, minLng: at.lng - 0.2, maxLng: at.lng + 0.2 });
 
+/** Court lists joined, in order, each court once (the first list's copy). */
+function withCourts(...lists: Court[][]): Court[] {
+  const seen = new Set<string>();
+  const out: Court[] = [];
+  for (const list of lists) for (const c of list) if (!seen.has(c.id)) { seen.add(c.id); out.push(c); }
+  return out;
+}
+
 /** A ring as a court pin, for a court with one that the courts layer has not loaded (or with the layer off). */
 const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Tennis courts', lat: r.lat, lng: r.lng, count: 1 });
 
@@ -98,8 +106,14 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  * quiet dots and the soonest hits near you, and never loads the full court pins.
  * `focusHit` opens the map with that hit's card up; `focusPlace` (a place
  * picked in Find Players' search) opens it on that place with its courts listed.
+ *
+ * `opts.full` (the still card only, the check-in zoom's v5: mapGrow): the card draws what the full map draws, so it loads
+ * the full map's court pins too: round the card's town and round you, the very areas (and the same kept answers) the full
+ * map asks for as it opens, so it makes no call the full map would not. `opts.seed` (the full map a card grew into): the
+ * courts that card was drawing, kept alongside whatever loads after, so its pins at the hand-over are the card's.
  */
-export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null, cardHint?: { lat: number; lng: number; name: string } | null) {
+export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null, cardHint?: { lat: number; lng: number; name: string } | null, opts?: { full?: boolean; seed?: Court[] | null }) {
+  const full = card && !!opts?.full;
   const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
@@ -258,7 +272,9 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // The courts layer is on from the start: the courts are what the map is for
   // (the Courts chip still turns them off). Only the full map loads them.
   const [courtsOn, setCourtsOn] = useState(true);
-  const [courts, setCourts] = useState<Court[]>([]);
+  // A full map a card grew into starts with that card's courts, and keeps them (seed).
+  const seed = useRef<Court[] | null>(!card && opts?.seed?.length ? opts.seed : null);
+  const [courts, setCourts] = useState<Court[]>(() => seed.current ?? []);
   const [courtsLoading, setCourtsLoading] = useState(false);
   // How many times the courts have come back (or failed to), so a tagged court waits for the first.
   const [courtsLoads, setCourtsLoads] = useState(0);
@@ -323,7 +339,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
         if (same) setSelectedCourtId(same.id);
         else if (was) list = [was, ...list];
       }
-      setCourts(list);
+      setCourts(seed.current ? withCourts(seed.current, list) : list);
     } catch {
       showToast({ title: 'Could not load courts', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' });
     } finally {
@@ -444,6 +460,21 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     return () => { on = false; };
   }, [card, cityLat, cityLng]);
   const cardCourts = useMemo(() => (card && city ? cardCourtList.slice(0, CARD_COURTS) : []), [card, city, cardCourtList]);
+  // The card drawing the full map's pins (opts.full): the full map's courts round its town and round you (the one the full
+  // map loads as it opens), kept answers first, then fresh ones; and the rings round you too.
+  const homeLat = homeKnown ? home.lat : undefined;
+  const homeLng = homeKnown ? home.lng : undefined;
+  useEffect(() => {
+    if (!full || cityLat === undefined || cityLng === undefined) return undefined;
+    const spots: LatLng[] = [{ lat: cityLat, lng: cityLng }];
+    if (homeLat !== undefined && homeLng !== undefined && (homeLat.toFixed(2) !== cityLat.toFixed(2) || homeLng.toFixed(2) !== cityLng.toFixed(2))) spots.push({ lat: homeLat, lng: homeLng });
+    let on = true;
+    const kept = spots.map((at) => peekCourts(at));
+    if (kept.every(Boolean)) setCourts(withCourts(...(kept as Court[][])));
+    void Promise.all(spots.map((at) => fetchCourts(at).catch(() => peekCourts(at) ?? []))).then((lists) => { if (on) setCourts(withCourts(...lists)); });
+    if (spots[1]) void loadCourtRings(ringBox(spots[1])).catch(() => undefined);
+    return () => { on = false; };
+  }, [full, cityLat, cityLng, homeLat, homeLng, loadCourtRings]);
   // The still card's rings: the city's courts played on this week.
   useEffect(() => {
     if (!card || cityLat === undefined || cityLng === undefined) return;
@@ -485,7 +516,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   return {
     home, homeKnown, homeView, mePos, city, cityName, cityPending, cityExact, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, nearTown, selected, select, loadPlayersIn,
     place, pickPlace, clearPlace, placeSearch, placeRows: placeCourts.rows, placeLoading: placeCourts.loading, placeFailed: placeCourts.failed, retryPlace: placeCourts.retry,
-    courtsOn, toggleCourts, courts: card ? [] : pins, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
+    courtsOn, toggleCourts, courts: card && !full ? [] : pins, courtPool: courts, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
     cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
   };
 }

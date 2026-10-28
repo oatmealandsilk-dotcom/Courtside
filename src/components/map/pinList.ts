@@ -183,3 +183,13 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   if (mine) list.push({ ...meWidths, at: courtUnder(mine, playing?.courtId), id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, meHidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You', up: !meHidden, rc: colors.brand, ...(land && !meHidden ? { land } : {}) });
   return list;
 }
+
+/**
+ * The Community card drawing the full map's pins (the check-in zoom's v5, admins: NearbyMap's `fullCard`): the full map's
+ * list as it is, but for two things. Its courts show at the card's zoom too (the full map shows them from about a city in,
+ * COURTS_MIN_ZOOM, which the card is just short of and the push-in passes: they would come in part way). And your own pin
+ * never drops in or pops there (it lands on you at the end of the dive, on the full map).
+ */
+export function onTheCard(list: CanvasMarker[]): CanvasMarker[] {
+  return list.map((m) => (m.mz != null || m.up !== undefined || m.land ? { ...m, mz: undefined, up: undefined, land: undefined } : m));
+}
