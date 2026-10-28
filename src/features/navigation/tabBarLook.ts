@@ -70,7 +70,8 @@ export const BAR_METRICS = TAB_BAR_LOOK === 'B' ? { ...METRICS.B, height: SHAPE.
  * and as wide as a tab's fifth plus the bar's end room; icons 24 (about 21 of drawing, as theirs), our
  * words at 11 under them. Its top (22 + 60 = 82 up) stays below today's (34 + BAR_METRICS.height = 90 up),
  * so every page's bottom room, the live session's bar, a clip's words, the Feed's windows and the
- * tutorial (all of which read the bar's height above) still clear it.
+ * tutorial (all of which read the bar's height above) still clear it; on a phone with no home bar (and in a browser)
+ * newBarFoot sets it 8 up instead of 12, so its top still never passes today's.
  */
 export const NEW_BAR = {
   height: 60,
@@ -93,9 +94,14 @@ export const NEW_BAR = {
   badgeLeft: 15,
 } as const;
 
-/** The new bar's foot above the screen's bottom edge, from the phone's bottom strip (`bottom`: the strip, or 12 where there is none). */
+/**
+ * The new bar's foot above the screen's bottom edge, from the phone's bottom strip (`bottom`: the strip, or 12 where there is none).
+ * Never so high that its top passes today's (`bottom` + BAR_METRICS.height), which every page's bottom room, the live session's
+ * bar and the Feed's windows are measured from: with no home bar (an iPhone SE, a browser) the 60-point bar sits 8 up, not 12
+ * (review, Oct 28: at 12 its top stood 4 points above today's there).
+ */
 export function newBarFoot(bottom: number): number {
-  return Math.max(bottom - NEW_BAR.sink, 12);
+  return Math.min(Math.max(bottom - NEW_BAR.sink, 12), bottom + BAR_METRICS.height - NEW_BAR.height);
 }
 
 /**
