@@ -38,7 +38,7 @@ export const demoHits: HitRequest[] = [
   { id: 'hit-demo-7', authorId: 'u-sam', startsAt: laterToday(2), place: at(1), format: 'singles', spots: 1, createdAt: hoursFromNow(-6), joinedIds: [CURRENT_USER_ID], conversationId: 'cv-hit-demo-7', cancelled: true },
   // Your own hit tomorrow evening, which Priya was in until she tapped
   // "Can't make it": its spot is open again, and her note is in your alerts.
-  { id: 'hit-demo-8', authorId: CURRENT_USER_ID, startsAt: tomorrowAt(18), place: at(2), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Match play, best of three tiebreak sets.', createdAt: hoursFromNow(-8), joinedIds: [] },
+  { id: 'hit-demo-8', authorId: CURRENT_USER_ID, startsAt: tomorrowAt(18), place: at(2), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Match play, best of three tiebreak sets.', createdAt: hoursFromNow(-8), joinedIds: [], cancelled: true },
   // Rosa's hit with no court yet: its town and a town-sized area (0.05°), the way the server keeps one (migration 187).
   { id: 'hit-demo-9', authorId: 'u-rosa', startsAt: tomorrowAt(17), place: { flexible: true, name: 'Court flexible · near Glendale', near: 'Glendale', area: { lat: 34.15, lng: -118.25 } }, levelMin: 3.0, levelMax: 4.0, format: 'hit', spots: 1, note: 'New to LA and still finding courts. Happy to play wherever suits you.', createdAt: hoursFromNow(-3), joinedIds: [] },
 ];

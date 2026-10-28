@@ -325,7 +325,7 @@ export const users: User[] = [
     avatarSeed: 'sam-ortiz',
     ageGroup: 'adult',
     // Up for a hit until tonight, worked out when the demo loads.
-    openToHitUntil: endOfToday(),
+    // openToHitUntil: endOfToday(), (store frame 05 only: Sam not free today)
     isCoach: false,
     followers: 38,
     following: 52,
