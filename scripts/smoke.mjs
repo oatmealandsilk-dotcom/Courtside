@@ -1707,7 +1707,8 @@ const STEPS = [
         // (A signed-in visit can show the sign-in page for a moment before it moves on by itself.)
         try { await page.tap({ label: 'Log in' }, 5000); } catch { /* it went on to the app by itself */ }
         const next = await page.waitForAny([{ text: /^Demo build — no accounts, no database/ }, { text: 'Find Players' }], 45000);
-        if (next.index === 0) await page.tap({ text: 'Enter' });
+        // (Still signed in, the demo's sheet can show for a moment and the app go on by itself: Enter is then gone.)
+        if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
       }
       await page.waitFor({ text: 'Find Players' }, 45000);
       // "Cities this month" (or, on the 1st, last month's final board: "Cities in October").
