@@ -31,7 +31,8 @@ export const hasCoin = (rank: number) => rank >= 1 && rank <= 3;
  *     and weight of the places under it (so the column reads as one run of
  *     numbers), with a short bar of the metal under it, a podium's step.
  */
-export const MEDAL_STYLE: 'coin' | 'mark' = 'coin';
+// Owner, Oct 28: "B is better for leaderboard" (the coloured number with its short bar).
+export const MEDAL_STYLE: 'coin' | 'mark' = 'mark';
 
 /**
  * The place's mark for 1st, 2nd and 3rd (owner, Oct 28: "have first second

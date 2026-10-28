@@ -718,7 +718,8 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    // Friends' pins on the map go too: the next account never sees the last one's friends (Oct 28 review).
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeen: {}, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
