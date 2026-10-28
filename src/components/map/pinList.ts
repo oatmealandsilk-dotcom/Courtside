@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litSize, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litHalf, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { CourtGlow } from '@/features/places/lightUp';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
@@ -108,12 +108,13 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     // Your pin standing on it already says so: the court only glows under it, no words beside.
     const underYou = (yours || !!g?.you) && !on && !!meAt && milesBetween(meAt, c) < 0.05;
     if (g) {
-      // A lit court (Oct 27 review): a big tile with its light moving, who is there tucked into its corner
-      // (friends' faces, you when your own pin is not standing on it, then "+5"), its words under it. Above
-      // plain players' pins (3), so someone just beside it never covers its corner; under you and the picked.
+      // A lit court (Oct 27 review; Oct 28, three looks to pick from: LIT_LOOK): big, its light moving, who is
+      // there on it (one or two: their circles, no number; more: two circles and "+5"; friends' faces, you when
+      // your own pin is not standing on it, everyone else a stranger's plain disc), its words under it. Above
+      // plain players' pins (3), so someone just beside it never covers who is there; under you and the picked.
       const faces = [...(g.you && !underYou ? [me] : []), ...g.friends];
       const others = Math.max(0, g.people - (g.you ? 1 : 0) - g.friends.length);
-      const half = Math.round(litSize(g.level, on) / 2);
+      const half = litHalf(g.level, on, faces.length + others > 0);
       return {
         id: `c:${c.id}`, lat: c.lat, lng: c.lng,
         html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live }),
