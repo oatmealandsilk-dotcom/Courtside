@@ -101,7 +101,7 @@ export const LIT_CSS = `
 .cs-lit-run .cs-lit-band{animation:cs-lit-slide 3.8s linear infinite}
 .cs-lit-run.cs-lit-1 .cs-lit-band{animation-duration:4.2s}
 .cs-lit-run.cs-lit-3 .cs-lit-band{animation-duration:3.4s}
-@keyframes cs-lit-slide{0%{transform:translateX(-50%)}100%{transform:translateX(0)}}
+@keyframes cs-lit-slide{0%{transform:translateX(-33.33333%)}100%{transform:translateX(0)}}
 .cs-lit-run .cs-lit-tide{animation:cs-lit-tide 3.9s cubic-bezier(.45,0,.55,1) infinite alternate}
 .cs-lit-run.cs-lit-1 .cs-lit-tide{animation-duration:4.6s}
 .cs-lit-run.cs-lit-3 .cs-lit-tide{animation-duration:3.2s}
@@ -644,37 +644,50 @@ const FLOW_ANGLE = 40;
 
 /**
  * The light on a floodlit court (A), laid over its surface (`iw` × `ih`, inside the rim) in the court's own
- * colours only, never white: `light` (the brand switched on, New York's orange on a hot court), the brand,
- * and `deep`, the brand a touch deeper. Busier courts: a little more between light and deep, a little faster.
- *  drift (LIT_FLOW): a strip of a gradient that repeats every `period` (a touch more than the court's
- *     diagonal, so nearly a whole turn of it is always on the court and the court as a whole never brightens
- *     or dims: only the light moves), twice as long as one, laid on FLOW_ANGLE and slid by exactly one
- *     period a turn at an even pace (cs-lit-slide), so a turn ends where it starts.
+ * colours only, never white: `light` (the brand switched on more, New York's orange on a hot court), the brand
+ * switched on (`mid`), and `deep`, that a touch deeper: about round 3's own darkest corner, never down to a
+ * quiet court's colour, so no moment of it reads as the court switching off. Busier courts: a little more
+ * between light and deep, a little faster.
+ *  drift (LIT_FLOW): a strip of a gradient that repeats every `period`, three long, laid on FLOW_ANGLE and slid
+ *     by exactly one period a turn at an even pace (cs-lit-slide), so a turn ends where it starts. The period
+ *     is three quarters of the court's length along the flow: with that, as much light as deep is on the court
+ *     at every moment, so the court as a whole stays as bright and only the light moves (a period as long as
+ *     the court's diagonal left the whole court darker each time the deep part crossed its middle).
  *  breathe: a deeper gradient over the court's own, easing in and out (cs-lit-tide).
- *  wave: the same strip as drift, clear but for one wide soft band of the lighter colour in each period.
+ *  wave: the same strip, a longer period, clear but for one wide soft band of the lighter colour in each.
  * At rest (Reduce Motion, and lit courts that are not among the liveliest) each shows where its turn starts:
- * drift light at the top left easing deeper below, breathe and wave the court's own gradient alone.
+ * drift light and deep across the court, breathe and wave the court's own gradient alone.
  */
 function litFlowLayer(flow: LitFlow, iw: number, ih: number, level: 1 | 2 | 3, k: ReturnType<typeof litColours>, delay: number): string {
   const light = k.b;
   const mid = k.a;
-  // A touch deeper than the brand switched on, more so the busier: on a dark theme's bright brand (New York's
-  // yellow) a deeper gold, where the brand's own darker step would hardly show.
-  const low = deepen(k.brand, 0.2);
-  const deep = mix(k.a, low, [0, 0.35, 0.45, 0.55][level]);
+  // The brand switched on, a touch deeper (same hue, its richer saturation kept), more so the busier: on a
+  // light theme about round 3's darkest corner, above a quiet court's own brand; on a dark theme's bright brand
+  // (New York's yellow) a deeper gold, where the brand's own darker step would hardly show.
+  const by = [0, 0.08, 0.11, 0.14][level];
+  const deep = deepen(k.a, by);
   if (flow === 'breathe') {
-    const deeper = mix(deep, low, 0.5);
+    const deeper = deepen(k.a, by * 1.3);
     return `<i class="cs-lit-tide" style="position:absolute;inset:0;z-index:1;background:linear-gradient(170deg,${mid} 0%,${deep} 52%,${deeper} 100%);pointer-events:none;animation-delay:-${delay}ms"></i>`;
   }
   const across = Math.ceil(Math.hypot(iw, ih)) + 2;
   const wave = flow === 'wave';
-  const period = Math.ceil(across * (wave ? 1.6 : 1.05));
-  // Drift: light → the brand → deep and back. Wave: clear, then from 62% of the way one band of light, eased.
+  const rad = (FLOW_ANGLE * Math.PI) / 180;
+  const along = iw * Math.cos(rad) + ih * Math.sin(rad);
+  // The strip is three periods long and slides one, so two must reach across the square it turns in.
+  const period = Math.max(Math.ceil(across / 2), Math.round(wave ? across * 1.6 : along * 0.75));
+  // Drift: its three colours lightest to darkest and back (New York's hot court: pale yellow, gold, orange, so no
+  // thin pale line where the orange gives way to gold), the middle one placed by its lightness, so the light
+  // rises and falls along one smooth curve with no crease. Wave: clear, then from 62% of the way one band of light.
+  const [hi, md, lo] = [light, mid, deep].sort((x, y) => brightness(y) - brightness(x));
+  const lit = (c: string) => Math.cbrt(brightness(c));
+  const span = lit(hi) - lit(lo);
+  const mdAt = span > 1e-4 ? (lit(md) - lit(lo)) / span : 0.5;
   const stops = wave
     ? bandStops(period, lightUp(k.b, 0.35, 0.84), [0, 0.4, 0.5, 0.6][level])
-    : softStops(period, (v) => (v >= 0.5 ? mix(mid, light, (v - 0.5) * 2) : mix(deep, mid, v * 2)));
+    : softStops(period, (v) => (v >= mdAt ? mix(md, hi, (v - mdAt) / (1 - mdAt || 1)) : mix(lo, md, v / (mdAt || 1))));
   return `<div style="position:absolute;z-index:1;left:${((iw - across) / 2).toFixed(1)}px;top:${((ih - across) / 2).toFixed(1)}px;width:${across}px;height:${across}px;transform:rotate(${FLOW_ANGLE}deg);pointer-events:none">`
-    + `<i class="${wave ? 'cs-lit-band' : 'cs-lit-drift'}" style="position:absolute;left:0;top:0;width:${period * 2}px;height:${across}px;background:repeating-linear-gradient(90deg,${stops});animation-delay:-${delay}ms"></i></div>`;
+    + `<i class="${wave ? 'cs-lit-band' : 'cs-lit-drift'}" style="position:absolute;left:0;top:0;width:${period * 3}px;height:${across}px;background:repeating-linear-gradient(90deg,${stops});animation-delay:-${delay}ms"></i></div>`;
 }
 
 /** Wave's stops across `period` px: clear to 62% of the way, then one band of `color` easing up to `peak` and away. */
