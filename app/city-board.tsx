@@ -91,7 +91,8 @@ export default function CityBoard() {
   const unrankedHome = !mine && homeId && data?.me.cityName ? { name: data.me.cityName, needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
   const per = mode === 'per';
   const target = mine ? nextTarget(board, mine.id, mode) : null;
-  const open = (id: string) => router.push({ pathname: '/city/[id]', params: { id } });
+  // Kept the same between draws, so the 200 rows at 0 are not drawn again when the tab or the page moves.
+  const open = useCallback((id: string) => router.push({ pathname: '/city/[id]', params: { id } }), []);
   const final = isFinal(month);
 
   // The week's news: yours first, two lines at most.
