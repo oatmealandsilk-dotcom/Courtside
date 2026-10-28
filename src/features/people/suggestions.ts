@@ -4,7 +4,6 @@ import type { User } from '@/data/types';
 import { useFindable } from '@/features/people/findable';
 import { notKnownAdult } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
-import { LESS_AI } from '@/theme/look';
 
 /** What a post is, said in a reason line: "Liked your clip". */
 const POST_WORD: Record<string, string> = { clip: 'clip', match: 'match', session: 'session', note: 'post', gear: 'post', milestone: 'post' };
@@ -60,15 +59,15 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
     const did = new Map<string, string>();
     for (const post of posts) {
       if (post.authorId === currentUserId) post.likedBy.forEach((id) => { interacted.add(id); if (!did.has(id)) did.set(id, `Liked your ${POST_WORD[post.kind] ?? 'post'}`); });
-      else if (post.likedBy.includes(currentUserId)) interacted.add(post.authorId);
+      else if (post.likedBy.includes(currentUserId)) { interacted.add(post.authorId); if (!did.has(post.authorId)) did.set(post.authorId, `You liked their ${POST_WORD[post.kind] ?? 'post'}`); }
     }
     const postById = new Map(posts.map((p) => [p.id, p]));
     for (const comment of comments) {
       const post = postById.get(comment.postId);
       if (post?.authorId === currentUserId) { interacted.add(comment.authorId); if (!did.has(comment.authorId)) did.set(comment.authorId, `Commented on your ${POST_WORD[post.kind] ?? 'post'}`); }
     }
-    // Someone you have a chat with: "Messaged you", unless something they did was already found.
-    for (const conversation of conversations) conversation.participantIds.forEach((id) => { interacted.add(id); if (id !== currentUserId && !did.has(id)) did.set(id, 'Messaged you'); });
+    // Someone you have a chat with (one-to-one or a group): "In a chat with you", unless something they did was already found.
+    for (const conversation of conversations) conversation.participantIds.forEach((id) => { interacted.add(id); if (id !== currentUserId && !did.has(id)) did.set(id, 'In a chat with you'); });
     const myTown = me ? townOf(me.location) : '';
     const theirTown = near ? townOf(near) : '';
     // Who each of `friendsOf` follows, so a friend of theirs reads "Followed by Om" (the first of them to follow).
@@ -85,7 +84,8 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
         const local = !!town && town === myTown;
         const sameAsThem = !!town && town === theirTown;
         const friendName = via.get(user.id);
-        const reason = interacted.has(user.id) ? (LESS_AI ? did.get(user.id) ?? 'Knows you' : 'Interacted with you')
+        // The real reason, always (Oct 27, owner: "show real reason" for the vague "Knows you").
+        const reason = interacted.has(user.id) ? did.get(user.id) ?? 'Knows you'
           : friendName ? `Followed by ${friendName}`
           : user.isCoach ? 'Coach on CourtSide'
           : local || sameAsThem ? `Plays in ${town}`
