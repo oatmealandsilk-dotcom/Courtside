@@ -304,7 +304,7 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
  * colour (the theme's brand: green on Clean, yellow on New York) with its
  * name beside it at every zoom, in your colour; a court still to unlock
  * stays today's plain mark. A court lit up (people there now, Light up) has
- * the glow and "5 here" beside it (designHereCount: friends there and
+ * the glow and "5 playing" beside it (hereTag, the card's words; designHereCount: friends there and
  * everyone else only from 2 up), a number only, never who. A court
  * with an open hit coming up but nobody there keeps a small dot at its
  * corner instead of the glow, so the glow only ever means "people here now".

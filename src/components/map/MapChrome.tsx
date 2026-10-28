@@ -63,8 +63,8 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
-import { DESIGN_UNLOCKS } from '@/features/courtUnlocks/designDemo';
-import { RegularsBar } from '@/features/courtUnlocks/RegularsBar';
+import { DESIGN_UNLOCKS, courtCardOption } from '@/features/courtUnlocks/designDemo';
+import { HereNow } from '@/features/courtUnlocks/HereNow';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1421,6 +1421,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   // small phone it never covers the search and the chips, and the pin
   // stays in sight. (The name row and the buttons take about 190pt.)
   const middleMax = Math.max(160, Math.round(windowH * 0.6) - 190);
+  // DESIGN BRANCH (court unlocks, round 5): which of the three ways the card says who is there now (null off the design build).
+  const cardOption = DESIGN_UNLOCKS ? courtCardOption() : null;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -1435,7 +1437,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text>
         </Pressable>
         {/* The heart and Send sit beside Close, the way a maps app's place card puts Save and Share there. */}
-        {extras ? <FollowHeart court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng, access }} style={styles.close} size={16} /> : null}
+        {/* DESIGN BRANCH (round 5): option c says the heart in words beside who is there ("My court"), so it steps aside up here. */}
+        {extras && cardOption !== 'c' ? <FollowHeart court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng, access }} style={styles.close} size={16} /> : null}
         <Pressable accessibilityRole="button" accessibilityLabel={`Send ${court.name} to a chat`} hitSlop={8} onPress={() => sendCourtToChat(place)} style={({ pressed }) => [styles.close, pressed && styles.closePressed]}>
           <Ionicons name="paper-plane-outline" size={16} color={colors.textMuted} />
         </Pressable>
@@ -1444,9 +1447,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
       </View>
       <GHScrollView style={{ maxHeight: middleMax, flexGrow: 0 }} contentContainerStyle={styles.courtMiddle} showsVerticalScrollIndicator={false} bounces={false}>
-      {/* DESIGN BRANCH (court unlocks, round 2): "Regulars here" right under the name, and nothing else between it and Played here
-          (owner, Oct 27: "make it a bar above played here, below alder park. and get rid of everything in between"). Never at someone's home. */}
-      {DESIGN_UNLOCKS ? (access === 'private' ? null : <RegularsBar court={{ name: court.name }} />) : (
+      {/* DESIGN BRANCH (court unlocks): who is there now, right under the name, and nothing else between it and Played here
+          (owner, Oct 27: "get rid of everything in between"). Round 5 (Oct 28: "I don't like the regulars here and it says +4"):
+          one of three calmer ways, a, b or c (HereNow). Never at someone's home. */}
+      {cardOption ? (access === 'private' ? null : <HereNow name={court.name} option={cardOption} follow={extras ? { id: court.id, name: court.name, lat: court.lat, lng: court.lng, access } : undefined} />) : (
         <>
           {showTags ? (
             <View style={styles.courtTags}>

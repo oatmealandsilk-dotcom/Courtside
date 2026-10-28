@@ -76,16 +76,16 @@ export const NEXT_CARD = { name: 'Full colour', have: 5, need: 8 };
 export const DESIGN_FRIENDS = new Set(['u-sam', 'u-marcus', 'u-omar']);
 
 /**
- * "Regulars here": people who chose to mark a court as one of theirs
- * (`ids`), and which of them are at the court right now (`here`). Ella is
+ * A court's regulars: people who keep it as one of their courts (`ids`),
+ * and which of them are at the court right now (`here`). Ella is
  * a teen and not a friend: never counted, never shown. The demo knows
  * everyone here by name; the real server sends only friends by name and
  * everyone else as one number (court_right_now, migration 189).
  */
 export const DESIGN_REGULARS: Record<string, { ids: string[]; here: string[] }> = {
-  // Two friends and three others here (Ella, a teen, is there too and never counted): "Sam, Marcus, +3 here".
+  // Two friends and three others here (Ella, a teen, is there too and never counted): "Sam, Marcus and 3 others".
   'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], here: ['u-sam', 'u-marcus', 'u-priya', 'u-theo', 'u-bea', 'u-ella'] },
-  // Only people you don't know: "4 here".
+  // Only people you don't know: "4 playing now".
   'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], here: ['u-rosa', 'u-kai', 'u-noor', 'u-ivy'] },
   // One stranger alone: never counted, so it reads as nobody here.
   'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], here: ['u-diego'] },
@@ -125,18 +125,53 @@ export const designHereCount = (court: string) => {
 /** "Sam", "Sam and Marcus", "Sam, Marcus and Omar". */
 export const andList = (names: string[]) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
 
-/** Courts you marked as one of yours in this visit (Add yourself). */
-const regularAt = new Set<string>();
-const regularListeners = new Set<() => void>();
-export const isDesignRegular = (court: string) => regularAt.has(court);
-export function setDesignRegular(court: string, on: boolean) {
-  if (on) regularAt.add(court); else regularAt.delete(court);
-  regularListeners.forEach((l) => l());
+/**
+ * Who is there now, in words, never with a plus (owner, Oct 28: "I don't
+ * like the regulars here and it says +4"): up to two friends by first name
+ * (three when that is everyone), everyone else in plain words. `lead` is the
+ * names, `tail` the rest: "Sam, Marcus" + " and 3 others", "Sam and Marcus" + "".
+ */
+export function hereWords(friends: User[], others: number) {
+  const firsts = friends.map((u) => u.name.split(' ')[0]);
+  const named = firsts.length === 3 && !others ? firsts : firsts.slice(0, 2);
+  const rest = firsts.length - named.length + others;
+  const lead = rest ? named.join(', ') : andList(named);
+  const tail = rest ? ` and ${rest} ${rest === 1 ? 'other' : 'others'}` : '';
+  return { lead, tail, total: firsts.length + others };
 }
-export function subscribeDesignRegular(l: () => void) {
-  regularListeners.add(l);
-  return () => { regularListeners.delete(l); };
+
+/*
+ * Round 5 (owner, Oct 28, on the round 4 board: "I don't like the regulars
+ * here and it says +4"): three calmer ways for a court's card to say who is
+ * there now. No "Regulars" heading, no plus, no pill of a number:
+ *   a  One line: under the name, "Sam, Marcus and 3 others playing now",
+ *      friends' small faces before it; "4 playing now"; "No one playing
+ *      right now". Add yourself is the heart by Send and Close (it already
+ *      keeps the court in Your courts, so the two were one job).
+ *   b  Here now: a small row, friends' faces with their names, then "and 3
+ *      others" in words; "Here now · 4 players"; "No one here right now".
+ *      Add yourself is the heart, as in a.
+ *   c  Two chips under the name: "5 playing now" (friends' tiny faces in it,
+ *      their names on a tap) and "My court" (the heart, with a word).
+ * The demo build on the web picks one with localStorage 'courtside-courtcard'
+ * = a, b or c; otherwise COURT_CARD_OPTION.
+ */
+export type CourtCardOption = 'a' | 'b' | 'c';
+export const COURT_CARD_OPTION: CourtCardOption = 'a';
+export function courtCardOption(): CourtCardOption {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const v = window.localStorage.getItem('courtside-courtcard');
+      if (v === 'a' || v === 'b' || v === 'c') return v;
+    } catch {
+      // Storage blocked: the default.
+    }
+  }
+  return COURT_CARD_OPTION;
 }
+
+/** The note beside a lit court on the map and at the foot of Your courts' cards, in the card's own words: "5 playing" (a, c) or "5 here" (b). */
+export const hereTag = (n: number) => `${n} ${courtCardOption() === 'b' ? 'here' : 'playing'}`;
 
 /**
  * How many players have each court unlocked, and the friends among them

@@ -6,13 +6,13 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { type SharedValue, useAnimatedProps, useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { G, Line, Rect } from 'react-native-svg';
 
-import { Avatar, Button } from '@/components/ui';
+import { Button } from '@/components/ui';
 import type { User } from '@/data/types';
 import { CourtTile, ordinal } from '@/features/courtUnlocks/DesignParts';
 import { DESIGN_FRIENDS, HAVE_IT, MY_COURTS, TO_UNLOCK, andList } from '@/features/courtUnlocks/designDemo';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing, typography, withAlpha } from '@/theme';
+import { colors, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 /*
@@ -39,47 +39,34 @@ export function useUnlock() {
     .filter((id) => DESIGN_FRIENDS.has(id))
     .map((id) => users.find((u) => u.id === id))
     .filter((u): u is User => !!u);
-  const rest = Math.max(0, have.total - friends.length);
-  const others = rest >= 2 ? rest : 0;
   const beatYou = andList(friends.map((u) => u.name.split(' ')[0]));
   const next = TO_UNLOCK[0];
   const nextFriendId = friendsParam === 'none' ? undefined : HAVE_IT[next.name]?.friends.find((id) => DESIGN_FRIENDS.has(id));
   const nextFriend = nextFriendId ? users.find((u) => u.id === nextFriendId)?.name.split(' ')[0] : undefined;
-  return { court, nth, have, friends, others, beatYou, next, nextFriend };
+  return { court, nth, have, friends, beatYou, next, nextFriend };
 }
 
 /**
  * The two lines under the name: you against who got here first, and what's
- * next near you. Friends who got here first: their faces, then the rest as
- * "+40", and their names under. No friend: just "You're the 43rd player
- * here", by the court's own mark.
+ * next near you. Round 5 (owner, Oct 28: "I don't like the regulars here and
+ * it says +4"): no stack of faces and "+40" any more. The court's own mark,
+ * "You're the 43rd player here", and friends who got here first named in
+ * words under it ("Sam and Marcus got here first"); with no friend, just
+ * the first line.
  */
 export function UnlockRows() {
   const styles = useThemedStyles(styleDefinitions);
-  const { have, friends, others, beatYou, next, nextFriend } = useUnlock();
+  const { have, beatYou, next, nextFriend } = useUnlock();
   const place = `You’re the ${ordinal(have.total + 1)} player here`;
   return (
     <View style={styles.rows}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`${place}.${beatYou ? ` ${beatYou} got here first${others ? `, and ${others} others` : ''}.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${place}.${beatYou ? ` ${beatYou} got here first.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
         <View style={styles.faces}>
-          {friends.length ? (
-            <>
-              {friends.slice(0, 2).map((u, i) => (
-                <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
-                  <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={34} />
-                </View>
-              ))}
-              {others ? (
-                <View style={[styles.face, styles.faceOver, styles.more]}>
-                  <Text maxFontSizeMultiplier={1.1} style={styles.moreText}>+{others}</Text>
-                </View>
-              ) : null}
-            </>
-          ) : <View style={styles.mark}><CourtTile size={34} unlocked /></View>}
+          <View style={styles.mark}><CourtTile size={34} unlocked /></View>
         </View>
         <View style={styles.rowWords}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>{place}</Text>
-          {beatYou ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{beatYou} got here first</Text> : null}
+          {beatYou ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={2}>{beatYou} got here first</Text> : null}
         </View>
       </Pressable>
       <Pressable accessibilityRole="link" accessibilityLabel={`${TO_UNLOCK.length} more courts to unlock near you`} onPress={() => router.replace('/your-courts')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && { opacity: PRESS_DIM }]}>
@@ -195,18 +182,13 @@ const styleDefinitions = StyleSheet.create({
   rows: { borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: 14 },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  faces: { flexDirection: 'row', alignItems: 'center', width: 102 },
-  face: { borderRadius: 19, borderWidth: 2, borderColor: colors.bg },
-  // Overlapping only by about the rim, so "SO" and "ML" are never cut by the face after.
-  faceOver: { marginLeft: -6 },
-  // The court's own mark where no friend's face goes (left, where the faces start).
+  faces: { flexDirection: 'row', alignItems: 'center', width: 64 },
+  // The court's own mark, where the faces used to start.
   mark: { paddingLeft: 2 },
-  more: { minWidth: 38, height: 38, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt },
-  moreText: { ...font('700'), fontSize: 12, color: colors.text, fontVariant: ['tabular-nums'] },
   rowWords: { flex: 1, gap: 2 },
   rowTitle: { ...typography.bodyStrong, color: colors.text },
   rowSub: { ...typography.small, color: colors.textMuted },
-  locks: { width: 102, flexDirection: 'row', alignItems: 'center' },
+  locks: { width: 64, flexDirection: 'row', alignItems: 'center' },
   lockA: { transform: [{ rotate: '-6deg' }] },
   lockB: { marginLeft: -6, marginTop: 8, transform: [{ rotate: '5deg' }] },
   actions: { gap: 2, paddingTop: spacing.lg },
