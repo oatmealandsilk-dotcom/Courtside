@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { FadeOut, LinearTransition } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -41,6 +41,12 @@ import { TextScale } from '@/theme/textScale';
 const LINGER_MS = 1100;
 /** At most this many cards in the row. */
 const MOST = 12;
+/** The others closing up the gap a card leaves, and the card fading out. */
+const CLOSE_UP = LinearTransition.duration(240);
+const LEAVE = FadeOut.duration(160);
+/** How long after a card leaves the row the others may move (web): the close-up, with room to start. */
+const SETTLE_MS = 600;
+const WEB = Platform.OS === 'web';
 
 /** A reason that says something you did together, or who you know in common (a follow back's second line). Not a town. */
 const together = (reason: string) => !/^Plays in /.test(reason) && reason !== 'Suggested for you' && reason !== 'Knows you';
@@ -101,6 +107,24 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, followRequests, currentUserId } = useApp();
   const { cards, follow, hide, close } = model;
+  /*
+   * Only the pages slide (owner, Oct 22: "smooth swipe, nothing framing in or
+   * out"). On the web a layout transition measures the card on the page before
+   * and after every re-render and animates any difference, so a re-render while
+   * Community's sections slide read the slide itself as the card moving: each
+   * card jumped back by the swipe and was hidden while it "moved". So the cards
+   * may move only just after the row itself changed (a Follow or an x), when the
+   * others close up the gap. On a phone the transition compares a card's place
+   * in its row, which a sliding section never changes, so it stays on there.
+   */
+  const order = cards.map((c) => c.user.id).join(' ');
+  const shownOrder = useRef(order);
+  const settleUntil = useMemo(() => {
+    if (shownOrder.current === order) return 0;
+    shownOrder.current = order;
+    return Date.now() + SETTLE_MS;
+  }, [order]);
+  const closeUp = !WEB || Date.now() < settleUntil ? CLOSE_UP : undefined;
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
@@ -119,7 +143,7 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
           const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
           const label = following ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
           return (
-            <Reanimated.View key={user.id} layout={LinearTransition.duration(240)} exiting={FadeOut.duration(160)} style={styles.card}>
+            <Reanimated.View key={user.id} layout={closeUp} exiting={LEAVE} style={styles.card}>
               <Pressable accessibilityRole="link" accessibilityLabel={[user.name, line, second].filter(Boolean).join(', ')} onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
                 <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={68} ring={user.isCoach} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
