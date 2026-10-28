@@ -18,7 +18,7 @@ import { TextScale } from '@/theme/textScale';
  * line, "Sam, Marcus and 3 others playing now" with friends' small faces;
  * then, under it, the friends who call this court home ("Sam and Marcus
  * play here", friends only) and how many players call it home as a number
- * only ("12 players call this home", from 2 up). Never a list of strangers'
+ * only ("Home court for 12 players", from 2 up). Never a list of strangers'
  * faces or names. A friend (you follow each other) by face and first name;
  * everyone else only as a number; a lone stranger is never counted, and a
  * teen only for their friends. Never a plus. Adding yourself is the heart
@@ -83,14 +83,15 @@ function HereLine({ name }: { name: string }) {
 
 /**
  * Who calls this court home: friends by first name ("Sam and Marcus play
- * here"), then everyone as one number ("12 players call this home", only
+ * here"), then everyone as one number ("Home court for 12 players", only
  * from 2 up). Nothing when neither is there. Never a stranger's name.
  */
 function HomeLine({ name }: { name: string }) {
   const styles = useThemedStyles(styleDefinitions);
   const { friendNames, friends, players } = designHome(name);
   if (!friendNames && !players) return null;
-  const count = players ? `${players}\u00A0players call this\u00A0home` : '';
+  // Owner, Oct 28: "call this home seems weird" -> "Home court for 12 players".
+  const count = players ? `${friendNames ? 'home' : 'Home'} court for ${players}\u00A0players` : '';
   return (
     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={3} style={[styles.lineText, styles.home]}>
       {friendNames ? <><Text style={styles.strong}>{friendNames}</Text> {friends === 1 ? 'plays' : 'play'} here{count ? '\u00A0· ' : ''}</> : null}

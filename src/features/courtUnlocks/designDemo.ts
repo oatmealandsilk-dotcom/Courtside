@@ -89,9 +89,9 @@ export const DESIGN_REGULARS: Record<string, { ids: string[]; here: string[] }> 
   'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], here: ['u-rosa', 'u-kai', 'u-noor', 'u-ivy'] },
   // One stranger alone: never counted, so it reads as nobody here; Sam calls it home.
   'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], here: ['u-diego'] },
-  // Nobody there and no friend calls it home: "3 players call this home".
+  // Nobody there and no friend calls it home: "Home court for 3 players".
   'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], here: [] },
-  // Only people you don't know, and no friend calls it home: "2 playing now", "4 players call this home".
+  // Only people you don't know, and no friend calls it home: "2 playing now", "Home court for 4 players".
   'Bellwood Recreation Center': { ids: ['u-rosa', 'u-kai', 'u-theo', 'u-ivy'], here: ['u-rosa', 'u-kai'] },
   'Larkspur Recreation Center': { ids: ['u-omar', 'u-bea', 'u-jonah'], here: [] },
 };
@@ -146,7 +146,7 @@ export function hereWords(friends: User[], others: number) {
 /*
  * The court card (owner, Oct 28: "Yes for court card"): one quiet line for
  * who is playing now, then who calls the court home: friends by name, and
- * everyone as one number ("12 players call this home").
+ * everyone as one number ("Home court for 12 players").
  */
 
 /** The note beside a lit court on the map and at the foot of Your courts' cards, in the card's own words: "5 playing". */
