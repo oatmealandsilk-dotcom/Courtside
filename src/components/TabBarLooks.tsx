@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, PixelRatio, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, interpolateColor, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassView } from 'expo-glass-effect';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BrandWash } from '@/components/ui/BrandWash';
 import { CLEAR_GLASS_ALPHA, Glass, LIGHT_GLASS_ALPHA, liquidGlass } from '@/components/ui/Glass';
-import { BAR_SLIDE, LENS_LOOK, LENS_TABS, lensAt, lensFeel, lensFollow, lensGoal, lensHeld, lensLag, lensLift, lensPlace, lensPress, lensReset, lensRide, lensRides, lensRow, lensSettle, lensTo, lensTrail } from '@/features/navigation/barLens';
+import { BAR_SLIDE, LENS_LOOK, LENS_TABS, lensAt, lensFeel, lensFollow, lensGoal, lensHeld, lensKind, lensKindOf, lensLag, lensLanding, lensLift, lensMotion, lensPlace, lensPress, lensReset, lensRide, lensRides, lensRow, lensSettle, lensTo, lensTrail } from '@/features/navigation/barLens';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { BAR_SHAPE, NEW_BAR, PLUS_LOOK, SHAPE, newBarFoot } from '@/features/navigation/tabBarLook';
@@ -121,11 +121,28 @@ export const LookBar = React.memo(function LookBar({
   newBar?: boolean;
 }) {
   const { theme } = useTheme();
-  // Which bar: today's quiet pill, or the new one (its measures, styles and glass).
-  const look = newBar ? NEW_LOOK : QUIET_LOOK;
+  // Where each tab's middle is along the bar, from the pill's width (worked out from the window's
+  // until it has been measured; measured only while the lens is on, so the bar is untouched without it).
+  const [measured, setMeasured] = useState<number | null>(null);
+  const onPillLayout = useCallback((e: LayoutChangeEvent) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    setMeasured((was) => (was === w ? was : w));
+  }, []);
+  const pillW = measured ?? Dimensions.get('window').width - 2 * (newBar ? NEW_SPEC : QUIET_SPEC).side;
+  // Which bar: today's quiet pill, or the new one (its measures, styles and glass); the new one with its
+  // words a touch smaller where "Community" would not sit in its capsule with room either side (tightWords).
+  const look = newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : QUIET_LOOK;
   // The new bar's lens with the phone's Reduce Motion (the app's own answer: useReducedMotion): a quick plain slide.
   const calm = useReducedMotion();
-  useLayoutEffect(() => { lensFeel.value = newBar ? (calm ? 2 : 1) : 0; }, [newBar, calm]);
+  // How it travels (barLens's LENS_MOTION): read once.
+  const [motion] = useState(lensMotion);
+  const kind = lensKindOf(motion);
+  useLayoutEffect(() => { lensFeel.value = newBar ? (calm ? 2 : 1) : 0; lensKind.value = kind; }, [newBar, calm, kind]);
+  // The new bar's words as drawn, each tab's own width (the lit capsule is sized to the lit tab's word).
+  const [wordW, setWordW] = useState<Readonly<Record<string, number>>>({});
+  const onWordWidth = useCallback((route: string, w: number) => {
+    setWordW((was) => (was[route] !== undefined && Math.abs(was[route] - w) < 0.5 ? was : { ...was, [route]: w }));
+  }, []);
   // How much of its tint this bar's glass shows, for the copies laid over it (a clip's look fading, a followed swipe).
   const glassAlpha = newBar ? LIGHT_GLASS_ALPHA : CLEAR_GLASS_ALPHA;
   const followAlpha = newBar ? NEW_FOLLOW_ALPHA : FOLLOW_ALPHA;
@@ -406,15 +423,7 @@ export const LookBar = React.memo(function LookBar({
     if (Platform.OS === 'web') lensReset();
     else runOnUI(lensReset)();
   } : undefined), [lens]);
-  // Where each tab's middle is along the bar, from the pill's width (worked out from the window's
-  // until it has been measured; measured only while the lens is on, so the bar is untouched without it).
-  const [measured, setMeasured] = useState<number | null>(null);
-  const onPillLayout = useCallback((e: LayoutChangeEvent) => {
-    const w = Math.round(e.nativeEvent.layout.width);
-    setMeasured((was) => (was === w ? was : w));
-  }, []);
-  const pillW = measured ?? Dimensions.get('window').width - 2 * look.m.side;
-  const lensGeo = useMemo<LensGeo | null>(() => (lens ? lensGeometry(pillW, look.m) : null), [lens, pillW, look]);
+  const lensGeo = useMemo<LensGeo | null>(() => (lens ? lensGeometry(pillW, look.m, newBar ? wordW : null) : null), [lens, pillW, look, newBar, wordW]);
   // Press and slide (the new bar's, barLens's BAR_SLIDE): a finger that comes down on the bar and moves
   // along it drags the lens across the tabs, lifted, each tab lighting (a light tick) as the lens comes over
   // it, and lifting opens the tab it is on. It starts only once the finger has moved 12 points sideways
@@ -482,6 +491,7 @@ export const LookBar = React.memo(function LookBar({
       sliding.value = 0;
       lensPress.value = 0;
       const to = slideOver.value;
+      if (lensFeel.value !== 0) lensLanding.value = 1;
       lensSettle(to, SLIDE_LAND_MS);
       runOnJS(slideEnd)(LENS_TABS[to]);
     })
@@ -525,7 +535,7 @@ export const LookBar = React.memo(function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
-    <Face palette={palette} look={look} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace}
+    <Face palette={palette} look={look} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace} kind={kind} onWordWidth={live && newBar ? onWordWidth : undefined}
       onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
   // The swipe followed: the two copies' faces, built once as a swipe starts carrying the look (and
@@ -534,7 +544,7 @@ export const LookBar = React.memo(function LookBar({
     key: ++copySeq,
     dark: face(themes[theme], false, true, followAlpha),
     light: face(themes[theme], false, false, followAlpha),
-  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, lensGeo, look, calm]); // eslint-disable-line react-hooks/exhaustive-deps
+  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, lensGeo, look, calm, kind]); // eslint-disable-line react-hooks/exhaustive-deps
   // The shadow around the glass: on an iPhone, drawn along the pill's own outline (a box shadow),
   // not worked out from everything inside it, which redrew the bar off screen every frame while a
   // page slid or scrolled under the glass (Oct 25 audit). The same shadow to look at. Quicker press feel only (admins first).
@@ -596,8 +606,37 @@ const FollowCopy = React.memo(function FollowCopy({ dark, children }: { dark: bo
   return <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="follow-bar" style={[StyleSheet.absoluteFill, look]}>{children}</Animated.View>;
 });
 
-/** Where the lens sits along the bar: each tab's middle (in the row's order), the lens's width and its height. */
-interface LensGeo { centers: readonly number[]; width: number; height: number }
+/**
+ * Where the lens sits along the bar: each tab's middle (in the row's order), the lens's width and its
+ * height; on the new bar, its width on each tab (`widths`: sized to that tab's word), otherwise all `width`.
+ */
+interface LensGeo { centers: readonly number[]; width: number; widths: readonly number[]; height: number }
+
+/**
+ * The new bar's words at 11 points in Apple's own font (San Francisco, semibold), measured on a Mac: the
+ * capsule's width until the words on screen have been measured, and the test for tightWords.
+ */
+const WORD_AT_11: Record<string, number> = { discuss: 62.5, index: 26.7, coaches: 51.4, profile: 35.8 };
+/** The least room either side of the lit word before the words go to NEW_BAR.tightLabel. */
+const ROOM_MIN = 10;
+
+/** The new bar's tab slots on a pill `pillW` wide (five equal slots, the + in the middle). */
+function newSlots(pillW: number) {
+  const slotW = (pillW - 2 * NEW_BAR.pad) / 5;
+  return { slotW, first: NEW_BAR.pad + slotW / 2 };
+}
+
+/**
+ * Whether the new bar's words go a touch smaller (Oct 28, owner: "the font under almost does not fit in the
+ * glass when your on the tab"): when "Community" lit, with ROOM_MIN either side, would reach past 4 in from
+ * the bar's round end, or would not fit its own slot. From 390 points across up it fits at 11 (iPhone 16,
+ * 17, the Pluses and Pro Maxes); a 375 (SE, 13 mini) takes 10.5 with a touch of negative tracking.
+ */
+function tightWords(pillW: number): boolean {
+  const { slotW, first } = newSlots(pillW);
+  const word = WORD_AT_11.discuss;
+  return word + 2 * ROOM_MIN > 2 * (first - NEW_BAR.inset) + 0.25 || word > slotW - 1;
+}
 
 /** How far in the lens sits from the bar's top and bottom, and from its ends on the first and last tab (the quiet pill's). */
 const LENS_INSET = 4;
@@ -607,11 +646,24 @@ const LENS_INSET = 4;
  * tabs' slots either side of it), and the lens is as much wider than a slot as keeps it the same
  * way in from the pill's round ends as from its top and bottom on the first and last tab.
  */
-function lensGeometry(pillW: number, m: BarSpec): LensGeo {
+function lensGeometry(pillW: number, m: BarSpec, words: Readonly<Record<string, number>> | null): LensGeo {
   const tabsW = m.split ? pillW - m.height - SPLIT_GAP : pillW;
   const slotW = (tabsW - 2 * m.pad) / (m.split ? 4 : 5);
   const centers = [0, 1, 2, 3].map((i) => m.pad + slotW * ((m.split || i < 2 ? i : i + 1) + 0.5));
-  return { centers, width: slotW + 2 * m.pad - 2 * m.lensInset, height: m.height - 2 * m.lensInset };
+  const width = slotW + 2 * m.pad - 2 * m.lensInset;
+  if (!words) return { centers, width, widths: [width, width, width, width], height: m.height - 2 * m.lensInset };
+  // The new bar: as wide as the tab's word on screen plus NEW_BAR.room each side (never under minLit), but
+  // never past 4 in from the bar's round ends, and always 3 clear of the next tab's icon or the round +.
+  const scale = m.label / NEW_BAR.label;
+  const widths = LENS_TABS.map((route, i) => {
+    const word = words[route] ?? WORD_AT_11[route] * scale;
+    const want = Math.max(NEW_BAR.minLit, word + 2 * NEW_BAR.room);
+    const c = centers[i];
+    const left = i === 0 ? c - m.lensInset : slotW - (i === 2 ? m.plus / 2 : m.icon / 2) - 3;
+    const right = i === 3 ? pillW - c - m.lensInset : slotW - (i === 1 ? m.plus / 2 : m.icon / 2) - 3;
+    return Math.min(want, 2 * Math.min(left, right));
+  });
+  return { centers, width: Math.max(...widths), widths, height: m.height - 2 * m.lensInset };
 }
 
 /**
@@ -640,10 +692,15 @@ const Lens = React.memo(function Lens({ geo, fallback, fill, glass, glassDark, s
   );
 });
 
-/** How far the new bar's lens may stretch past its own width while it travels, as a share of that width. */
-const STRETCH_MAX = 0.3;
-/** Its lift at the touch: this much taller (and as much wider), as a share of its height (about 1.07 times). */
-const LIFT = 0.07;
+/**
+ * Each motion's (barLens's LensMotion, in lensKind's order: tuned, liquid, lens) most stretch past the
+ * capsule's own width while it travels, as a share of that width.
+ */
+const STRETCH_MAX = [0.25, 0.45, 0.15] as const;
+/** Each one's lift at the touch: this much taller (and as much wider), as a share of its height (tuned about 1.06, the lens's swell 1.14). */
+const LIFTS = [0.06, 0.04, 0.14] as const;
+/** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers. */
+const SQUASH = 0.08;
 /** Up at the touch, quickly; down, once the finger is up and the lens has landed, on a soft spring with no bounce. */
 const LIFT_UP = { duration: 120, easing: Easing.out(Easing.cubic) };
 const LIFT_DOWN = { dampingRatio: 1, duration: 280 } as const;
@@ -651,54 +708,83 @@ const LIFT_DOWN = { dampingRatio: 1, duration: 280 } as const;
 const SLIDE_LAND_MS = 220;
 /** How near its tab (in tabs) the lens counts as landed, for the lift to start coming down. */
 const LANDED = 0.12;
+/** How near its tab (in tabs) the leading edge is when the soft tap of landing comes (about 2 points). */
+const TOUCHDOWN = 0.03;
+/** Read straight on the JS thread (a function made there, so the animation thread can call it). */
+const landTap = () => haptics.landed();
 /**
- * The trailing edge's chase: a spring with no bounce this stiff, re-aimed at the lens every frame it
- * moves, so it trails it by about 2 / √k seconds of its speed (about 28 ms after a tap: a one-tab move
- * stretches it about a fifth): the faster the lens goes, the longer it stretches, and it gathers up as
- * the lens slows to land. Never past the lens. Softer (about 50 ms) while a finger drags it, page or
- * bar, whose speeds are slower than a tap's spring, so a quick swipe still shows it.
+ * The trailing edge's chase (tuned, and the lens): a spring with no bounce this stiff, re-aimed at the lens
+ * every frame it moves, so it trails it by about 2 / √k seconds of its speed: the faster the lens goes, the
+ * longer it stretches, and it gathers up as the lens slows to land. Never past the lens. Softer (about 50
+ * ms) while a finger drags it, page or bar, whose speeds are slower than a tap's spring, so a quick swipe
+ * still shows it. The lens's is stiffer: it swells rather than stretches.
  */
-const TRAIL_K = 5000;
-const TRAIL_SPRING = { stiffness: TRAIL_K, damping: 2 * Math.sqrt(TRAIL_K), mass: 1, overshootClamping: true } as const;
-const TRAIL_RIDE_K = 1600;
-const TRAIL_RIDE = { stiffness: TRAIL_RIDE_K, damping: 2 * Math.sqrt(TRAIL_RIDE_K), mass: 1, overshootClamping: true } as const;
+const chase = (k: number) => ({ stiffness: k, damping: 2 * Math.sqrt(k), mass: 1, overshootClamping: true } as const);
+const TRAIL_SPRINGS = [chase(6000), chase(6000), chase(9000)] as const;
+const TRAIL_RIDE = chase(1600);
+/**
+ * The liquid capsule's trailing edge: a spring of its own aimed at the tab (not chasing the front), slower
+ * than the front's 230 ms, so the front pulls ahead and the back catches up as it lands.
+ */
+const LIQUID_TRAIL = { dampingRatio: 1, duration: 400, overshootClamping: true } as const;
 /** The middle piece's own width before it is stretched (any width: it is only ever scaled). */
 const MID_W = 100;
+/** The lens's highlight: a short soft bar near its top that rides along with it. */
+const GLINT_W = 22;
+const GLINT_H = 4;
 
 /**
- * The new bar's lens (Oct 28, owner: "Also the animation is inportant for tab switching"), after iOS 26's
- * own: at the touch it lifts a touch and sets off at once; as it travels its leading edge leads and its
- * trailing edge follows, so it stretches toward the tab with its speed and gathers up again as it lands,
- * on a spring with no bounce that never passes the tab. A swipe between tabs drags it frame by frame
- * (the row's own place, barLens's lensRow), stretching with the finger's speed.
+ * The new bar's lens (Oct 28, owner: "Also the animation is inportant for tab switching", then "The new
+ * bottom is better, still could be better animation"), after iOS 26's own: at the touch it lifts and sets
+ * off at once; as it travels its leading edge leads and its trailing edge follows, so it stretches toward
+ * the tab and gathers up again as it lands, on springs with no bounce that never pass the tab. It is as
+ * wide as each tab's word (geo.widths) and changes width on the way. A swipe between tabs drags it frame
+ * by frame (the row's own place, barLens's lensRow), stretching with the finger's speed. Three ways to
+ * move (barLens's LENS_MOTION, `kind`): tuned, liquid (two springs, a touch flatter while stretched), lens
+ * (a swell with a brighter rim and a highlight riding on it).
  *
  * Only transforms, on the animation thread: a round end at each side and a plain middle between their
  * centres, each moved (the middle also stretched), so the ends stay round however long it gets (a
  * stretched capsule would flatten them). The three are one solid colour and overlap; their holder (never
- * glass, never holding glass, never animated) gives them their see-through, all at once, so the overlaps
- * never show. With Reduce Motion: no stretch, no lift.
+ * glass, never holding glass) gives them their see-through, all at once, so the overlaps never show. The
+ * lens's rim is the same three pieces again (two half rings and a top and bottom line). With Reduce
+ * Motion: no stretch, no lift, a quick plain slide.
  */
-const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alpha, drive, calm, st }: {
+const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alpha, rim, glint, kind, drive, calm, st }: {
   geo: LensGeo; fallback: number; color: string; alpha: number;
+  /** The lens's (kind 2) rim and highlight colours. */
+  rim: string; glint: string;
+  /** barLens's lensKind: 0 tuned, 1 liquid, 2 lens. */
+  kind: number;
   /** The live bar's: it moves the trailing edge and the lift for every copy too (they read the same values). */
   drive: boolean;
   calm: boolean; st: BarStyles;
 }) {
   const h = geo.height;
+  const stretchMax = STRETCH_MAX[kind] ?? STRETCH_MAX[0];
+  const liftBy = LIFTS[kind] ?? LIFTS[0];
   useAnimatedReaction(() => {
     if (!drive) return null;
     const own = lensAt.value;
-    return lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
-  }, (at, was) => {
-    if (at === null) return;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return { at, goal: lensGoal.value, rides: lensRides.value };
+  }, (now, was) => {
+    if (now === null) return;
+    const { at } = now;
     // Placed (the first time, or straight onto a tab: a jump, never a move) or calm: the trailing edge is simply there too.
-    if (calm || was === null || lensTrail.value < 0 || Math.abs(at - was) > 0.5) {
+    if (calm || was === null || lensTrail.value < 0 || Math.abs(at - was.at) > 0.9) {
       cancelAnimation(lensTrail);
       lensTrail.value = at;
       return;
     }
-    lensTrail.value = withSpring(at, lensRides.value ? TRAIL_RIDE : TRAIL_SPRING);
-  }, [drive, fallback, calm]);
+    if (now.rides) { lensTrail.value = withSpring(at, TRAIL_RIDE); return; }
+    if (kind === 1) {
+      // Liquid: the back on its own slower spring, aimed at the tab once for each new tab (and once a drag lets go).
+      if (now.goal >= 0 && (now.goal !== was.goal || was.rides)) lensTrail.value = withSpring(now.goal, LIQUID_TRAIL);
+      return;
+    }
+    if (at !== was.at) lensTrail.value = withSpring(at, TRAIL_SPRINGS[kind] ?? TRAIL_SPRINGS[0]);
+  }, [drive, fallback, calm, kind]);
   useAnimatedReaction(() => {
     // Not while a finger is on the bar or drags the lens along it.
     if (!drive || lensPress.value || lensHeld.value || lensLift.value <= 0) return 0;
@@ -710,24 +796,42 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
   }, (down, was) => {
     if (down === 1 && was !== 1) lensLift.value = withSpring(0, LIFT_DOWN);
   }, [drive]);
+  // The soft tap as it lands (a phone's; a browser stays still), once for each tap or slide that sent it.
+  useAnimatedReaction(() => {
+    if (!drive || !lensLanding.value) return 0;
+    const goal = lensGoal.value;
+    if (goal < 0 || lensRides.value) return 0;
+    const own = lensAt.value;
+    return own >= 0 && Math.abs(own - goal) < TOUCHDOWN ? 1 : 0;
+  }, (landed, was) => {
+    if (landed === 1 && was !== 1) {
+      lensLanding.value = 0;
+      runOnJS(landTap)();
+    }
+  }, [drive]);
   const box = useDerivedValue(() => {
     const own = lensAt.value;
     const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
     const trail = calm || lensTrail.value < 0 ? at : lensTrail.value;
-    const lead = interpolate(at, [0, 1, 2, 3], geo.centers as number[], Extrapolation.CLAMP);
-    const back = interpolate(trail, [0, 1, 2, 3], geo.centers as number[], Extrapolation.CLAMP);
-    const w = geo.width;
-    let left = Math.min(lead, back) - w / 2;
-    let right = Math.max(lead, back) + w / 2;
-    // Never longer than STRETCH_MAX past its width: the trailing edge is the one held in.
-    const most = w * (1 + STRETCH_MAX);
+    const places = [0, 1, 2, 3];
+    const lead = interpolate(at, places, geo.centers as number[], Extrapolation.CLAMP);
+    const back = interpolate(trail, places, geo.centers as number[], Extrapolation.CLAMP);
+    const wl = interpolate(at, places, geo.widths as number[], Extrapolation.CLAMP);
+    const wb = interpolate(trail, places, geo.widths as number[], Extrapolation.CLAMP);
+    let left = Math.min(lead - wl / 2, back - wb / 2);
+    let right = Math.max(lead + wl / 2, back + wb / 2);
+    // Never longer than its most stretch past its width: the trailing edge is the one held in.
+    const base = Math.max(wl, wb);
+    const most = base * (1 + stretchMax);
     if (right - left > most) {
       if (lead >= back) left = right - most;
       else right = left + most;
     }
-    const grow = calm ? 0 : LIFT * h * lensLift.value;
-    return { mid: (left + right) / 2, w: right - left + grow, h: h + grow };
-  }, [geo, fallback, calm]);
+    const stretch = Math.max(0, (right - left) / base - 1);
+    const grow = calm ? 0 : liftBy * h * lensLift.value;
+    const squash = kind === 1 && !calm ? 1 - SQUASH * Math.min(1, stretch / stretchMax) : 1;
+    return { mid: (left + right) / 2, w: right - left + grow, h: (h + grow) * squash, lean: lead - back };
+  }, [geo, fallback, calm, kind, stretchMax, liftBy]);
   const startCap = useAnimatedStyle(() => {
     const b = box.value;
     return { transform: [{ translateX: b.mid - b.w / 2 + b.h / 2 - h / 2 }, { scale: b.h / h }] };
@@ -738,14 +842,104 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
   }, [h]);
   const middle = useAnimatedStyle(() => {
     const b = box.value;
-    return { transform: [{ translateX: b.mid - MID_W / 2 }, { scaleX: Math.max(0.001, (b.w - b.h) / MID_W) }, { scaleY: b.h / h }] };
+    return { transform: [{ translateX: b.mid - MID_W / 2 }, { scaleX: Math.max(0.001, (b.w - b.h + 1) / MID_W) }, { scaleY: b.h / h }] };
+  }, [h]);
+  // The lens (kind 2): its fill a touch stronger as it swells, its rim and highlight brighter.
+  const lensFill = useAnimatedStyle(() => ({ opacity: kind === 2 && !calm ? alpha * (1 + 0.6 * lensLift.value) : alpha }), [kind, calm, alpha]);
+  const rimShow = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * lensLift.value }));
+  // The highlight only while it is swollen (at rest the lens is just its fill and a faint rim).
+  const glintShow = useAnimatedStyle(() => ({ opacity: lensLift.value }));
+  const rimStart = useAnimatedStyle(() => {
+    const b = box.value;
+    const sc = b.h / h;
+    return { transform: [{ translateX: b.mid - b.w / 2 - h / 4 + (sc * h) / 4 }, { scale: sc }] };
+  }, [h]);
+  const rimEnd = useAnimatedStyle(() => {
+    const b = box.value;
+    const sc = b.h / h;
+    return { transform: [{ translateX: b.mid + b.w / 2 - h / 4 - (sc * h) / 4 }, { scale: sc }] };
+  }, [h]);
+  const glintMove = useAnimatedStyle(() => {
+    const b = box.value;
+    // Toward the capsule's front as it travels (it leans the way it goes), back to just left of middle at rest.
+    const x = b.mid - b.w * 0.18 + Math.max(-b.w * 0.25, Math.min(b.w * 0.25, b.lean * 0.6));
+    return { transform: [{ translateX: x - GLINT_W / 2 }, { translateY: (h - b.h) / 2 + b.h * 0.1 }, { scaleX: 1 + Math.min(0.8, Math.abs(b.lean) / 40) }] };
   }, [h]);
   return (
-    <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="bar-lens" needsOffscreenAlphaCompositing style={[st.stretch, { height: h, opacity: alpha }]}>
-      <Animated.View testID="bar-lens-mid" style={[st.stretchMid, { height: h, backgroundColor: color }, middle]} />
-      <Animated.View testID="bar-lens-start" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, startCap]} />
-      <Animated.View testID="bar-lens-end" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, endCap]} />
-    </View>
+    <>
+      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="bar-lens" needsOffscreenAlphaCompositing style={[st.stretch, { height: h }, lensFill]}>
+        <Animated.View testID="bar-lens-mid" style={[st.stretchMid, { height: h, backgroundColor: color }, middle]} />
+        <Animated.View testID="bar-lens-start" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, startCap]} />
+        <Animated.View testID="bar-lens-end" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, endCap]} />
+      </Animated.View>
+      {kind === 2 ? (
+        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, rimShow]}>
+          <Animated.View style={[st.stretchMid, st.rimLine, { height: h, borderColor: rim }, middle]} />
+          <Animated.View style={[st.stretchCap, st.rimHalf, { width: h / 2, height: h }, rimStart]}>
+            <View style={[st.rimRing, { width: h, height: h, borderRadius: h / 2, borderColor: rim }]} />
+          </Animated.View>
+          <Animated.View style={[st.stretchCap, st.rimHalf, { width: h / 2, height: h }, rimEnd]}>
+            <View style={[st.rimRing, { left: -h / 2, width: h, height: h, borderRadius: h / 2, borderColor: rim }]} />
+          </Animated.View>
+          <Animated.View style={[st.stretchCap, { width: GLINT_W, height: GLINT_H, borderRadius: GLINT_H / 2, backgroundColor: glint }, glintMove, glintShow]} />
+        </Animated.View>
+      ) : null}
+    </>
+  );
+});
+
+/**
+ * How lit a tab is, 0 to 1, by how near the capsule is to it (in tabs): full on it, nothing a tab away, eased
+ * between. The capsule's place is its front and back together (the front a little more), so a tab lights
+ * as the capsule arrives and the one left fades as it goes. A worklet: each style reads the values itself.
+ */
+function litNear(place: number, at: number, trail: number): number {
+  'worklet';
+  const d = Math.abs(0.65 * at + 0.35 * (trail < 0 ? at : trail) - place);
+  const q = Math.max(0, 1 - d);
+  return q * q * (3 - 2 * q);
+}
+
+/**
+ * The new bar's tab icon with the lit colour following the capsule: the plain icon in the tabs' ink under
+ * the filled one in the lit colour, the two crossed by how near the capsule is (each icon a leaf of its
+ * own: nothing that holds glass fades). It still pops a touch as the tab lights.
+ */
+const FollowGlyph = React.memo(function FollowGlyph({ place, fallback, icon, activeIcon, size, idle, lit, active, pop }: {
+  place: number; fallback: number;
+  icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap;
+  size: number; idle: string; lit: string; active: boolean; pop: boolean;
+}) {
+  const litOn = useAnimatedStyle(() => {
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return { opacity: litNear(place, at, lensTrail.value) };
+  }, [place, fallback]);
+  const idleOn = useAnimatedStyle(() => {
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return { opacity: 1 - litNear(place, at, lensTrail.value) };
+  }, [place, fallback]);
+  return (
+    <PopWrap active={active} pop={pop}>
+      <Animated.View style={idleOn}><Ionicons name={icon} size={size} color={idle} /></Animated.View>
+      <Animated.View style={[StyleSheet.absoluteFill, litOn]}><Ionicons name={activeIcon} size={size} color={lit} /></Animated.View>
+    </PopWrap>
+  );
+});
+
+/** The new bar's tab word, its colour following the capsule as the icon's does (one word, its colour mixed). */
+const FollowWord = React.memo(function FollowWord({ place, fallback, idle, lit, style, fade, children, onWidth }: {
+  place: number; fallback: number; idle: string; lit: string; style: object; fade: AnimStyle; children: string;
+  onWidth?: (w: number) => void;
+}) {
+  const tint = useAnimatedStyle(() => {
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return { color: interpolateColor(litNear(place, at, lensTrail.value), [0, 1], [idle, lit]) };
+  }, [place, fallback, idle, lit]);
+  return (
+    <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} onLayout={onWidth ? (e) => onWidth(e.nativeEvent.layout.width) : undefined} style={[style, tint, fade]}>{children}</Animated.Text>
   );
 });
 
@@ -758,6 +952,12 @@ const POP_DOWN = { dampingRatio: 1, duration: 260 } as const;
 const TabGlyph = React.memo(function TabGlyph({ name, size, color, active, pop }: {
   name: keyof typeof Ionicons.glyphMap; size: number; color: string; active: boolean; pop: boolean;
 }) {
+  if (!pop) return <Ionicons name={name} size={size} color={color} />;
+  return <PopWrap active={active} pop><Ionicons name={name} size={size} color={color} /></PopWrap>;
+});
+
+/** The pop itself, around whatever the tab's icon is. */
+function PopWrap({ active, pop, children }: { active: boolean; pop: boolean; children: React.ReactNode }) {
   const scale = useSharedValue(1);
   const was = useRef(active);
   useEffect(() => {
@@ -765,12 +965,11 @@ const TabGlyph = React.memo(function TabGlyph({ name, size, color, active, pop }
     was.current = active;
   }, [active, pop, scale]);
   const grow = useAnimatedStyle(() => (scale.value === 1 ? { transform: [] } : { transform: [{ scale: scale.value }] }));
-  if (!pop) return <Ionicons name={name} size={size} color={color} />;
-  return <Animated.View style={grow}><Ionicons name={name} size={size} color={color} /></Animated.View>;
-});
+  return <Animated.View style={grow}>{children}</Animated.View>;
+}
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback }: {
+function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; look: BarLook; calm: boolean; media: boolean; glassMedia: boolean; live: boolean;
   /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
@@ -782,6 +981,10 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   veilStyle: AnimStyle; veilBlocks: boolean; onVeil: () => void; onFeedHold?: () => void;
   /** The lens's measures (null: no lens), and the lit tab's place until it has been placed. */
   lens: LensGeo | null; lensFallback: number;
+  /** How the new bar's lens moves (barLens's lensKind). */
+  kind: number;
+  /** The live new bar's: each tab's word as drawn, for its capsule's width. */
+  onWordWidth?: (route: string, w: number) => void;
 }) {
   const { m, st, fresh } = look;
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
@@ -836,6 +1039,8 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
     </View>
   );
 
+  // The new bar with its lens: each tab's colour follows the capsule (FollowGlyph, FollowWord).
+  const follow = fresh && !!lens;
   const row: React.ReactNode[] = [];
   items.forEach((item, index) => {
     if (index === 2 && !m.split) row.push(plus);
@@ -867,14 +1072,22 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
           <View ref={live ? tourRef(item.route) : undefined} style={st.target}>
             <Animated.View style={[st.inner, settle]}>
               <View>
-                <TabGlyph name={active ? item.activeIcon : item.icon} size={m.icon} color={active ? litOf(item.route) : idleIcon} active={active} pop={fresh && live && !calm} />
+                {follow ? (
+                  <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm} />
+                ) : (
+                  <TabGlyph name={active ? item.activeIcon : item.icon} size={m.icon} color={active ? litOf(item.route) : idleIcon} active={active} pop={fresh && live && !calm} />
+                )}
                 {item.route === 'profile' && profileAlerts > 0 ? (
                   <View style={[st.badge, { backgroundColor: c.danger }]}>
                     <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
                   </View>
                 ) : null}
               </View>
-              <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
+              {follow ? (
+                <FollowWord place={lensPlace(item.route)} fallback={lensFallback} idle={idleLabel} lit={litOf(item.route)} style={st.label} fade={labelFade} onWidth={onWordWidth ? (w) => onWordWidth(item.route, w) : undefined}>{item.label}</FollowWord>
+              ) : (
+                <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
+              )}
             </Animated.View>
           </View>
         </Pressable>
@@ -890,10 +1103,14 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // The new bar's: a soft wash of the brand's colour on a light court (the lit icon and word are that
   // colour), a step lighter on a dark court and over a clip. Never a heavy grey.
   const tint = lensDark ? { color: c.onMedia, alpha: 0.18 } : darkPage ? { color: c.text, alpha: 0.13 } : { color: c.brand, alpha: 0.11 };
+  // The lens motion's rim and highlight: light on a dark court and over a clip; on a light court a rim in
+  // the brand's colour (white would vanish on the light glass) and a white highlight.
+  const lensRim = lensDark || darkPage ? withAlpha(c.onMedia, 0.34) : withAlpha(c.brand, 0.3);
+  const lensGlint = withAlpha(c.onMedia, lensDark || darkPage ? 0.5 : 0.95);
   const inside = (
     <>
       {lens ? (fresh
-        ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} drive={live} calm={calm} st={st} />
+        ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} rim={lensRim} glint={lensGlint} kind={kind} drive={live} calm={calm} st={st} />
         : <Lens geo={lens} fallback={lensFallback} fill={lensFill} glass={live && liquidGlass && LENS_LOOK === 'glass'} glassDark={lensDark || darkPage} st={st} />) : null}
       {row}
       {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
@@ -1012,6 +1229,8 @@ const PLUS_SHAPE = 'circle' as 'square' | 'circle';
 /** One bar's measures: the quiet pill's (BAR_SHAPE) or the new bar's (tabBarLook's NEW_BAR). */
 interface BarSpec {
   height: number; lift: number; radius: number; side: number; pad: number; icon: number; label: number;
+  /** The words' tracking (the new bar's on a narrow phone; otherwise its look's own). */
+  track?: number;
   plus: number; plusIcon: number; plusW: number; plusH: number; plusRadius: number;
   settle: number; badgeLeft: number; lensInset: number; split: boolean;
 }
@@ -1022,10 +1241,12 @@ const QUIET_SPEC: BarSpec = {
 };
 const NEW_SPEC: BarSpec = {
   height: NEW_BAR.height, lift: 0, radius: NEW_BAR.height / 2, side: NEW_BAR.side, pad: NEW_BAR.pad,
-  icon: NEW_BAR.icon, label: NEW_BAR.label, plus: NEW_BAR.plus, plusIcon: NEW_BAR.plusIcon,
+  icon: NEW_BAR.icon, label: NEW_BAR.label, track: 0, plus: NEW_BAR.plus, plusIcon: NEW_BAR.plusIcon,
   plusW: NEW_BAR.plus, plusH: NEW_BAR.plus, plusRadius: NEW_BAR.plus / 2,
   settle: NEW_BAR.settle, badgeLeft: NEW_BAR.badgeLeft, lensInset: NEW_BAR.inset, split: false,
 };
+/** The new bar on a narrow phone (tightWords): its words a touch smaller and closer. */
+const NEW_TIGHT_SPEC: BarSpec = { ...NEW_SPEC, label: NEW_BAR.tightLabel, track: NEW_BAR.tightTrack };
 
 function barStyles(m: BarSpec, fresh: boolean) {
   const RADIUS = m.radius;
@@ -1061,7 +1282,7 @@ function barStyles(m: BarSpec, fresh: boolean) {
     plusAbove: { zIndex: 2 },
     plus: { width: m.plusW, height: m.plusH, borderRadius: m.plusRadius, alignItems: 'center', justifyContent: 'center', ...brandShadow },
     label: fresh
-      ? { ...typography.smallStrong, fontSize: m.label, letterSpacing: 0 }
+      ? { ...typography.smallStrong, fontSize: m.label, letterSpacing: m.track ?? 0 }
       : { ...typography.smallStrong, fontSize: m.label, letterSpacing: 0.15 },
     // Sits off the icon's shoulder rather than on top of it, as today.
     badge: {
@@ -1080,6 +1301,10 @@ function barStyles(m: BarSpec, fresh: boolean) {
     stretch: { position: 'absolute', left: 0, right: 0, top: m.lensInset },
     stretchCap: { position: 'absolute', left: 0, top: 0 },
     stretchMid: { position: 'absolute', left: 0, top: 0, width: MID_W },
+    // The lens motion's rim: a top and bottom line for the middle, a half ring for each end.
+    rimLine: { borderTopWidth: 1, borderBottomWidth: 1 },
+    rimHalf: { overflow: 'hidden' },
+    rimRing: { position: 'absolute', top: 0, left: 0, borderWidth: 1 },
   });
 }
 type BarStyles = ReturnType<typeof barStyles>;
@@ -1088,3 +1313,4 @@ type BarStyles = ReturnType<typeof barStyles>;
 interface BarLook { m: BarSpec; st: BarStyles; fresh: boolean }
 const QUIET_LOOK: BarLook = { m: QUIET_SPEC, st: barStyles(QUIET_SPEC, false), fresh: false };
 const NEW_LOOK: BarLook = { m: NEW_SPEC, st: barStyles(NEW_SPEC, true), fresh: true };
+const NEW_TIGHT_LOOK: BarLook = { m: NEW_TIGHT_SPEC, st: barStyles(NEW_TIGHT_SPEC, true), fresh: true };

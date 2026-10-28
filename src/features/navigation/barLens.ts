@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { Easing, ReduceMotion, cancelAnimation, makeMutable, withSpring, withTiming } from 'react-native-reanimated';
 
 import { useApp } from '@/store/AppContext';
@@ -90,10 +91,55 @@ export function lensPlace(route: string | undefined): number {
  */
 const LENS_SPRING = { dampingRatio: 1, duration: 420, overshootClamping: true } as const;
 /**
- * The new bar's (lensFeel 1): quicker, as iOS 26's lens, with the trailing edge catching up after it
- * (TabBarLooks' StretchLens), so the whole move is about 340 ms. Still no bounce, never past the tab.
+ * How the new bar's capsule travels between tabs (Oct 28, owner, after the first video: "The new bottom is
+ * better, still could be better animation"). Three, one line apart (TabBarLooks' StretchLens draws them):
+ *
+ *   'liquid'  its two ends ride two springs, the leading one quicker (about 230 ms) than the trailing one
+ *             (about 400 ms): it stretches like a drop of liquid toward the tab, a touch flatter while
+ *             stretched, and the back catches up as it lands. No bounce, never past the tab.
+ *   'lens'    at the touch it swells into a glassier lens (bigger, a brighter rim, a highlight riding on
+ *             it), travels a little stretched, and shrinks back as it lands, as iOS 26's own tab bar.
+ *   'tuned'   the first version made snappier (about 240 ms, a short stretch, a small lift): the baseline.
+ *
+ * In all three the lit colour follows the capsule (a tab tints by how near it is), a soft tap as it lands
+ * (on a phone), and Reduce Motion is a quick plain slide.
  */
-const NEW_SPRING = { dampingRatio: 1, duration: 300, overshootClamping: true } as const;
+export type LensMotion = 'liquid' | 'lens' | 'tuned';
+export const LENS_MOTION = 'liquid' as LensMotion;
+const MOTIONS: readonly LensMotion[] = ['tuned', 'liquid', 'lens'];
+let motionChosen: LensMotion | null = null;
+/**
+ * The motion in use: LENS_MOTION, or in the web demo one picked with ?barmotion=liquid|lens|tuned (kept for
+ * the visit), so the three can be filmed side by side from one build.
+ */
+export function lensMotion(): LensMotion {
+  if (motionChosen) return motionChosen;
+  motionChosen = LENS_MOTION;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const asked = new URLSearchParams(window.location.search).get('barmotion') as LensMotion | null;
+      if (asked && MOTIONS.includes(asked)) { window.sessionStorage.setItem('courtside-barmotion', asked); motionChosen = asked; }
+      else {
+        const kept = window.sessionStorage.getItem('courtside-barmotion') as LensMotion | null;
+        if (kept && MOTIONS.includes(kept)) motionChosen = kept;
+      }
+    } catch { /* no storage: the default */ }
+  }
+  return motionChosen;
+}
+/** The motion as a number the animation thread reads (MOTIONS' order: 0 tuned, 1 liquid, 2 lens). Set by the bar on show. */
+export const lensKind = makeMutable(1);
+export function lensKindOf(motion: LensMotion): number {
+  return MOTIONS.indexOf(motion);
+}
+/** Each motion's leading spring (critically damped: no bounce, never past the tab). */
+const NEW_SPRINGS = [
+  { dampingRatio: 1, duration: 240, overshootClamping: true },
+  { dampingRatio: 1, duration: 230, overshootClamping: true },
+  { dampingRatio: 1, duration: 320, overshootClamping: true },
+] as const;
+/** 1 from the moment a tap or a slide along the bar sends the new bar's lens to a tab until it lands there (its soft tap on landing). */
+export const lensLanding = makeMutable(0);
 /** Reduce Motion (lensFeel 2): a quick plain slide, no stretch, no lift. Run even with the setting on (it is the calm version already). */
 const CALM_SLIDE = { duration: 160, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never } as const;
 
@@ -113,7 +159,7 @@ export const lensPress = makeMutable(0);
 function lensMove(to: number) {
   'worklet';
   const feel = lensFeel.value;
-  return feel === 2 ? withTiming(to, CALM_SLIDE) : withSpring(to, feel === 1 ? NEW_SPRING : LENS_SPRING);
+  return feel === 2 ? withTiming(to, CALM_SLIDE) : withSpring(to, feel === 1 ? NEW_SPRINGS[lensKind.value] ?? NEW_SPRINGS[1] : LENS_SPRING);
 }
 /** Picked up by a finger mid-slide: how long it takes to ease onto the row from where it stood. */
 const CATCH_MS = 200;
@@ -217,6 +263,8 @@ export function lensTo(to: number, tap = false) {
     lensAt.value = shown;
   }
   lensGoal.value = to;
+  // A tap on the bar: a soft tap when it lands (the new bar's; never for a tab lit any other way).
+  if (tap && lensFeel.value !== 0) lensLanding.value = 1;
   lensAt.value = lensMove(to);
 }
 
@@ -236,6 +284,7 @@ export function lensReset() {
   lensTrail.value = -1;
   lensLift.value = 0;
   lensPress.value = 0;
+  lensLanding.value = 0;
 }
 
 /** The row's own curve as it settles after a swipe (TabsPager's EASE, the browser swipe's cubic-bezier). */

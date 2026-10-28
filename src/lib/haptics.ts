@@ -80,6 +80,12 @@ export const reward = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedback
  */
 export const arrive = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft), 0, { feel: A.Clock_Tick });
 
+/**
+ * The new tab bar's capsule settling on the tab it was sent to (iOS 26's own bar gives the same soft
+ * tap as its lens lands). A browser stays still.
+ */
+export const landed = () => run(() => Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft), 0, { feel: A.Clock_Tick });
+
 /** Something went wrong and the person needs to notice. */
 export const reject = () => run(() => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning), [0, 18, 50, 18], { feel: A.Reject, older: A.Long_Press });
 
