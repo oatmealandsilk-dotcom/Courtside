@@ -5,13 +5,13 @@ import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { HitGlyph } from '@/components/HitGlyph';
+import { NOW_CARD_W, NOW_PAD, NowCardBody, NowHeldBody } from '@/components/place/CourtCardNow';
 import { PEEK_CARD_W, PeekCardBody, PeekHeldBody, peekFrame, useCourtPicturesGo } from '@/components/place/CourtsNearPeek';
 import { hitShort } from '@/features/hits/format';
 import { canSeeHitAt, hitsAtCourt, openHits } from '@/features/hits/visible';
 import { countLabel, sameCourt } from '@/features/places/court';
 import { labelOf, looksPublic } from '@/features/places/courtName';
-import { courtSurfaceOf, surfaceAdjective, surfaceLabel } from '@/features/places/courtSurface';
+import { courtSurfaceOf, surfaceAdjective } from '@/features/places/courtSurface';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { canSeeAtCourt, courtSeeing } from '@/features/places/useCourtPosts';
 import { openCourt } from '@/features/players/courtLink';
@@ -47,17 +47,10 @@ export function usePeekLook(): 'now' | 'N' {
   return COURTS_LOOK === 'N' && (PEEK_FOR_EVERYONE || admin) ? 'N' : 'now';
 }
 
-const CARD = 168;
-// The room inside a card, a little more than a grouped box's, since no fill marks its edge.
-const PAD = spacing.lg - 2;
+// The outlined card's size and room (CourtCardNow has its body, shared with a city's Most active courts).
+const CARD = NOW_CARD_W;
+const PAD = NOW_PAD;
 const MOST = 8;
-
-/**
- * Top left on a card, in place of the old court icon (Oct 24, owner: the icon was "too ai looking
- * and repetitive"; "Maybe something that says the surface of the court?"; he chose look 1): a small
- * outlined tag, a dot in the surface's colour and its word ("Hard"), the status pill beside it.
- * When the map does not say what the court is played on, no tag and no icon.
- */
 
 /** The line under a card's name: how far, how many courts, lights. */
 function metaLine(miles: number, count: number, lit: boolean | undefined): string {
@@ -193,15 +186,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
         <View style={[styles.row, styles.heldRow]}>
           {[0, 1, 2].map((i) => (
             LOOK === 'N' ? <View key={i} style={[styles.card, peekFrame]}><PeekHeldBody /></View> :
-            <View key={i} style={styles.card}>
-              <View style={styles.top}><View style={styles.heldTag} /></View>
-              {/* The real card's room for its words (WordsRoom), under the quiet bars: the same height at every text size, so nothing moves when the courts come. */}
-              <View>
-                <WordsRoom />
-                <View style={[styles.heldLine, styles.heldOver, { width: '82%' }]} />
-                <View style={[styles.heldLine, styles.heldOver, styles.heldMeta, styles.heldMetaAt]} />
-              </View>
-            </View>
+            <View key={i} style={styles.card}><NowHeldBody /></View>
           ))}
         </View>
       </View>
@@ -241,24 +226,9 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
               {LOOK === 'N' ? (
                 <PeekCardBody name={labelOf(c)} lat={c.lat} lng={c.lng} meta={meta} kind={kind} tint={surfaceTint(kind)}
                   hit={badge?.hit ?? null} posts={badge?.posts ?? null} draw={picturesGo && i < seen} />
-              ) : <>
-              {/* The surface's tag with what's on there beside it (a hit first, else its posts), so the card stays short. */}
-              <View style={styles.top}>
-                {/* Beside an open hit, the surface is its dot alone: the hit's time must read whole (the card's label still says the surface). */}
-                {kind ? <View style={[styles.tag, badge?.hit ? styles.tagDotOnly : null]}><View style={[styles.tagDot, { backgroundColor: surfaceTint(kind) }]} />{badge?.hit ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.tagText} numberOfLines={1}>{surfaceLabel[kind]}</Text>}</View> : null}
-                {badge?.hit ? <View style={[styles.badge, styles.badgeHit, styles.badgeRow]}><HitGlyph size={11} color={colors.brand} /><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.badgeText, styles.badgeHitText]} numberOfLines={1}>{badge.hit}</Text></View>
-                  : badge?.posts ? <View style={styles.badge}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText} numberOfLines={1}>{badge.posts}</Text></View> : null}
-              </View>
-              {/* The name keeps two lines' room at every text size, the very rule the held cards use, so a
-                  strip of short names is never shorter than the strip it takes the place of. */}
-              <View>
-                <WordsRoom />
-                <View style={styles.wordsOver}>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{labelOf(c)}</Text>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{meta}</Text>
-                </View>
-              </View>
-              </>}
+              ) : (
+                <NowCardBody name={labelOf(c)} meta={meta} kind={kind} tint={surfaceTint(kind)} hit={badge?.hit ?? null} posts={badge?.posts ?? null} />
+              )}
             </SwipePressable>
           );
         })}
@@ -270,23 +240,6 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
     </View>
   );
   return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
-}
-
-/**
- * The room a court card's words take, unseen: two lines of name and one of
- * distance at the phone's text size. Both the held cards and the real ones
- * stand on it, so the strip is the same height before and after the courts
- * come, whatever the names (Oct 22: a strip of one-line names was 20pt
- * shorter, and everything under it jumped up).
- */
-function WordsRoom() {
-  const styles = useThemedStyles(styleDefinitions);
-  return (
-    <View style={styles.wordsRoom} aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" pointerEvents="none">
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.unseen]} numberOfLines={2}>{'Courts\nnear you'}</Text>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, styles.unseen]} numberOfLines={1}>1 mi</Text>
-    </View>
-  );
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -301,36 +254,9 @@ const styleDefinitions = StyleSheet.create({
   // A light card: no fill and no shadow, just a hairline in the theme's border colour, so the strip sits quietly on the page.
   card: { width: CARD, padding: PAD, gap: 4, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
-  // The old court tile's 36 pt height whatever stands there (a tag, a pill, or nothing), so no card is taller or shorter than another.
-  top: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6, minHeight: 36 },
-  // A small hairline tag, the surface's dot and its word.
-  tag: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingLeft: 7, paddingRight: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, flexShrink: 0 },
-  tagDot: { width: 7, height: 7, borderRadius: 4 },
-  tagText: { ...typography.caption, letterSpacing: 0, color: colors.text },
-  tagDotOnly: { paddingLeft: 7, paddingRight: 7 },
-  name: { ...typography.bodyStrong, fontSize: 16, letterSpacing: -0.2, color: colors.text, lineHeight: 20 },
-  meta: { ...typography.small, color: colors.textMuted },
-  badges: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  badge: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bgElevated, maxWidth: CARD - PAD * 2, flexShrink: 1 },
-  badgeText: { ...typography.caption, letterSpacing: 0, color: colors.textMuted },
-  badgeHit: { backgroundColor: colors.brandDim },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  badgeHitText: { color: colors.brand },
   allCard: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   allDisc: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   allText: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },
-  // The strip holding its place: the cards' own shape, a name's line and a distance's, in the page's quiet tone.
+  // The strip holding its place: the cards' own shape (CourtCardNow's NowHeldBody, CourtsNearPeek's PeekHeldBody), in the page's quiet tone.
   heldRow: { flexDirection: 'row', overflow: 'hidden' },
-  heldLine: { height: 14, marginVertical: 3, borderRadius: 7, backgroundColor: colors.bgElevated },
-  heldMeta: { width: '48%', height: 12 },
-  // A tag's place.
-  heldTag: { width: 56, height: 22, borderRadius: radius.pill, backgroundColor: colors.bgElevated },
-  // Over the unseen words, from their top.
-  heldOver: { position: 'absolute', top: 0, left: 0 },
-  // The distance's bar, where the distance's line starts: under two name lines (20 each) and the gap.
-  heldMetaAt: { top: 44 },
-  // The card's words over their room, from its top.
-  wordsOver: { position: 'absolute', top: 0, left: 0, right: 0, gap: 4 },
-  wordsRoom: { gap: 4 },
-  unseen: { opacity: 0 },
 });
