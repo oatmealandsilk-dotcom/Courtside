@@ -66,6 +66,12 @@ export const REVEAL_MAX_MS = 3000;
 export const REVEAL_MS = 220;
 /** The swoop after a grow: the push-in has done the first part of the way down, so it is shorter than from the city. */
 export const GROW_SWOOP_MS = 1300;
+/**
+ * Its ease after a grow: already moving as the grown card dissolves (the push-in was its slow start), then the same long
+ * soft landing. With the swoop's own slow start (0.5, 0, …) the camera all but stood still for a third of a second
+ * after the push-in had come to rest: two moves, not one (review, Oct 28).
+ */
+export const GROW_SWOOP_EASE: [number, number, number, number] = [0.3, 0.15, 0.16, 1];
 /** The map's buttons slide in this long after the map has taken over, as the camera comes in to land. */
 export const CHROME_AFTER_MS = 760;
 export const CHROME_MS = 420;
@@ -161,25 +167,32 @@ export function useGrowPicture() {
 
 /* ------------------------------------------------- the page that grows */
 
-let host: MutableRefObject<View | null> | null = null;
-/** The Community page registers itself as the page that pushes in, while it is up. */
-export function useGrowHost(ref: MutableRefObject<View | null>) {
+/**
+ * The Community page registers itself as the page that pushes in, while it is up. Only the page itself (`on`), never a
+ * copy of it drawn for a moment (a swipe's preview of the tab, or of Community behind a thread as you swipe back): one of
+ * those coming and going took the page's place and then left none, and Up to hit slid the map in again from then on
+ * (review, Oct 28). Kept as a list, so whichever goes, the one still up stays the page.
+ */
+const hosts: MutableRefObject<View | null>[] = [];
+export function useGrowHost(ref: MutableRefObject<View | null>, on = true) {
   useEffect(() => {
-    host = ref;
-    return () => { if (host === ref) host = null; };
-  }, [ref]);
+    if (!on) return undefined;
+    hosts.push(ref);
+    return () => { const i = hosts.lastIndexOf(ref); if (i >= 0) hosts.splice(i, 1); };
+  }, [ref, on]);
 }
 /** The page that pushes in, if one is up. */
-export const growHost = (): View | null => host?.current ?? null;
+export const growHost = (): View | null => hosts[hosts.length - 1]?.current ?? null;
 
 const WEB = Platform.OS === 'web';
 /**
  * The push-in on the page itself (the website only; the phone pushes its picture in). Never anything
  * but a transform: the page's glass stays glass.
  */
-export function useGrowHostStyle() {
-  // On the phone the worklet never reads the push-in, so the page is not touched at all there.
-  return useAnimatedStyle(() => (!WEB ? {} : growT.value > 0 ? { transform: placeAt(growT.value, geo.value) } : { transform: [] }));
+export function useGrowHostStyle(on = true) {
+  // On the phone (and on a preview copy of the page) the worklet never reads the push-in, so the page is not touched at all there.
+  const live = WEB && on;
+  return useAnimatedStyle(() => (!live ? {} : growT.value > 0 ? { transform: placeAt(growT.value, geo.value) } : { transform: [] }));
 }
 
 /** A ref that always holds the latest value (for timers set up once). */

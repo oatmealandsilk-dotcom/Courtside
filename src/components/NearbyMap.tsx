@@ -29,7 +29,7 @@ import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/fea
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
-import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_MS, LABELS_OUT_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, setGrowPlan, startGrow, useGrowPicture, type Rect } from '@/features/players/mapGrow';
+import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_EASE, GROW_SWOOP_MS, LABELS_OUT_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, setGrowPlan, startGrow, useGrowPicture, type Rect } from '@/features/players/mapGrow';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -110,6 +110,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // from the card it opens first (the card's own tap, onExpand), only while the card is still in view. Not inViewNow:
   // iOS's own location prompt, the first time, leaves the app 'inactive' for a moment, and that is still the card in view.
   const zoomOn = useCheckInZoom();
+  // A grow being readied (the picture of the page being taken): a tap on the card meanwhile does not open a second full map.
+  const growBusy = useRef(false);
   const swoopOnUp = (here: LatLng): boolean => {
     if (expanded) { swoopTo(here, false); return false; }
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
@@ -117,7 +119,8 @@ export function NearbyMap(props: NearbyMapProps) {
     swoopTo(here, true);
     // On the Community tab the card grows into the full map (mapGrow); anything in the way of a picture of the page, the plain way in.
     if (props.grow && !still && !keepNone && !cardCaptureBroken() && growHost()) {
-      void growOpen().then((ok) => { if (!ok) onExpand(); });
+      growBusy.current = true;
+      void growOpen().then((how) => { growBusy.current = false; if (how === 'plain') onExpand(); });
       return true;
     }
     onExpand();
@@ -126,29 +129,40 @@ export function NearbyMap(props: NearbyMapProps) {
   /**
    * The grow, from the card: a picture of the Community page as it is (the card's map in it), held in memory so the full
    * map's very first frame is that picture; then the full map opens over it with no slide (app/_layout's map options) and
-   * pushes the picture in while it loads underneath. False (nothing opened) if the page or the card could not be measured
-   * or photographed: the caller then opens the full map the plain way.
+   * pushes the picture in while it loads underneath. 'plain' (nothing opened) if the page or the card could not be measured
+   * or photographed: the caller then opens the full map the plain way. 'gone' if you left the page (another tab, the
+   * card scrolled away, the app put away) while the picture was being readied: then nothing opens at all, as without the grow.
    */
-  const growOpen = async (): Promise<boolean> => {
+  const growOpen = async (): Promise<'grown' | 'plain' | 'gone'> => {
     const page = growHost();
     const card = spot.ref.current;
-    if (!page || !card) return false;
+    if (!page || !card) return 'plain';
     const rect = (v: View) => new Promise<Rect>((done) => v.measureInWindow((x, y, w, h) => done({ x, y, w, h })));
+    const fits = (r: Rect) => r.w > 0 && r.h > 0;
+    const here = (c: Rect) => growHost() === page && AppState.currentState !== 'background' && props.inView?.() !== false && c.y + c.h > 0 && c.y < windowH;
+    let raw: string | null = null;
+    const letGo = () => { endGrow(); if (raw) { try { releaseCapture(raw); } catch { /* a temporary file either way */ } } };
     try {
-      const [pageAt, cardAt] = await Promise.all([rect(page), rect(card)]);
-      if (!(cardAt.w > 0 && cardAt.h > 0 && pageAt.w > 0 && pageAt.h > 0)) return false;
+      const [page0, card0] = await Promise.all([rect(page), rect(card)]);
+      if (!fits(card0) || !fits(page0)) return 'plain';
       // The card's words step aside first (so the push-in is into the map, not into its city's name), then the picture.
       labelsOut();
       await new Promise((done) => setTimeout(done, LABELS_OUT_MS + 20));
-      const raw = await captureRef(page, { format: 'jpg', quality: 0.92, result: 'tmpfile' });
+      // Measured again just before the picture, so where the card is and what the picture shows agree (the page may have
+      // moved under the words stepping aside: your own row coming in as you are up).
+      const [pageAt, cardAt] = await Promise.all([rect(page), rect(card)]);
+      if (!fits(cardAt) || !fits(pageAt) || !here(cardAt)) { letGo(); return 'gone'; }
+      raw = await captureRef(page, { format: 'jpg', quality: 0.92, result: 'tmpfile' });
       const shot = raw.startsWith('file:') ? raw : `file://${raw}`;
       await PhotoImage.prefetch(shot, 'memory');
+      // Left while the picture was readied: nothing opens.
+      if (!here(cardAt)) { letGo(); return 'gone'; }
       setGrowPlan(growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, shot, center: view.center, zoom: view.zoom }));
       router.push({ pathname: '/map', params: { grow: '1' } });
-      return true;
+      return 'grown';
     } catch {
-      endGrow();
-      return false;
+      letGo();
+      return 'plain';
     }
   };
   const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? swoopOnUp : undefined);
@@ -276,11 +290,11 @@ export function NearbyMap(props: NearbyMapProps) {
   // Opened by the card growing into it: the swoop waits for the grown card to hand over (below), then is shorter.
   const swoopRun = useRef(swoop.run);
   swoopRun.current = swoop.run;
-  const startSwoop = (ms?: number) => {
+  const startSwoop = (afterGrow = false) => {
     const run = swoopRun.current;
     if (!run) return;
     const shape = swoopShape();
-    canvas.current?.swoop({ ...shape, ms: ms ?? shape.ms, id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
+    canvas.current?.swoop({ ...shape, ...(afterGrow ? { ms: GROW_SWOOP_MS, ease: GROW_SWOOP_EASE } : null), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
   };
   const growing = useRef(!!growFrom);
   useEffect(() => { if (!growing.current) startSwoop(); }, [swoop.run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -329,7 +343,7 @@ export function NearbyMap(props: NearbyMapProps) {
     // Crept on past the push-in's end while the map drew: its camera comes that much closer too, then dives on.
     const dz = creptZoom(growFrom, holdGrow());
     if (dz > 0.005) canvas.current?.flyTo(growFrom.center, growFrom.zoom + dz, 0, 0, true);
-    startSwoop(GROW_SWOOP_MS);
+    startSwoop(true);
     shotIn.value = withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(growDone)(); });
     chromeIn.value = withDelay(CHROME_AFTER_MS, withTiming(1, { duration: CHROME_MS, easing: Easing.out(Easing.cubic) }));
   }, [growDue, growLate, mapStatus]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -574,7 +588,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
-        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand}
+        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand ? () => { if (!growBusy.current) onExpand(); } : undefined}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}

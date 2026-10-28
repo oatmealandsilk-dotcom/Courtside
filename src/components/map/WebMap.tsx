@@ -5,7 +5,7 @@ import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-na
 import { router } from 'expo-router';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { isDesktopBrowser } from '@/lib/browserDevice';
-import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, setGrowPlan, startGrow, type Rect } from '@/features/players/mapGrow';
+import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_EASE, GROW_SWOOP_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, setGrowPlan, startGrow, type Rect } from '@/features/players/mapGrow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -697,7 +697,7 @@ export function NearbyMap(props: NearbyMapProps) {
       // Once the map has drawn where it starts (or very nearly: SwoopAsk's wait).
       // Ending, it lands your pin for this swoop only: one stopped by a newer one (the cleanup below) never lands the newer one's early.
       const shape = swoopShape();
-      going = runSwoop(m, { ...shape, ms: ms ?? shape.ms, id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(run.id); });
+      going = runSwoop(m, { ...shape, ...(ms ? { ms, ease: GROW_SWOOP_EASE } : null), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(run.id); });
     };
     const t = setTimeout(go, ms ? 0 : 90);
     return () => { gone = true; clearTimeout(t); going?.stop(); };

@@ -256,8 +256,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The check-in zoom (mapGrow): this page is what pushes in toward the map card as it grows into the full map.
   // A picture of it on the phone (taken from this view); in a browser the page itself moves, by a transform only.
   const growRef = useRef<View | null>(null);
-  useGrowHost(growRef);
-  const growStyle = useGrowHostStyle();
+  // The page itself only: never a preview copy of it (a tab swipe's, or a thread's swipe back).
+  useGrowHost(growRef, !previewSection);
+  const growStyle = useGrowHostStyle(!previewSection);
   // Check in (migration 189), for the Open to hit row's note: your ring is on the map only for friends, and only once you check in.
   const checkIn = useCheckIn();
   // (No ask on opening any more, migration 189: "Who can see you on the map?" comes only when you tap Check in.)
