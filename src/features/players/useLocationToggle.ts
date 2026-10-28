@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
+import * as haptics from '@/lib/haptics';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
@@ -50,8 +51,17 @@ export interface CheckInControl {
   span: string;
   /** When yours ends, while you are up to hit. */
   until: string | null;
+  /** Counts the taps that could not put you up (location refused, the server said no): each one shakes the button once. */
+  failed: number;
   press: () => void;
 }
+
+/**
+ * How long the "Up to hit · till 10pm" toast waits after you are up, so the button's own moment
+ * (UpToHit: the green sweeping in, the tick, the arrow's bounce, your pin landing, about 400 ms) is
+ * seen first, before the toast slides in over the top of the map (Oct 28, owner: "be more gratifying").
+ */
+const TOAST_AFTER_MS = 450;
 
 /**
  * Check in (migration 189, Apple 5.1.2(i)): the only way your spot is ever
@@ -65,6 +75,9 @@ export interface CheckInControl {
 export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   const { actions, mapVisibility, lastSeen, currentUserId, currentUser, courtFacts } = useApp();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(0);
+  // Each tap's turn: a toast still waiting says nothing once a later tap (Up to hit off again) has come.
+  const turn = useRef(0);
   const mine = currentUserId ? lastSeen[currentUserId]?.until : undefined;
   // Looks again the moment your check-in ends, so the button says Check in again by itself.
   const now = useOpenClock(mine ? [mine] : []);
@@ -72,6 +85,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
 
   const pressNow = async () => {
     if (busy) return;
+    const tap = ++turn.current;
     dismissHideTip();
     if (until) { await actions.checkOutOfMap(); return; }
     let first = false;
@@ -85,11 +99,16 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
     try {
       let at: { lat: number; lng: number } | null = null;
       const problem = await actions.checkInOnMap((fix) => { at = fix; });
-      if (problem) { showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); return; }
+      // It could not put you up: the button shakes once (UpToHit), the hand feels the same, and the toast says why.
+      if (problem) { setFailed((n) => n + 1); haptics.reject(); showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); return; }
+      const upAt = Date.now();
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const spot: { lat: number; lng: number } | null = at;
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
-      showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      const say = () => { if (turn.current === tap) showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' }); };
+      const wait = TOAST_AFTER_MS - (Date.now() - upAt);
+      if (wait > 0) setTimeout(say, wait);
+      else say();
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);
@@ -99,7 +118,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   ref.current = pressNow;
   const press = useCallback(() => { void ref.current(); }, []);
 
-  return { on: !!until, busy, span: until ? litTill(until) : litSpan(), until, press };
+  return { on: !!until, busy, span: until ? litTill(until) : litSpan(), until, failed, press };
 }
 
 /**
