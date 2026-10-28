@@ -6,6 +6,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { cropLayer } from '@/lib/crop';
 import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
 import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
 import { GroupTile } from '@/features/groups/GroupTile';
@@ -1028,28 +1029,38 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // Pull-to-refresh: fetch what is new, rank the pages again in place (the
   // pager is holding the feed down and brings it back itself), and give the
   // new first pages a short beat to draw before the feed comes back up.
-  // The brand on a page that is not built or loaded yet. Built once, so the
-  // dozens of held pages cost nothing when the feed re-renders on a tap.
-  const holdMark = useMemo(() => <BrandMark size={72} />, []);
-  const holdWord = useMemo(() => <Text style={styles.holdWord}>CourtSide</Text>, [styles]);
   // The shape of a page before it is in: a round stand-in where the picture
   // will be, the name beside it, and the column of buttons down the right.
+  // No brand on any of them (Oct 28, owner: "Also rn scrolling fast on the feed I almost immediatly
+  // get hit with loading screen"): the big CourtSide name and mark a stand-in used to carry read as
+  // the app's own loading screen. A clip's stand-in now shows the clip's cover instead (holdCover,
+  // in the pages below), and a post's only quiet grey shapes. Built once each, so the dozens of
+  // held pages cost nothing when the feed re-renders on a tap.
   const insets = useSafeAreaInsets();
   // How tall the removed notice over each post of yours is, once drawn, so the post starts under it.
   const [removedTall, setRemovedTall] = useState<Record<string, number>>({});
   const noteRemovedTall = useCallback((id: string, h: number) => {
     setRemovedTall((m) => (Math.abs((m[id] ?? -1) - h) < 1 ? m : { ...m, [id]: h }));
   }, []);
-  // A written or photo post's shape: who at the top, the picture in its frame
-  // with the mark on it, the words, and the row of buttons under them.
-  const skeletonPost = useMemo(() => (
+  // A photo or video post's shape: who at the top, the picture's frame (its cover in it, when
+  // there is one), the words, and the row of buttons under them. A written post's: who, then lines
+  // of words, then the buttons (it has no picture, so no frame).
+  const postBones = useCallback((frame: 'none' | 'empty' | string) => (
     <View style={[styles.holdPost, { paddingTop: insets.top + 66 }]}>
       <View style={[styles.author, { alignSelf: 'stretch', marginBottom: 10 }]}>
         <View style={[styles.boneAvatar, { width: 40, height: 40, borderRadius: 20 }]} />
         <View style={{ gap: 6 }}><View style={[styles.bone, { width: 130 }]} /><View style={[styles.bone, { width: 90, height: 10 }]} /></View>
       </View>
-      <View style={styles.boneFrame}>{holdMark}</View>
-      <View style={{ alignSelf: 'stretch', gap: 8, marginTop: 12 }}><View style={[styles.bone, { width: '80%' }]} /><View style={[styles.bone, { width: '55%' }]} /></View>
+      {frame === 'none' ? (
+        <View style={{ alignSelf: 'stretch', gap: 10, marginTop: 6 }}>
+          <View style={[styles.bone, { width: '92%' }]} /><View style={[styles.bone, { width: '86%' }]} /><View style={[styles.bone, { width: '74%' }]} /><View style={[styles.bone, { width: '48%' }]} />
+        </View>
+      ) : (
+        <View style={styles.boneFrame}>
+          {frame === 'empty' ? null : <ExpoImage accessibilityIgnoresInvertColors source={{ uri: frame }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={0} />}
+        </View>
+      )}
+      {frame === 'none' ? null : <View style={{ alignSelf: 'stretch', gap: 8, marginTop: 12 }}><View style={[styles.bone, { width: '80%' }]} /><View style={[styles.bone, { width: '55%' }]} /></View>}
       <View style={styles.boneRow}>
         <Ionicons name="heart-outline" size={32} color={colors.textMuted} />
         <Ionicons name="chatbubble-outline" size={29} color={colors.textMuted} />
@@ -1058,11 +1069,12 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         <Ionicons name="ellipsis-horizontal" size={28} color={colors.textMuted} />
       </View>
     </View>
-  ), [styles, holdMark, insets.top]);
-  // A clip's or hit's shape: the name in the middle, who at the bottom left, the buttons down the right.
+  ), [styles, insets.top]);
+  const skeletonPost = useMemo(() => postBones('empty'), [postBones]);
+  const skeletonWritten = useMemo(() => postBones('none'), [postBones]);
+  // A clip's or hit's shape: who at the bottom left, the words, the buttons down the right (over its cover, when it has one).
   const skeletonClip = useMemo(() => (
     <>
-      {holdWord}
       {/* The same boxes the live page uses, so every stand-in sits exactly where the real thing lands (tucked with the bar, too). */}
       <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
         <View style={styles.author}>
@@ -1081,7 +1093,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         ))}
       </Reanimated.View>
     </>
-  ), [styles, holdWord, wordsBottom, tuckStyle]);
+  ), [styles, wordsBottom, tuckStyle]);
   const warmWaiters = useRef<(() => void)[]>([]);
   const firstReadyRef = useRef(false);
   const activeRef = useRef(active);
@@ -1683,21 +1695,43 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (host?.type === 'post') findHost.current = { visit, id: host.post.id };
   }
   const findHostId = !scope && findShown && findHost.current.visit === visit && roomy.has(findHost.current.id) ? findHost.current.id : null;
+  // Where the pages built and the covers drawn are counted from: the page on screen.
+  const base = active;
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
-  useEffect(() => {
-    for (const item of feed.slice(0, AHEAD)) {
-      if (item.type === 'post' && !item.post.videoUrl) {
-        const uri = item.post.imageUrl ?? item.post.thumbnailUrl;
-        if (uri) Image.prefetch(uri).then(() => markReady(item.post.id, true)).catch(() => markReady(item.post.id, true));
-        // A carousel's second photo too, so the first swipe lands on a picture; the page never waits for it.
-        const second = item.post.imageUrls?.[1];
-        if (second) Image.prefetch(second).catch(() => undefined);
-      }
-      if (item.type === 'hit' && !item.story.videoUrl && item.story.imageUrl) {
-        Image.prefetch(item.story.imageUrl).then(() => markReady(item.story.id, true)).catch(() => markReady(item.story.id, true));
-      }
+  // From the page on screen (or, building ahead, the page a swipe heads for: `base`, below) to the
+  // last one built ahead, into expo-image's own cache, the one every page draws from (Oct 28: this
+  // used React Native's own Image.prefetch for the first two pages of the feed only, a cache the
+  // pages never read on a phone, and nothing for any page after them). Each picture is asked for
+  // once; covers further ahead come from postersAhead.
+  const prefetched = useRef<Set<string>>(new Set());
+  const prefetchFrom = base;
+  const prefetchKey = feed.slice(Math.max(0, prefetchFrom - WINDOW), prefetchFrom + AHEAD + 1).map((item) => {
+    if (item.type === 'post') {
+      const uri = item.post.videoUrl ? (item.post.thumbnailUrl ?? item.post.imageUrl) : (item.post.imageUrl ?? item.post.thumbnailUrl);
+      return uri ? `${item.post.videoUrl ? 'v' : 'p'}\t${item.post.id}\t${uri}\t${item.post.videoUrl ? '' : (item.post.imageUrls?.[1] ?? '')}` : '';
     }
-  }, [feed, markReady]);
+    if (item.type === 'hit') {
+      const uri = item.story.thumbnailUrl ?? item.story.imageUrl;
+      return uri ? `${item.story.videoUrl ? 'v' : 'p'}\t${item.story.id}\t${uri}\t` : '';
+    }
+    return '';
+  }).filter(Boolean).join('\n');
+  useEffect(() => {
+    if (!prefetchKey) return;
+    for (const line of prefetchKey.split('\n')) {
+      const [kind, id, uri, second] = line.split('\t');
+      if (!prefetched.current.has(uri)) {
+        prefetched.current.add(uri);
+        const fetched = ExpoImage.prefetch(uri, 'memory-disk');
+        // A photo's page is ready once its picture is in (one that failed counts as done too: nothing
+        // waits on it). A clip's cover is only its stand-in: the clip is ready when its video is.
+        if (kind === 'p') fetched.then(() => markReady(id, true), () => markReady(id, true));
+        else fetched.catch(() => undefined);
+      }
+      // A carousel's second photo too, so the first swipe lands on a picture; the page never waits for it.
+      if (second && !prefetched.current.has(second)) { prefetched.current.add(second); ExpoImage.prefetch(second, 'memory-disk').catch(() => undefined); }
+    }
+  }, [prefetchKey, markReady]);
 
   // Instagram-style lookahead (Oct 23, owner: "if I swipe fast through 3 reels it has to load
   // again"). What the feed built before stays exactly as it was and never waits on anything: the
@@ -1755,6 +1789,42 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     const item = feed[index];
     return ahead === EXTRA && !!item && lookahead.current.has(keyOf(item));
   };
+  // What a page that is not built yet shows (Oct 28, owner: "Also rn scrolling fast on the feed I
+  // almost immediatly get hit with loading screen"). A clip or an Instant: its cover, full screen,
+  // cut the way its player shows it (ClipPlayback: a wide clip whole on black, a tall one filling the
+  // page, the author's crop), with grey shapes where its name, words and buttons will be, the way
+  // Instagram shows a reel still loading. A photo or video post: its picture in the frame. A written
+  // post or a thread: grey lines. Never the CourtSide name or mark, which read as the app's loading
+  // screen. Covers only from two pages behind to five ahead (the rest keep the grey shapes), so a
+  // long feed never holds dozens of full-screen pictures in memory; postersAhead has them on the
+  // phone already, ten ahead.
+  const COVERS_BEHIND = 2;
+  const COVERS_AHEAD = 5;
+  const holdFace = (item: FeedItem, index: number) => {
+    const covered = index - base >= -COVERS_BEHIND && index - base <= COVERS_AHEAD;
+    if (item.type === 'question') return skeletonWritten;
+    if (item.type === 'post' && item.post.kind !== 'clip') {
+      const post = item.post;
+      if (!post.imageUrl && !post.videoUrl) return skeletonWritten;
+      const uri = post.videoUrl ? (post.thumbnailUrl ?? post.imageUrl) : (post.imageUrl ?? post.thumbnailUrl);
+      return covered && uri ? postBones(uri) : skeletonPost;
+    }
+    const uri = item.type === 'post' ? (item.post.thumbnailUrl ?? item.post.imageUrl) : item.type === 'hit' ? (item.story.thumbnailUrl ?? item.story.imageUrl) : undefined;
+    if (!covered || !uri) return skeletonClip;
+    const wide = item.type === 'post' && item.post.orientation === 'landscape';
+    return (
+      <>
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.clipFrame, wide && { backgroundColor: '#000' }]}>
+          <View style={wide || phone ? StyleSheet.absoluteFill : styles.clipPortrait}>
+            <View style={cropLayer(item.type === 'post' ? item.post.crop : undefined)}>
+              <ExpoImage accessibilityIgnoresInvertColors source={{ uri }} style={StyleSheet.absoluteFill} contentFit={wide ? 'contain' : 'cover'} cachePolicy="memory-disk" />
+            </View>
+          </View>
+        </View>
+        {skeletonClip}
+      </>
+    );
+  };
   // Every reel's cover, there before you reach it (Oct 25, owner: "I'm scrolling on Instagram as
   // fast as I can and I don't ever hit a video that's not loaded"): the covers of the next ten pages
   // (three on a slow link) are fetched ahead, nearest first, while this Feed is on show, so a page
@@ -1765,7 +1835,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   if (postersOn) {
     const reach = connectionIsQuick() ? POSTERS_AHEAD : POSTERS_AHEAD_SLOW;
     for (let k = 1; k <= reach; k += 1) {
-      const item = feed[active + k];
+      const item = feed[base + k];
       const url = item?.type === 'post' ? (item.post.thumbnailUrl ?? item.post.imageUrl) : item?.type === 'hit' ? (item.story.thumbnailUrl ?? item.story.imageUrl) : undefined;
       if (url) posterUrls.push(url);
     }
@@ -1994,8 +2064,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               const pageKey = item.type === 'post' ? item.post.id : item.type === 'question' ? item.question.id : item.type === 'hit' ? item.story.id : item.type;
               // The page behind and the next two stay built (a third once it has its lookahead); the rest hold their slot.
               if (!inReach(index)) {
-                // A page not built yet holds its slot with the brand on it, so a
-                // fast scroll lands on the mark (a post) or the name (a clip or thread).
+                // A page not built yet holds its slot with its stand-in (holdFace: a clip's cover,
+                // a post's grey shapes), so a fast scroll lands on what is coming, never a blank.
                 // On a phone, a page more than STAND_IN_REACH away holds it with the plain page
                 // (same colour, same height) until the feed has arrived, then gets its stand-in
                 // too, as background work: a swipe moves one page, so none of those can be on
@@ -2003,16 +2073,17 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 // tap on their grid (Oct 24, owner: "Buttons need to be way more responsive").
                 // A browser lists every page at once: there they all keep it.
                 if (Platform.OS !== 'web' && !arrived && distance > STAND_IN_REACH) return <View key={pageKey} style={styles.holdPage} />;
-                return <View key={pageKey} style={styles.holdPage}>{item.type === 'post' && item.post.kind !== 'clip' ? skeletonPost : skeletonClip}</View>;
+                return <View key={pageKey} style={styles.holdPage}>{holdFace(item, index)}</View>;
               }
               // The same over a built page whose picture has not landed yet. A reel with a cover needs
               // none: its cover is drawn under its caption and buttons until its video plays
               // (ClipPlayback), the way Instagram shows a reel still loading, so the page is whole the
               // moment it arrives (Oct 25, owner: "I don't ever hit a video that's not loaded").
-              const cover = (id: string, kind: 'mark' | 'word', poster?: string) => {
-                if (inNow(id) || (kind === 'word' && poster)) return null;
+              // A video post's player draws its own cover too now (PostVideo), so with one it needs none of these (Oct 28).
+              const cover = (id: string, look: React.ReactNode, poster?: string) => {
+                if (inNow(id) || poster) return null;
                 // Once the picture is in, the cover fades away over 180 ms rather than being cut (Oct 22 sweep, item 15).
-                return <Reanimated.View key="skeleton" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{kind === 'mark' ? skeletonPost : skeletonClip}</Reanimated.View>;
+                return <Reanimated.View key="skeleton" exiting={COVER_OUT} pointerEvents="none" style={[StyleSheet.absoluteFill, styles.holdPage]}>{look}</Reanimated.View>;
               };
               // On a phone, the page behind and two ahead keep their video buffered.
               // In a browser (where every video decodes on the same machine as the
@@ -2115,7 +2186,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                     </Reanimated.View>
                     </ChromeLayer>
                    </Reanimated.View></PinchZone>
-                    {story.videoUrl ? cover(story.id, 'word', story.thumbnailUrl) : null}
+                    {story.videoUrl ? cover(story.id, skeletonClip, story.thumbnailUrl) : null}
                   </View>
                 );
               }
@@ -2186,7 +2257,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       pop={burst.id === post.id ? burst.n : 0}
                       onReady={(ok) => markReady(post.id, ok)}
                     />
-                    {cover(post.id, 'mark')}
+                    {post.videoUrl ? cover(post.id, skeletonPost, post.thumbnailUrl) : cover(post.id, postBones(post.imageUrl ?? post.thumbnailUrl ?? 'empty'))}
                     {removedOver(post)}
                   </View>
                 );
@@ -2353,7 +2424,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                   </Reanimated.View>
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
-                  {post.videoUrl ? cover(post.id, 'word', post.thumbnailUrl) : null}
+                  {post.videoUrl ? cover(post.id, skeletonClip, post.thumbnailUrl) : null}
                   {removedOver(post)}
                 </View>
               );
@@ -2483,10 +2554,9 @@ const styleDefinitions = StyleSheet.create({
   removedStack: { position: 'absolute', left: 16, right: 16, alignItems: 'center', gap: 8, zIndex: 6 },
   removedPillRow: { alignSelf: 'stretch', paddingHorizontal: 48, alignItems: 'center' },
   holdPage: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
-  holdWord: { ...typography.display, fontSize: 34, ...wordmarkFont('600'), color: colors.brand, letterSpacing: -1.2 },
   bone: { height: 12, borderRadius: 6, backgroundColor: colors.border },
   holdPost: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, paddingHorizontal: 16, paddingBottom: 16 + BAR_OVERLAY_PX, alignItems: 'center' },
-  boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: corner(16), backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  boneFrame: { alignSelf: 'stretch', aspectRatio: 4 / 5, maxHeight: '58%', borderRadius: corner(16), backgroundColor: colors.border, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   boneRow: { alignSelf: 'stretch', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 12, marginTop: 14 },
   boneAvatar: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.border },
   clipFrame: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.bg },
