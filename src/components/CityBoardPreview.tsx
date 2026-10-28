@@ -5,8 +5,9 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, ordinal, rankCities, sessionsWords, type RankedCity } from '@/features/cityBoard/mock';
-import { BoardHead, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { MIN_PLAYERS, daysLeftLabel, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, sessionsWords, whenWords, type RankedCity } from '@/features/cityBoard/board';
+import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
+import { useCityBoard } from '@/features/cityBoard/useCityBoard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -20,60 +21,82 @@ const RANK_W = 32;
 const IN_RUN = 5;
 
 /**
- * DESIGN MOCK (design/city-board), round 2. Find Players, under the map, in
- * place of "You're early in …": this month's city board, fading into the
- * page, with "See all cities" on the fade. One tap opens the full board.
+ * Find Players, under the map, in place of "You're early in …" (owner,
+ * Oct 27: "maybe we just replace it with the leaderboard that fades"): this
+ * month's city board, fading into the page, with "See all cities" on the
+ * fade. One tap opens the full board. The numbers are the server's
+ * (city_board, migration 196), yours up to the minute in your own city.
  *
- * Which rows (owner, Oct 27: "should it show your city amongst the top …
- * or just have it show the correct leaderboard", and "not a big fan of these
- * 5 .... 9"): always the true board, never your city faked into the top.
+ * Which rows (owner, Oct 27): always the true board, never your city faked
+ * into the top.
  *   - Your city in the top 5: the top of the board, yours tinted in place.
  *   - Lower: the top 3, then your city as its own row with its real place
  *     and the one number that matters to you ("69 to pass Denver"), then the
- *     city right behind you, fading. No dots: the space and the tint say
- *     "and here is you", the way Strava pins your row under a segment's top.
+ *     city right behind you, fading.
+ *   - Your city not ranked yet: "Durham needs 2 more players to make the
+ *     board" (never whether one other is there), and the way to invite.
+ *   - No town the boards know: how to pick one.
  * Movement this week sits beside each city; a city on a run gets the filled mark.
+ * Find Players shows it only while there is something to show (CityBoardSlot).
  */
-export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) {
+export function CityBoardPreview() {
   const styles = useThemedStyles(styleDefinitions);
-  const board = useMemo(() => rankCities('total'), []);
-  const mine = board.find((c) => c.id === homeCityId) ?? null;
-  const unranked = !mine && homeCityId ? cityById(homeCityId) : null;
-  const at = mine ? board.indexOf(mine) : -1;
+  const { status, board, cities, month } = useCityBoard();
+  const ranked = useMemo(() => rankCities(cities, 'total'), [cities]);
+  const me = board?.me ?? null;
+  const mine = ranked.find((c) => c.id === me?.cityId) ?? null;
+  const unranked = !mine && me?.cityId && me.cityName ? { name: me.cityName, needed: me.playersNeeded ?? MIN_PLAYERS } : null;
+  const noTown = status === 'ready' && !!me && !me.cityId;
+  const at = mine ? ranked.indexOf(mine) : -1;
   const apart = at >= IN_RUN;
-  const top = apart ? board.slice(0, 3) : board.slice(0, Math.max(5, at + 2));
-  const below = apart ? board[at + 1] ?? null : null;
-  const target = mine ? nextTarget(board, mine.id) : null;
+  const top = apart ? ranked.slice(0, 3) : ranked.slice(0, Math.max(5, at + 2));
+  const below = apart ? ranked[at + 1] ?? null : null;
+  const target = mine ? nextTarget(ranked, mine.id, 'total') : null;
+  const final = isFinal(month);
 
   // One line of news under the title, the race's latest: about your city when there is one.
   const moment = useMemo(() => {
-    const m = MOMENTS.find((x) => x.who === mine?.id || x.passed === mine?.id) ?? MOMENTS[0];
-    const who = cityById(m.who);
-    const passed = cityById(m.passed);
-    return who && passed ? { text: `${who.name} passed ${passed.name}`, when: m.when } : null;
-  }, [mine]);
+    if (!board) return null;
+    const name = (id: string) => board.cities.find((c) => c.id === id)?.name ?? null;
+    const now = new Date();
+    const lines = board.events.flatMap((e) => {
+      const who = name(e.who);
+      const passed = name(e.passed);
+      const when = whenWords(e.at, now);
+      return who && passed && when ? [{ text: `${who} passed ${passed}`, when, yours: e.who === mine?.id || e.passed === mine?.id }] : [];
+    });
+    return lines.find((l) => l.yours) ?? lines[0] ?? null;
+  }, [board, mine]);
 
   // The last row dissolves into the page; never your own.
   const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
+  const title = final ? `Cities in ${monthName(month)}` : 'Cities this month';
+  const loading = status === 'loading';
+  const listed = ranked.length > 0;
 
   // What VoiceOver hears for the card (one link): the rows it shows, each with its unit ("512 sessions").
   const shown = [...top, ...(apart && mine ? [mine, ...(below ? [below] : [])] : [])];
-  const spokenRows = shown.map((c) => `${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${sessionsWords(c.hits)}`).join('. ');
+  const spokenRows = shown.map((c) => `${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${sessionsWords(c.sessions)}`).join('. ');
 
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`Cities this month, by tennis sessions logged.${spokenRows ? ` ${spokenRows}.` : ''} See all cities`}
+      accessibilityLabel={loading ? `${title}. Loading` : `${title}, by tennis sessions logged.${spokenRows ? ` ${spokenRows}.` : ''} See all cities`}
+      disabled={!loading && !listed}
       onPress={() => router.push('/city-board')}
       style={({ pressed }) => [styles.wrap, pressed && { opacity: PRESS_DIM }]}
     >
       <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Cities this month</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.left}>{DAYS_LEFT_LABEL}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.left}>{daysLeftLabel(month)}</Text>
       </View>
       {unranked ? (
         <View style={styles.newsRow}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.news}>{unranked.name} needs {MIN_PLAYERS - unranked.players} more players to make the board.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.news}>{unranked.name} needs {morePlayersWords(unranked.needed)} to make the board.</Text>
+        </View>
+      ) : noTown ? (
+        <View style={styles.newsRow}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.news}>Pick your town from the search in Edit profile to join a city board.</Text>
         </View>
       ) : moment ? (
         <View style={styles.newsRow}>
@@ -85,29 +108,55 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
         <Pressable accessibilityRole="link" accessibilityLabel={`Invite a hitting partner to put ${unranked.name} on the board`} hitSlop={6} onPress={() => router.push('/invite')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
         </Pressable>
+      ) : noTown ? (
+        <Pressable accessibilityRole="link" accessibilityLabel="Edit profile to pick your town" hitSlop={6} onPress={() => router.push('/edit-profile')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Edit profile</Text>
+        </Pressable>
       ) : null}
       {/* Round 5 (owner, Oct 28: "something on the top that says like position or rank ... and then city, and then sessions"). */}
-      <BoardHead name="City" value="Sessions" rankWidth={RANK_W} style={styles.boardHead} />
-      <View style={styles.rows}>
-        {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} />)}
-        {apart && mine ? (
-          <View style={styles.yours}>
-            <PreviewRow city={mine} mine target={target} />
-            {below ? <PreviewRow city={below} mine={false} /> : null}
-          </View>
-        ) : null}
-        {fadeRows > 0 ? <Fade height={ROW_H * fadeRows} /> : null}
-      </View>
-      <View style={[styles.more, fadeRows === 0 && styles.moreClear]}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>See all cities</Text>
-        <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-      </View>
+      {loading || listed ? <BoardHead name="City" value="Sessions" rankWidth={RANK_W} style={styles.boardHead} /> : null}
+      {loading ? (
+        // Still coming: the rows' own shapes, quiet, so nothing jumps when they land.
+        <View style={styles.rows}>
+          {[0, 1, 2, 3, 4].map((i) => <SkeletonRow key={i} line={i > 0} />)}
+          <Fade height={ROW_H * 1.6} />
+        </View>
+      ) : listed ? (
+        <View style={styles.rows}>
+          {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} final={final} />)}
+          {apart && mine ? (
+            <View style={styles.yours}>
+              <PreviewRow city={mine} mine target={target} final={final} />
+              {below ? <PreviewRow city={below} mine={false} /> : null}
+            </View>
+          ) : null}
+          {fadeRows > 0 ? <Fade height={ROW_H * fadeRows} /> : null}
+        </View>
+      ) : null}
+      {listed ? (
+        <View style={[styles.more, fadeRows === 0 && styles.moreClear]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>See all cities</Text>
+          <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+        </View>
+      ) : null}
     </Pressable>
   );
 }
 
+/** A row still loading: a coin's place, a name's length, a number's width, in the page's faintest ink. */
+function SkeletonRow({ line }: { line: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.row, line && styles.rowLine]}>
+      <View style={styles.rankCol}><View style={styles.skelCoin} /></View>
+      <View style={styles.nameCol}><View style={styles.skelName} /></View>
+      <View style={styles.skelValue} />
+    </View>
+  );
+}
+
 /** A city's row here: place, name, this week's movement, sessions logged. Yours is tinted, with the number to chase under its name. */
-function PreviewRow({ city, mine, line = false, target = null }: { city: RankedCity; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget> }) {
+function PreviewRow({ city, mine, line = false, target = null, final = false }: { city: RankedCity; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget>; /** Last month's, on the 1st: how far behind it finished. */ final?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const podium = city.rank <= 3;
   return (
@@ -116,16 +165,16 @@ function PreviewRow({ city, mine, line = false, target = null }: { city: RankedC
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
           ? <Medal rank={city.rank} size={RANK_W} fontSize={16} />
-          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{city.name}</Text>
           <Movement moved={city.moved} long={mine} />
         </View>
-        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{target.gap} to pass {target.city.name}</Text> : null}
+        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{!final ? `${target.gap} to pass ${target.city.name}` : target.gap === 1 ? `Level with ${target.city.name}` : `${target.gap - 1} behind ${target.city.name}`}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.hits}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.sessions}</Text>
     </View>
   );
 }
@@ -183,4 +232,7 @@ const styleDefinitions = StyleSheet.create({
   moreText: { ...typography.smallStrong, color: colors.textMuted },
   invite: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', marginBottom: spacing.xs },
   inviteText: { ...typography.smallStrong, color: colors.brand },
+  skelCoin: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceAlt },
+  skelName: { width: '46%', height: 12, borderRadius: 6, backgroundColor: colors.surfaceAlt },
+  skelValue: { width: 30, height: 12, borderRadius: 6, backgroundColor: colors.surfaceAlt },
 });

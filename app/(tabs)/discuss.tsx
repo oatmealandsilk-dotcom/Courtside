@@ -42,8 +42,7 @@ import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { CityBoardPreview } from '@/components/CityBoardPreview';
-import { CITY_BOARD_MOCK, MOCK_UP_COUNT, cityById } from '@/features/cityBoard/mock';
-import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
+import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
@@ -506,14 +505,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Only for a known adult: a teen sees only friends who follow each other
   // with them (migration 78; before it, nobody), so an empty list says nothing
   // about the town for them.
-  // DESIGN MOCK (design/city-board): 'early' forces the old card for a before picture.
-  const early = CITY_BOARD_MOCK === 'early' || (CITY_BOARD_MOCK === 'off' && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0);
-  const homeCityId = useHomeCityId();
-  // DESIGN MOCK (design/city-board, round 3): the picture can ask for fewer up (one, or none), and the row
-  // fills behind them with your home city's regulars (by the city on their profile, never where they are).
-  const upShown = useMemo(() => (CITY_BOARD_MOCK === 'board' && MOCK_UP_COUNT !== null ? upToday.slice(0, MOCK_UP_COUNT) : upToday), [upToday]);
-  const homeCityName = homeCityId ? cityById(homeCityId)?.name ?? null : null;
-  const upFill = useCityFill({ cityName: homeCityName, upIds: upShown.map((p) => p.user.id) });
+  // City boards (migration 196; owner, Oct 28: "New rank city sessions is good"), admins first
+  // (CITY_BOARD_FOR_EVERYONE): this month's board takes the invite card's place, fading into Open to hit,
+  // while there is a board to show (on its way, or your city on it or waiting for players). Off, not open
+  // to you, or not loaded: the page is exactly as before.
+  const cityBoard = useCityBoard();
+  const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
+  const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home
+  // city's regulars (by the town on their profile, never where they are), as the server picked them for you.
+  const homeCityId = boardShown ? cityBoard.board?.me.cityId ?? null : null;
+  const homeCityName = homeCityId ? cityBoard.board?.me.cityName ?? null : null;
+  const homePage = useCityPage(homeCityId, cityBoard.month).page;
+  const upFill = useCityFill(homeCityId ? homePage : null, upToday.map((p) => p.user.id));
   // The same moment for a teen, or anyone not known to be an adult (Oct 5,
   // owner: "Do all"): no friend on their map yet, which for them says only
   // that their friends are not here yet. "Bring your friends" takes the
@@ -721,8 +725,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             on their map yet, the same card as "Bring your friends". */}
         {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
-        {/* DESIGN MOCK (design/city-board): the city board in the invite card's place, fading into Open to hit. */}
-        {!search && CITY_BOARD_MOCK === 'board' ? <FirstReveal order={0}><CityBoardPreview homeCityId={homeCityId} /></FirstReveal> : null}
+        {/* City boards (admins first): the month's board in the invite card's place, fading into Open to hit. */}
+        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
@@ -730,7 +734,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upShown} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others

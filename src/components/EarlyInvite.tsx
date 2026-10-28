@@ -107,8 +107,7 @@ const styleDefinitions = StyleSheet.create({
   headWords: { flex: 1, minWidth: 0, gap: 2, paddingTop: 2 },
   title: { ...typography.heading, color: colors.text },
   body: { ...typography.small, color: colors.textMuted, lineHeight: 19, maxWidth: 420 },
-  // Centred under the card on a computer (it sat left at 440 wide, under centred links: owner, Oct 27).
-  actions: { marginTop: spacing.sm, maxWidth: 440, width: '100%', alignSelf: 'center' },
+  actions: { marginTop: spacing.sm, maxWidth: 440 },
   // 44 to the finger.
   link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', minHeight: 44 },
   linkText: { ...typography.smallStrong, color: colors.textMuted },

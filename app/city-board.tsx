@@ -5,12 +5,12 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
-import { Button, Screen } from '@/components/ui';
+import { Button, EmptyState, Screen } from '@/components/ui';
 import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
 import { Wash } from '@/components/Wash';
-import { BoardHead, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
-import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, cityById, isHot, nextTarget, ordinal, rankCities, sessionsWords, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
-import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
+import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
+import { MIN_PLAYERS, isFinal, isHot, monthName, morePlayersWords, nextTarget, ordinal, rankCities, resetsOn, sessionsWords, whenWords, type BoardMode, type RankedCity } from '@/features/cityBoard/board';
+import { useCityBoard } from '@/features/cityBoard/useCityBoard';
 import { useBarInset } from '@/features/navigation/barInset';
 import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -44,8 +44,8 @@ const rect = (node: unknown): DOMRect | null => {
 };
 
 /**
- * DESIGN MOCK (design/city-board), round 2. The whole board as a standings
- * table (owner, Oct 27: the first one "looks hella AI and hella plain"):
+ * The whole month's city board (city_board, migration 196), as a standings
+ * table, as approved (design/city-board, rounds 2 to 5) (owner, Oct 27: the first one "looks hella AI and hella plain"):
  *
  *   - big, heavy place numbers; the top 3 taller, with a line under 3rd;
  *   - this week's movement beside each city, and the one filled mark for a
@@ -64,29 +64,38 @@ const rect = (node: unknown): DOMRect | null => {
  *     then sessions. Like a header"); scrolled down the long list, the tabs
  *     and the head row stay pinned at the top, so the columns stay named;
  *   - the week's moments on top ("Raleigh passed Atlanta · today").
- * Starts again on the 1st.
+ * Starts again on the 1st (which shows last month's final board). Every
+ * number but yours is as of yesterday; yours is up to the minute, added to
+ * your own city only (withMine). Still coming: the rows' shapes; offline:
+ * the last board there was; not open to you: says so.
  */
 export default function CityBoard() {
   const styles = useThemedStyles(styleDefinitions);
   const [mode, setMode] = useState<BoardMode>('total');
-  const board = useMemo(() => rankCities(mode), [mode]);
-  const homeId = useHomeCityId();
+  const { status, stale, month, board: data, cities, mySessions, countsHere, retry } = useCityBoard();
+  const board = useMemo(() => rankCities(cities, mode), [cities, mode]);
+  const homeId = data?.me.cityId ?? null;
   const mine = board.find((c) => c.id === homeId) ?? null;
   const at = mine ? board.indexOf(mine) : -1;
-  const unrankedHome = !mine && homeId ? cityById(homeId) : null;
+  const unrankedHome = !mine && homeId && data?.me.cityName ? { name: data.me.cityName, needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
   const per = mode === 'per';
-  const target = mine ? nextTarget(board, mine.id) : null;
+  const target = mine ? nextTarget(board, mine.id, mode) : null;
   const open = (id: string) => router.push({ pathname: '/city/[id]', params: { id } });
+  const final = isFinal(month);
 
   // The week's news: yours first, two lines at most.
   const moments = useMemo(() => {
-    const ordered = [...MOMENTS].sort((a, b) => Number(b.who === homeId || b.passed === homeId) - Number(a.who === homeId || a.passed === homeId));
-    return ordered.slice(0, 2).flatMap((m) => {
-      const who = cityById(m.who);
-      const passed = cityById(m.passed);
-      return who && passed ? [{ key: `${m.who}-${m.passed}`, text: `${who.name} passed ${passed.name}`, when: m.when }] : [];
+    if (!data) return [];
+    const name = (id: string) => data.cities.find((c) => c.id === id)?.name ?? null;
+    const now = new Date();
+    const lines = data.events.flatMap((e, i) => {
+      const who = name(e.who);
+      const passed = name(e.passed);
+      const when = whenWords(e.at, now);
+      return who && passed && when ? [{ key: `${e.who}-${e.passed}-${i}`, text: `${who} passed ${passed}`, when, yours: e.who === homeId || e.passed === homeId }] : [];
     });
-  }, [homeId]);
+    return [...lines].sort((a, b) => Number(b.yours) - Number(a.yours)).slice(0, 2);
+  }, [data, homeId]);
 
   // ---- Where your row is, and whether it is on screen (all on the UI thread) ----
   const scrollRef = useRef<ScrollView | null>(null);
@@ -144,29 +153,34 @@ export default function CityBoard() {
   useEffect(() => {
     if (!placed || opened.current || myTop < 0) return;
     opened.current = true;
-    // Already in the top half of what you can see: nothing to do.
-    if (listY.value + myTop + myH / 2 < seeH.value * 0.55) return;
-    const t = setTimeout(() => scrollToMine(!reduced), 380);
+    // Once the rows have landed and been measured (they come after the page): already in the top half
+    // of what you can see, nothing to do.
+    const t = setTimeout(() => { if (listY.value + myTop + myH / 2 >= seeH.value * 0.55) scrollToMine(!reduced); }, 380);
     return () => clearTimeout(t);
   }, [placed, myTop, myH, listY, seeH, scrollToMine, reduced]);
 
   // The one number to chase: "62 to pass Austin", "Level with New York" (per player), or the lead.
+  // Last month's final board (the 1st): how far behind it finished, not how many to pass.
+  const behind = target ? target.city.value - mine!.value : 0;
   const chaseWords = !mine ? '' : target
-    ? (per && target.city.value - mine.value < 0.05 ? `Level with ${target.city.name}` : `${per ? target.gap.toFixed(1) : target.gap} to pass ${target.city.name}`)
-    : `${per ? (mine.value - (board[1]?.value ?? 0)).toFixed(1) : mine.hits - (board[1]?.hits ?? 0)} clear of ${board[1]?.name ?? 'the rest'}`;
-  const valueOf = (c: RankedCity) => (per ? c.value.toFixed(1) : String(c.hits));
+    ? (per ? behind < 0.05 : final && behind === 0) ? `Level with ${target.city.name}`
+      : final ? `${per ? behind.toFixed(1) : behind} behind ${target.city.name}`
+        : `${per ? target.gap.toFixed(1) : target.gap} to pass ${target.city.name}`
+    : board[1] ? `${per ? (mine.value - board[1].value).toFixed(1) : mine.sessions - board[1].sessions} clear of ${board[1].name}` : 'Only city ranked yet';
+  const valueOf = (c: RankedCity) => (per ? c.value.toFixed(1) : String(c.sessions));
   const subOf = (c: RankedCity) => {
     if (c.id === mine?.id) {
-      return per ? chaseWords : `${chaseWords} · you added ${MY_DEMO_HITS}`;
+      // "you added": yours this month, only while your month counts here (after a move it stays where it began).
+      return per || !countsHere || !mySessions || board.length === 1 ? chaseWords : `${chaseWords} · you added ${mySessions}`;
     }
-    if (per) return `${sessionsWords(c.hits)} · ${c.players} players`;
+    if (per) return `${sessionsWords(c.sessions)} · ${c.players} players`;
     // A city on a run says how long it has lasted (from 2 weeks: "1 weeks running" says nothing).
     return isHot(c) && (c.run ?? 0) >= 2 ? `${c.players} players · climbing ${c.run} weeks running` : `${c.players} players`;
   };
 
   return (
     <View style={styles.root}>
-      <Screen title="Cities" subtitle={`${BOARD_MONTH} · resets ${RESETS_ON}`} compactTitle onBack={() => goBack()} scrollRef={scrollRef} offsetY={offsetY}>
+      <Screen title="Cities" subtitle={final ? `${monthName(month)} · final` : `${monthName(month)} · resets ${resetsOn(month)}`} compactTitle onBack={() => goBack()} scrollRef={scrollRef} offsetY={offsetY}>
         <View
           ref={probe}
           onLayout={() => {
@@ -174,6 +188,10 @@ export default function CityBoard() {
             probe.current?.measureInWindow((_x, y) => { viewTop.value = y; setPlaced(true); });
           }}
         />
+        {/* Not open to you, or could not be loaded with nothing earlier to show. */}
+        {status === 'off' ? <EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, your city’s tennis sessions this month will show here." action={{ label: "Back", onPress: () => goBack() }} /> : null}
+        {status === 'error' ? <EmptyState icon="cloud-offline-outline" title="Couldn’t load the board" body="Check your connection and try again." action={{ label: "Try again", onPress: retry }} /> : null}
+        {stale ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stale}>Offline: this is the board from earlier.</Text> : null}
         {/* The week's moments: one line each, newest first. */}
         {moments.length && !per ? (
           <View style={styles.moments}>
@@ -189,9 +207,11 @@ export default function CityBoard() {
 
         {/* The table's head: how many, and what it is ranked by (tap the other to re-rank); under it, what each
             column is. Pinned at the top while the long list scrolls under it. */}
-        <PinnedHead offsetY={offsetY} viewTop={viewTop} headTop={headTop} headH={headH}>
+        {status === 'loading' || (status === 'ready' && board.length > 0) ? (<>
+        {/* Measured again once the board lands (the news lines above it arrive with it). */}
+        <PinnedHead key={`${status}-${mode}`} offsetY={offsetY} viewTop={viewTop} headTop={headTop} headH={headH}>
         <View style={styles.tableHead}>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headCount}>{board.length} cities</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headCount}>{status === 'loading' ? ' ' : `${board.length} ${board.length === 1 ? 'city' : 'cities'}`}</Text>
           <View style={styles.sorts} accessibilityRole="tablist" accessibilityLabel="Rank cities by">
             {([['total', 'Sessions'], ['per', 'Per player']] as const).map(([value, label]) => {
               const on = mode === value;
@@ -208,23 +228,36 @@ export default function CityBoard() {
         <BoardHead name="City" value={per ? 'Per player' : 'Sessions'} valueSpoken={per ? 'Sessions per player' : 'Sessions'} rankWidth={RANK_W} rankShift={RANK_SHIFT} style={styles.boardHead} />
         </PinnedHead>
 
-        <View style={styles.list} onLayout={(e) => { listY.value = e.nativeEvent.layout.y; }}>
+        {/* Keyed by the tab: the news lines show on Sessions only, so the list moves, and a browser measures a view again only when its size changes. */}
+        <View key={mode} style={styles.list} onLayout={(e) => { listY.value = e.nativeEvent.layout.y; }}>
+          {/* Still coming: the rows' own shapes, so nothing jumps when they land. */}
+          {status === 'loading' ? [0, 1, 2, 3, 4, 5].map((i) => (
+            <React.Fragment key={i}>
+              {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
+              <SkeletonRow podium={i < 3} line={i !== 0 && i !== 3} />
+            </React.Fragment>
+          )) : null}
           {board.map((c, i) => (
             <React.Fragment key={c.id}>
               {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
-              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.hits)}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.sessions)}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
                 <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} />
               </Pressable>
             </React.Fragment>
           ))}
         </View>
 
+        </>) : null}
+
+        {status === 'ready' ? (
         <View style={styles.after}>
-          {unrankedHome || cityById('cary') ? (
+          {/* Your city, not ranked yet: how many more it needs (never whether one other is there). Nobody else's unranked city is ever named. */}
+          {unrankedHome ? (
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.unranked}>
-              {(unrankedHome ?? cityById('cary'))!.name} needs {MIN_PLAYERS - (unrankedHome ?? cityById('cary'))!.players} more players to be ranked.
+              {unrankedHome.name} needs {morePlayersWords(unrankedHome.needed)} to be ranked.
             </Text>
           ) : null}
+          {!homeId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.unranked}>Pick your town from the search in Edit profile to join a city board.</Text> : null}
           {mine || unrankedHome ? (
             <View style={styles.climb}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {(mine ?? unrankedHome)!.name} climb</Text>
@@ -234,6 +267,7 @@ export default function CityBoard() {
           ) : null}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged this month by players who call it home. A city needs {MIN_PLAYERS} players to be ranked.</Text>
         </View>
+        ) : null}
       </Screen>
 
       {/* Yours, docked over the bottom while its row is off screen (in place of the old "5 ⋮ 9"): the
@@ -241,7 +275,7 @@ export default function CityBoard() {
           it. Scrolling down to it hands over in place; one tap takes you there. */}
       {mine ? (
         <Animated.View pointerEvents="box-none" style={[styles.dock, { height: barInset + DOCK_ROW_TOP }, youStyle]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.hits)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.sessions)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
             <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} />
           </Pressable>
         </Animated.View>
@@ -251,7 +285,7 @@ export default function CityBoard() {
 }
 
 /**
- * DESIGN MOCK, round 5. The table's head (the tabs and the Rank · City ·
+ * Round 5. The table's head (the tabs and the Rank · City ·
  * Sessions row), pinned over the top of the page once the list scrolls up
  * under it, so the columns stay named all the way down the board. Pinned the
  * way the Tennis profile's tabs are: on a phone it is carried down by the
@@ -319,6 +353,21 @@ function PinnedHead({ offsetY, viewTop, headTop, headH, children }: {
   );
 }
 
+/** A row still loading: its coin or place, a name's length and a line under it, a number's width, in the faintest ink. */
+function SkeletonRow({ podium, line }: { podium: boolean; line: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.row, { height: podium ? PODIUM_H : ROW_H }, line && styles.rowLine]}>
+      <View style={styles.rankCol}><View style={[styles.skel, { width: podium ? 30 : 18, height: podium ? 30 : 18, borderRadius: 15 }]} /></View>
+      <View style={styles.nameCol}>
+        <View style={[styles.skel, { width: '52%', height: 13 }]} />
+        <View style={[styles.skel, { width: '30%', height: 10, marginTop: 6 }]} />
+      </View>
+      <View style={[styles.skel, { width: 34, height: 13 }]} />
+    </View>
+  );
+}
+
 function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
@@ -328,7 +377,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: Ra
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
           ? <Medal rank={city.rank} size={RANK_W} fontSize={21} />
-          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
@@ -395,5 +444,7 @@ const styleDefinitions = StyleSheet.create({
   climbBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   climbButton: { alignSelf: 'stretch', marginTop: spacing.md, maxWidth: 440, width: '100%', marginHorizontal: 'auto' },
   fine: { ...typography.small, color: colors.textFaint, lineHeight: 19, textAlign: 'center', paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl + YOU_H },
+  skel: { backgroundColor: colors.surfaceAlt, borderRadius: 6 },
+  stale: { ...typography.small, color: colors.textFaint, paddingBottom: spacing.sm },
   dock: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingTop: DOCK_PAD, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 });

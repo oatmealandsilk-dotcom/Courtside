@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -691,6 +691,8 @@ export interface UserState {
   autoLog?: boolean;
   /** "Questions you could answer" (migration 170). Undefined on a database without it: the switch is not shown. */
   pushQuestions?: boolean;
+  /** "Show me on city boards" (migration 196). Undefined on a database without it: the switch is not shown. */
+  cityBoards?: boolean;
   /** What the coach works around (injuries, schedule, gear): kept in this private row, never on the public profile. Undefined on a database without migration 19. */
   constraints?: PlayerProfile['constraints'];
   /**
@@ -799,7 +801,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98; `until`, your own check-in's end, since 189). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; push_questions?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -868,6 +870,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushPartnerStreak: typeof r.push_partner_streak === 'boolean' ? r.push_partner_streak : undefined,
   autoLog: typeof r.auto_log === 'boolean' ? r.auto_log : undefined,
   pushQuestions: typeof r.push_questions === 'boolean' ? r.push_questions : undefined,
+  cityBoards: typeof r.city_boards === 'boolean' ? r.city_boards : undefined,
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
@@ -1089,6 +1092,11 @@ export interface ReportedChat {
   messages: { id?: ID; senderId: ID; body: string; kind: string; createdAt: string; photos?: ChatPhoto[] }[];
 }
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** City boards (migration 196): a month ('YYYY-MM-01'), a day, a board city's own id ('raleigh-nc'), a whole number or null. */
+const MONTH_RE = /^\d{4}-\d{2}-01$/;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const boardId = (v: unknown): string | null => (typeof v === 'string' && /^[a-z0-9-]{2,60}$/.test(v) ? v : null);
+const int = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v) : null);
 /** blocked_me()'s rows: plain ids, or ({ blocked_me: id }) from an older gateway. Anything else is dropped. */
 const blockedMeIdsOf = (rows: unknown[]): ID[] =>
   rows.flatMap((row) => {
@@ -4477,6 +4485,108 @@ export const remote = {
         .map((t) => ({ userId: t.id!, n: num(t.n), ...(typeof t.last === 'string' ? { last: t.last.slice(0, 10) } : {}) })),
       me: { wins: num(r.me?.n), ...(typeof r.me?.rank === 'number' ? { rank: r.me.rank } : {}), ranked: !!r.me?.ranked && (typeof r.me?.rank === 'number' || over), ...(over ? { over: true } : {}) },
     };
+  },
+  /**
+   * The month's city board (city_board, migration 196): ranked cities and
+   * counts only, no person anywhere, and your own line. `month` is this
+   * phone's own ('YYYY-MM-01'). Null when the board is not open to you (the
+   * server's flag, {"off": true}) or the database has no city boards yet;
+   * throws when it could not be asked (offline), so the page can keep the
+   * last board it had.
+   */
+  async fetchCityBoard(month: string): Promise<CityBoard | null> {
+    if (!MONTH_RE.test(month)) return null;
+    const { data, error } = await need().rpc('city_board', { p_month: month });
+    if (error) { if (missingFunction(error)) return null; throw error; }
+    const r = (data ?? {}) as Record<string, unknown>;
+    if (r.off === true) return null;
+    const me = (r.me ?? {}) as Record<string, unknown>;
+    const cityId = boardId(me.city_id);
+    return {
+      month: MONTH_RE.test(String(r.month)) ? String(r.month) : month,
+      refreshedAt: typeof r.refreshed_at === 'string' ? r.refreshed_at : null,
+      openUntil: typeof r.open_until === 'string' ? r.open_until : '',
+      cities: (Array.isArray(r.cities) ? r.cities as Record<string, unknown>[] : []).flatMap((c) => {
+        const id = boardId(c.id);
+        const rank = int(c.rank);
+        if (!id || rank === null || typeof c.name !== 'string') return [];
+        return [{
+          id, name: c.name, region: typeof c.region === 'string' ? c.region : '', sessions: num(c.sessions), players: num(c.players), rank,
+          perValue: num(c.per_value), perRank: int(c.per_rank), weekAgoRank: int(c.week_ago_rank), run: num(c.run),
+        }];
+      }),
+      events: (Array.isArray(r.events) ? r.events as Record<string, unknown>[] : []).flatMap((e) => {
+        const who = boardId(e.who);
+        const passed = boardId(e.passed);
+        return who && passed && typeof e.at === 'string' ? [{ who, passed, at: e.at }] : [];
+      }),
+      me: {
+        cityId, cityName: cityId && typeof me.city_name === 'string' ? me.city_name : null, region: cityId && typeof me.region === 'string' ? me.region : null,
+        countsFor: boardId(me.counts_for), ranked: me.ranked === true, sessions: num(me.sessions), inTotal: num(me.in_total),
+        playersNeeded: int(me.players_needed),
+      },
+    };
+  },
+  /**
+   * One city's page (city_page, migration 196): Top players, Up to hit
+   * (ringed and filled), Busiest courts and the clip, every person checked
+   * again for you by the server. Null as fetchCityBoard (off, or no city
+   * boards yet); a page whose `city` is null is a city you may not open (not
+   * ranked, and not yours). Throws when it could not be asked.
+   */
+  async fetchCityPage(cityId: string, month: string): Promise<CityPage | null> {
+    if (!boardId(cityId) || !MONTH_RE.test(month)) return null;
+    const { data, error } = await need().rpc('city_page', { p_city: cityId, p_month: month });
+    if (error) { if (missingFunction(error)) return null; throw error; }
+    const r = (data ?? {}) as Record<string, unknown>;
+    if (r.off === true) return null;
+    const c = (r.city ?? null) as Record<string, unknown> | null;
+    const id = c ? boardId(c.id) : null;
+    const rank = c ? int(c.rank) : null;
+    const city = c && id && typeof c.name === 'string' ? {
+      id, name: c.name, region: typeof c.region === 'string' ? c.region : '', rank, of: num(c.of),
+      ...(rank !== null
+        ? { sessions: num(c.sessions), players: num(c.players), perValue: num(c.per_value), perRank: int(c.per_rank), weekAgoRank: int(c.week_ago_rank), run: num(c.run) }
+        : { playersNeeded: Math.max(1, num(c.players_needed)) }),
+    } : null;
+    const me = (r.me ?? null) as Record<string, unknown> | null;
+    const ids = (v: unknown) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string' && UUID_RE.test(x)) : []);
+    const habit = (v: unknown) => (v === 'weekends' || v === 'evenings' || v === 'mornings' ? v : null);
+    return {
+      month: MONTH_RE.test(String(r.month)) ? String(r.month) : month,
+      refreshedAt: typeof r.refreshed_at === 'string' ? r.refreshed_at : null,
+      city,
+      top: (Array.isArray(r.top) ? r.top as Record<string, unknown>[] : []).flatMap((t) => (typeof t.id === 'string' && UUID_RE.test(t.id) && int(t.rank) !== null ? [{ userId: t.id, sessions: num(t.sessions), rank: int(t.rank)! }] : [])),
+      me: city && me ? { rank: int(me.rank), sessions: num(me.sessions), inTotal: num(me.in_total) } : null,
+      fill: (Array.isArray(r.fill) ? r.fill as Record<string, unknown>[] : []).flatMap((f) => (typeof f.id === 'string' && UUID_RE.test(f.id)
+        ? [{ userId: f.id, habit: habit(f.habit), lastDay: typeof f.last_day === 'string' && DAY_RE.test(f.last_day) ? f.last_day : null, sessions: int(f.sessions) }]
+        : [])),
+      up: ids(r.up),
+      courts: (Array.isArray(r.courts) ? r.courts as Record<string, unknown>[] : []).flatMap((k) => (typeof k.court_id === 'string' && isMapCourtId(k.court_id)
+        ? [{ courtId: k.court_id, name: typeof k.name === 'string' && k.name.trim() ? k.name : null, courts: Math.max(1, num(k.courts)), sessions: num(k.sessions) }]
+        : [])),
+      clip: (() => {
+        const k = (r.clip ?? null) as Record<string, unknown> | null;
+        return k && typeof k.post_id === 'string' && UUID_RE.test(k.post_id) && typeof k.author_id === 'string' && UUID_RE.test(k.author_id)
+          ? { postId: k.post_id, authorId: k.author_id, views: num(k.views) } : null;
+      })(),
+    };
+  },
+  /**
+   * "Show me on city boards" (Privacy center; migration 196's
+   * user_state.city_boards, which your own settings row lets you change).
+   * Off: your sessions still count for your city, but your name and clips
+   * stay off every board. False when it did not go through (or the database
+   * has no city boards yet).
+   */
+  async setCityBoardsVisible(me: ID, on: boolean): Promise<boolean> {
+    const { data, error } = await need().from('user_state').update({ city_boards: on, updated_at: new Date().toISOString() }).eq('user_id', me).select('city_boards');
+    if (error) { if (!missingColumn(error)) fail('city boards switch')(error); return false; }
+    if (Array.isArray(data) && data.length) return true;
+    // No settings row yet: start one with just this (the rest keep their defaults).
+    const made = await need().from('user_state').insert({ user_id: me, city_boards: on });
+    if (made.error) { fail('city boards switch')(made.error); return false; }
+    return true;
   },
   /**
    * "What surface?" at one court (migration 186): your own answer (your row

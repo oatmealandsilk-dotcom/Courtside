@@ -10,12 +10,18 @@ import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
+import { cityBoardOn } from '@/features/cityBoard/flag';
+import { notKnownAdult } from '@/features/players/age';
 import { colors, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, cityBoardsVisible, cityBoards } = useApp();
+  // City boards (migration 196), admins first: adults only (a teen is never named on a board, whatever this says),
+  // once the database has the switch. Your sessions count for your city either way; off, nobody sees your name or clips there.
+  const showCityBoards = cityBoardOn(currentUser) && !!currentUser && !notKnownAdult(currentUser) && cityBoardsVisible !== null;
+  const boardCity = Object.values(cityBoards).find((e) => e.board?.me.cityName)?.board?.me.cityName ?? null;
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
     <Pressable key={label} accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -52,6 +58,16 @@ export default function PrivacyCentre() {
               <Text style={styles.rowDetail}>By your phone number or email</Text>
             </View>
             <Toggle value={prefs.contactsFindable} onChange={(v) => actions.setPref('contactsFindable', v)} accessibilityLabel="Let people find me from their contacts" />
+          </View>
+        ) : null}
+        {showCityBoards ? (
+          <View style={[styles.row, styles.rowBorder]}>
+            <Ionicons name="podium-outline" size={19} color={colors.textMuted} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.rowLabel}>Show me on city boards</Text>
+              <Text style={styles.rowDetail}>Your sessions always count for {boardCity ?? 'your city'}. Off: your name and clips stay off the boards.</Text>
+            </View>
+            <Toggle value={cityBoardsVisible !== false} onChange={(v) => { void actions.setCityBoardsVisible(v); }} accessibilityLabel="Show me on city boards" />
           </View>
         ) : null}
         {/* Who sees your check-ins on the map (migration 189): Friends or No one. A teen too (78, 119). */}

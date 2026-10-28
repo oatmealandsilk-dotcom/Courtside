@@ -121,8 +121,8 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * seen only by those friends; the words say so.
  */
 export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle }: { me: User; people: Up[];
-  /** DESIGN MOCK (design/city-board, round 3): your home city's regulars after the ringed faces, so the row never looks empty. Empty on the live app. */ fill?: FillFace[];
-  /** DESIGN MOCK: the row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
+  /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
+  /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -203,7 +203,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
             </Animated.View>
           );
         })}
-        {/* DESIGN MOCK (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
+        {/* City boards (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
         {fill.length ? <FillDivider size={FACE} /> : null}
         {fill.map((f) => <FilledFace key={f.user.id} face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />)}
         {!people.length && !fill.length ? (

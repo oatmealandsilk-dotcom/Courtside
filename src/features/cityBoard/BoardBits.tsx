@@ -9,7 +9,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import type { FillFace } from './fill';
-import { MEDAL_LOOK, isHot } from './mock';
+import { isHot } from './board';
 
 /** 1st, 2nd and 3rd: each one's metal, as [ink, coin], read from the live theme as it draws. */
 const metalOf = (rank: number): [string, string] | null =>
@@ -18,14 +18,11 @@ const metalOf = (rank: number): [string, string] | null =>
       : rank === 3 ? [colors.medalBronze, colors.medalBronzeFill]
         : null;
 
-/** Whether a place wears a coin (1st to 3rd, in the coin look). */
-export const hasCoin = (rank: number) => MEDAL_LOOK === 'coin' && rank >= 1 && rank <= 3;
-
-/** In the 'ink' look, a podium place's numeral colour (its metal); otherwise null and the numeral keeps its own. */
-export const medalInk = (rank: number): string | null => (MEDAL_LOOK === 'ink' ? metalOf(rank)?.[0] ?? null : null);
+/** Whether a place wears a coin: 1st to 3rd (by place, so two cities level on 2nd both wear silver). */
+export const hasCoin = (rank: number) => rank >= 1 && rank <= 3;
 
 /**
- * DESIGN MOCK (design/city-board), round 3. Owner, Oct 28: "have first
+ * Round 3 of the approved design. Owner, Oct 28: "have first
  * second third be gold silver bronze". The place's numeral on a small coin
  * of its metal: a pale disc (deep on a dark court), a fine rim in the
  * metal's ink with a second one just inside it (a coin's raised edge), the
@@ -61,7 +58,7 @@ export function Medal({ rank, size, fontSize }: { rank: number; size: number; fo
 }
 
 /**
- * DESIGN MOCK, round 3. A face after the ringed ones in Up to hit: a
+ * Round 3. A face after the ringed ones in Up to hit: a
  * regular here, a plain circle (no ring: the ring only ever means "up
  * today"), first name, and when they usually play. Opens their profile.
  * `size`: the face; the box round it is the ringed faces' box, so names
@@ -89,7 +86,7 @@ export function FilledFace({ face, size, width, top = 2, onPress }: { face: Fill
 const HEAD_TRACK = 0.6;
 
 /**
- * DESIGN MOCK, round 5. Owner, Oct 28, after round 4's three looks: "I don't
+ * Round 5. Owner, Oct 28, after round 4's three looks: "I don't
  * like the emojis or how it says sessions after each or whatever under every
  * row. We should make something on the top that says like position or rank
  * or whatever and then city, and then sessions. Like a header".
@@ -145,7 +142,7 @@ export function FillDivider({ size }: { size: number }) {
 }
 
 /**
- * DESIGN MOCK (design/city-board). The board's two small marks, shared by
+ * The board's two small marks, shared by
  * Find Players, the full board and a city's page.
  *
  * Movement since a week ago, the way a standings table says it: a small
