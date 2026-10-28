@@ -89,13 +89,16 @@ export function UnlockRows() {
         </View>
         <View style={styles.rowWords}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>{TO_UNLOCK.length} more to unlock near you</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{nextFriend ? `${nextFriend} has ${next.name.split(' ')[0]} · ${next.miles}` : `${next.name} · ${next.miles}`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{nextFriend ? `${nextFriend} has ${shortCourt(next.name)} · ${next.miles}` : `${shortCourt(next.name)} · ${next.miles}`}</Text>
         </View>
         <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
       </Pressable>
     </View>
   );
 }
+
+/** "Bellwood Recreation Center" → "Bellwood", so the line keeps its distance on one line (with or without a friend's name). */
+const shortCourt = (name: string) => name.replace(/\s+(Recreation Center|Community Park|Tennis Center|Park|Courts)$/i, '') || name;
 
 export function UnlockActions() {
   const styles = useThemedStyles(styleDefinitions);
