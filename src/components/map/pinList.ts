@@ -8,6 +8,7 @@ import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/
 import { isOpenToHit } from '@/features/players/openToHit';
 import { surfaceAdjective, surfaceKind } from '@/features/places/courtSurface';
 import { LESS_AI_COURTS } from '@/theme/look';
+import { colors } from '@/theme';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
@@ -170,6 +171,6 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   const meWidths = nameWidths(`You${nowWords}${isOpenToHit(me) ? ' · Open to hit' : ''}${hidden ? ' · Hidden' : ''}`, { open: isOpenToHit(me) || !!playing });
   const meClass = [playerPinClass(me), playing ? PLAYING_CLASS : ''].filter(Boolean).join(' ');
   // Standing on a court (the one you are playing at first): players checked in at it ring round you.
-  if (mine) list.push({ ...meWidths, at: courtUnder(mine, playing?.courtId), id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You' });
+  if (mine) list.push({ ...meWidths, at: courtUnder(mine, playing?.courtId), id: 'me', lat: mine.lat, lng: mine.lng, html: mePinHtml(me, ME_SIZE, hidden, playing ? playing.courtName : undefined), cls: meClass, anchor: 'top', offsetY: -discSize(ME_SIZE) / 2, z: 6, k: 'p', fix: true, r: -1, ds: discSize(ME_SIZE), g: 'p', role: 'button', label: 'You', up: !hidden, rc: colors.brand });
   return list;
 }

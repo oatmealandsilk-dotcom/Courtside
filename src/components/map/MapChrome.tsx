@@ -58,7 +58,7 @@ import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
-import { LIGHT_UP, litLine, litTill } from '@/features/places/lightUp';
+import { UpToHitPill, UpToHitRound } from '@/components/map/UpToHit';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -143,19 +143,6 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
   const say = city ? `Search ${city}` : 'Search a place or park';
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
-  // One lit value for the Check in button's green and its edge.
-  const locLit = useLit(!!checkIn?.on);
-  const locV = locLit.v;
-  // The edge's two colours for the animation thread, kept to the theme now (the button is rebuilt in a new one).
-  const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
-  const edgeOn = useInk(colors.brand, locLit.bump);
-  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
-  // Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
-  // arrow. On the map cover it was fine"): outlined while you are hidden, filled on green while you are
-  // checked in; a tap checks in or out. The Find Players card keeps its "Check in" pill.
-  const locationIcon = !checkIn ? null : checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : (
-    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
-  );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
@@ -217,13 +204,11 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
       {checkIn ? (
         <View>
           <TipPulse where="map" size={44} />
-          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} onPress={checkIn.press} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-            {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
-              <GreenFill v={locLit.v} radius={22} />
-              {locationIcon}
-            </MapGlass>
-          </Pressable>
+          {/* Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
+              arrow. On the map cover it was fine"): outlined while you are not up to hit, filled on green while you
+              are; a tap turns it on or off (UpToHit: it fills from the middle and bounces once). The Find Players
+              card keeps its pill. */}
+          <UpToHitRound control={checkIn} />
           <HideTip where="map" style={{ top: 52, right: 0 }} />
         </View>
       ) : null}
@@ -486,27 +471,6 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-/** What the Up to hit button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `Up to hit, friends see you ${c.span}. Turn off` : `Up to hit. Friends who follow you back see you ${c.span}`);
-
-/**
- * The Up to hit button's own words (Oct 27, the owner's pick: "Up to hit"; migration 189):
- * "Up to hit", or while it is on: "Up to hit · till 10pm"
- * (a tap turns it off).
- */
-function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const ink = control.on ? colors.brandInk : colors.text;
-  return (
-    <View pointerEvents="none" style={styles.checkInRow}>
-      {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on && control.until ? litLine(litTill(control.until)) : LIGHT_UP}
-      </Text>
-    </View>
-  );
-}
-
 function GreenFill({ v, radius: r, edge = 0 }: { v: SharedValue<number>; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
@@ -1683,10 +1647,9 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       {checkIn ? (
         <>
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
-          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} hitSlop={6} onPress={checkIn.press} style={[styles.previewSwitch, checkIn.on && styles.roundOn]}>
-            {checkIn.on ? <BrandWash /> : null}
-            <CheckInWords control={checkIn} size={14} />
-          </Pressable>
+          {/* The Up to hit pill (Oct 27, the owner's pick: "Up to hit"; migration 189): "Up to hit", or while it is on,
+              "Up to hit · till 10pm" on green (a tap turns it off). UpToHit: it springs to its words as the green sweeps in. */}
+          <UpToHitPill control={checkIn} />
           <HideTip where="card" style={{ top: 52, right: 8 }} />
         </>
       ) : null}
@@ -1792,7 +1755,6 @@ const styleDefinitions = StyleSheet.create({
   seenLabel: { ...typography.smallStrong, color: colors.text, flex: 1 },
   seenValue: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  roundOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   roundHit: { width: 42, height: 42, borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   roundGlass: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The chips' row to the screen's edge, its 6 above and below the chips their touch's reach (44 in all).
@@ -1836,8 +1798,6 @@ const styleDefinitions = StyleSheet.create({
   // The map's top row (Oct 11): Back, the bar and Location, 44 tall, one glass, one soft lift each.
   barPillHit: { height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barPill: { height: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
-  checkInRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  checkInWord: { ...typography.smallStrong, ...font('600') },
   barRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
@@ -2045,7 +2005,6 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  previewSwitch: { position: 'absolute', right: 12, top: 12, height: 32, paddingHorizontal: 12, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
 });

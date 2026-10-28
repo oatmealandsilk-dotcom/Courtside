@@ -132,6 +132,14 @@ export interface CanvasMarker {
   /** For screen readers. */
   role?: string;
   label?: string;
+  /**
+   * Your pin, up to hit (checked in). Turned on while the map is open, your pin drops in with a small
+   * spring (or, already there, gives one small pop) and sends out one soft ring in `rc`; turned off, it
+   * shrinks away (or, staying as "You · Hidden", gives a small dip). Never when the map has just opened.
+   */
+  up?: boolean;
+  /** The colour of that ring: the theme's brand. */
+  rc?: string;
 }
 
 /** What the gathered pins look like, in the theme's colours (markers.ts clusterTemplates). */
@@ -223,7 +231,12 @@ return function(map,ml,o){
   // The still card, until it has been shown (calm(false)): its pins are simply there, with no fade or drop in, so the
   // card under its cover (or its picture) already has every pin at full strength when it is first seen (Oct 22).
   var calm=!!o.quiet;
+  // Your pin's Up to hit, as last drawn (null until the first drawing), and when that first drawing was: a change in the
+  // moments after it is the map catching up with you, not a tap, so your pin never drops in then.
+  var meUp=null,born=0,SETTLE_MS=1200;
   function still(){try{return document.body.classList.contains('cs-still')}catch(e){return false}}
+  // The system's Reduce Motion, which the pins' own CSS already follows (markers.ts): your pin's landing then is the plain fade.
+  function lessMotion(){try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)}catch(e){return false}}
   // Levels come every half step of zoom (lvl counts half steps: 23 is zoom 11.5), so a pin is never gathered for more than a little way past the point it needs.
   function levelNow(){return Math.max(ZMIN*2,Math.min(ZMAX*2,Math.floor(map.getZoom()*2+1e-6)))}
   function zoomOf(l){return l/2}
@@ -491,10 +504,36 @@ return function(map,ml,o){
       if(par)for(var sib=par.firstChild;sib;sib=sib.nextSibling){if(sib!==el&&sib.__r!=null&&sib.__z===el.__z&&sib.__r<it.r){par.insertBefore(el,sib);break}}}
     return k}
   function drop(id){var k=ms[id];if(!k)return;clearTimeout(k.leaving);clearTimeout(k.tidy);k.m.remove();delete ms[id]}
+  // Your pin, just put up to hit (Oct 28, owner: "be more gratifying"): new on the map it drops in with a small spring, already
+  // there it gives one small pop; either way one soft ring goes out from your face in the brand's colour, once. Scaled about
+  // the face (its middle is ds/2 down the pin), with the browser's own animations, so no class is left on it.
+  function land(k,made){var c=child(k),it=k.it||{};if(!c||!c.animate)return;var mid=(it.ds||48)/2;
+    try{
+      c.style.transformOrigin='50% '+mid+'px';
+      if(made)c.animate([{transform:'translateY(-16px) scale(.55)',opacity:0},{opacity:1,offset:.3},{transform:'translateY(0) scale(1)',opacity:1}],{duration:480,easing:'cubic-bezier(.3,1.45,.5,1)'});
+      else c.animate([{transform:'scale(1)'},{transform:'scale(1.1)',offset:.35},{transform:'scale(1)'}],{duration:380,easing:'cubic-bezier(.3,.7,.4,1)'});
+      var d=c.querySelector('.cs-disc');if(!d||!it.rc)return;
+      var r=document.createElement('i');r.setAttribute('aria-hidden','true');
+      r.style.cssText='position:absolute;left:4px;top:4px;right:4px;bottom:4px;border-radius:999px;border:2.5px solid '+it.rc+';box-sizing:border-box;pointer-events:none;opacity:0';
+      d.appendChild(r);
+      var a=r.animate([{transform:'scale(1)',opacity:.6},{transform:'scale(2.2)',opacity:0}],{duration:700,delay:made?170:90,easing:'cubic-bezier(.2,.7,.3,1)'});
+      a.onfinish=a.oncancel=function(){if(r.parentNode)r.parentNode.removeChild(r)};
+    }catch(e){}}
+  // Your pin, taken down: it shrinks away into your spot (staying as "You · Hidden", its face only dips a little and comes back).
+  function shrink(k,gone){var c=child(k),it=k.it||{};if(!c||!c.animate)return;
+    try{
+      if(gone){c.style.transformOrigin='50% '+((it.ds||48)/2)+'px';c.animate([{transform:'scale(1)',opacity:1},{transform:'scale(.3)',opacity:0}],{duration:220,easing:'cubic-bezier(.5,0,.75,0)',fill:'forwards'});return}
+      var d=c.querySelector('.cs-disc');if(d)d.animate([{transform:'scale(1)'},{transform:'scale(.88)',offset:.4},{transform:'scale(1)'}],{duration:320,easing:'ease-in-out'});
+    }catch(e){}}
   function render(why){
     if(!ready||dead||held)return;
     var d=desired(),was=owner,st=still(),spot={},glides=[],fresh=[],back={};
     owner=d.own;
+    // Your Up to hit, turned on or off since the last drawing (not in the map's first moments, not with Reduce Motion).
+    var upNow=!!(items.me&&items.me.up),arrive=false,depart=false,meMade=false;
+    if(meUp===null)born=now();
+    else if(upNow!==meUp&&!st&&!lessMotion()&&now()-born>SETTLE_MS){arrive=upNow;depart=!upNow}
+    meUp=upNow;
     // The view, and a margin of half of it all round: only pins in there are made.
     var ct=map.getContainer(),W=ct.clientWidth||400,H=ct.clientHeight||700,mid={x:W/2,y:H/2};
     function near(p){return p.x>-W*0.5&&p.x<W*1.5&&p.y>-H*0.5&&p.y<H*1.5}
@@ -509,8 +548,11 @@ return function(map,ml,o){
       var p0=map.project([it.lng,it.lat]),pos={x:p0.x+off[0],y:p0.y+off[1]};
       if(!near(pos)){if(k)drop(id);continue}
       if(k&&k.a!==a){drop(id);k=null}
-      if(k&&k.leaving){clearTimeout(k.leaving);k.leaving=0;var c0=child(k);if(c0){c0.classList.remove('cs-out','cs-move');c0.style.translate=''}k.el.style.pointerEvents='';back[id]=1}
+      if(k&&k.leaving){clearTimeout(k.leaving);k.leaving=0;var c0=child(k);if(c0){c0.classList.remove('cs-out','cs-move');c0.style.translate='';
+        // Your pin shrinking away (shrink), back before it went: its shrink lets go, or it would stay shrunk and unseen.
+        if(id==='me'&&c0.getAnimations)c0.getAnimations().forEach(function(a){a.cancel()})}k.el.style.pointerEvents='';back[id]=1}
       var made=!k;
+      if(id==='me')meMade=made;
       if(!k){
         k=ms[id]=make(it,off);
         // Split off from a gathered pin (or fanned out of one): it glides out from where that pin was. A gathered pin goes by its lead.
@@ -551,12 +593,16 @@ return function(map,ml,o){
     leaving.forEach(function(l,i){if(i>=GLIDES||st)l.into=null});
     glides.forEach(function(g){var c=child(g.k);if(!c)return;clearTimeout(g.k.tidy);c.classList.remove('cs-move','cs-spring');c.style.translate=g.dx+'px '+g.dy+'px'});
     // One still springing out (zoomed straight back out) loses its spring first: the spring's grow would hold it solid until it went.
-    leaving.forEach(function(l){var c=child(l.k);clearTimeout(l.k.tidy);l.k.el.style.pointerEvents='none';if(c)c.classList.remove('cs-spring');if(c&&l.into){c.classList.add('cs-move');c.style.translate=(l.into.x-l.from.x)+'px '+(l.into.y-l.from.y)+'px'}if(c)c.classList.add('cs-out');
+    leaving.forEach(function(l){var c=child(l.k);clearTimeout(l.k.tidy);l.k.el.style.pointerEvents='none';if(c)c.classList.remove('cs-spring');if(c&&l.into){c.classList.add('cs-move');c.style.translate=(l.into.x-l.from.x)+'px '+(l.into.y-l.from.y)+'px'}
+      if(c&&depart&&l.id==='me'&&c.animate)shrink(l.k,true);else if(c)c.classList.add('cs-out');
       var k=l.k,id=l.id;k.leaving=setTimeout(function(){k.m.remove();if(ms[id]===k)delete ms[id]},c?260:0)});
     if(glides.length)void ct.offsetWidth;
     // A player split off a gathered pin springs out (a little past its spot and back, growing to full size); anything else just glides.
     glides.forEach(function(g){var c=child(g.k);if(!c)return;var sp=g.made&&g.p;c.classList.add('cs-move',sp?'cs-spring':'cs-in');c.style.translate='0px 0px';
       g.k.tidy=setTimeout(function(){c.classList.remove('cs-move','cs-in','cs-spring');c.style.translate=''},sp?620:460)});
+    // Your pin, just put up to hit: it lands (land) in place of the plain fade in; just taken down and still here, it dips.
+    if(arrive&&ms.me&&d.out.me){var km=ms.me;fresh=fresh.filter(function(f){return f.k!==km});land(km,meMade)}
+    else if(depart&&ms.me&&d.out.me&&!ms.me.leaving)shrink(ms.me,false);
     // New pins: the first ones after the full map opens come in as one wave, nearest the middle first; later ones fade in.
     var t=now();
     if(!waveDone&&!wave0&&fresh.length){
