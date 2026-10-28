@@ -22,7 +22,7 @@ export const PERMISSION_META: Record<DevicePermission, { label: string; why: str
   photos: { label: 'Photos', why: Platform.OS === 'android' ? 'To post clips and photos.' : 'To post clips and photos. Pick All Photos so videos open.', icon: 'images-outline' },
   microphone: { label: 'Microphone', why: 'For voice notes in chats.', icon: 'mic-outline' },
   // A map pin rather than the compass arrow, since this is about where you are, not directions.
-  location: { label: 'Location', why: 'For courts near you, and Check in for friends.', icon: 'location-outline' },
+  location: { label: 'Location', why: 'For courts near you, and Up to hit for friends.', icon: 'location-outline' },
 };
 
 /**

@@ -4,7 +4,8 @@ import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
 import { confirm } from '@/lib/confirm';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
-import { checkInSpan, liveCheckIn, untilWords } from '@/features/players/checkIn';
+import { liveCheckIn } from '@/features/players/checkIn';
+import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
 import { useOpenClock } from '@/features/players/useOpenClock';
 
 /**
@@ -40,14 +41,16 @@ export function useLocationToggle() {
   return { locationOn: locationEnabled, locating, toggle };
 }
 
-/** What a Check in button shows and does (MapTopBar, the Find Players card). */
+/** What the Up to hit button shows and does (MapTopBar, the Find Players card). */
 export interface CheckInControl {
-  /** Checked in right now. */
+  /** Lit up right now. */
   on: boolean;
   /** Asking the phone where it is, or the server. */
   busy: boolean;
-  /** "until 10pm" (how long a check-in now would last, or how long yours still does). */
+  /** "till 10pm" (how long a light-up now would last, or how long yours still does). */
   span: string;
+  /** When yours ends, while you are up to hit. */
+  until: string | null;
   press: () => void;
 }
 
@@ -64,7 +67,7 @@ export interface CheckInControl {
  * recentre never shows you to anyone.
  */
 export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
-  const { actions, mapVisibility, lastSeen, currentUserId } = useApp();
+  const { actions, mapVisibility, lastSeen, currentUserId, currentUser, courtFacts } = useApp();
   const [busy, setBusy] = useState(false);
   const mine = currentUserId ? lastSeen[currentUserId]?.until : undefined;
   // Looks again the moment your check-in ends, so the button says Check in again by itself.
@@ -82,11 +85,11 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
       if (!saidYes(chose)) return;
       first = true;
     } else if (where === 'map') {
-      // The round arrow: "Check in?" first, every time (the first time, the question above was it).
+      // The round arrow: "Up to hit?" first, every time (the first time, the question above was it).
       const yes = await new Promise<boolean>((resolve) => confirm({
-        title: 'Check in?',
-        message: `Friends who follow you back see where you are ${checkInSpan()}.`,
-        confirmLabel: 'Check in',
+        title: 'Up to hit?',
+        message: `Friends who follow you back see where you are ${litSpan()}.`,
+        confirmLabel: 'Up to hit',
         cancelLabel: 'Not now',
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
@@ -95,9 +98,13 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
     }
     setBusy(true);
     try {
-      const problem = await actions.checkInOnMap();
-      if (problem) { showToast({ title: 'Not checked in', body: problem, icon: 'navigate-outline' }); return; }
-      showToast({ title: `Checked in ${checkInSpan()}`, body: 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      let at: { lat: number; lng: number } | null = null;
+      const problem = await actions.checkInOnMap((fix) => { at = fix; });
+      if (problem) { showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); return; }
+      // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
+      const spot: { lat: number; lng: number } | null = at;
+      const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
+      showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);
@@ -107,7 +114,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   ref.current = pressNow;
   const press = useCallback(() => { void ref.current(); }, []);
 
-  return { on: !!until, busy, span: until ? untilWords(until) : checkInSpan(), press };
+  return { on: !!until, busy, span: until ? litTill(until) : litSpan(), until, press };
 }
 
 /**

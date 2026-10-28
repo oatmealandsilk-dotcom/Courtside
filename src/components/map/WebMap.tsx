@@ -30,6 +30,7 @@ import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
 import { mapMarkers } from '@/components/map/pinList';
+import { glowKey, useCourtGlow } from '@/features/places/lightUp';
 import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MAP_LOADING, softShotAllowed, MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
@@ -590,9 +591,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // moves a hit's "Tomorrow" to "Today") by itself. The player list is kept while unchanged, so the
   // pins are no longer rebuilt on every redraw of the tab under them and need telling when time passes.
   const pinClock = useOpenClock(shown.map((p) => p.user.openToHitUntil));
+  // Courts light up by what is on there right now (Light up, admins first; null: as before).
+  const glow = useCourtGlow(model, expanded, shown, playing?.courtId);
+  const glowNow = glowKey(glow);
   const markers = useMemo(
-    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock], // eslint-disable-line react-hooks/exhaustive-deps
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps

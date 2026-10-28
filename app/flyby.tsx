@@ -79,7 +79,7 @@ export default function FlybySheet() {
           <View>
             {people.map(({ person, user }, i) => {
               const following = followingIds.includes(user.id);
-              const what = `${person.via === 'checkin' ? 'Checked in' : 'Posted'} ${day ? partWords(person.part, day) : person.part}`;
+              const what = `${person.via === 'checkin' ? 'Played here' : 'Posted'} ${day ? partWords(person.part, day) : person.part}`;
               return (
                 // The row opens their profile; Follow sits beside it, not inside it (no button inside a button in a browser).
                 <View key={user.id} style={[styles.row, i > 0 && styles.rule]}>
@@ -108,7 +108,7 @@ export default function FlybySheet() {
         ) : null}
         <View style={[styles.fine, playedNote ? styles.fineNext : null]}>
           <Ionicons name="lock-closed-outline" size={13} color={colors.textFaint} />
-          <Text style={styles.fineText}>You see friends, and public players who posted here. Check-ins show to friends only.</Text>
+          <Text style={styles.fineText}>You see friends, and public players who posted here. “I’m playing here” shows to friends only.</Text>
         </View>
       </ScrollView>
     </DragSheet>

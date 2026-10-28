@@ -75,11 +75,17 @@ export interface CourtLifeActions {
   loadFollowedCourts: () => Promise<void>;
   /** "How is it right now?" Null takes your answer back. Resolves a sentence when it did not go through. */
   reportCourtNow: (courtId: string, status: CourtNow | null) => Promise<string | null>;
-  /** "I'm playing here", for two hours. Resolves a sentence when it is refused. */
-  checkInAtCourt: (courtId: string) => Promise<string | null>;
+  /**
+   * "I'm playing here", for two hours. Resolves a sentence when it is refused.
+   * `at`: where the phone was found a moment ago by the same tap (Light up at a
+   * court, features/places/lightUp), so it is not asked again.
+   */
+  checkInAtCourt: (courtId: string, at?: { lat: number; lng: number }) => Promise<string | null>;
   checkOutOfCourt: () => Promise<void>;
   /** Court rings in a box of the map. */
   loadCourtRings: (box: MapBox) => Promise<void>;
+  /** Only how up to 50 courts are right now (the map's lit courts, features/places/lightUp). */
+  loadCourtsNow: (courtIds: string[]) => Promise<void>;
 }
 
 const seeing = (s: Reads): Seeing => ({ me: s.currentUserId, users: s.users, followingIds: s.followingIds, blockedIds: s.blockedIds, mutedIds: s.mutedIds });
@@ -231,38 +237,41 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     return null;
   }, [stateRef, setState, live, loadCourtInfo]);
 
-  const checkInAtCourt = useCallback(async (courtId: string) => {
+  const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }) => {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
     const self = s.users.find((u) => u.id === me);
-    if (!self || notKnownAdult(self)) return 'Checking in is for adults only.';
+    if (!self || notKnownAdult(self)) return '“I’m playing here” is for adults only.';
     // A yes to "Who can see you on the map?" first, every time (Apple 5.1.2(i), migration 191): the page
     // that offers the check-in asks (yesFirst) before it gets here; no answer is never taken as a yes.
+    // Up to hit at a court (Light up, `at`) reaches here only after that same yes, and is held to it too.
     if (s.mapVisibility === 'none') return 'You chose No one on the map, so no one sees you here.';
     if (!saidYes(s.mapVisibility)) return 'Say who can see you on the map first.';
-    if (!s.locationEnabled) return 'Turn on Location first, so players know you’re really here.';
+    // A spot from the same tap (Light up) is Location on already, whatever this render last saw.
+    if (!at && !s.locationEnabled) return 'Turn on Location first, so players know you’re really here.';
     if (live(me)) {
       // Where the phone is now, not where it was when the app opened: the
       // server checks you are within 5 km of the court (migration 189) and
       // never keeps it. Your pin is the court; nothing else is shared.
-      const fix = await getPosition({ recentMs: 2 * 60_000 });
+      const fix = at ? { ok: true as const, ...at } : await getPosition({ recentMs: 2 * 60_000 });
       if (!fix.ok) return fix.reason === 'denied' ? 'Location is blocked, so we can’t tell you’re here.' : 'Couldn’t find you. Try again.';
       if (stateRef.current.currentUserId !== me) return null;
       setState((prev) => ({ ...prev, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
       const got = await remote.checkInAtCourt(courtId, { lat: fix.lat, lng: fix.lng });
       if ('error' in got) {
-        return got.error === 'too_far' ? 'You need to be at the court to check in.'
+        return got.error === 'too_far' ? 'You need to be at the court for that.'
           : got.error === 'location_off' ? 'Turn on Location first, so players know you’re really here.'
-            : got.error === 'adults_only' ? 'Checking in is for adults only.'
-              : got.error === 'closed_court' ? 'Check-ins are only for courts anyone can play at.'
-                : got.error === 'slow_down' ? 'That’s a lot of check-ins today. Try again tomorrow.'
-                  : got.error === 'hidden' ? 'You turned off map check-ins. Turn them on in Settings → Privacy.'
+            : got.error === 'adults_only' ? '“I’m playing here” is for adults only.'
+              : got.error === 'closed_court' ? 'Only for courts anyone can play at.'
+                : got.error === 'slow_down' ? 'That’s a lot of courts today. Try again tomorrow.'
+                  : got.error === 'hidden' ? 'You chose No one on the map. Change it in Settings → Privacy.'
                   : got.error === 'ask_first' ? 'Say who can see you on the map first.'
                   : 'That didn’t go through. Try again.';
       }
     }
-    haptics.commit();
+    // From a light-up's own tap (`at`), that tap has buzzed already: one buzz, not two.
+    if (!at) haptics.commit();
     // One court at a time: checking in here checks you out anywhere else.
     setState((prev) => ({
       ...prev,
@@ -298,7 +307,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, wasNow.includes(id) ? { ...row, youHere: true } : row])),
       followedCourts: prev.followedCourts?.map((c) => (wasFollowed.includes(c.courtId) ? { ...c, youHere: true } : c)) ?? null,
     }));
-    showToast({ title: 'You’re still checked in', body: 'Checking out didn’t go through. Try again.', icon: 'alert-circle-outline' });
+    showToast({ title: 'You still show here', body: 'Hiding didn’t go through. Try again.', icon: 'alert-circle-outline' });
   }, [stateRef, setState, live]);
 
   const loadCourtRings = useCallback(async (box: MapBox) => {
@@ -312,7 +321,28 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     setState((prev) => ({ ...prev, courtRings: [...prev.courtRings.filter((r) => !inBox(r) && !rings.some((x) => x.courtId === r.courtId)), ...rings].slice(-400) }));
   }, [stateRef, setState, live]);
 
+  const loadCourtsNow = useCallback(async (courtIds: string[]) => {
+    const ids = [...new Set(courtIds.filter(isMapCourtId))].slice(0, 50);
+    const me = stateRef.current.currentUserId;
+    if (!ids.length || !me) return;
+    if (!live(me)) {
+      // The demo's answers for courts not yet seen; anything changed here (yours, a light-up) stays.
+      setState((prev) => {
+        const add = ids.filter((id) => !prev.courtNow[id]);
+        return add.length ? { ...prev, courtNow: { ...Object.fromEntries(add.map((id) => [id, demoNowFor(id)])), ...prev.courtNow } } : prev;
+      });
+      return;
+    }
+    const now = await remote.fetchCourtRightNow(ids).catch(() => null);
+    if (!now || stateRef.current.currentUserId !== me) return;
+    setState((prev) => {
+      // Nothing new at any of them: the same state, so nothing on screen redraws.
+      const changed = now.filter((r) => JSON.stringify(prev.courtNow[r.courtId]) !== JSON.stringify(r));
+      return changed.length ? { ...prev, courtNow: { ...prev.courtNow, ...byCourt(changed) } } : prev;
+    });
+  }, [stateRef, setState, live]);
+
   return useMemo(() => ({
-    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings,
-  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings]);
+    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow,
+  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow]);
 }

@@ -93,7 +93,7 @@ export default function LiveSessionPage() {
   const here = !!s.court && !!courtNow[s.court.id]?.youHere && locationEnabled && state !== 'finished';
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court: s.court, access: s.court ? courtFacts[s.court.id]?.access : undefined, locationOn: locationEnabled, seenBy });
-  const seen = state === 'finished' ? { line: 'Finished · checked out', shared: false } : seenShort({ here, seenBy, why: plan.why });
+  const seen = state === 'finished' ? { line: 'Finished · no longer shown', shared: false } : seenShort({ here, seenBy, why: plan.why });
   // Not seen, but could be by the court sheet's rules: Show friends, a tap of its own each time (Start never
   // checks in, Oct 27 audit #3). With no yes yet it asks "Who can see you on the map?" first ('ask-first').
   const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off' || plan.why === 'ask-first');

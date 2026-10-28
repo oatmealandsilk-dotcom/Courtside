@@ -19,7 +19,7 @@ export function checkInEnds(now: Date = new Date()): Date {
 }
 
 /** "10pm", "9:30pm": a time the way the app says it. */
-function clock(at: Date): string {
+export function clock(at: Date): string {
   const h = at.getHours();
   const m = at.getMinutes();
   return `${h % 12 || 12}${m ? `:${String(m).padStart(2, '0')}` : ''}${h < 12 ? 'am' : 'pm'}`;
