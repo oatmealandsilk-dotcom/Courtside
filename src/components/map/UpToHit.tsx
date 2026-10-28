@@ -10,7 +10,7 @@ import { MapGlass } from '@/components/map/MapGlass';
 import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { LIGHT_UP, litLine } from '@/features/places/lightUp';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
-import { useGrowAway } from '@/features/players/mapGrow';
+import { PILL_QUICK_MS, growArmed, useGrowAway } from '@/features/players/mapGrow';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { TextScale, colors, font, typography, withAlpha } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -45,6 +45,13 @@ const SWEEP_OUT = Easing.bezier(0.4, 0, 0.6, 1);
 /** The tick, drawn as the green reaches it. */
 const TICK_DELAY = 110;
 const TICK_MS = 240;
+/**
+ * The check-in zoom's grow (mapGrow, v4): the pill slips out of the card as the page pushes in from the moment you are
+ * found, so its moment is the same one, quicker, played as it goes (the green and the tick within PILL_QUICK_MS).
+ */
+const QUICK_TICK_DELAY = 40;
+const QUICK = { sweep: PILL_QUICK_MS, tickDelay: QUICK_TICK_DELAY, tick: PILL_QUICK_MS - QUICK_TICK_DELAY - 10 };
+const PLAIN = { sweep: SWEEP_IN_MS, tickDelay: TICK_DELAY, tick: TICK_MS };
 /** The tick's stroke, in its 24-unit box (a little over its real length, so no dot is left at the start). */
 const TICK = 'M4.5 12.75l4.75 4.75L19.5 7';
 const TICK_LEN = 22;
@@ -77,7 +84,7 @@ const APath = Animated.createAnimatedComponent(Path);
  * views `p` moves: they are built afresh at rest, so an iPhone that drops a settled animation value
  * never shows the old look on a later re-render (restMotion).
  */
-function useUpToHitMotion(control: CheckInControl, bounceOnLand: boolean) {
+function useUpToHitMotion(control: CheckInControl, bounceOnLand: boolean, quick?: () => boolean) {
   const reduce = useReducedMotion();
   const p = useSharedValue(control.on ? 1 : 0);
   const tick = useSharedValue(0);
@@ -94,9 +101,10 @@ function useUpToHitMotion(control: CheckInControl, bounceOnLand: boolean) {
       return;
     }
     if (control.on) {
-      p.value = withTiming(1, { duration: SWEEP_IN_MS, easing: SWEEP_IN }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
+      const pace = quick?.() ? QUICK : PLAIN;
+      p.value = withTiming(1, { duration: pace.sweep, easing: SWEEP_IN }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
       tick.value = TICK_LEN;
-      tick.value = withDelay(TICK_DELAY, withTiming(0, { duration: TICK_MS, easing: Easing.out(Easing.cubic) }));
+      tick.value = withDelay(pace.tickDelay, withTiming(0, { duration: pace.tick, easing: Easing.out(Easing.cubic) }));
       if (bounceOnLand) bounce.value = withDelay(60, withSequence(withTiming(BOUNCE_TO, { duration: 120, easing: Easing.out(Easing.quad) }), withSpring(1, BOUNCE_SETTLE)));
     } else {
       p.value = withTiming(0, { duration: SWEEP_OUT_MS, easing: SWEEP_OUT }, (done) => { 'worklet'; if (done) runOnJS(bump)(); });
@@ -156,7 +164,8 @@ function FindingBand({ width, radius }: { width: number; radius: number }) {
 export function UpToHitPill({ control }: { control: CheckInControl }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
-  const m = useUpToHitMotion(control, false);
+  // Slipping out with the check-in zoom's grow: its quick moment (mapGrow).
+  const m = useUpToHitMotion(control, false, growArmed);
   const onWords = litLine(control.span);
   // While it shuts (and so long as it is off), the green's words are the ones it showed.
   const shown = useRef(onWords);
@@ -185,11 +194,11 @@ export function UpToHitPill({ control }: { control: CheckInControl }) {
   // Not measured yet and already on (the card drawn while you are up): the plain row says the longer words, so the
   // very first frame is already the right width.
   const baseWords = control.on && !onW ? greenWords : LIGHT_UP;
-  // The check-in zoom's grow (mapGrow): once its moment has played, it slips up out of the card at its own size as the
-  // page pushes in (a picture of it on the phone, so this view is the one photographed).
+  // The check-in zoom's grow (mapGrow): it slips up out of the card at its own size as the page pushes in, its quick
+  // moment playing as it goes.
   const away = useGrowAway('top');
   return (
-    <Animated.View ref={away.ref} collapsable={false} style={[styles.pillSpot, away.style]}>
+    <Animated.View style={[styles.pillSpot, away]}>
       <Animated.View style={m.moved}>
         <Pressable accessibilityRole="button" accessibilityState={{ busy: control.busy }} accessibilityLabel={checkInLabel(control)} hitSlop={6} onPress={control.press} style={({ pressed }) => (pressed ? PRESSED : null)}>
           <Animated.View key={k} style={[styles.pill, edge, w.style]}>

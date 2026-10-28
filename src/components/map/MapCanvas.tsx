@@ -10,7 +10,7 @@ import { useMapLoad, type MapLoadStatus } from '@/components/map/useMapLoad';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, GROW_CLEAR_CSS, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
-import { SWOOP_JS, type SwoopAsk } from '@/components/map/swoop';
+import { SWOOP_JS, WARM_JS, type SwoopAsk } from '@/components/map/swoop';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
 
@@ -43,6 +43,8 @@ export interface MapCanvasHandle {
   quiet: () => number;
   /** The check-in zoom's grow (mapGrow): the still card's pins step aside (a quick fade), or come back at once. */
   clearPins: (clear: boolean) => void;
+  /** The check-in zoom's grow: the streets of the full map's first view asked for ahead, while you are found (swoop's WARM_JS). */
+  warm: (at: LatLng, zoom: number) => void;
 }
 
 interface Props {
@@ -151,6 +153,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     },
     shoot: () => send('window.__cs.shot()'),
     clearPins: (clear) => send(`document.getElementById('m').classList.toggle('cs-clear',${clear ? 'true' : 'false'})`),
+    warm: (at, z) => send(`window.__cs.warm(${JSON.stringify({ lat: at.lat, lng: at.lng, zoom: z })})`),
     isUp: () => ready.current,
     quiet: () => load.quiet(),
     swoop: (ask) => {
@@ -241,7 +244,8 @@ window.__cs={
   rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
   // The check-in zoom (swoop.ts): one swoop at a time; the pins come in as it lands, if they had not yet.
   swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok,sw:a.id})});if(!fin)SWOOP=s},
-  shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}}
+  shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}},
+  warm:function(a){try{(${WARM_JS})(map,a,{})}catch(e){}}
 };
 }
 ${ENGINE_JS}

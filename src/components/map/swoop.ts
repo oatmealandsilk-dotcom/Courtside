@@ -51,12 +51,37 @@ export const SWOOPS: Record<SwoopKind, SwoopShape> = {
 /**
  * What the page is told: where to, how close, the swoop, and whether to skip the move (Reduce Motion).
  * `up`: the map has had its first full drawing already (open a while); otherwise the swoop starts once
- * it has, or `wait` ms from now at most.
+ * it has, or `wait` ms from now at most (or at once: `now`).
  */
-export interface SwoopAsk extends SwoopShape { lat: number; lng: number; zoom: number; still: boolean; up: boolean; wait: number; /** Which swoop (checkInZoom's SwoopTo.id), said back as it ends. */ id: number }
+export interface SwoopAsk extends SwoopShape {
+  lat: number; lng: number; zoom: number; still: boolean; up: boolean; wait: number;
+  /** Which swoop (checkInZoom's SwoopTo.id), said back as it ends. */
+  id: number;
+  /**
+   * Begin at once, even before the map's last streets are in: after the check-in zoom's grow (mapGrow) the map has drawn
+   * what is on screen and the move is already under way, so waiting for the rest held the camera still a moment (v4).
+   */
+  now?: boolean;
+}
 
 /** Runs a swoop on a map: `SWOOP_FN(map, ask, done)`; `done(true)` once it has arrived, `done(false)` if it was stopped part way. */
 export type SwoopFn = (map: unknown, ask: SwoopAsk, done: (arrived: boolean) => void) => { stop: () => void };
+
+/**
+ * The streets round a spot, asked for ahead: `warm(map, { lat, lng, zoom }, seen)` fetches the map's own tiles there (the
+ * same addresses the map asks for, kept by the phone), so a map that goes there next finds them in. The last few zoom
+ * levels only, round the spot, a row more ahead. True if the map's list of streets was there to ask from. Used by the
+ * swoop (where it lands), and by the check-in zoom's grow (mapGrow), for the full map's first view while you are found.
+ */
+export const WARM_JS = `function(map,o,seen){try{
+  var st=map.getStyle(),ids=st&&st.sources?Object.keys(st.sources):[],any=false;
+  ids.forEach(function(id){var src=map.getSource(id);if(!src||src.type!=='vector'||!src.tiles||!src.tiles.length)return;any=true;
+    var top=Math.min(src.maxzoom||14,Math.floor(o.zoom)),lat=o.lat*Math.PI/180;
+    for(var z=top;z>=top-2&&z>=0;z--){var n=Math.pow(2,z),x=Math.floor((o.lng+180)/360*n),y=Math.floor((1-Math.log(Math.tan(lat)+1/Math.cos(lat))/Math.PI)/2*n);
+      for(var dy=(z===top-2?-1:-2);dy<=1;dy++)for(var dx=-1;dx<=1;dx++){var tx=(x+dx+n)%n,ty=y+dy;if(ty<0||ty>=n)continue;
+        var u=src.tiles[0].replace('{z}',z).replace('{x}',tx).replace('{y}',ty);if(seen[u])continue;seen[u]=1;
+        try{fetch(u,{mode:'cors',credentials:'omit'}).catch(function(){})}catch(e){}}}});
+  return any}catch(e){return false}}`;
 
 export const SWOOP_JS = `(function(){
 // A CSS cubic-bezier ease, solved for x by Newton's method (and halving, if that stalls).
@@ -74,15 +99,7 @@ function now(){return window.performance&&performance.now?performance.now():Date
 // The streets on the way down and where it lands, asked for at once (the map's own tiles, the same addresses the map
 // asks for, kept by the phone for years): by the time the camera is there they are in, rather than drawing in under it.
 // The last few zoom levels only, round the spot, a row more ahead (the far side of the tilted view).
-function warm(map,o,seen){try{
-  var st=map.getStyle(),ids=st&&st.sources?Object.keys(st.sources):[],any=false;
-  ids.forEach(function(id){var src=map.getSource(id);if(!src||src.type!=='vector'||!src.tiles||!src.tiles.length)return;any=true;
-    var top=Math.min(src.maxzoom||14,Math.floor(o.zoom)),lat=o.lat*Math.PI/180;
-    for(var z=top;z>=top-2&&z>=0;z--){var n=Math.pow(2,z),x=Math.floor((o.lng+180)/360*n),y=Math.floor((1-Math.log(Math.tan(lat)+1/Math.cos(lat))/Math.PI)/2*n);
-      for(var dy=(z===top-2?-1:-2);dy<=1;dy++)for(var dx=-1;dx<=1;dx++){var tx=(x+dx+n)%n,ty=y+dy;if(ty<0||ty>=n)continue;
-        var u=src.tiles[0].replace('{z}',z).replace('{x}',tx).replace('{y}',ty);if(seen[u])continue;seen[u]=1;
-        try{fetch(u,{mode:'cors',credentials:'omit'}).catch(function(){})}catch(e){}}}});
-  return any}catch(e){return false}}
+var warm=${WARM_JS};
 // The camera hook: a property of the map in MapLibre 4 (the phone's page), set through setTransformCameraUpdate from 5 on (the browser's).
 function hook(map,fn){if(map.setTransformCameraUpdate)map.setTransformCameraUpdate(fn);else map.transformCameraUpdate=fn}
 return function(map,o,done){
@@ -115,7 +132,7 @@ return function(map,o,done){
   // A map just opened starts once it has drawn where it is (its first full drawing, 'load'), or after o.wait at most: a
   // slow street far off the way down is not worth waiting for, as the streets close in are about to be fetched anyway.
   // Reduce Motion has no move to start from, so it goes there at once: the first streets drawn are yours, not the town's.
-  if(o.up||o.still||less())begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
+  if(o.up||o.now||o.still||less())begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
   return {stop:function(){if(over)return;if(started){try{map.stop()}catch(e){}}end(false)}};
 };
 })()`;

@@ -659,9 +659,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * pin to friends who follow each other with you until 10pm (2 hours after
    * 8pm). Never called on its own. Resolves with a message to show, or null.
    * `onFix` hears where the phone was found, once it went through (Light up
-   * at a court lights the court up too, features/places/lightUp).
+   * at a court lights the court up too, features/places/lightUp). `onAllowed`
+   * hears that the phone said yes to its own location question (or had
+   * before), as it starts finding you (the check-in zoom readies its pictures).
    */
-  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void) => Promise<string | null>;
+  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void) => Promise<string | null>;
   /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
@@ -4084,10 +4086,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadLastSeen]);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
-  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void): Promise<string | null> => {
+  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
     if (!me) return 'Sign in first.';
-    const fix = await getPosition();
+    // onAllowed: the phone said yes to its location question (or had before), and is finding you now (the check-in zoom's pictures).
+    const fix = await getPosition({ onAllowed });
     if (!fix.ok) {
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
         : fix.reason === 'unavailable' ? 'Location isn’t available on this device.' : 'Couldn’t find you. Try again.';

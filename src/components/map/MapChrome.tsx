@@ -594,7 +594,7 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
 export function CardCredit() {
   const away = useGrowAway('bottom');
   return (
-    <Animated.View ref={away.ref} collapsable={false} pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10, zIndex: 20 }, away.style]}>
+    <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10, zIndex: 20 }, away]}>
       <MapCredit align="right" />
     </Animated.View>
   );
@@ -1650,7 +1650,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
         </>
       ) : null}
       {weather ? (
-        <Animated.View ref={weatherAway.ref} collapsable={false} pointerEvents="none" style={[styles.previewWeather, weatherAway.style]}>
+        <Animated.View pointerEvents="none" style={[styles.previewWeather, weatherAway]}>
           <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
         </Animated.View>

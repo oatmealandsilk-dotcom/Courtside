@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui';
 import { takeHandedPlace } from '@/features/places/geocode';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
-import { takeGrowPlan } from '@/features/players/mapGrow';
+import { endGrow, takeGrowPlan } from '@/features/players/mapGrow';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
@@ -33,6 +33,8 @@ export default function MapScreen() {
   // exactly where the grown card shows, and (in a browser) see-through over the page pushing in until it has drawn.
   // Once it has taken over it is the ordinary full map again: Back (and the edge swipe) slide it away as always.
   const [growFrom] = useState(() => (params.grow ? takeGrowPlan() : null));
+  // Opened to grow, but the grow was not there to take (too late): nothing of it is left waiting (the tab bar, the page).
+  useEffect(() => { if (params.grow && !growFrom) endGrow(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [grown, setGrown] = useState(!growFrom);
   const navigation = useNavigation();
   useEffect(() => {

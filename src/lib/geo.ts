@@ -21,13 +21,18 @@ export type GeoResult =
  * `quiet`: never shows the device's own prompt. Only a device that already
  * allows it answers; one that would have to ask counts as 'unavailable'
  * (for checking again in the background, which must never pop a question).
+ *
+ * `onAllowed`: the phone has said the app may know where it is (its own
+ * question answered yes, or yes before), told before it starts finding you
+ * (the check-in zoom readies its pictures then). Not told in a browser.
  */
-interface Ask { recentMs?: number; quiet?: boolean }
+interface Ask { recentMs?: number; quiet?: boolean; onAllowed?: () => void }
 
-async function fromDevice({ recentMs, quiet }: Ask): Promise<GeoResult> {
+async function fromDevice({ recentMs, quiet, onAllowed }: Ask): Promise<GeoResult> {
   try {
     const perm = quiet ? await Location.getForegroundPermissionsAsync() : await Location.requestForegroundPermissionsAsync();
     if (!perm.granted) return { ok: false, reason: quiet && perm.canAskAgain ? 'unavailable' : 'denied' };
+    try { onAllowed?.(); } catch { /* only a head start */ }
     const fix = await Promise.race<Location.LocationObject | null>([
       Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
       new Promise((resolve) => setTimeout(() => resolve(null), 9000)),

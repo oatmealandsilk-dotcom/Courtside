@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, type MutableRefObject } from 'react';
+import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react';
 import { Platform, type View } from 'react-native';
 import { Easing, cancelAnimation, makeMutable, useAnimatedStyle, withSequence, withTiming } from 'react-native-reanimated';
 
@@ -19,22 +19,29 @@ import type { LatLng } from '@/features/players/positions';
  * How, without a second map floating over the app (Oct 22: that broke the iPhone): the full map is the
  * same page it always was (app/map.tsx), opened with no slide, at exactly the place the grown card shows,
  * so the hand-over cannot be seen.
- *  - iPhone and Android: a picture of the Community page (the card's map in it) is taken the moment you
- *    are up. The full map opens with it on top, so its first frame is the page you were looking at; the
- *    picture is what pushes in, while the full map loads under it. When the map has drawn, the picture
- *    goes (a short dissolve, the map's camera already moving) and the map is all there is.
- *  - The website: the Community page itself pushes in, under a full map that opens see-through and
- *    shows itself once it has drawn (a browser keeps both pages drawn, so no picture is needed).
- * Either way the tab bar slides away by itself (AppShell, as for every full map).
  *
  * v3 (Oct 28, owner, of v2: "The zoom is better but the first bit is weird because the icon in the middle and up to hit
  * in the corner are still there. Like it should be one seamless transition"): nothing that sits on the card grows with
- * the push-in, only its map. As you are found the card's words and pins step aside (a quick fade, in the map's own
- * drawing for the pins) while the Up to hit pill plays its moment (the green sweeping in, the tick: UpToHit); then, as the
- * push-in starts, the pill, the weather and the credit slip out of the card's edge, keeping their own size (useGrowAway).
- * On the phone the picture is taken only once the pill's moment has played (taking it holds the phone for a moment, which
- * would stop the pill part way), and it carries the card's map alone over the card (GrowBox) with each of those as its
- * own small picture (GrowAwayShot), so the same slip happens on the picture as on the website's live page.
+ * the push-in, only its map. The card's words and pins step aside (a quick fade, in the map's own drawing for the pins),
+ * and the Up to hit pill, the weather and the credit slip out of the card's edge, keeping their own size (useGrowAway).
+ *
+ * v4 (Oct 28, owner, of v3: "The zoom is a lot better, but there is still a slight lag pause it can be seamless"): no
+ * still moment anywhere. The push-in starts on the very frame you are found, on the live Community page itself (both the
+ * phone and the website), with everything else overlapping it rather than waiting its turn: the pill plays a shorter
+ * moment (the green and the tick in about 180 ms: UpToHit) as it slips out, and the words and pins fade in the first
+ * part of the push. The tab bar slides away from that same frame (AppShell, useGrowUnderWay).
+ *  - The website: the full map opens at once over the page, see-through, and shows itself once it has drawn (a browser
+ *    keeps both pages drawn).
+ *  - iPhone and Android: an opened page covers the one under it, so the full map opens with pictures of the page on top
+ *    of it, at exactly the point the live push-in has reached, and carries the push-in on (the hand-over cannot be seen).
+ *    The pictures are taken early, while you are being found, right after you said yes (and after the phone's own
+ *    question, the first time): the page (taking it holds the phone for a moment, then, with nothing else moving but the
+ *    pill's finding light) and the card's map alone, from the map's own drawing (no pins, and the phone is not held for
+ *    it). Nothing is photographed once you are found. The full map opens over the live page once the pill and the rest
+ *    have slipped out of the card (HANDOFF_MS), so the pictures need nothing that moves.
+ * Then, once the card covers the screen and the full map has drawn, the map takes over (a short dissolve) while the
+ * push-in is still moving, its camera diving on at that same speed (growHandOver): before, the push-in came all but to
+ * rest first, and the camera then waited for its last streets to come in before it moved, two still moments.
  *
  * Only the Community tab's card grows (it is the page that pushes in); the For you copy of the card,
  * Reduce Motion, a phone whose pictures of the map come out blank, and Only me keep the plain way in
@@ -48,69 +55,68 @@ export interface Rect { x: number; y: number; w: number; h: number }
 export type AwayEdge = 'top' | 'bottom';
 /** The phone: the card's map alone (no words, pins or buttons on it), laid over the card in the picture of the page. */
 export interface GrowBox { rect: Rect; shot: string; radius: number }
-/** The phone: one thing that sits on the card (Up to hit, the weather, the credit), as its own picture, and where it was. */
-export interface GrowAwayShot { rect: Rect; shot: string; edge: AwayEdge }
 
-/** A grow asked for: what the full map needs to open exactly where the grown card is. */
+/** A grow under way: what the full map needs to open exactly where the grown card is. */
 export interface GrowPlan {
   /** The page that pushes in (window coordinates), and the card in it. */
   page: Rect;
   card: Rect;
   /** The screen it grows to fill. */
   screen: { w: number; h: number };
-  /** The phone's picture of the page (a file), or null in a browser (the page itself pushes in). */
+  /** The phone's picture of the page (a file), or null: in a browser (the page itself is seen), or a page that moved. */
   shot: string | null;
-  /** The phone: the card's map alone, over the card in the picture, so what sits on the card is not in what grows. */
+  /** The phone: the card's map alone, over the card in the picture, so what sat on the card is not in what grows. */
   box?: GrowBox | null;
-  /** The phone: what sat on the card, each its own picture, slipping out of the card's edge at its own size. */
-  away?: GrowAwayShot[];
   /** Where the full map opens: the card's own centre, as close as the grown card shows it. */
   center: LatLng;
   zoom: number;
   /** How much the page grows. */
   scale: number;
+  /** When the push-in started (Date.now()): the full map carries it on from there, never starting it again. */
+  started: number;
   at: number;
 }
 
-/** The push-in: fast to start, a long strong ease to rest. */
-export const GROW_MS = 560;
-const GROW_EASE = Easing.bezier(0.33, 0, 0.1, 1);
+/**
+ * The push-in: a quick launch, then a long ease. It does not come to rest as the card covers the screen (that let the
+ * move all but stop just before the map took over, v4): it carries on past it (OVER, the card's map a little closer
+ * still) and the map takes over from it while it is still moving, at the speed it has then (growSwoopEase).
+ */
+export const GROW_MS = 680;
+const GROW_CURVE: [number, number, number, number] = [0.25, 0, 0.15, 1];
+const GROW_EASE = Easing.bezier(...GROW_CURVE);
+const OVER = 0.2;
 /** Not drawn yet when the push-in is done: it keeps creeping in, slowly, so the screen never stands still. */
 const CREEP = 0.08;
 const CREEP_MS = 2600;
-/** The map takes over this far into the push-in (if it has drawn), so the push-in and the camera's dive overlap: one move. */
-export const REVEAL_AT = 0.8;
 /** However long the map takes, it takes over by this long after the push-in began (its own loading look then shows). */
 export const REVEAL_MAX_MS = 3000;
-/** The dissolve from the grown card to the live map. */
+/** The dissolve from the grown card to the live map (the card's pictures keep moving under it: never a still layer). */
 export const REVEAL_MS = 220;
 /** The swoop after a grow: the push-in has done the first part of the way down, so it is shorter than from the city. */
 export const GROW_SWOOP_MS = 1300;
-/**
- * Its ease after a grow: already moving as the grown card dissolves (the push-in was its slow start), then the same long
- * soft landing. With the swoop's own slow start (0.5, 0, …) the camera all but stood still for a third of a second
- * after the push-in had come to rest: two moves, not one (review, Oct 28).
- */
-export const GROW_SWOOP_EASE: [number, number, number, number] = [0.3, 0.15, 0.16, 1];
 /** The map's buttons slide in this long after the map has taken over, as the camera comes in to land. */
 export const CHROME_AFTER_MS = 760;
 export const CHROME_MS = 420;
-/** A grow asked for is taken by the full map it opens within this long, or let go. */
+/** A grow handed to the full map is taken by it within this long, or let go. */
 const PLAN_KEEP_MS = 6000;
+/** The Up to hit pill's moment when it slips out with a grow: the green sweeps in and the tick is drawn in this long (UpToHit). */
+export const PILL_QUICK_MS = 180;
 /**
- * The Up to hit pill's moment, from the moment you are found: the green sweeps in and the tick is drawn (both all but done
- * by 320 ms: their eases settle long before their 360 / 350 ms ends) as the pill springs to its new width (UpToHit).
- * Nothing moves (and on the phone nothing is photographed) before it has played, so it is never cut; a frame to spare for
- * the pill turning green a moment after you are found. The card's words and pins step aside meanwhile.
+ * As the push-in starts, what sits on the card slips out of its edge: slow for its first part (the pill's green is seen
+ * coming in), gathering speed, all gone by the end.
  */
-export const PILL_MOMENT_MS = 340;
-/** As the push-in starts, what sits on the card slips out of its edge: this quick, gathering speed as it goes. */
-export const SLIP_MS = 170;
+const SLIP_MS = 240;
 const SLIP_EASE = Easing.bezier(0.4, 0, 1, 1);
 /** How far (in the card's own size, before it grows): enough to clear the edge from the 12 points in where they sit. */
 const SLIP_PX = 60;
+/**
+ * The phone: the full map opens over the live page this long into the push-in, once everything on the card has slipped
+ * out of it, so the pictures it opens with (taken before you were found) need nothing that moves.
+ */
+export const HANDOFF_MS = SLIP_MS + 20;
 
-/** 0 → 1 as the page pushes in (past 1 while it creeps on). Shared by the page (website) and the picture (phone). */
+/** 0 → 1 as the page pushes in (1: the card covers the screen; past it as it carries on). Shared by the live page and the phone's picture of it. */
 export const growT = makeMutable(0);
 /**
  * The card's words (its city's name and counts, PreviewOverlay): they step out of the way as the grow starts, so the
@@ -155,17 +161,92 @@ function placeAt(t: number, g: { cx: number; cy: number; px: number; py: number;
   return [{ translateX: (g.px - g.cx) * (1 - s) }, { translateY: (g.py - g.cy) * (1 - s) }, { scale: s }];
 }
 
-/** The plan for a card at `card` in a page at `page`, growing to fill `screen`; `center`/`zoom`: the card's map. */
-export function growPlan(o: { page: Rect; card: Rect; screen: { w: number; h: number }; shot: string | null; box?: GrowBox | null; away?: GrowAwayShot[]; center: LatLng; zoom: number }): GrowPlan {
-  // Big enough to cover the screen both ways, and a touch more, so the card's rounded corners and edge go off the screen.
-  const scale = Math.max(o.screen.w / o.card.w, o.screen.h / o.card.h) * 1.03;
-  return { ...o, scale, zoom: o.zoom + Math.log2(scale), at: Date.now() };
+/** A CSS cubic-bezier ease (the same curve Reanimated draws), with its slope, for the timings worked out here. */
+function curve([x1, y1, x2, y2]: [number, number, number, number]) {
+  const at = (t: number, a: number, b: number) => ((1 - 3 * b + 3 * a) * t + (3 * b - 6 * a)) * t * t + 3 * a * t;
+  const rate = (t: number, a: number, b: number) => 3 * (1 - 3 * b + 3 * a) * t * t + 2 * (3 * b - 6 * a) * t + 3 * a;
+  const tFor = (x: number) => { let lo = 0; let hi = 1; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (at(m, x1, x2) < x) lo = m; else hi = m; } return (lo + hi) / 2; };
+  return {
+    y: (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : at(tFor(x), y1, y2)),
+    slope: (x: number) => { if (x <= 0 || x >= 1) return 0; const t = tFor(x); const dx = rate(t, x1, x2); return dx > 1e-6 ? rate(t, y1, y2) / dx : 0; },
+  };
+}
+const GROW_C = curve(GROW_CURVE);
+/** When the card covers the whole screen (the push-in at 1): the soonest the map may take over. */
+export const COVER_MS = (() => { let lo = 0; let hi = 1; for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if ((1 + OVER) * GROW_C.y(m) < 1) lo = m; else hi = m; } return Math.ceil(hi * GROW_MS); })();
+/** How fast the push-in is going `ms` after it started (its own units, per ms). */
+function pushRate(ms: number): number {
+  if (ms < GROW_MS) return ((1 + OVER) * GROW_C.slope(ms / GROW_MS)) / GROW_MS;
+  const u = Math.min(1, (ms - GROW_MS) / CREEP_MS);
+  return (CREEP * 2 * (1 - u)) / CREEP_MS;
 }
 
-let plan: GrowPlan | null = null;
-/** Asked for by the card, the moment before the full map opens. */
-export function setGrowPlan(p: GrowPlan) {
-  plan = p;
+/**
+ * The map taking over from the grow, now: where its camera starts (as close as the pushed-in card shows it, which may be
+ * past the plan) and the swoop's ease, whose start runs at exactly the speed the push-in has then, so the push-in and the
+ * dive are one move, never a slow-down and a speed-up (v4). Then the same long soft landing as ever.
+ */
+export function growHandOver(p: GrowPlan, targetZoom: number): { zoom: number; ease: [number, number, number, number] } {
+  const levels = Math.log2(Math.max(1.001, p.scale));
+  const zoom = p.zoom + (growT.value - 1) * levels;
+  const zoomPerSec = pushRate(Date.now() - p.started) * levels * 1000;
+  const left = targetZoom - zoom;
+  // The swoop's starting slope (its ease's first point at x 0.3): matched, within a quick enough start and a gentle one.
+  const slope = left > 0.25 ? (zoomPerSec * (GROW_SWOOP_MS / 1000)) / left : 0.5;
+  return { zoom, ease: [0.3, 0.3 * Math.min(1.6, Math.max(0.3, slope)), 0.16, 1] };
+}
+
+/** The plan for a card at `card` in a page at `page`, growing to fill `screen`; `center`/`zoom`: the card's map. */
+export function growPlan(o: { page: Rect; card: Rect; screen: { w: number; h: number }; center: LatLng; zoom: number }): GrowPlan {
+  // Big enough to cover the screen both ways, and a touch more, so the card's rounded corners and edge go off the screen.
+  const scale = Math.max(o.screen.w / o.card.w, o.screen.h / o.card.h) * 1.03;
+  return { ...o, shot: null, box: null, scale, zoom: o.zoom + Math.log2(scale), started: 0, at: Date.now() };
+}
+
+/* ------------------------------------------------- the push-in, from the card */
+
+/** When a grow was set going (the moment you were found): the pill's moment is the quick one from then (UpToHit). */
+let armedAt = 0;
+/** The tab bar goes as the push-in starts, before the full map is the page (AppShell). */
+let barAway = false;
+const barListeners = new Set<() => void>();
+const setBarAway = (away: boolean) => { if (barAway === away) return; barAway = away; barListeners.forEach((fn) => fn()); };
+const subscribeBar = (fn: () => void) => { barListeners.add(fn); return () => { barListeners.delete(fn); }; };
+/** Whether a grow is under way, from the moment you are found until the map has taken over: the tab bar goes (AppShell). */
+export function useGrowUnderWay(): boolean {
+  return useSyncExternalStore(subscribeBar, () => barAway, () => barAway);
+}
+/**
+ * The Community page stays on the live state for the first moment of a grow (tabFocus), while the pill plays its quick
+ * moment as it slips out: under the full map opened over it at once in a browser it would otherwise count as covered, and
+ * the pill's green would come a few frames late, as background work. Only that long: after, the page is out of sight
+ * under the pushed-in card, and its redraws go back to waiting their turn (one mid-dive held the camera still a moment).
+ */
+let pageLive = false;
+let pageLiveTimer: ReturnType<typeof setTimeout> | null = null;
+const pageListeners = new Set<() => void>();
+const setPageLive = (live: boolean) => { if (pageLive === live) return; pageLive = live; pageListeners.forEach((fn) => fn()); };
+const subscribePage = (fn: () => void) => { pageListeners.add(fn); return () => { pageListeners.delete(fn); }; };
+export function useGrowPageLive(): boolean {
+  return useSyncExternalStore(subscribePage, () => pageLive, () => pageLive);
+}
+/** A grow is going ahead (you are found, the card is about to push in): set at once, before anything is measured. */
+let barTimer: ReturnType<typeof setTimeout> | null = null;
+export function armGrow() {
+  armedAt = Date.now();
+  setBarAway(true);
+  setPageLive(true);
+  if (pageLiveTimer) clearTimeout(pageLiveTimer);
+  pageLiveTimer = setTimeout(() => { pageLiveTimer = null; setPageLive(false); }, SLIP_MS + 120);
+  // Never left without its tab bar: a grow that somehow never ended gives it back (the full map hides it anyway).
+  if (barTimer) clearTimeout(barTimer);
+  barTimer = setTimeout(() => { barTimer = null; setBarAway(false); }, REVEAL_MAX_MS + PLAN_KEEP_MS);
+}
+/** Whether a grow was set going just now: the Up to hit pill then plays its quick moment as it slips out. */
+export const growArmed = (): boolean => armedAt > 0 && Date.now() - armedAt < 1000;
+
+/** The push-in's aim: where the page grows round, and how far. Before startGrow; the page is as it was until then. */
+export function aimGrow(p: GrowPlan) {
   // In the page's own coordinates: its middle, the card's middle, the screen's middle.
   const cx = p.page.w / 2;
   const cy = p.page.h / 2;
@@ -181,30 +262,33 @@ export function setGrowPlan(p: GrowPlan) {
   cancelAnimation(slip);
   slip.value = 0;
 }
-/** The full map, opening: the grow asked for, if it is still fresh (taken once). */
+
+/** The push-in starts, on the live page, this frame; what sits on the card slips out with it. When it started. */
+export function startGrow(still: boolean): number {
+  cancelAnimation(growT);
+  cancelAnimation(slip);
+  if (still) { growT.value = 1; slip.value = 1; return Date.now(); }
+  slip.value = withTiming(1, { duration: SLIP_MS, easing: SLIP_EASE });
+  growT.value = withSequence(
+    withTiming(1 + OVER, { duration: GROW_MS, easing: GROW_EASE }),
+    withTiming(1 + OVER + CREEP, { duration: CREEP_MS, easing: Easing.out(Easing.quad) }),
+  );
+  return Date.now();
+}
+
+let plan: GrowPlan | null = null;
+/** Handed to the full map, the moment before it opens. */
+export function setGrowPlan(p: GrowPlan) {
+  plan = { ...p, at: Date.now() };
+}
+/** The full map, opening: the grow handed to it, if it is still fresh (taken once). */
 export function takeGrowPlan(): GrowPlan | null {
   const p = plan;
   plan = null;
   return p && Date.now() - p.at <= PLAN_KEEP_MS ? p : null;
 }
 
-/** The push-in starts (once its first frame is surely on screen). */
-export function startGrow(still: boolean) {
-  cancelAnimation(growT);
-  cancelAnimation(slip);
-  if (still) { growT.value = 1; slip.value = 1; return; }
-  slip.value = withTiming(1, { duration: SLIP_MS, easing: SLIP_EASE });
-  growT.value = withSequence(
-    withTiming(1, { duration: GROW_MS, easing: GROW_EASE }),
-    withTiming(1 + CREEP, { duration: CREEP_MS, easing: Easing.out(Easing.quad) }),
-  );
-}
-/** The map takes over: the push-in stops where it is; how far past its end it had crept (for the map's camera to match). */
-export function holdGrow(): number {
-  cancelAnimation(growT);
-  return Math.max(0, growT.value - 1);
-}
-/** Over: the page goes back to how it was (under the full map by now, so nobody sees it). */
+/** Over (or let go before the full map opened): the page goes back to how it was (out of sight by then), the tab bar to the page. */
 export function endGrow() {
   cancelAnimation(growT);
   growT.value = 0;
@@ -213,11 +297,12 @@ export function endGrow() {
   cancelAnimation(labels);
   labels.value = 1;
   clearers.forEach((l) => l(false));
+  armedAt = 0;
+  setBarAway(false);
+  if (barTimer) { clearTimeout(barTimer); barTimer = null; }
 }
-/** How much closer the grown card was than its plan, `crept` past the end (zoom levels, for the map's camera). */
-export const creptZoom = (p: GrowPlan, crept: number) => crept * Math.log2(p.scale);
 
-/** The push-in, for the picture of the page (the phone). */
+/** The push-in, for the picture of the page (the phone's full map, carrying on from the live page). */
 export function useGrowPicture() {
   return useAnimatedStyle(() => ({ transform: placeAt(growT.value, geo.value) }));
 }
@@ -233,32 +318,15 @@ function awayAt(edge: AwayEdge, t: number, k: number, g: { s: number }) {
   return [{ translateY: (edge === 'top' ? -SLIP_PX : SLIP_PX) * k }, { scale: 1 / s }];
 }
 
-/** The things on the growing card (Up to hit, the weather, the credit): each one's view, for the phone's pictures of them. */
-export interface AwayItem { ref: MutableRefObject<View | null>; edge: AwayEdge }
-export type AwayRegistry = Set<AwayItem>;
-/** Given by the growing card (the Community tab's) round what sits on it; none elsewhere, where nothing moves. */
-export const GrowAwayContext = createContext<AwayRegistry | null>(null);
-export const newAwayRegistry = (): AwayRegistry => new Set();
+/** Given by the growing card (the Community tab's) round what sits on it; false elsewhere, where nothing moves. */
+export const GrowAwayContext = createContext(false);
 /**
- * A thing that sits on the card: its view (the phone takes its picture) and, in a browser, where the page itself pushes
- * in, its slip out of the card at its own size. Only transforms: never a fade (the pill's green and glass stay as they are).
+ * A thing that sits on the card (Up to hit, the weather, the credit): as the page pushes in it slips out of the card at
+ * its own size. Only transforms: never a fade (the pill's green and glass stay as they are).
  */
 export function useGrowAway(edge: AwayEdge) {
-  const reg = useContext(GrowAwayContext);
-  const ref = useRef<View | null>(null);
-  useEffect(() => {
-    if (!reg) return undefined;
-    const item: AwayItem = { ref, edge };
-    reg.add(item);
-    return () => { reg.delete(item); };
-  }, [reg, edge]);
-  const live = WEB && !!reg;
-  const style = useAnimatedStyle(() => (!live ? {} : growT.value > 0 ? { transform: awayAt(edge, growT.value, slip.value, geo.value) } : { transform: [] }));
-  return { ref, style };
-}
-/** The same slip for a thing's own picture, inside the phone's picture of the card (the picture of the page around it grows). */
-export function useAwayPicture(edge: AwayEdge) {
-  return useAnimatedStyle(() => ({ transform: awayAt(edge, growT.value, slip.value, geo.value) }));
+  const live = useContext(GrowAwayContext);
+  return useAnimatedStyle(() => (!live ? {} : growT.value > 0 ? { transform: awayAt(edge, growT.value, slip.value, geo.value) } : { transform: [] }));
 }
 
 /* ------------------------------------------------- the page that grows */
@@ -282,13 +350,11 @@ export const growHost = (): View | null => hosts[hosts.length - 1]?.current ?? n
 
 const WEB = Platform.OS === 'web';
 /**
- * The push-in on the page itself (the website only; the phone pushes its picture in). Never anything
- * but a transform: the page's glass stays glass.
+ * The push-in on the page itself (a preview copy of the page is never touched). Never anything but a transform: the
+ * page's glass stays glass.
  */
 export function useGrowHostStyle(on = true) {
-  // On the phone (and on a preview copy of the page) the worklet never reads the push-in, so the page is not touched at all there.
-  const live = WEB && on;
-  return useAnimatedStyle(() => (!live ? {} : growT.value > 0 ? { transform: placeAt(growT.value, geo.value) } : { transform: [] }));
+  return useAnimatedStyle(() => (!on ? {} : growT.value > 0 ? { transform: placeAt(growT.value, geo.value) } : { transform: [] }));
 }
 
 /** A ref that always holds the latest value (for timers set up once). */

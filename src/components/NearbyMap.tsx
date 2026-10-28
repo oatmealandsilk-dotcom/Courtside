@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, PixelRatio, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image as PhotoImage } from 'expo-image';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
+import { File, Paths } from 'expo-file-system';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -29,7 +30,7 @@ import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/fea
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
-import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_EASE, GROW_SWOOP_MS, GrowAwayContext, PILL_MOMENT_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, newAwayRegistry, setGrowPlan, startGrow, useAwayPicture, useGrowClear, useGrowPicture, type GrowAwayShot, type GrowPlan, type Rect } from '@/features/players/mapGrow';
+import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, armGrow, endGrow, growHandOver, growHost, growPlan, labelsOut, setGrowPlan, startGrow, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -110,87 +111,142 @@ export function NearbyMap(props: NearbyMapProps) {
   // from the card it opens first (the card's own tap, onExpand), only while the card is still in view. Not inViewNow:
   // iOS's own location prompt, the first time, leaves the app 'inactive' for a moment, and that is still the card in view.
   const zoomOn = useCheckInZoom();
-  // A grow being readied (the picture of the page being taken): a tap on the card meanwhile does not open a second full map.
+  // A grow under way (the page pushing in, the full map about to open over it): a tap on the card meanwhile opens no second full map.
   const growBusy = useRef(false);
-  const upNow = useRef(false);
-  // What sits on the growing card (Up to hit, the weather, the credit): each slips out of it at its own size (mapGrow).
-  const awayReg = useMemo(() => (props.grow && !expanded ? newAwayRegistry() : null), [props.grow, expanded]);
+  // The Community tab's card grows into the full map (mapGrow); what sits on it slips out of it as it does.
+  const growsHere = !!props.grow && !expanded;
   // Its pins step aside with its words as you are found (a quick fade in the map's own drawing), and come back after.
-  useGrowClear(!!props.grow && !expanded, (clear) => canvas.current?.clearPins(clear));
+  useGrowClear(growsHere, (clear) => canvas.current?.clearPins(clear));
+  // The pictures the grow opens the full map with, taken while you are being found (growReady); let go if no grow takes them.
+  const prep = useRef<GrowPrep | null>(null);
+  const dropPrep = () => { const p = prep.current; prep.current = null; if (p) void p.done.then(() => dropShots(p.files)); };
+  useEffect(() => () => dropPrep(), []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Whether the card may grow now (anything in the way of pictures of it: the plain way in).
+  const canGrow = () => growsHere && !still && !keepNone && !cardCaptureBroken() && !!growHost();
+  // The card's map alone, from its own drawing (no pins: they are not part of it), asked of its page (MapCanvas shoot).
+  const shotWaiters = useRef<((data: string | null) => void)[]>([]);
+  const mapAlone = () => new Promise<string | null>((done) => {
+    const give = (data: string | null) => { clearTimeout(t); shotWaiters.current = shotWaiters.current.filter((w) => w !== give); done(data); };
+    const t = setTimeout(() => give(null), MAP_ALONE_MAX_MS);
+    shotWaiters.current.push(give);
+    canvas.current?.shoot();
+  });
+  /**
+   * The grow's pictures, taken early (v4): you said yes to both questions and the phone is finding you (half a second to
+   * a couple, the page still but for the pill's finding light), so nothing has to be photographed once you are found.
+   * The page as it is (taking it holds the phone for a moment, now, rather than mid-move) and the card's map alone, from
+   * the map's own drawing (the phone is not held for that one). Kept in memory (and as files, gone after: dropShots).
+   */
+  const growReady = () => {
+    dropPrep();
+    const page = growHost();
+    const card = spot.ref.current;
+    const box = mapBox.current;
+    if (!zoomOn || !onExpand || !canGrow() || !page || !card || !box) return;
+    const files: string[] = [];
+    const p: GrowPrep = { page, files, at: null, shot: null, box: null, done: Promise.resolve() };
+    p.done = (async () => {
+      // Asked first: the map's own page makes it, while the phone takes the other.
+      const alone = mapAlone();
+      try {
+        const [pageAt, cardAt, boxAt] = await Promise.all([rectOf(page), rectOf(card), rectOf(box)]);
+        if (fits(pageAt) && fits(cardAt) && fits(boxAt)) {
+          p.at = { page: pageAt, card: cardAt, box: boxAt };
+          p.shot = asFile(await captureRef(page, { format: 'jpg', quality: 0.92, result: 'tmpfile' }));
+          files.push(p.shot);
+        }
+      } catch { p.shot = null; }
+      const data = await alone;
+      p.box = data ? tempPicture(data) : null;
+      if (p.box) files.push(p.box);
+      await Promise.all(files.map((uri) => PhotoImage.prefetch(uri, 'memory').catch(() => false)));
+    })();
+    prep.current = p;
+  };
+  // The full map's first view (the card grown), its streets asked for while you are found, so it draws sooner (swoop's WARM_JS).
+  const growWarm = () => {
+    const page = growHost();
+    const card = spot.ref.current;
+    if (!zoomOn || !onExpand || !canGrow() || !page || !card) return;
+    void Promise.all([rectOf(page), rectOf(card)]).then(([pageAt, cardAt]) => {
+      if (!fits(pageAt) || !fits(cardAt)) return;
+      const grown = growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, center: view.center, zoom: view.zoom });
+      canvas.current?.warm(grown.center, grown.zoom);
+    }).catch(() => undefined);
+  };
   const swoopOnUp = (here: LatLng): boolean => {
     if (expanded) { swoopTo(here, false); return false; }
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
     if (!onExpand || !seen) return false;
     swoopTo(here, true);
-    // On the Community tab the card grows into the full map (mapGrow); anything in the way of a picture of the page, the plain way in.
-    if (props.grow && !still && !keepNone && !cardCaptureBroken() && growHost()) {
+    // On the Community tab the card grows into the full map (mapGrow), with the pictures taken while you were found.
+    const p = prep.current;
+    prep.current = null;
+    if (p && canGrow()) {
+      armGrow();
       growBusy.current = true;
-      void growOpen().then((how) => { growBusy.current = false; if (how === 'plain') onExpand(); });
+      void growGo(p).then((how) => { growBusy.current = false; if (how === 'plain') onExpand(); });
       return true;
     }
+    if (p) void p.done.then(() => dropShots(p.files));
     onExpand();
     return true;
   };
   /**
-   * The grow, from the card. As you are found the card clears: its words and pins step aside while the Up to hit pill plays
-   * its moment (the green, the tick). Only then the pictures (taking one holds the phone for a moment, which would stop the
-   * pill part way): the Community page as it is, the card's map alone (laid over the card, so nothing on it is in what
-   * grows), and each thing still on the card (the pill, the weather, the credit) on its own, to slip out of the card at its
-   * own size. All held in memory so the full map's very first frame is the page you saw; then the full map opens over it
-   * with no slide (app/_layout's map options) and pushes the picture in while it loads underneath. 'plain' (nothing
-   * opened) if the page or the card could not be measured or photographed: the caller then opens the full map the plain
-   * way. 'gone' if you left the page (another tab, the card scrolled away, the app put away) meanwhile: nothing opens.
+   * The grow, from the card, the moment you are found (v4: nothing waits). The live Community page starts pushing in
+   * this very frame, the card's words and pins fading and what sits on it slipping out (the pill playing its quick
+   * moment as it goes); the full map opens over it HANDOFF_MS later, with no slide (app/_layout's map options), its first
+   * frame the pictures readied while you were found, at exactly the point the push-in has reached, which it carries on.
+   * A page that moved since its picture (scrolled while finding you): the full map opens once the card covers the screen,
+   * with the card's map alone. 'plain' if the card could not be measured (the caller then opens the full map the plain
+   * way); 'gone' if you left the page meanwhile (another tab, the app put away): nothing opens, the page is as it was.
    */
-  const growOpen = async (): Promise<'grown' | 'plain' | 'gone'> => {
+  const growGo = async (p: GrowPrep): Promise<'grown' | 'plain' | 'gone'> => {
     const page = growHost();
     const card = spot.ref.current;
     const box = mapBox.current;
-    if (!page || !card || !box) return 'plain';
-    const rect = (v: View) => new Promise<Rect>((done) => v.measureInWindow((x, y, w, h) => done({ x, y, w, h })));
-    const fits = (r: Rect) => r.w > 0 && r.h > 0;
-    const here = (c: Rect) => growHost() === page && AppState.currentState !== 'background' && props.inView?.() !== false && c.y + c.h > 0 && c.y < windowH;
-    const taken: string[] = [];
-    const take = async (v: View, format: 'jpg' | 'png') => {
-      const raw = await captureRef(v, format === 'jpg' ? { format, quality: 0.92, result: 'tmpfile' } : { format, result: 'tmpfile' });
-      const uri = raw.startsWith('file:') ? raw : `file://${raw}`;
-      taken.push(uri);
-      return uri;
-    };
-    const letGo = () => { endGrow(); dropShots(taken); };
+    const letGo = () => { endGrow(); void p.done.then(() => dropShots(p.files)); };
+    if (!page || page !== p.page || !card || !box) { letGo(); return 'plain'; }
+    let at: GrowPrep['at'];
     try {
-      const [page0, card0] = await Promise.all([rect(page), rect(card)]);
-      if (!fits(card0) || !fits(page0)) return 'plain';
-      labelsOut();
-      await new Promise((done) => setTimeout(done, PILL_MOMENT_MS));
-      // Measured again just before the pictures, so where things are and what the pictures show agree (the page may have
-      // moved meanwhile: your own row coming in as you are up).
-      const items = awayReg ? [...awayReg].filter((i) => i.ref.current) : [];
-      const [pageAt, cardAt, boxAt, ...itemsAt] = await Promise.all([rect(page), rect(card), rect(box), ...items.map((i) => rect(i.ref.current as View))]);
-      if (!fits(cardAt) || !fits(pageAt) || !fits(boxAt) || !here(cardAt) || !upNow.current) { letGo(); return 'gone'; }
-      const shot = await take(page, 'jpg');
-      const boxShot = await take(box, 'jpg');
-      const away: GrowAwayShot[] = [];
-      for (let i = 0; i < items.length; i++) {
-        const v = items[i].ref.current;
-        const r = itemsAt[i];
-        // Only what is really on the card (a pill not drawn yet, or off it, is simply not there).
-        if (!v || !fits(r) || r.x + r.w <= boxAt.x || r.x >= boxAt.x + boxAt.w || r.y + r.h <= boxAt.y || r.y >= boxAt.y + boxAt.h) continue;
-        away.push({ rect: r, shot: await take(v, 'png'), edge: items[i].edge });
+      const [pageAt, cardAt, boxAt] = await Promise.all([rectOf(page), rectOf(card), rectOf(box)]);
+      at = { page: pageAt, card: cardAt, box: boxAt };
+    } catch { at = null; }
+    if (!at || !fits(at.page) || !fits(at.card) || !fits(at.box)) { letGo(); return 'plain'; }
+    const plan = growPlan({ page: at.page, card: at.card, screen: { w: windowW, h: windowH }, center: view.center, zoom: view.zoom });
+    aimGrow(plan);
+    const started = startGrow(still);
+    labelsOut();
+    const here = () => growHost() === page && AppState.currentState !== 'background' && props.inView?.() !== false;
+    try {
+      // The pictures are in by now (taken while you were found); a check-in quicker than them waits here, the push-in going on.
+      await Promise.all([Promise.race([p.done, wait(PREP_WAIT_MAX_MS)]), wait(HANDOFF_MS)]);
+      // The page's picture is the page only if nothing moved since (the card where it was): else it opens once the card covers the screen.
+      const pageSame = !!p.shot && !!p.at && same(p.at.page, at.page) && same(p.at.card, at.card);
+      let boxShot = p.box;
+      // No picture of the card's map alone (its page did not answer): the card itself now, its pins and words gone by now
+      // (this one holds the phone for a moment, mid-move: only ever when the map's own drawing could not be had).
+      if (!boxShot && here()) {
+        const raw = asFile(await captureRef(box, { format: 'jpg', quality: 0.92, result: 'tmpfile' }));
+        p.files.push(raw);
+        await PhotoImage.prefetch(raw, 'memory').catch(() => false);
+        boxShot = raw;
       }
-      await Promise.all(taken.map((uri) => PhotoImage.prefetch(uri, 'memory')));
-      // Left while the pictures were readied: nothing opens.
-      if (!here(cardAt)) { letGo(); return 'gone'; }
-      setGrowPlan(growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, shot, box: { rect: boxAt, shot: boxShot, radius: Math.max(0, radius.xl - 1) }, away, center: view.center, zoom: view.zoom }));
+      if (!pageSame) await wait(started + COVER_MS - Date.now());
+      if (!here()) { letGo(); return 'gone'; }
+      if (!boxShot) { letGo(); return 'plain'; }
+      const shot = pageSame ? p.shot : null;
+      setGrowPlan({ ...plan, shot, box: { rect: at.box, shot: boxShot, radius: Math.max(0, radius.xl - 1) }, started });
       router.push({ pathname: '/map', params: { grow: '1' } });
+      // The full map lets go of the two it shows (planShots); any other taken meanwhile goes now.
+      void p.done.then(() => dropShots(p.files.filter((f) => f !== shot && f !== boxShot)));
       return 'grown';
     } catch {
       letGo();
-      return 'plain';
+      return here() ? 'plain' : 'gone';
     }
   };
-  const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? swoopOnUp : undefined);
-  // Still up when the pill's moment has played (a second tap meanwhile turns it off): the grow goes on only then.
-  upNow.current = checkIn.on;
+  const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? { up: swoopOnUp, finding: growWarm, allowed: growReady, over: dropPrep } : undefined);
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
   const unlock = lock === 'hidden' ? () => { void askWhoSeesYou('manage'); } : onToggleLocation;
   // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
@@ -315,20 +371,23 @@ export function NearbyMap(props: NearbyMapProps) {
   // Opened by the card growing into it: the swoop waits for the grown card to hand over (below), then is shorter.
   const swoopRun = useRef(swoop.run);
   swoopRun.current = swoop.run;
-  const startSwoop = (afterGrow = false) => {
+  // `grown`: after a grow, the ease that carries on at the push-in's own speed (growHandOver); the camera dives on at once
+  // (now): the push-in was its start, and the map has drawn what is on screen.
+  const startSwoop = (grown?: [number, number, number, number]) => {
     const run = swoopRun.current;
     if (!run) return;
     const shape = swoopShape();
-    canvas.current?.swoop({ ...shape, ...(afterGrow ? { ms: GROW_SWOOP_MS, ease: GROW_SWOOP_EASE } : null), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
+    canvas.current?.swoop({ ...shape, ...(grown ? { ms: GROW_SWOOP_MS, ease: grown, now: true } : null), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
   };
   const growing = useRef(!!growFrom);
   useEffect(() => { if (!growing.current) startSwoop(); }, [swoop.run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The grow's hand-over (mapGrow), on the full map it opened: the picture of the Community page pushes in over the map
-  // while it loads; once the push-in is most of the way and the map has drawn, the picture dissolves as the camera dives
-  // on (one move), and the map's buttons slide in (never fade: they are glass) as it comes in to land.
-  const [growShot, setGrowShot] = useState<string | null>(growFrom?.shot ?? null);
-  const [growStart, setGrowStart] = useState(0);
+  // The grow's hand-over (mapGrow), on the full map it opened: it opened over the live page part way into the push-in, with
+  // the pictures of it on top at exactly the point the push-in had reached, and they carry the push-in on (it is never
+  // started again here) while the map loads under them; once the card covers the screen and the map has drawn, the
+  // pictures dissolve as the camera dives on at the push-in's own speed (one move; they keep moving as they go, never a
+  // still layer), and the map's buttons slide in (never fade: they are glass).
+  const [growShot, setGrowShot] = useState(!!growFrom);
   const [growDue, setGrowDue] = useState(false);
   const [growLate, setGrowLate] = useState(false);
   const growPicture = useGrowPicture();
@@ -339,48 +398,42 @@ export function NearbyMap(props: NearbyMapProps) {
   const bottomAway = insets.bottom + 170;
   const topSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * topAway }] }));
   const bottomSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * bottomAway }] }));
-  // The push-in starts once the picture is on screen (it is the page as it was, so nothing changes until it moves).
-  const growBegun = useRef(false);
-  const beginGrow = () => {
-    if (!growing.current || growBegun.current) return;
-    growBegun.current = true;
-    startGrow(still);
-    setGrowStart(Date.now());
-  };
-  // A picture that never shows: the push-in starts anyway (the map then takes over as soon as it has drawn).
-  useEffect(() => { if (!growFrom) return undefined; const t = setTimeout(beginGrow, 450); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Timed from the moment the push-in started (the moment you were found), not from this page opening.
   useEffect(() => {
-    if (!growStart) return undefined;
-    const due = setTimeout(() => setGrowDue(true), GROW_MS * REVEAL_AT);
-    const late = setTimeout(() => setGrowLate(true), REVEAL_MAX_MS);
+    if (!growFrom) return undefined;
+    const since = Date.now() - growFrom.started;
+    const due = setTimeout(() => setGrowDue(true), Math.max(0, COVER_MS - since));
+    const late = setTimeout(() => setGrowLate(true), Math.max(0, REVEAL_MAX_MS - since));
     return () => { clearTimeout(due); clearTimeout(late); };
-  }, [growStart]);
-  // The pictures (the page, the card's map, what sat on the card) all in before the push-in starts.
-  const growWaiting = useRef(growFrom ? 1 + (growFrom.box ? 1 : 0) + (growFrom.away?.length ?? 0) : 0);
-  const growLoaded = () => { growWaiting.current -= 1; if (growWaiting.current <= 0) requestAnimationFrame(beginGrow); };
-  const growDone = () => {
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Over once (the dissolve done, or the page left part way): the page under it back as it was, the tab bar to it, and the
+  // pictures gone from the phone.
+  const growOver = useRef(!growFrom);
+  const growEnd = () => {
+    if (growOver.current) return false;
+    growOver.current = true;
     endGrow();
-    // The pictures were only ever for this: gone from the phone now.
     dropShots(planShots(growFrom));
-    setGrowShot(null);
+    return true;
+  };
+  const growDone = () => {
+    if (!growEnd()) return;
+    setGrowShot(false);
     props.onGrown?.();
   };
   useEffect(() => {
     if (!growFrom || !growing.current || !growDue || (mapStatus === 'loading' && !growLate)) return;
     growing.current = false;
-    // Crept on past the push-in's end while the map drew: its camera comes that much closer too, then dives on.
-    const dz = creptZoom(growFrom, holdGrow());
-    if (dz > 0.005) canvas.current?.flyTo(growFrom.center, growFrom.zoom + dz, 0, 0, true);
-    startSwoop(true);
-    shotIn.value = withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(growDone)(); });
+    // The camera starts as close as the pushed-in card is now (past the plan: it carries on past covering the screen), and
+    // dives on at the speed the push-in has.
+    const hand = growHandOver(growFrom, CHECKIN_ZOOM);
+    if (Math.abs(hand.zoom - growFrom.zoom) > 0.005) canvas.current?.flyTo(growFrom.center, hand.zoom, 0, 0, true);
+    startSwoop(hand.ease);
+    shotIn.value = withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.quad) }, () => { runOnJS(growDone)(); });
     chromeIn.value = withDelay(CHROME_AFTER_MS, withTiming(1, { duration: CHROME_MS, easing: Easing.out(Easing.cubic) }));
   }, [growDue, growLate, mapStatus]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Left part way (Back mid-grow): the page under it is back as it was, and the picture gone from the phone.
-  useEffect(() => () => {
-    if (!growing.current) return;
-    endGrow();
-    dropShots(planShots(growFrom));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Left part way (Back mid-grow, or mid-dissolve).
+  useEffect(() => () => { growEnd(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = expanded ? model.shown : cardPlayers;
   const selectedId = model.selected?.user.id ?? null;
@@ -564,7 +617,11 @@ export function NearbyMap(props: NearbyMapProps) {
       // The full map's first pins come in as one wave (once any sheet over it has gone); a tap on "+N" zooms in clear of the bars and the cards.
       popIn={expanded}
       onPainted={expanded ? undefined : () => showCard()}
-      onShot={expanded ? undefined : (data) => { const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current && !keepNoneNow.current) saveStreetsShot(k, data); }}
+      onShot={expanded ? undefined : (data) => {
+        // The check-in zoom's grow asked for the card's map alone (growReady), and the card's picture cover maybe too.
+        shotWaiters.current.slice().forEach((give) => give(data));
+        const k = shotFor.current; shotFor.current = null; if (k && k === keyNow.current && !keepNoneNow.current) saveStreetsShot(k, data);
+      }}
       // The phone stopped the page (or took back its drawing) while the app was away: covered again before anyone looks.
       onLost={expanded ? undefined : () => { if (cardUp) coverAgainRef.current(true); }}
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
@@ -648,7 +705,7 @@ export function NearbyMap(props: NearbyMapProps) {
               />
             </Reanimated.View>
           ) : null}
-          <GrowAwayContext.Provider value={awayReg}>
+          <GrowAwayContext.Provider value={growsHere}>
             <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} />
             <CardCredit />
           </GrowAwayContext.Provider>
@@ -699,16 +756,16 @@ export function NearbyMap(props: NearbyMapProps) {
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
-      {/* Opened by the card growing into it: the picture of the Community page, pushing in over the map, then dissolving into it. */}
-      {/* Over the card in it, the card's map alone, with what sat on the card slipping out of it at its own size (mapGrow). */}
+      {/* Opened by the card growing into it: the picture of the Community page, carrying on the push-in over the map, then */}
+      {/* dissolving into it; over the card in it, the card's map alone (its words, pins and buttons gone by then: mapGrow). */}
+      {/* A page that moved since its picture: the card's map alone, which covers the screen by the time this opens. */}
       {growShot && growFrom ? (
         <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shotFade]}>
           <Reanimated.View style={[{ position: 'absolute', left: growFrom.page.x, top: growFrom.page.y, width: growFrom.page.w, height: growFrom.page.h }, growPicture]}>
-            <PhotoImage source={{ uri: growShot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} onLoad={growLoaded} onError={beginGrow} />
+            {growFrom.shot ? <PhotoImage source={{ uri: growFrom.shot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} /> : null}
             {growFrom.box ? (
               <View style={{ position: 'absolute', left: growFrom.box.rect.x - growFrom.page.x, top: growFrom.box.rect.y - growFrom.page.y, width: growFrom.box.rect.w, height: growFrom.box.rect.h, borderRadius: growFrom.box.radius, overflow: 'hidden' }}>
-                <PhotoImage source={{ uri: growFrom.box.shot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} onLoad={growLoaded} onError={beginGrow} />
-                {(growFrom.away ?? []).map((a) => <AwaySprite key={a.shot} item={a} box={growFrom.box?.rect ?? a.rect} onLoad={growLoaded} />)}
+                <PhotoImage source={{ uri: growFrom.box.shot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} />
               </View>
             ) : null}
           </Reanimated.View>
@@ -763,24 +820,53 @@ export function NearbyMap(props: NearbyMapProps) {
 
 type Cover = { uri: string | null; kind: 'card' | 'streets' | 'sketch'; hash: string };
 
-/** The grow's pictures on the phone (mapGrow): every file it took. */
-const planShots = (p: GrowPlan | null) => (p ? [p.shot, p.box?.shot, ...(p.away ?? []).map((a) => a.shot)] : []);
-/** Gone from the phone (temporary files either way): the picture tool wants the plain path back. */
+/** The grow's pictures on the phone (mapGrow) that the full map shows: gone once it has taken over. */
+const planShots = (p: GrowPlan | null) => (p ? [p.shot, p.box?.shot] : []);
+/** Gone from the phone (temporary files either way): a picture taken of a view, or one written from the map's own drawing. */
 function dropShots(uris: (string | null | undefined)[]) {
   for (const uri of uris) {
     if (!uri) continue;
-    try { releaseCapture(uri.replace(/^file:\/\//, '')); } catch { /* a temporary file either way */ }
+    try { releaseCapture(uri.replace(/^file:\/\//, '')); } catch { /* not one of the picture tool's */ }
+    try { const f = new File(uri); if (f.exists) f.delete(); } catch { /* a temporary file either way */ }
   }
 }
 
-/** The phone's grow (mapGrow): one thing that sat on the card, its own picture, slipping out of the card at its own size. */
-function AwaySprite({ item, box, onLoad }: { item: GrowAwayShot; box: Rect; onLoad: () => void }) {
-  const slip = useAwayPicture(item.edge);
-  return (
-    <Reanimated.View style={[{ position: 'absolute', left: item.rect.x - box.x, top: item.rect.y - box.y, width: item.rect.w, height: item.rect.h }, slip]}>
-      <PhotoImage source={{ uri: item.shot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} onLoad={onLoad} onError={onLoad} />
-    </Reanimated.View>
-  );
+/** The grow's pictures, readied while you are being found (growReady), for the moment you are up (growGo). */
+interface GrowPrep {
+  /** The page they were taken of. */
+  page: View;
+  /** Where the page, the card and its map were as they were taken (window coordinates). */
+  at: { page: Rect; card: Rect; box: Rect } | null;
+  /** The page, and the card's map alone (files), or null where it could not be had. */
+  shot: string | null;
+  box: string | null;
+  /** Every file taken, to let go of. */
+  files: string[];
+  /** Done (however it went). */
+  done: Promise<void>;
+}
+/** How long the card's map is given to send its own drawing; and how long, once you are found, the pictures are waited for. */
+const MAP_ALONE_MAX_MS = 1500;
+const PREP_WAIT_MAX_MS = 1200;
+const wait = (ms: number) => new Promise<void>((done) => setTimeout(done, Math.max(0, ms)));
+/** Where a view is on the screen; a view gone meanwhile never answers, so it is given up on after a moment. */
+const rectOf = (v: View) => Promise.race([
+  new Promise<Rect>((done) => v.measureInWindow((x, y, w, h) => done({ x, y, w, h }))),
+  wait(500).then((): Rect => { throw new Error('not measured'); }),
+]);
+const fits = (r: Rect) => r.w > 0 && r.h > 0;
+const same = (a: Rect, b: Rect) => Math.abs(a.x - b.x) < 1 && Math.abs(a.y - b.y) < 1 && Math.abs(a.w - b.w) < 1 && Math.abs(a.h - b.h) < 1;
+const asFile = (raw: string) => (raw.startsWith('file:') ? raw : `file://${raw}`);
+/** The card's map alone, as its page drew it (a JPEG data URL), written to a temporary file the full map can show at once. */
+function tempPicture(dataUrl: string): string | null {
+  try {
+    const file = new File(Paths.cache, `grow-${Date.now()}-${Math.round(Math.random() * 1e6)}.jpg`);
+    file.create();
+    file.write(dataUrl.replace(/^data:image\/\w+;base64,/, ''), { encoding: 'base64' });
+    return file.uri;
+  } catch {
+    return null;
+  }
 }
 
 const styleDefinitions = StyleSheet.create({
