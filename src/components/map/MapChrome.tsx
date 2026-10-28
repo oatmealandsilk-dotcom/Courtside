@@ -63,6 +63,8 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
+import { DESIGN_UNLOCKS } from '@/features/courtUnlocks/designDemo';
+import { UnlockLine } from '@/features/courtUnlocks/DesignParts';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1442,6 +1444,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
       </View>
       <GHScrollView style={{ maxHeight: middleMax, flexGrow: 0 }} contentContainerStyle={styles.courtMiddle} showsVerticalScrollIndicator={false} bounces={false}>
+      {DESIGN_UNLOCKS ? <View style={styles.courtBlock}><UnlockLine name={court.name} closed={closed} /></View> : null}
       {showTags ? (
         <View style={styles.courtTags}>
           <AccessTag access={access} bookUrl={bookUrl} />

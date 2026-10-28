@@ -56,6 +56,9 @@ import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { PROFILE_TABS_LOOK, ProfileTabRow } from '@/features/profile/ProfileTabRow';
+import { DESIGN_UNLOCKS, KING, MY_COURTS } from '@/features/courtUnlocks/designDemo';
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { CrownGlyph } from '@/components/place/CrownGlyph';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -252,7 +255,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    {/* One grouped list, the way Settings reads, instead of three boxes. */}
    <View style={styles.links}>
      {studio ? <Pressable accessibilityRole="link" accessibilityLabel={`Coach studio. ${studio.line}`} onPress={() => router.push('/coach-studio')} style={({ pressed }) => [styles.linkRow, pressed && styles.linkPressed]}><Ionicons name="ribbon-outline" size={20} color={colors.brand}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Coach studio</Text>{studio.waiting ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.waiting} waiting</Text> : studio.doneCount < 4 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{studio.doneCount} of 4</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
-     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text>{savedCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
+     {/* DESIGN BRANCH ONLY (court unlocks): Your courts, with your crown. */}
+     {DESIGN_UNLOCKS ? <Pressable accessibilityRole="link" accessibilityLabel={`Your courts, ${MY_COURTS.length}. King of ${KING.court}`} onPress={() => router.push('/your-courts')} style={({ pressed }) => [styles.linkRow, studio && styles.linkLine, pressed && styles.linkPressed]}><View style={{ width: 20, alignItems: 'center' }}><CourtGlyph size={16} color={colors.text}/></View><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Your courts</Text><CrownGlyph size={15} color={colors.sun}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{MY_COURTS.length}</Text><Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable> : null}
+     <Pressable accessibilityRole="link" accessibilityLabel="Saved videos and discussions" onPress={() => router.push('/saved')} style={({ pressed }) => [styles.linkRow, (studio || DESIGN_UNLOCKS) && styles.linkLine, pressed && styles.linkPressed]}><Ionicons name="bookmark-outline" size={20} color={colors.text}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Saved</Text>{savedCount ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkValue}>{savedCount}</Text> : null}<Ionicons name="chevron-forward" size={16} color={colors.textFaint}/></Pressable>
    </View>
    {PROFILE_TABS_LOOK !== 'now'
      // The other looks for this row (Oct 25, owner: "This part could look better"), picked in src/features/profile/ProfileTabRow.tsx.

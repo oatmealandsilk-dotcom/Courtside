@@ -6,6 +6,7 @@ import { initials } from '@/lib/format';
 import { colors, surfaceColorFor } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
+import { DESIGN_UNLOCKS, isDesignUnlocked } from '@/features/courtUnlocks/designDemo';
 
 /**
  * A court pin's colour by what it is played on (Oct 24, owner: "the courts near me hard grass
@@ -102,6 +103,8 @@ export function agoShort(iso?: string): string {
 export const MAP_PIN_CSS = `
 .cs-court-name{display:none}
 .cs-close .cs-court-name,.cs-court.cs-on .cs-court-name{display:block}
+.cs-court.cs-mine .cs-court-name{display:block}
+.cs-far .cs-court.cs-mine{transform:none}
 .cs-court-nm{display:none}
 .cs-close .cs-court-nm,.cs-court.cs-on .cs-court-nm{display:inline}
 .cs-far .cs-court.cs-live{transform:none}
@@ -274,7 +277,9 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * same glow with no words, under your own pin when you are playing there
  * (your pin's tag says it, Oct 6).
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, soonHit = false): string {
+  // DESIGN BRANCH (court unlocks): a court you have unlocked is filled in your colour, named at every zoom.
+  if (isDesignUnlocked(court.name) || (DESIGN_UNLOCKS && soonHit)) return designCourtPinHtml(court, on, live, glowOnly, soonHit);
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
@@ -292,6 +297,34 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
   return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
+}
+
+/**
+ * DESIGN BRANCH (court unlocks): a court you have unlocked, filled in your
+ * colour (the theme's brand: green on Clean, yellow on New York) with its
+ * name beside it at every zoom, in your colour; a court still to unlock
+ * stays today's plain mark. A court lit up (people there now, Light up) has
+ * the glow and "Lit up · 3" beside it: a number only, never who. A court
+ * with an open hit coming up but nobody there keeps a small dot at its
+ * corner instead of the glow, so the glow only ever means "people here now".
+ */
+function designCourtPinHtml(court: Court, on: boolean, live: string | undefined, glowOnly: boolean, soonHit: boolean): string {
+  const mine = isDesignUnlocked(court.name);
+  const size = on ? 28 : mine ? 24 : 22;
+  const closed = isClosedCourt(court);
+  const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
+  const glowing = !!live || glowOnly;
+  const pill = `position:absolute;left:calc(100% + ${glowing ? 10 : 6}px);top:50%;transform:translateY(-50%);max-width:${live ? 200 : 160}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
+  const name = live
+    ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span style="color:${mine ? colors.brand : colors.textMuted};font-weight:600">${nameText} · </span>` : ''}${esc(live)}</span>`
+    : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${mine ? colors.brand : closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
+  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 16px 6px ${colors.open}55,` : '';
+  const tint = courtTone(court);
+  const tone = closed ? colors.borderStrong : tint;
+  const fill = mine ? colors.brand : on ? tone : colors.bg;
+  const glyph = mine ? colors.brandInk : on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
+  const edge = on || mine ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}${mine ? ' cs-mine' : ''}${soonHit ? ' cs-hit' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on || mine ? 7 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on || mine ? '.28' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph, mine ? 13 : 12)}${name}${hitDot()}</div>`;
 }
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */

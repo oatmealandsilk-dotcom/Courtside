@@ -51,6 +51,7 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useCreateMenuState } from '@/features/compose/createMenu';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { DESIGN_UNLOCKS } from '@/features/courtUnlocks/designDemo';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -294,7 +295,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // hide it everywhere.
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
-  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session', '/court-unlocked'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // The page the phone's bar sits over: the one on show, or, while a page that takes the bar away is
   // up (the Create box and a clip's comments among them, which leave the bar under them), the one it
   // was over. The quiet pill turns dark over a clip only on the Feed itself (TabBarLooks): a page
@@ -536,7 +537,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
-    <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    <HitFollowUp enabled={!DESIGN_UNLOCKS && !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
     {/* "Still playing?", when a live session's clock reaches three hours: the same note, on the same terms. */}
     <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}

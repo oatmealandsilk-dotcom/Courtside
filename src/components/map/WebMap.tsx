@@ -39,6 +39,7 @@ import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { cardHint, hasCardShot, hashText, peekCardShot, peekPlaceShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
+import { exposeDesignMap } from '@/features/courtUnlocks/designDemo';
 
 // The court pictures in chats (CourtMapThumb) fetch their drawing through
 // this file too. With two separate files each fetching the map engine, the
@@ -349,6 +350,7 @@ export function NearbyMap(props: NearbyMapProps) {
       return undefined;
     }
     load.heard('boot');
+    exposeDesignMap(instance, expanded);
     // First of all, before anything else listens: when the map is up, when it has drawn
     // (the curtain over the start page may lift onto it, and the card fades in), or that it failed.
     const watch = watchPaint(instance, (what, why) => {

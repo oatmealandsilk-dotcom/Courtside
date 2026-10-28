@@ -7,6 +7,7 @@ import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/
 import { isOpenToHit } from '@/features/players/openToHit';
 import { surfaceAdjective, surfaceKind } from '@/features/places/courtSurface';
 import { LESS_AI_COURTS } from '@/theme/look';
+import { DESIGN_UNLOCKS, LIT_COURT, isDesignUnlocked } from '@/features/courtUnlocks/designDemo';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
@@ -94,12 +95,16 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const hit = hitAt.get(c.id);
     // Your live session's court counts you: "You're playing", "You + 2 playing".
     const yours = playing?.courtId === c.id;
-    const tag = yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
+    // DESIGN BRANCH (court unlocks): only people there now light a court ("Lit up · 3"); a hit coming up is a dot.
+    const designLit = DESIGN_UNLOCKS && c.name === LIT_COURT ? Math.max(n, 3) : 0;
+    const tag = DESIGN_UNLOCKS ? (designLit ? `Lit up · ${designLit}` : undefined)
+      : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
+    const soonHit = DESIGN_UNLOCKS && !designLit && !!hit;
     // Your pin standing on it already says so: the court only glows under it, no words beside.
     const underYou = yours && !on && !!meAt && milesBetween(meAt, c) < 0.05;
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, DESIGN_UNLOCKS ? false : ringed, underYou ? undefined : tag, underYou, soonHit), z: on ? 4 : tag || isDesignUnlocked(c.name) ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag || isDesignUnlocked(c.name), n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
@@ -113,7 +118,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     // Crowded flags gather behind the soonest one.
     list.push({ id: `h:${h.hit.id}`, lat: h.at.lat, lng: h.at.lng, html: hitPinHtml(h.hit, on), anchor: 'bottom', offsetY: HIT_LIFT, z: on ? 5 : 2, k: 'h', r: Date.parse(h.hit.startsAt) || 0, sel: on, g: 'h', role: 'button', label: `Open hit at ${h.hit.place.name}` });
   }
-  for (const p of shown) {
+  // DESIGN BRANCH (court unlocks): with Light up, a friend is on your map only while lit up at a court.
+  for (const p of DESIGN_UNLOCKS ? shown.filter((x) => !!x.court) : shown) {
     const on = p.user.id === selectedId;
     const size = on ? 42 : 34;
     // Open to hit is a class on the pin (cls), so it eases on and off in place rather than redrawing;
@@ -133,7 +139,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   }
   // Your pin only where you last shared your location; location off, no pin.
   // Not on the still card: it shows your city, never your spot in it.
-  const mine = meAt;
+  // DESIGN BRANCH (court unlocks): not lit up, so no pin of your own.
+  const mine = DESIGN_UNLOCKS ? null : meAt;
   // Hung by its top, the face on your spot; Open to hit switches its class, so the green ring draws in behind your card.
   // Never gathered: players crowding your spot gather into a "+N" beside you (fix).
   // Your tag: "You", with "· Playing now · <court>", "· Open to hit" or "· Hidden" when they show.

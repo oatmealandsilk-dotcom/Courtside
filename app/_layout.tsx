@@ -37,6 +37,7 @@ import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 import { ConfirmHost } from '@/components/ConfirmHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
+import { useDesignNavHook } from '@/features/courtUnlocks/designDemo';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
@@ -103,6 +104,7 @@ export default function RootLayout() {
  * is drawn again.
  */
 function RootStack() {
+  useDesignNavHook();
   const desktop = isDesktopBrowser();
   const instantExit = useInstantExit();
   return (
@@ -153,6 +155,8 @@ function RootStack() {
       <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
       <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* DESIGN BRANCH ONLY (court unlocks): the "Court unlocked" moment after a hit is logged (DragSheet). */}
+      <Stack.Screen name="court-unlocked" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}
       <Stack.Screen name="tennis-sheet" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* "Ask for a review" on something of yours taken down: a small sheet over it (DragSheet). */}
