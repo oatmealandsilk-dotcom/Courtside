@@ -2,7 +2,7 @@ import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { brandBoxShadow } from '@/theme/fillMode';
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useIsFocused } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -63,6 +63,8 @@ export default function LiveSessionPage() {
       .finally(() => setAsking(false));
   }, [locationEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
   const look = cardLook(theme);
+  // With "Let friends see where you are?" up over it (Show friends), Escape is that ask's alone, never this sheet's too.
+  const focused = useIsFocused();
 
   const dismissed = () => {
     if (next.current === 'log') openLiveLog('replace');
@@ -73,7 +75,7 @@ export default function LiveSessionPage() {
   // Opened cold (a reload on this page) before the phone's copy is read: a moment's wait.
   if (!s) {
     return (
-      <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.5}
+      <DragSheet fitContent active={focused} closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.5}
         header={<Header title="Your session" eyebrow="" onClose={close} />}>
         <ScrollView contentContainerStyle={formBody}>
           {!liveSessionRead ? <View style={styles.wait}><CourtSpinner size={34} /></View> : (
@@ -126,7 +128,7 @@ export default function LiveSessionPage() {
 
   const status = state === 'finished' ? 'FINISHED' : state === 'paused' ? 'PAUSED' : 'LIVE';
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.86} contentHeight={contentH || undefined}
+    <DragSheet fitContent active={focused} closeSignal={closeSignal} onDismissed={dismissed} peekFraction={0.86} contentHeight={contentH || undefined}
       header={<Header title={where || 'Your session'} eyebrow={status} running={state === 'running'} onClose={close} />}>
       <ScrollView contentContainerStyle={[formBody, styles.body]} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {/* The clock, in the session box's colours: the card a logged session gets, still running. */}

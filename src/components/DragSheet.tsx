@@ -32,6 +32,14 @@ const SLIDE_PAST = 48;
 const SLID_AT_REST = { transform: [{ translateY: 0 }] };
 
 /**
+ * What is closing a sheet, as beforeClose hears it: a drag down, a tap on
+ * the dimmed page outside it, a phone's Back, or a computer's Escape (the
+ * .web twin). A page can then wait out only a tap outside, say (the second
+ * half of a double tap on what opened it), and still close at once on Back.
+ */
+export type SheetCloseHow = 'drag' | 'outside' | 'back' | 'escape';
+
+/**
  * The comments stage's own drag, for a list inside it that hands a pull down
  * at its top over to the sheet (see comments). Worklets: start, follow the
  * finger, let go. Every other sheet has none.
@@ -203,9 +211,10 @@ export function DragSheet(props: {
    * Asked before a drag down, a tap outside or (in a browser) Escape closes
    * the sheet: false keeps it open (the page then asks its own question,
    * "Discard this group?", and bumps closeSignal if the answer is yes). A
-   * close from closeSignal is never asked. The comments stage ignores it.
+   * close from closeSignal is never asked. `how` says what is closing it
+   * (SheetCloseHow). The comments stage ignores it.
    */
-  beforeClose?: () => boolean;
+  beforeClose?: (how: SheetCloseHow) => boolean;
   /**
    * The page handles Android's Back itself (a step back in a form, say), so
    * the sheet leaves it alone. Without it, Back closes the sheet the way a
@@ -272,7 +281,7 @@ function PlainSheet({
   onSettled?: () => void;
   contentHeight?: number;
   waitForFit?: boolean;
-  beforeClose?: () => boolean;
+  beforeClose?: (how: SheetCloseHow) => boolean;
   ownBack?: boolean;
   handOverSignal?: number;
   plain?: boolean;
@@ -421,8 +430,8 @@ function PlainSheet({
   // A close the person started (a drag down, a tap outside): the page may say not yet.
   const latestBefore = useRef(beforeClose);
   latestBefore.current = beforeClose;
-  const userDismiss = (origin?: number) => {
-    if (latestBefore.current && !latestBefore.current()) {
+  const userDismiss = (how: SheetCloseHow, origin?: number) => {
+    if (latestBefore.current && !latestBefore.current(how)) {
       if (origin !== undefined) returnTo(origin);
       return;
     }
@@ -431,7 +440,7 @@ function PlainSheet({
   // Android's Back, while this sheet's page is in front: the same close as a
   // drag down (it slides away, the page's own question first, and onDismissed
   // then leaves the page), rather than the page vanishing in one frame.
-  useAndroidBack(() => { if (!dismissedRef.current) userDismiss(); return true; }, !ownBack);
+  useAndroidBack(() => { if (!dismissedRef.current) userDismiss('back'); return true; }, !ownBack);
   // The keyboard: the sheet opens all the way, and its bottom rides up with
   // the keyboard frame by frame (the phone reports its height as it moves),
   // so a box at the bottom stays right on top of it, never jumping after it.
@@ -510,7 +519,7 @@ function PlainSheet({
       const origin = startY.value;
       const travelled = translateY.value - origin;
       if (e.velocityY > FLICK_PX_PER_S || (travelled > 0 && travelled > (fullHeight - origin) * 0.32)) {
-        runOnJS(userDismiss)(origin);
+        runOnJS(userDismiss)('drag', origin);
       } else if (e.velocityY < -FLICK_PX_PER_S || (travelled < 0 && Math.abs(travelled) > origin * 0.32)) {
         runOnJS(openFull)();
       } else {
@@ -531,7 +540,7 @@ function PlainSheet({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss('outside')} />
       <Animated.View style={[styles.sheet, sheetStyle, risen && SLID_AT_REST]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         {plain ? null : <Wash height={300} strength={0.85} />}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { DragSheet } from '@/components/DragSheet';
@@ -38,6 +38,8 @@ export default function CourtNowSheet() {
   const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled, mapLive, mapVisibility, teenMap } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
   const name = params.name?.trim() || 'This court';
+  // With "Who can see you on the map?" up over it (I'm playing here), Escape is that sheet's alone, never this one's too.
+  const focused = useIsFocused();
   const [closeSignal, setCloseSignal] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,7 +86,7 @@ export default function CourtNowSheet() {
   };
 
   return (
-    <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
+    <DragSheet fitContent active={focused} closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
       header={<SheetTitle title="How is it right now?" line={standing ? `${name} · ${standing.line}` : name} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         <View style={styles.choices} accessibilityRole="radiogroup">
