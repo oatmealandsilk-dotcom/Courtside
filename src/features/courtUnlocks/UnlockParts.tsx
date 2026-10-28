@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { type SharedValue, useAnimatedProps, useAnimatedStyle } from 'react-native-reanimated';
 import Svg, { G, Line, Rect } from 'react-native-svg';
@@ -9,7 +9,7 @@ import Svg, { G, Line, Rect } from 'react-native-svg';
 import { Avatar, Button } from '@/components/ui';
 import type { User } from '@/data/types';
 import { CourtTile, ordinal } from '@/features/courtUnlocks/DesignParts';
-import { HAVE_IT, MY_COURTS, TO_UNLOCK } from '@/features/courtUnlocks/designDemo';
+import { DESIGN_FRIENDS, HAVE_IT, MY_COURTS, TO_UNLOCK, andList } from '@/features/courtUnlocks/designDemo';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography, withAlpha } from '@/theme';
@@ -23,44 +23,63 @@ import { TextScale } from '@/theme/textScale';
  * size, so they sit on the map picture like the real thing.
  */
 
-/** The new court and who else has it (made-up sample data). */
+/**
+ * The new court and who else has it (made-up sample data). Round 4 (owner,
+ * Oct 28: "Just say number like x here."): only friends (you follow each
+ * other) by face or name; everyone else is a number, and only from 2 up.
+ * The demo's pictures pass ?friends=none for a court no friend has.
+ */
 export function useUnlock() {
   const { users } = useApp();
+  const { friends: friendsParam } = useLocalSearchParams<{ friends?: string }>();
   const court = MY_COURTS[0];
   const nth = MY_COURTS.length;
   const have = HAVE_IT[court.name] ?? { friends: [], total: 0 };
-  const friends = have.friends.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
-  const others = Math.max(0, have.total - friends.length);
-  const firstNames = friends.map((u) => u.name.split(' ')[0]);
-  const beatYou = firstNames.length > 1 ? `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}` : firstNames[0];
+  const friends = friendsParam === 'none' ? [] : have.friends
+    .filter((id) => DESIGN_FRIENDS.has(id))
+    .map((id) => users.find((u) => u.id === id))
+    .filter((u): u is User => !!u);
+  const rest = Math.max(0, have.total - friends.length);
+  const others = rest >= 2 ? rest : 0;
+  const beatYou = andList(friends.map((u) => u.name.split(' ')[0]));
   const next = TO_UNLOCK[0];
-  const nextFriendId = HAVE_IT[next.name]?.friends[0];
+  const nextFriendId = friendsParam === 'none' ? undefined : HAVE_IT[next.name]?.friends.find((id) => DESIGN_FRIENDS.has(id));
   const nextFriend = nextFriendId ? users.find((u) => u.id === nextFriendId)?.name.split(' ')[0] : undefined;
   return { court, nth, have, friends, others, beatYou, next, nextFriend };
 }
 
-/** The two lines under the name: you against who got here first, and what's next near you. */
+/**
+ * The two lines under the name: you against who got here first, and what's
+ * next near you. Friends who got here first: their faces, then the rest as
+ * "+40", and their names under. No friend: just "You're the 43rd player
+ * here", by the court's own mark.
+ */
 export function UnlockRows() {
   const styles = useThemedStyles(styleDefinitions);
   const { have, friends, others, beatYou, next, nextFriend } = useUnlock();
+  const place = `You’re the ${ordinal(have.total + 1)} player here`;
   return (
     <View style={styles.rows}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`You're the ${ordinal(have.total + 1)} player here.${beatYou ? ` ${beatYou} got here first.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`${place}.${beatYou ? ` ${beatYou} got here first${others ? `, and ${others} others` : ''}.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
         <View style={styles.faces}>
-          {friends.slice(0, 2).map((u, i) => (
-            <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
-              <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={34} />
-            </View>
-          ))}
-          {others ? (
-            <View style={[styles.face, friends.length ? styles.faceOver : null, styles.more]}>
-              <Text maxFontSizeMultiplier={1.1} style={styles.moreText}>+{others}</Text>
-            </View>
-          ) : null}
+          {friends.length ? (
+            <>
+              {friends.slice(0, 2).map((u, i) => (
+                <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
+                  <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={34} />
+                </View>
+              ))}
+              {others ? (
+                <View style={[styles.face, styles.faceOver, styles.more]}>
+                  <Text maxFontSizeMultiplier={1.1} style={styles.moreText}>+{others}</Text>
+                </View>
+              ) : null}
+            </>
+          ) : <View style={styles.mark}><CourtTile size={34} unlocked /></View>}
         </View>
         <View style={styles.rowWords}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>You’re the {ordinal(have.total + 1)} player here</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{beatYou ? `${beatYou} got here first` : `${have.total} players got here first`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>{place}</Text>
+          {beatYou ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{beatYou} got here first</Text> : null}
         </View>
       </Pressable>
       <Pressable accessibilityRole="link" accessibilityLabel={`${TO_UNLOCK.length} more courts to unlock near you`} onPress={() => router.replace('/your-courts')} style={({ pressed }) => [styles.row, styles.rowLine, pressed && { opacity: PRESS_DIM }]}>
@@ -177,6 +196,8 @@ const styleDefinitions = StyleSheet.create({
   face: { borderRadius: 19, borderWidth: 2, borderColor: colors.bg },
   // Overlapping only by about the rim, so "SO" and "ML" are never cut by the face after.
   faceOver: { marginLeft: -6 },
+  // The court's own mark where no friend's face goes (left, where the faces start).
+  mark: { paddingLeft: 2 },
   more: { minWidth: 38, height: 38, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt },
   moreText: { ...font('700'), fontSize: 12, color: colors.text, fontVariant: ['tabular-nums'] },
   rowWords: { flex: 1, gap: 2 },

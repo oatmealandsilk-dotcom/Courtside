@@ -16,7 +16,9 @@ import { UnlockZoom } from '@/features/courtUnlocks/UnlockZoom';
  * pick from (COURT_UNLOCKED_OPTION; the demo's pictures pass ?v=A, B or C):
  * A Traced, B Card, C Your map. All three keep the full-screen court map,
  * who got here first, what is next near you, Share to story and See your
- * courts.
+ * courts. Round 4 (owner, Oct 28: "Just say number like x here."): who got
+ * here first is friends only, by face and name; with no friend, just "You're
+ * the 43rd player here" (the demo's pictures pass ?friends=none).
  */
 export default function CourtUnlocked() {
   const { v } = useLocalSearchParams<{ v?: string }>();

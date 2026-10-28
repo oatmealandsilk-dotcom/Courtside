@@ -11,7 +11,7 @@ import { Box, SectionHead } from '@/components/tennis/ProfileParts';
 import { Avatar, Screen } from '@/components/ui';
 import type { User } from '@/data/types';
 import { Bar, BadgeDisc, CardSwatch, CourtTile, WeekDots } from '@/features/courtUnlocks/DesignParts';
-import { BADGES, BADGE_EARNED, DESIGN_REGULARS, HAVE_IT, KING, MY_COURTS, NEXT_CARD, TO_UNLOCK, TO_UNLOCK_AT, WEEKS, WEEKS_IN_A_ROW, courtNumber, type DesignCourt } from '@/features/courtUnlocks/designDemo';
+import { BADGES, BADGE_EARNED, DESIGN_FRIENDS, HAVE_IT, KING, MY_COURTS, NEXT_CARD, TO_UNLOCK, TO_UNLOCK_AT, WEEKS, WEEKS_IN_A_ROW, courtNumber, designHereCount, type DesignCourt } from '@/features/courtUnlocks/designDemo';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -163,9 +163,9 @@ function CourtCard({ court, width }: { court: DesignCourt; width: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const n = courtNumber(court.name);
   const sub = [`${court.sessions} ${court.sessions === 1 ? 'session' : 'sessions'}`, court.since === 'Today' ? 'today' : `since ${court.since}`].join(' · ');
-  const now = DESIGN_REGULARS[court.name]?.hereNow ?? 0;
+  const now = court.town ? 0 : designHereCount(court.name);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${court.name}, court number ${n}. ${sub}`} onPress={() => {}} style={({ pressed }) => [styles.card, { width }, pressed && { opacity: PRESS_DIM }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${court.name}, court number ${n}. ${sub}${now ? `. ${now} here now` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.card, { width }, pressed && { opacity: PRESS_DIM }]}>
       <View style={[styles.cardMap, { width, height: MAP_H }]}>
         <CourtMapThumb lat={court.lat} lng={court.lng} width={width} height={MAP_H} zoom={14.6} />
         <View pointerEvents="none" style={styles.cardMarkWrap}>
@@ -190,13 +190,13 @@ function CourtCard({ court, width }: { court: DesignCourt; width: number }) {
   );
 }
 
-/** "● 3 here now" at a card's foot: how many are at the court now, a number only. */
+/** "● 3 here" at a card's foot: how many are at the court now, a number only, counted as the court's card counts them. */
 function LiveCount({ n }: { n: number }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.cardFoot}>
       <View style={styles.liveDot} />
-      <Text maxFontSizeMultiplier={1.1} style={[styles.cardFlagText, { color: colors.open }]}>{n} here now</Text>
+      <Text maxFontSizeMultiplier={1.1} style={[styles.cardFlagText, { color: colors.open }]}>{n} here</Text>
     </View>
   );
 }
@@ -211,13 +211,17 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
   const { users } = useApp();
   const at = TO_UNLOCK_AT[name];
   const have = HAVE_IT[name] ?? { friends: [], total: 0 };
-  const friends = have.friends.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
-  const others = Math.max(0, have.total - friends.length);
+  // Only a friend (you follow each other) by face and name; everyone else a number, and only from 2 up.
+  const friends = have.friends.filter((id) => DESIGN_FRIENDS.has(id)).map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
+  const rest = have.total - (friends.length ? 1 : 0);
   // The first friend by name, the rest a number: "Omar + 30 have it".
-  const who = friends.length ? `${friends[0].name.split(' ')[0]} + ${have.total - 1}` : `${have.total} players`;
-  const now = DESIGN_REGULARS[name]?.hereNow ?? 0;
+  const who = friends.length
+    ? (rest >= 2 ? `${friends[0].name.split(' ')[0]} + ${rest}` : friends[0].name.split(' ')[0])
+    : have.total >= 2 ? `${have.total} players` : null;
+  const verb = friends.length && rest < 2 ? 'has it' : 'have it';
+  const now = designHereCount(name);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${name}, not unlocked yet. ${miles}. ${who} have it`} onPress={() => {}} style={({ pressed }) => [styles.card, styles.cardLocked, { width }, pressed && { opacity: PRESS_DIM }]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${name}, not unlocked yet. ${miles}.${who ? ` ${who} ${verb}.` : ''}${now ? ` ${now} here now.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.card, styles.cardLocked, { width }, pressed && { opacity: PRESS_DIM }]}>
       <View style={[styles.cardMap, { width, height: MAP_H }]}>
         {at ? <CourtMapThumb lat={at.lat} lng={at.lng} width={width} height={MAP_H} zoom={14.6} /> : null}
         <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.bg, 0.55) }]} />
@@ -240,7 +244,7 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
               ))}
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSub} numberOfLines={1}><Text style={styles.haveStrong}>{who}</Text> have it</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSub} numberOfLines={1}>{who ? <><Text style={styles.haveStrong}>{who}</Text> {verb}</> : 'Be the first to unlock it'}</Text>
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cardSub, { marginTop: -2 }]} numberOfLines={1}>{courts} courts · public</Text>
       </View>

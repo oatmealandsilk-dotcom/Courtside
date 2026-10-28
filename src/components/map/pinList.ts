@@ -7,7 +7,7 @@ import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/
 import { isOpenToHit } from '@/features/players/openToHit';
 import { surfaceAdjective, surfaceKind } from '@/features/places/courtSurface';
 import { LESS_AI_COURTS } from '@/theme/look';
-import { DESIGN_UNLOCKS, LIT_COURT, isDesignUnlocked } from '@/features/courtUnlocks/designDemo';
+import { DESIGN_UNLOCKS, designHereCount, isDesignUnlocked } from '@/features/courtUnlocks/designDemo';
 
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
@@ -95,8 +95,9 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const hit = hitAt.get(c.id);
     // Your live session's court counts you: "You're playing", "You + 2 playing".
     const yours = playing?.courtId === c.id;
-    // DESIGN BRANCH (court unlocks): only people there now light a court ("Lit up · 3"); a hit coming up is a dot.
-    const designLit = DESIGN_UNLOCKS && c.name === LIT_COURT ? Math.max(n, 3) : 0;
+    // DESIGN BRANCH (court unlocks): only people there now light a court ("5 here"), counted as its card counts them
+    // (friends, and everyone else only from 2 up); a hit coming up is a dot.
+    const designLit = DESIGN_UNLOCKS ? designHereCount(c.name) : 0;
     const tag = DESIGN_UNLOCKS ? (designLit ? `${designLit} here` : undefined)
       : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
     const soonHit = DESIGN_UNLOCKS && !designLit && !!hit;

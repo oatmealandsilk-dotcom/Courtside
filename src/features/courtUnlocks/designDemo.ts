@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
 
+import { userById } from '@/data/mock/users';
+import type { User } from '@/data/types';
+import { notKnownAdult } from '@/features/players/age';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 /*
@@ -18,9 +21,6 @@ export const DESIGN_UNLOCKS = !isSupabaseConfigured;
 /** The demo courts Alex has unlocked (by name: the map folds a park's courts into one pin). */
 const UNLOCKED_NAMES = new Set(['Alder Park', 'Cypress Hollow Park', 'Juniper Community Park', 'Marigold Park']);
 export const isDesignUnlocked = (name?: string | null) => DESIGN_UNLOCKS && !!name && UNLOCKED_NAMES.has(name);
-
-/** The court that lights up: people have tapped Light up there (shown to strangers as a number only). */
-export const LIT_COURT = 'Alder Park';
 
 export interface DesignCourt {
   name: string;
@@ -76,19 +76,54 @@ export const NEXT_CARD = { name: 'Full colour', have: 5, need: 8 };
 export const DESIGN_FRIENDS = new Set(['u-sam', 'u-marcus', 'u-omar']);
 
 /**
- * "Regulars here": people who chose to mark a court as one of theirs,
- * friends first. Ella is a teen and not a friend, so she is counted but
- * never shown. `hereNow` is a number only; a friend here now is named
- * (`friendsHere`), a stranger never is.
+ * "Regulars here": people who chose to mark a court as one of theirs
+ * (`ids`), and which of them are at the court right now (`here`). Ella is
+ * a teen and not a friend: never counted, never shown. The demo knows
+ * everyone here by name; the real server sends only friends by name and
+ * everyone else as one number (court_right_now, migration 189).
  */
-export const DESIGN_REGULARS: Record<string, { ids: string[]; hereNow: number; friendsHere: string[] }> = {
-  'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], hereNow: 3, friendsHere: ['u-sam'] },
-  'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], hereNow: 2, friendsHere: [] },
-  'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], hereNow: 0, friendsHere: [] },
-  'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], hereNow: 0, friendsHere: [] },
-  'Bellwood Recreation Center': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-theo', 'u-ivy'], hereNow: 2, friendsHere: ['u-marcus'] },
-  'Larkspur Recreation Center': { ids: ['u-omar', 'u-bea', 'u-jonah'], hereNow: 0, friendsHere: [] },
+export const DESIGN_REGULARS: Record<string, { ids: string[]; here: string[] }> = {
+  // Two friends and three others here (Ella, a teen, is there too and never counted): "Sam, Marcus, +3 here".
+  'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], here: ['u-sam', 'u-marcus', 'u-priya', 'u-theo', 'u-bea', 'u-ella'] },
+  // Only people you don't know: "4 here".
+  'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], here: ['u-rosa', 'u-kai', 'u-noor', 'u-ivy'] },
+  // One stranger alone: never counted, so it reads as nobody here.
+  'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], here: ['u-diego'] },
+  'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], here: [] },
+  'Bellwood Recreation Center': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-theo', 'u-ivy'], here: [] },
+  'Larkspur Recreation Center': { ids: ['u-omar', 'u-bea', 'u-jonah'], here: [] },
 };
+
+/**
+ * Who is at a court right now, as anything next to that court may say it
+ * (owner, Oct 28: "Just say number like x here."), the server's rule for
+ * court counts (migration 189): friends (people who follow each other with
+ * you) by face and first name; everyone else only as one number, and only
+ * when it is 2 or more, so a lone stranger is never counted; a teen is
+ * never counted for, or shown to, anyone but their friends. Only regulars
+ * of the court.
+ */
+export function designHere(court: string): { friends: User[]; others: number } {
+  const data = DESIGN_REGULARS[court];
+  if (!data) return { friends: [], others: 0 };
+  const there = data.here
+    .filter((id) => data.ids.includes(id))
+    .map((id) => userById(id))
+    // A teen only for their friends (the server's rule): never counted for, or shown to, anyone else.
+    .filter((u): u is User => !!u && (DESIGN_FRIENDS.has(u.id) || !notKnownAdult(u)));
+  const friends = there.filter((u) => DESIGN_FRIENDS.has(u.id));
+  const rest = there.length - friends.length;
+  return { friends, others: rest >= 2 ? rest : 0 };
+}
+
+/** How many are at a court now, as the map and Your courts say it: the friends there and the others' number. */
+export const designHereCount = (court: string) => {
+  const { friends, others } = designHere(court);
+  return friends.length + others;
+};
+
+/** "Sam", "Sam and Marcus", "Sam, Marcus and Omar". */
+export const andList = (names: string[]) => (names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0] ?? '');
 
 /** Courts you marked as one of yours in this visit (Add yourself). */
 const regularAt = new Set<string>();
