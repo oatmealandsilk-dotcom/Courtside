@@ -9,7 +9,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows' | 'up-to-hit';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows' | 'up-to-hit' | 'no-one-reask';
 
 export const TIP_WORDS: Record<TipKey, string> = {
   'map-who-sees': 'Tap Up to hit to show friends where you are, till 10pm.',
@@ -42,6 +42,9 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // The Up to hit pill on the Find Players card, once, for someone who has never tapped it (upToHitTip; Oct 28, owner:
   // "give them a tip at some point to click the button"). The card says how long ("till 10pm", late on "for 2 hours").
   'up-to-hit': 'Tap Up to hit · friends see you on the map till 10pm.',
+  // For someone on No one (or who tapped Not now), later, with Turn on and Not now (noOneReask; Oct 28, owner:
+  // "as I use it more and trust it I will want to share if prompted"). It may come again, so it is never "done".
+  'no-one-reask': 'Friends can see you when you tap Up to hit · only people you both follow, till 10pm.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -128,10 +131,22 @@ const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
  * who has learned every other tip has found the pill too, and Settings → Tips should not turn On for it.
  */
 const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['up-to-hit']);
-const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k));
+/**
+ * Tips that may come again (the No one re-ask, noOneReask, keeps its own count of when): never "done" by being
+ * shown or closed (releaseTip lets go of them), never counted for Settings → Tips, and quiet only when Tips are off.
+ */
+const REPEAT_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['no-one-reask']);
+const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k) && !REPEAT_TIPS.has(k));
 const baseAllDone = () => BASE_TIPS.every((k) => done.has(k));
 /** This tip will not show: Tips are off, it is done, or it came later than everything they had learned. */
 const quiet = (key: TipKey) => off || done.has(key) || (LATE_TIPS.has(key) && baseAllDone());
+
+/** A tip that may come again has gone (answered, or out of view): another may have the screen, it is not done. */
+export function releaseTip(key: TipKey) {
+  if (showing !== key) return;
+  showing = null;
+  emit();
+}
 
 /** Settings → Tips, when they are on: every tip counts as known, so none shows (Oct 5, owner). */
 export function turnOffTips() {

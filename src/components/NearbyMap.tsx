@@ -29,6 +29,7 @@ import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/upToHitTip';
+import { useNoOneReaskDue } from '@/features/players/noOneReask';
 import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
@@ -301,6 +302,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const uthVisit = useFindPlayersVisit(growsHere && onScreen && props.visible !== false && !tourOpen);
   const uthTip = growsHere && upToHitTipOn(me) && tipVisit(uthVisit) && onScreen && props.visible !== false && !tourOpen
     && mapVisibility !== 'none' && !settingsUnknown && !lastSeen[me.id] && tipWaiting('up-to-hit');
+  // The No one re-ask (noOneReask): for someone on No one (or who said Not now), later, as trust builds; same card, same rules.
+  const reaskDue = useNoOneReaskDue(me, settingsUnknown || !canChooseVisibility(mapLive, me, teenMap) ? undefined : mapVisibility);
+  const reask = growsHere && reaskDue && onScreen && props.visible !== false && !tourOpen && tipWaiting('no-one-reask');
   // Where the card is centred stays put while it is seen (cardHold): a fix landing then waits until it is out of view.
   const place = useHeldCardPlace(expanded, at, !!locationOn, locating, () => (cardUp || photoIn) && inViewNow());
   // The town the card showed last time, with Location on and no fix yet (mapModel): read until it has shown something.
@@ -755,7 +759,7 @@ export function NearbyMap(props: NearbyMapProps) {
             </Reanimated.View>
           ) : null}
           <GrowAwayContext.Provider value={growsHere}>
-            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} chip={fullCard} />
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} reask={reask} chip={fullCard} />
             <CardCredit />
           </GrowAwayContext.Provider>
         </View>

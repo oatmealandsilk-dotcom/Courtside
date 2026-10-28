@@ -4,6 +4,7 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
 import { confirm } from '@/lib/confirm';
+import { noteDeclined } from '@/features/players/noOneReask';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
@@ -132,7 +133,8 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     if (!saidYes(mapVisibility)) {
       // Not now, or closed: nothing is shared, and it asks again next time.
       const chose = await askWhoSeesYou('first');
-      if (!saidYes(chose)) return;
+      // Said no for now: the re-ask (noOneReask) may come back to it, much later.
+      if (!saidYes(chose)) { if (chose !== 'none') noteDeclined(currentUserId); return; }
       first = true;
     } else if (where === 'map') {
       // The round arrow: "Up to hit?" first, every time (the first time, the question above was it).
