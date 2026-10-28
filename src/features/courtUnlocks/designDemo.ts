@@ -87,10 +87,12 @@ export const DESIGN_REGULARS: Record<string, { ids: string[]; here: string[] }> 
   'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], here: ['u-sam', 'u-marcus', 'u-priya', 'u-theo', 'u-bea', 'u-ella'] },
   // Only people you don't know: "4 playing now".
   'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], here: ['u-rosa', 'u-kai', 'u-noor', 'u-ivy'] },
-  // One stranger alone: never counted, so it reads as nobody here.
+  // One stranger alone: never counted, so it reads as nobody here; Sam calls it home.
   'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], here: ['u-diego'] },
+  // Nobody there and no friend calls it home: "3 players call this home".
   'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], here: [] },
-  'Bellwood Recreation Center': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-theo', 'u-ivy'], here: [] },
+  // Only people you don't know, and no friend calls it home: "2 playing now", "4 players call this home".
+  'Bellwood Recreation Center': { ids: ['u-rosa', 'u-kai', 'u-theo', 'u-ivy'], here: ['u-rosa', 'u-kai'] },
   'Larkspur Recreation Center': { ids: ['u-omar', 'u-bea', 'u-jonah'], here: [] },
 };
 
@@ -142,37 +144,28 @@ export function hereWords(friends: User[], others: number) {
 }
 
 /*
- * Round 5 (owner, Oct 28, on the round 4 board: "I don't like the regulars
- * here and it says +4"): three calmer ways for a court's card to say who is
- * there now. No "Regulars" heading, no plus, no pill of a number:
- *   a  One line: under the name, "Sam, Marcus and 3 others playing now",
- *      friends' small faces before it; "4 playing now"; "No one playing
- *      right now". Add yourself is the heart by Send and Close (it already
- *      keeps the court in Your courts, so the two were one job).
- *   b  Here now: a small row, friends' faces with their names, then "and 3
- *      others" in words; "Here now · 4 players"; "No one here right now".
- *      Add yourself is the heart, as in a.
- *   c  Two chips under the name: "5 playing now" (friends' tiny faces in it,
- *      their names on a tap) and "My court" (the heart, with a word).
- * The demo build on the web picks one with localStorage 'courtside-courtcard'
- * = a, b or c; otherwise COURT_CARD_OPTION.
+ * The court card (owner, Oct 28: "Yes for court card"): one quiet line for
+ * who is playing now, then who calls the court home: friends by name, and
+ * everyone as one number ("12 players call this home").
  */
-export type CourtCardOption = 'a' | 'b' | 'c';
-export const COURT_CARD_OPTION: CourtCardOption = 'a';
-export function courtCardOption(): CourtCardOption {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    try {
-      const v = window.localStorage.getItem('courtside-courtcard');
-      if (v === 'a' || v === 'b' || v === 'c') return v;
-    } catch {
-      // Storage blocked: the default.
-    }
-  }
-  return COURT_CARD_OPTION;
-}
 
-/** The note beside a lit court on the map and at the foot of Your courts' cards, in the card's own words: "5 playing" (a, c) or "5 here" (b). */
-export const hereTag = (n: number) => `${n} ${courtCardOption() === 'b' ? 'here' : 'playing'}`;
+/** The note beside a lit court on the map and at the foot of Your courts' cards, in the card's own words: "5 playing". */
+export const hereTag = (n: number) => `${n} playing`;
+
+/**
+ * Who calls a court home (its regulars), as the card says it: friends'
+ * first names in a line ("Sam and Marcus"), and how many players in all,
+ * friends included, only from 2 up (0 when fewer). A teen is never counted
+ * but by their friends; a stranger is never named.
+ */
+export function designHome(court: string): { friendNames: string; friends: number; players: number } {
+  const data = DESIGN_REGULARS[court];
+  if (!data) return { friendNames: '', friends: 0, players: 0 };
+  const people = data.ids.map((id) => userById(id)).filter((u): u is User => !!u && (DESIGN_FRIENDS.has(u.id) || !notKnownAdult(u)));
+  const firsts = people.filter((u) => DESIGN_FRIENDS.has(u.id)).map((u) => u.name.split(' ')[0]);
+  const named = firsts.length > 3 ? [...firsts.slice(0, 2), `${firsts.length - 2} more friends`] : firsts;
+  return { friendNames: andList(named), friends: firsts.length, players: people.length >= 2 ? people.length : 0 };
+}
 
 /**
  * How many players have each court unlocked, and the friends among them
