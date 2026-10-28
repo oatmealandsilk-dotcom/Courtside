@@ -1,13 +1,15 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { Button, Screen } from '@/components/ui';
-import { Count, Medal, Movement, SESSION_ICON, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
-import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, UNIT_LOOK, cityById, isHot, nextTarget, ordinal, rankCities, sessionsWords, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
+import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
+import { Wash } from '@/components/Wash';
+import { BoardHead, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, cityById, isHot, nextTarget, ordinal, rankCities, sessionsWords, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
 import { goBack } from '@/lib/goBack';
@@ -28,6 +30,18 @@ const DOCK_PAD = 4;
 /** Where row i starts in the list (fixed heights, so the bar and the opening scroll know without measuring). */
 const rowTop = (i: number) => (i < 3 ? i * PODIUM_H : 3 * PODIUM_H + CUT_H + (i - 3) * ROW_H);
 const rowHeight = (i: number) => (i < 3 ? PODIUM_H : ROW_H);
+/** The place column: a podium coin's width, giving back 2 points after it (the head's "Rank" is centred over it). */
+const RANK_W = 40;
+const RANK_SHIFT = -2;
+
+/** In a browser the page's own sticky positioning pins the table's head, exactly in step with the scroll (as the Tennis profile's tabs). */
+const WEB = Platform.OS === 'web';
+const webSticky = WEB ? ({ position: 'sticky', top: 0 } as unknown as ViewStyle) : null;
+/** A browser element's place on the screen (React Native for Web's views are the page's own elements). */
+const rect = (node: unknown): DOMRect | null => {
+  const el = node as { getBoundingClientRect?: () => DOMRect } | null;
+  return el && typeof el.getBoundingClientRect === 'function' ? el.getBoundingClientRect() : null;
+};
 
 /**
  * DESIGN MOCK (design/city-board), round 2. The whole board as a standings
@@ -44,9 +58,11 @@ const rowHeight = (i: number) => (i < 3 ? PODIUM_H : ROW_H);
  *   - Sessions / Per player as the value column's own heading, the way a
  *     stats table is sorted, not a segmented switch (round 4: "Sessions",
  *     the app's own word for a logged one, where it said "Hits");
- *   - what the number counts, by UNIT_LOOK (round 4, owner: "make sit more
- *     obvious the numbers on the right is sessions"): the ball by each
- *     number, "sessions" under it, or the ball on the Sessions heading;
+ *   - a head row under them, Rank · City · Sessions ("Per player" on that
+ *     tab), the rows' numbers bare (round 5, owner, Oct 28: "something on
+ *     the top that says like position or rank or whatever and then city, and
+ *     then sessions. Like a header"); scrolled down the long list, the tabs
+ *     and the head row stay pinned at the top, so the columns stay named;
  *   - the week's moments on top ("Raleigh passed Atlanta · today").
  * Starts again on the 1st.
  */
@@ -87,6 +103,10 @@ export default function CityBoard() {
   // The part of the page you can see, below the title and above the bar and the "you" bar.
   const seeH = useSharedValue(windowH);
   useEffect(() => { seeH.value = windowH - viewTop.value - barInset; }, [windowH, barInset, seeH, viewTop, placed]);
+  // The table's head (the tabs and the Rank · City · Sessions row): where it sits in the page, and its height.
+  // Scrolled past, it is pinned over the top of what you can see, and covers that much of it.
+  const headTop = useSharedValue(1e9);
+  const headH = useSharedValue(0);
 
   const showYou = useSharedValue(0);
   useAnimatedReaction(
@@ -94,14 +114,16 @@ export default function CityBoard() {
       if (myTop < 0 || listY.value <= 0) return false;
       const top = listY.value + myTop - offsetY.value;
       const bottom = top + myH;
-      // Gone off the top, or still below the dock's own row: the dock stands in for it until the
-      // real row scrolls up into the very spot the dock's row is drawn in, then hands over.
-      return bottom < 4 || top > seeH.value - DOCK_ROW_TOP + DOCK_PAD + 1;
+      // Gone up under the pinned head (or off the top), or still below the dock's own row: the dock stands in for
+      // it until the real row scrolls up into the very spot the dock's row is drawn in, then hands over.
+      const cover = offsetY.value > headTop.value ? headH.value : 0;
+      return bottom < cover + 4 || top > seeH.value - DOCK_ROW_TOP + DOCK_PAD + 1;
     },
     (off, was) => {
       if (off === was) return;
       // Handing over in place is instant (the two rows are the same, in the same spot); coming back from off the top slides up.
-      const fromTop = off && listY.value + myTop + myH - offsetY.value < 4;
+      const cover = offsetY.value > headTop.value ? headH.value : 0;
+      const fromTop = off && listY.value + myTop + myH - offsetY.value < cover + 4;
       showYou.value = fromTop && !reduced ? withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }) : (off ? 1 : 0);
     },
     [myTop, myH, reduced],
@@ -110,10 +132,12 @@ export default function CityBoard() {
 
   const scrollToMine = useCallback((animated: boolean) => {
     if (myTop < 0) return;
-    // Your row a little above the middle of what you can see.
-    const y = Math.max(0, listY.value + myTop + myH / 2 - seeH.value * 0.45);
+    // Your row a little above the middle of what you can see, under the head that will be pinned by then.
+    const mid = listY.value + myTop + myH / 2;
+    const free = mid - seeH.value * 0.45;
+    const y = Math.max(0, free > headTop.value ? mid - headH.value - (seeH.value - headH.value) * 0.45 : free);
     scrollRef.current?.scrollTo({ y, animated });
-  }, [myTop, listY, seeH]);
+  }, [myTop, myH, listY, seeH, headTop, headH]);
 
   // Opening the board takes you to your city, once the page has slid in, if it is not already in view.
   const opened = useRef(false);
@@ -163,7 +187,9 @@ export default function CityBoard() {
           </View>
         ) : null}
 
-        {/* The table's head: how many, and what it is ranked by (tap the other to re-rank). */}
+        {/* The table's head: how many, and what it is ranked by (tap the other to re-rank); under it, what each
+            column is. Pinned at the top while the long list scrolls under it. */}
+        <PinnedHead offsetY={offsetY} viewTop={viewTop} headTop={headTop} headH={headH}>
         <View style={styles.tableHead}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headCount}>{board.length} cities</Text>
           <View style={styles.sorts} accessibilityRole="tablist" accessibilityLabel="Rank cities by">
@@ -171,24 +197,23 @@ export default function CityBoard() {
               const on = mode === value;
               return (
                 <Pressable key={value} accessibilityRole="tab" accessibilityLabel={value === 'per' ? 'Sessions per player' : 'Sessions'} accessibilityState={{ selected: on }} hitSlop={8} onPress={() => setMode(value)} style={styles.sort}>
-                  {/* Look 'c' (round 4): the Sessions heading wears the ball, once, over the numbers. */}
-                  <View style={styles.sortLabel}>
-                    {UNIT_LOOK === 'c' && value === 'total' ? <Ionicons name={SESSION_ICON} size={13} color={on ? colors.text : colors.textFaint} style={styles.sortIcon} /> : null}
-                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sortText, on && styles.sortOn]}>{label}</Text>
-                  </View>
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sortText, on && styles.sortOn]}>{label}</Text>
                   <View style={[styles.sortBar, on && styles.sortBarOn]} />
                 </Pressable>
               );
             })}
           </View>
         </View>
+        {/* Round 5: what each column is, in the rows' own columns; the right one follows the tab. */}
+        <BoardHead name="City" value={per ? 'Per player' : 'Sessions'} valueSpoken={per ? 'Sessions per player' : 'Sessions'} rankWidth={RANK_W} rankShift={RANK_SHIFT} style={styles.boardHead} />
+        </PinnedHead>
 
         <View style={styles.list} onLayout={(e) => { listY.value = e.nativeEvent.layout.y; }}>
           {board.map((c, i) => (
             <React.Fragment key={c.id}>
               {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
               <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.hits)}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-                <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} per={per} />
+                <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} />
               </Pressable>
             </React.Fragment>
           ))}
@@ -217,7 +242,7 @@ export default function CityBoard() {
       {mine ? (
         <Animated.View pointerEvents="box-none" style={[styles.dock, { height: barInset + DOCK_ROW_TOP }, youStyle]}>
           <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.hits)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-            <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} per={per} />
+            <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} />
           </Pressable>
         </Animated.View>
       ) : null}
@@ -225,7 +250,76 @@ export default function CityBoard() {
   );
 }
 
-function TableRow({ city, mine, podium, line, value, sub, showMove, per }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean; per: boolean }) {
+/**
+ * DESIGN MOCK, round 5. The table's head (the tabs and the Rank · City ·
+ * Sessions row), pinned over the top of the page once the list scrolls up
+ * under it, so the columns stay named all the way down the board. Pinned the
+ * way the Tennis profile's tabs are: on a phone it is carried down by the
+ * page's own scroll on the animation thread (`offsetY`, from Screen), frame
+ * for frame with the finger; in a browser by the page's sticky positioning.
+ * While pinned it stands on a band of the page's colour that hides the rows
+ * passing under it, with a hairline along its foot, and the page's faint wash
+ * carried on behind it where the wash still reaches (on a phone the wash
+ * scrolls up with the page; in a browser it stays put).
+ */
+function PinnedHead({ offsetY, viewTop, headTop, headH, children }: {
+  offsetY: SharedValue<number>;
+  /** Where the scrolling part starts on screen (the wash is drawn from the screen's top). */
+  viewTop: SharedValue<number>;
+  /** Set here: where the head sits in the page, and its height. */
+  headTop: SharedValue<number>;
+  headH: SharedValue<number>;
+  children: React.ReactNode;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  // Phone: pinned once the page has scrolled it to the top, and from then on moved down exactly as far as the page moves up.
+  const pin = useAnimatedStyle(() => (WEB ? {} : { transform: [{ translateY: Math.max(0, offsetY.value - headTop.value) }] }));
+  const bandShown = useAnimatedStyle(() => (WEB ? {} : { opacity: offsetY.value > headTop.value ? 1 : 0 }));
+  // Phone: the band's copy of the wash sits where the page's own is, which scrolls up with the page.
+  const washAt = useAnimatedStyle(() => (WEB ? {} : { transform: [{ translateY: -viewTop.value - Math.max(0, offsetY.value) }] }));
+
+  // Browser: whether the head is pinned, and where the page's wash falls behind its band then.
+  const frame = useContext(PageWashContext);
+  const spot = useRef<View>(null);
+  const [webPinned, setWebPinned] = useState<{ top: number; left: number; width: number } | null | false>(false);
+  const onWebPin = useCallback((on: boolean) => {
+    if (!on) { setWebPinned(false); return; }
+    // Pinned, the band's top is the top of the scrolling part, which sits `y` below the wash's top;
+    // across, the wash spans the scrolling part from its left edge, and the band starts a gutter left of the head.
+    const f = frame?.current;
+    const box = f ? rect(f.node) : null;
+    const head = rect(spot.current);
+    setWebPinned(f && box && head ? { top: -f.y, left: box.left - (head.left - spacing.lg), width: box.width } : null);
+  }, [frame]);
+  useAnimatedReaction(
+    () => WEB && offsetY.value > headTop.value,
+    (on, was) => { if (WEB && on !== was && (on || was !== null)) runOnJS(onWebPin)(on); },
+  );
+
+  return (
+    <Animated.View
+      onLayout={(e) => { const { y, height } = e.nativeEvent.layout; headTop.value = y; headH.value = height; }}
+      style={[styles.pinSpot, webSticky, pin]}
+    >
+      {WEB ? (
+        webPinned !== false ? (
+          <View pointerEvents="none" style={styles.pinBand}>
+            {webPinned ? <Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} style={{ top: webPinned.top, left: webPinned.left, width: webPinned.width, right: undefined }} /> : null}
+            <View style={styles.pinLine} />
+          </View>
+        ) : null
+      ) : (
+        <Animated.View pointerEvents="none" style={[styles.pinBand, bandShown]}>
+          <Animated.View style={[StyleSheet.absoluteFill, washAt]}><Wash height={PAGE_WASH.height} strength={PAGE_WASH.strength} /></Animated.View>
+          <View style={styles.pinLine} />
+        </Animated.View>
+      )}
+      <View ref={spot}>{children}</View>
+    </Animated.View>
+  );
+}
+
+function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={[styles.row, { height: podium ? PODIUM_H : ROW_H }, mine ? styles.rowMine : line && styles.rowLine]}>
@@ -233,7 +327,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove, per }: { cit
           By place, not by row: two cities level on 2nd both wear silver. Yours keeps its metal; its name says it is yours. */}
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
-          ? <Medal rank={city.rank} size={40} fontSize={21} />
+          ? <Medal rank={city.rank} size={RANK_W} fontSize={21} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
@@ -243,7 +337,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove, per }: { cit
         </View>
         <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.sub, mine && styles.subMine]}>{sub}</Text>
       </View>
-      <Count value={value} size={podium ? 19 : 17} mine={mine} per={per} style={[styles.value, podium && styles.valuePodium, mine && styles.valueMine]} />
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, podium && styles.valuePodium, mine && styles.valueMine]}>{value}</Text>
     </View>
   );
 }
@@ -258,20 +352,25 @@ const styleDefinitions = StyleSheet.create({
   headCount: { ...typography.small, color: colors.textFaint, paddingBottom: 10 },
   sorts: { flexDirection: 'row', gap: spacing.lg },
   sort: { alignItems: 'center', paddingTop: 8, minHeight: 40, justifyContent: 'flex-end' },
-  sortLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  sortIcon: { marginBottom: 6 },
   sortText: { ...typography.small, ...font('500'), color: colors.textFaint, paddingBottom: 7 },
   sortOn: { ...font('700'), color: colors.text },
   sortBar: { height: 2.5, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent', marginBottom: -1.5 },
   sortBarOn: { backgroundColor: colors.brand },
-  list: { paddingTop: spacing.xs },
+  // The head row: under the tabs' line, close over the first row (whose coin has room of its own above it).
+  boardHead: { paddingTop: 10, paddingBottom: 7 },
+  list: {},
+  // Behind the pinned head only: the page's colour, out over the 16-point gutters, so nothing passing under shows;
+  // a hairline along its foot as wide as the rows' (the tabs' line above is the same width), where the list goes under.
+  pinBand: { position: 'absolute', top: 0, bottom: 0, left: -spacing.lg, right: -spacing.lg, overflow: 'hidden', backgroundColor: colors.bg },
+  pinLine: { position: 'absolute', bottom: 0, left: spacing.lg, right: spacing.lg, height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  pinSpot: { zIndex: 2 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
   // The place: big, heavy and tabular, a standings table's first column.
   // The place's column: a podium coin's width, every numeral centred under the coins; it gives back the
   // two points it grew by (from 38), so the names start where they did and their lines still fit.
-  rankCol: { width: 40, marginRight: -2, alignItems: 'center' },
+  rankCol: { width: RANK_W, marginRight: RANK_SHIFT, alignItems: 'center' },
   rank: { ...font('700'), fontSize: 26, letterSpacing: -1, textAlign: 'center', fontVariant: ['tabular-nums'], color: colors.text },
   rankPodium: { fontSize: 34, letterSpacing: -1.4, color: colors.text },
   rankLow: { color: colors.textFaint },

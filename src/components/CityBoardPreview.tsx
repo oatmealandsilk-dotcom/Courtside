@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, ordinal, rankCities, sessionsWords, type RankedCity } from '@/features/cityBoard/mock';
-import { ColumnHead, Count, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { BoardHead, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -14,6 +14,8 @@ import { corner } from '@/theme/look';
 
 /** One row's height: the fade is measured in rows. */
 export const ROW_H = 48;
+/** The place column: a coin's width (the head's "Rank" is centred over it). */
+const RANK_W = 32;
 /** Your city sits in the run of the top rows while it is this high; below it, it gets its own row under the top 3. */
 const IN_RUN = 5;
 
@@ -84,8 +86,8 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
         </Pressable>
       ) : null}
-      {/* Look 'c' (round 4): what the numbers count, once, over them. */}
-      <ColumnHead label="Sessions" inset={spacing.md} style={styles.colHead} />
+      {/* Round 5 (owner, Oct 28: "something on the top that says like position or rank ... and then city, and then sessions"). */}
+      <BoardHead name="City" value="Sessions" rankWidth={RANK_W} style={styles.boardHead} />
       <View style={styles.rows}>
         {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} />)}
         {apart && mine ? (
@@ -113,7 +115,7 @@ function PreviewRow({ city, mine, line = false, target = null }: { city: RankedC
       {/* 1st to 3rd on a coin of their metal (round 3); yours keeps its metal, its name says it is yours. */}
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
-          ? <Medal rank={city.rank} size={32} fontSize={16} />
+          ? <Medal rank={city.rank} size={RANK_W} fontSize={16} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
@@ -123,7 +125,7 @@ function PreviewRow({ city, mine, line = false, target = null }: { city: RankedC
         </View>
         {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{target.gap} to pass {target.city.name}</Text> : null}
       </View>
-      <Count value={String(city.hits)} size={16} mine={mine} hang={!(mine && target)} style={[styles.value, mine && styles.inkMine]} />
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.hits}</Text>
     </View>
   );
 }
@@ -154,8 +156,8 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   left: { ...typography.small, ...font('600'), color: colors.text },
   newsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm, minHeight: 20 },
-  // Look 'c': the column's head tucks under the news line, just over the first row.
-  colHead: { marginTop: -spacing.xs, marginBottom: 2 },
+  // The head row: tucked under the news line, a little room before the first row (and off your tinted one).
+  boardHead: { marginTop: -2, paddingBottom: 6 },
   news: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   when: { color: colors.textFaint },
   rows: {},
@@ -164,7 +166,7 @@ const styleDefinitions = StyleSheet.create({
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12), minHeight: 58 },
   // Big, heavy, tabular: the place is the first thing read, as on a standings table.
   // The place's column: a coin's width, the numerals below 3rd centred under the coins.
-  rankCol: { width: 32, alignItems: 'center' },
+  rankCol: { width: RANK_W, alignItems: 'center' },
   rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankLow: { color: colors.textFaint },
   inkMine: { color: colors.brand },

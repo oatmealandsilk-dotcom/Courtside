@@ -1,15 +1,15 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useId } from 'react';
-import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { Avatar } from '@/components/ui';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, typography, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import type { FillFace } from './fill';
-import { MEDAL_LOOK, UNIT_LOOK, isHot } from './mock';
+import { MEDAL_LOOK, isHot } from './mock';
 
 /** 1st, 2nd and 3rd: each one's metal, as [ink, coin], read from the live theme as it draws. */
 const metalOf = (rank: number): [string, string] | null =>
@@ -85,75 +85,55 @@ export function FilledFace({ face, size, width, top = 2, onPress }: { face: Fill
   );
 }
 
-/**
- * The app's own ball for a logged tennis session (Ionicons' tennisball, as on
- * the session chooser and "Log your first session"), in its filled form: at
- * a number's size the outline one reads as a "no entry" sign.
- */
-export const SESSION_ICON = 'tennisball' as const;
-
-/** The unit's line under a number in look 'b': its height, so a one-line row can let it hang below. */
-const UNIT_LINE = 13;
-const UNIT_RISE = 1;
-/** How far a hanging unit lifts the number from the name's line, so the word clears the row's edge. */
-const HANG_LIFT = 2;
+/** The head row's small capitals: how far apart their letters sit (the app's section labels: 0.3 to 0.66). */
+const HEAD_TRACK = 0.6;
 
 /**
- * DESIGN MOCK, round 4. The number on the right of a board row, and what it
- * counts (owner, Oct 28: "make sit more obvious the numbers on the right is
- * sessions"). By UNIT_LOOK:
- *   'a'  the session ball just after the number, about its digits' height:
- *        after, so every ball ends on the same line down the list (before
- *        a number, they stepped in and out with its width: "512", "96");
- *   'b'  "sessions" (or "per player") in small type under the number;
- *   'c'  the number alone: the column's head says it once (ColumnHead).
- * The number keeps its own style (`style`) and stays where round 3 had it:
- *   - in 'b', a row of one line (`hang`) lets the word hang under the number,
- *     which stays level with the name; a row of two lines centres the pair,
- *     the number level with the name, the word with the line under it;
- *   - the ball and the word take their room from the gap before the number
- *     (6 and 4 points), so a long line beside it ("47 players · climbing 2
- *     weeks running") is not cut where round 3 showed it whole.
- * `size` is the number's font size. Never grows with the phone's Text Size (a
- * count, TextScale.CHROME), so the names keep their room. The row around it
- * carries what VoiceOver hears ("512 sessions"); this only draws.
+ * DESIGN MOCK, round 5. Owner, Oct 28, after round 4's three looks: "I don't
+ * like the emojis or how it says sessions after each or whatever under every
+ * row. We should make something on the top that says like position or rank
+ * or whatever and then city, and then sessions. Like a header".
+ *
+ * One quiet head row over a board's list, laid out in the rows' own columns,
+ * so each word sits over what it names and the rows keep bare numbers:
+ *   - "Rank" centred over the place column (the coins, and the numerals
+ *     under them), as wide as the rows' (`rankWidth`, and `rankShift` where a
+ *     row gives some of it back); left out for a list with no places (null);
+ *   - `name` ("City", "Player", "Court") starting where the names start
+ *     (`nameIndent`: what a row draws before its name, a face and its gap);
+ *   - `value` ("Sessions", "Per player") ending where the numbers end.
+ * The app's section-label look (Pick a court's "Nearby", a profile's
+ * eyebrows, the stats sheet's labels): small capitals, a little
+ * letter-spacing, the page's faint ink; no brand colour. It never grows with
+ * the phone's Text Size (TextScale.CHROME, as the places and numbers under
+ * it): its columns are the rows' fixed ones, so a bigger name never moves a
+ * word off its column. VoiceOver hears it as a heading ("Rank, City,
+ * Sessions"); each row still says its own unit ("512 sessions").
  */
-export function Count({ value, size, style, mine = false, per = false, hang = false }: { value: string; size: number; style: StyleProp<TextStyle>; mine?: boolean; per?: boolean; hang?: boolean }) {
+export function BoardHead({ name, value, valueSpoken = value, rankWidth = 32, rankShift = 0, nameIndent = 0, style }: {
+  name: string;
+  value: string;
+  /** What VoiceOver hears for `value`, where the word alone says less ("Per player": "Sessions per player"). */
+  valueSpoken?: string;
+  /** The place column's width; null for a list without places. */
+  rankWidth?: number | null;
+  /** A row's margin after its place column (the full board gives back 2 points). */
+  rankShift?: number;
+  nameIndent?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
   const styles = useThemedStyles(styleDefinitions);
-  if (UNIT_LOOK === 'a') {
-    // The column keeps the number's own minimum width; the ball sits against the number, not in a column of its own.
-    const minWidth = StyleSheet.flatten(style)?.minWidth;
-    return (
-      <View style={[styles.countA, { minWidth }]}>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[style, styles.bare]}>{value}</Text>
-        <Ionicons name={SESSION_ICON} size={Math.round(size * 0.8)} color={mine ? colors.brand : colors.textMuted} style={{ marginTop: Math.round(size * 0.1) }} />
-      </View>
-    );
-  }
-  if (UNIT_LOOK === 'b') {
-    return (
-      <View style={[styles.countB, hang && { marginBottom: -(UNIT_LINE - UNIT_RISE) + HANG_LIFT * 2 }]}>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={style}>{value}</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.unit}>{per ? 'per player' : Number(value) === 1 ? 'session' : 'sessions'}</Text>
-      </View>
-    );
-  }
-  return <Text maxFontSizeMultiplier={TextScale.CHROME} style={style}>{value}</Text>;
-}
-
-/**
- * DESIGN MOCK, round 4, look 'c': the number column's head, once per list,
- * right over the numbers ("[ball] Sessions"). Null in the other looks.
- * `inset`: how far the numbers sit in from the list's edge, so the words end
- * where the numbers do.
- */
-export function ColumnHead({ label, inset, style }: { label: string; inset: number; style?: StyleProp<ViewStyle> }) {
-  const styles = useThemedStyles(styleDefinitions);
-  if (UNIT_LOOK !== 'c') return null;
   return (
-    <View style={[styles.colHead, { paddingRight: inset }, style]}>
-      <Ionicons name={SESSION_ICON} size={13} color={colors.textMuted} style={styles.colIcon} />
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.colText}>{label}</Text>
+    <View accessible accessibilityRole="header" accessibilityLabel={[rankWidth ? 'Rank' : null, name, valueSpoken].filter(Boolean).join(', ')} style={[styles.head, style]}>
+      {rankWidth ? (
+        <View style={[styles.headRank, { width: rankWidth, marginRight: rankShift }]}>
+          {/* Wider than its column and centred on it, so "Rank" sits on the coins' middle and is never cut (one
+              word, so it cannot wrap; no line limit, which in a browser would hold it to the column's width). */}
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.headText, styles.headRankText]}>Rank</Text>
+        </View>
+      ) : null}
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.headText, styles.headName, nameIndent ? { marginLeft: nameIndent } : null]}>{name}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.headText, styles.headValue]}>{value}</Text>
     </View>
   );
 }
@@ -205,14 +185,12 @@ const styleDefinitions = StyleSheet.create({
   fillName: { ...typography.smallStrong, color: colors.text, marginTop: 2 },
   fillLine: { ...typography.caption, ...font('500'), letterSpacing: 0, color: colors.textMuted, textAlign: 'center' },
   divider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, marginHorizontal: 6, alignSelf: 'flex-start' },
-  // Round 4: what the number counts.
-  countA: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginLeft: -6 },
-  bare: { minWidth: 0 },
-  countB: { alignItems: 'flex-end', marginLeft: -4 },
-  // The page's quiet ink on every row, your tinted one too: the brand on its own tint is under 4.5:1 for words this
-  // small on two courts (Melbourne 3.1:1, Paris 3.9:1); the quiet ink holds 5.4:1 or more on every court's tint.
-  unit: { ...typography.caption, ...font('500'), letterSpacing: 0.1, lineHeight: UNIT_LINE, marginTop: -UNIT_RISE, color: colors.textMuted },
-  colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
-  colIcon: { marginTop: 1 },
-  colText: { ...typography.small, ...font('500'), color: colors.textMuted },
+  // Round 5: the board's head row. The letters' spacing also follows the last one, so the right-hand word gives it
+  // back to end exactly where the numbers do, and the centred one is nudged by half of it.
+  head: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.md },
+  headText: { ...typography.caption, letterSpacing: HEAD_TRACK, textTransform: 'uppercase', color: colors.textFaint },
+  headRank: { alignItems: 'center' },
+  headRankText: { width: 64, textAlign: 'center', paddingLeft: HEAD_TRACK },
+  headName: { flex: 1, minWidth: 0 },
+  headValue: { textAlign: 'right', marginRight: -HEAD_TRACK },
 });

@@ -54,24 +54,6 @@ export const MOCK_UP_COUNT: number | null = (() => {
  */
 export const MEDAL_LOOK: 'coin' | 'ink' = read('courtside-cityboard-medal') === 'ink' ? 'ink' : 'coin';
 
-/**
- * Round 4 (Oct 28). Owner: "something on the leaderboard that make sit more
- * obvious the numbers on the right is sessions. Maybe an icon or smth". How
- * the number on the right of every board row (Find Players, the full board,
- * a city's Top players and Busiest courts) says what it counts:
- *
- *   'a'  the app's session ball (Ionicons tennisball) right after each number
- *   'b'  the word under each number: "512" over "sessions" (the default)
- *   'c'  the ball and the word once, over the number column; numbers bare
- *
- *   localStorage['courtside-cityboard-unit'] = 'a'
- */
-export type UnitLook = 'a' | 'b' | 'c';
-export const UNIT_LOOK: UnitLook = (() => {
-  const v = read('courtside-cityboard-unit');
-  return v === 'a' || v === 'b' || v === 'c' ? v : 'b';
-})();
-
 /** "512 sessions", "1 session": what VoiceOver hears for a board's number. */
 export const sessionsWords = (n: number | string) => `${n} ${Number(n) === 1 ? 'session' : 'sessions'}`;
 

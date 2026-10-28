@@ -13,9 +13,9 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
-import { ColumnHead, Count, FillDivider, FilledFace, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
-import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MOCK_UP_COUNT, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, UNIT_LOOK, cityById, nextTarget, ordinal, rankCities, sessionsWords, viewsWords } from '@/features/cityBoard/mock';
+import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MOCK_UP_COUNT, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, cityById, nextTarget, ordinal, rankCities, sessionsWords, viewsWords } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
 import { notKnownAdult } from '@/features/players/age';
@@ -33,6 +33,9 @@ import { corner } from '@/theme/look';
 /** Top players shown before your own row is pinned under them. */
 const TOP = 5;
 const PLAYER_H = 60;
+/** A player row's place column and face: the head's "Rank" is centred over the one, "Player" starts after the other. */
+const RANK_W = 32;
+const FACE = 40;
 /** The room between the list and your own row under it. */
 const YOU_GAP = 14;
 const BAR_H = 52;
@@ -64,8 +67,10 @@ const MOCK_ID = 'mock-';
  *      (on the animation thread); your own row under them, set apart by space
  *      (no "⋮").
  *   5. Busiest courts.
- *   (Round 4: every number on the right says it counts sessions, by
- *   UNIT_LOOK: the ball by it, "sessions" under it, or once over the column.)
+ *   (Round 5, owner, Oct 28: "something on the top that says like position
+ *   or rank or whatever and then city, and then sessions. Like a header":
+ *   both lists carry a head row, Rank · Player · Sessions and Court ·
+ *   Sessions, and their numbers stand bare.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
  * Who is shown (Apple 13+): players by the city on their profile, never where
@@ -222,8 +227,8 @@ export default function CityPage() {
           <View style={styles.section} onLayout={(e) => place('section', e.nativeEvent.layout.y)}>
             <View style={styles.head}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
-              <MonthNote />
             </View>
+            <BoardHead name="Player" value="Sessions" rankWidth={RANK_W} nameIndent={FACE + spacing.md} style={styles.boardHead} />
             <View onLayout={(e) => place('list', e.nativeEvent.layout.y)}>
               {topPlayers.map((p, i) => (
                 <Rise key={p.user.id} at={i * PLAYER_H} height={PLAYER_H} listY={listY} offsetY={offsetY} seeH={seeH} clock={clock} reduced={reduced}>
@@ -243,15 +248,16 @@ export default function CityPage() {
             <View style={styles.section}>
               <View style={styles.head}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Busiest courts</Text>
-                <MonthNote />
               </View>
+              {/* Not ranked (its rows have no places), so no "Rank". */}
+              <BoardHead name="Court" value="Sessions" rankWidth={null} style={styles.boardHead} />
               {courts.map((c, i) => (
                 <View key={c.name} accessible accessibilityLabel={`${c.name}, ${c.courts} courts, ${sessionsWords(c.hits)} this month`} style={[styles.courtRow, i > 0 && styles.line]}>
                   <View style={styles.courtWords}>
                     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.name}>{c.name}</Text>
                     <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sub}>{c.courts} courts</Text>
                   </View>
-                  <Count value={String(c.hits)} size={17} style={styles.value} />
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.hits}</Text>
                 </View>
               ))}
             </View>
@@ -369,17 +375,6 @@ function Rise({ at, height, listY, offsetY, seeH, clock, reduced, style, childre
   return <Animated.View style={[style, rise]}>{children}</Animated.View>;
 }
 
-/**
- * The note on the right of Top players' and Busiest courts' heads: "sessions
- * in October"; in look 'c' (round 4), the ball and the words, ending right
- * over the numbers (the rows' own inset), the one place they are named.
- */
-function MonthNote() {
-  const styles = useThemedStyles(styleDefinitions);
-  if (UNIT_LOOK === 'c') return <ColumnHead label={`Sessions in ${BOARD_MONTH}`} inset={spacing.md} style={styles.colHead} />;
-  return <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>sessions in {BOARD_MONTH}</Text>;
-}
-
 function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; hits: number; rank: number; me: boolean }; line?: boolean; sub?: string | null; onPress: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
@@ -387,10 +382,10 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; 
       {/* 1st to 3rd on a coin of their metal (round 3). */}
       <View style={styles.rankCol}>
         {hasCoin(p.rank)
-          ? <Medal rank={p.rank} size={32} fontSize={16} />
+          ? <Medal rank={p.rank} size={RANK_W} fontSize={16} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.rank > 3 && styles.rankLow, p.me && styles.mineInk, medalInk(p.rank) ? { color: medalInk(p.rank)! } : null]}>{p.rank}</Text>}
       </View>
-      <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={40} ring={p.user.isCoach} />
+      <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} />
       <View style={styles.playerWords}>
         <View style={styles.playerNameLine}>
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, p.me && styles.mineName]}>{p.me ? 'You' : p.user.name}</Text>
@@ -398,7 +393,7 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; 
         </View>
         {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.subMine}>{sub}</Text> : null}
       </View>
-      <Count value={String(p.hits)} size={17} mine={p.me} hang={!sub} style={[styles.value, p.me && styles.mineInk]} />
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, p.me && styles.mineInk]}>{p.hits}</Text>
     </Pressable>
   );
 }
@@ -443,12 +438,13 @@ const styleDefinitions = StyleSheet.create({
   sectionTitle: { ...typography.title, color: colors.text },
   upTitle: { flexShrink: 1 },
   headNote: { ...typography.small, color: colors.textMuted },
-  colHead: { alignSelf: 'flex-end', paddingBottom: 2 },
+  // The lists' head row: under the section's title, a little room before the first row (and off your tinted one).
+  boardHead: { marginTop: -2, paddingBottom: 6 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: PLAYER_H, paddingHorizontal: spacing.md },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
   youGap: { marginTop: YOU_GAP },
-  rankCol: { width: 32, alignItems: 'center' },
+  rankCol: { width: RANK_W, alignItems: 'center' },
   rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankLow: { color: colors.textFaint },
   mineInk: { color: colors.brand },
