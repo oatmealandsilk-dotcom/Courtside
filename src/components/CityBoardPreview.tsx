@@ -174,7 +174,7 @@ function PreviewRow({ city, mine, line = false, target = null, final = false }: 
       {/* 1st to 3rd on a coin of their metal (round 3); yours keeps its metal, its name says it is yours. */}
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
-          ? <Medal rank={city.rank} size={RANK_W} fontSize={16} />
+          ? <Medal rank={city.rank} size={RANK_W} fontSize={16} markSize={22} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
@@ -213,13 +213,16 @@ const styleDefinitions = StyleSheet.create({
   wrap: { gap: 2 },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
   title: { ...typography.title, color: colors.text },
-  left: { ...typography.small, ...font('600'), color: colors.text },
-  newsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm, minHeight: 20 },
-  // The head row: tucked under the news line, a little room before the first row (and off your tinted one).
-  boardHead: { marginTop: -2, paddingBottom: 6 },
+  // Quiet, as "3 near you" beside Open to hit: the title is the heading, this is its aside.
+  left: { ...typography.small, color: colors.textMuted },
+  newsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: spacing.xs, minHeight: 20 },
+  // Owner, Oct 28: "A bit too cluttered here under cities and 4 days left. It should be like the headers. And then
+  // the table chart". The title stands alone as a section heading; clear room; then the table, its head row on top.
+  boardHead: { marginTop: spacing.lg },
   news: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   when: { color: colors.textFaint },
-  rows: {},
+  // A little room under the head's hairline, so a tinted first row (yours) never sits on it.
+  rows: { paddingTop: spacing.xs },
   row: { flexDirection: 'row', alignItems: 'center', minHeight: ROW_H, paddingHorizontal: spacing.md, gap: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12), minHeight: 58 },
@@ -240,7 +243,7 @@ const styleDefinitions = StyleSheet.create({
   more: { marginTop: -16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },
   moreClear: { marginTop: spacing.xs },
   moreText: { ...typography.smallStrong, color: colors.textMuted },
-  invite: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', marginBottom: spacing.xs },
+  invite: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center' },
   inviteText: { ...typography.smallStrong, color: colors.brand },
   skelCoin: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surfaceAlt },
   skelName: { width: '46%', height: 12, borderRadius: 6, backgroundColor: colors.surfaceAlt },

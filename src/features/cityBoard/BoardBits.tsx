@@ -1,8 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useId } from 'react';
+import React from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { Avatar } from '@/components/ui';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -22,37 +21,42 @@ const metalOf = (rank: number): [string, string] | null =>
 export const hasCoin = (rank: number) => rank >= 1 && rank <= 3;
 
 /**
- * Round 3 of the approved design. Owner, Oct 28: "have first
- * second third be gold silver bronze". The place's numeral on a small coin
- * of its metal: a pale disc (deep on a dark court), a fine rim in the
- * metal's ink with a second one just inside it (a coin's raised edge), the
- * faintest light across its top, and the numeral in the metal's ink. Flat
- * and small, so it reads as a medal table's 1-2-3, not a cartoon medal. The
- * coin is what makes silver read as silver: a grey numeral alone looks like
- * a place further down.
+ * How 1st to 3rd are marked (owner, Oct 28, on round 3's coin: "the (1)
+ * thing could look better. More aesthetics"). Two looks, one switch:
+ *   - 'coin': a flat disc of the metal's pale tone (deep on a dark court),
+ *     one fine rim in the metal's ink, the numeral in that ink. No shine, no
+ *     second rim: a medal table's 1-2-3, not a cartoon medal. A little
+ *     smaller than its column, so it sits in the row instead of filling it.
+ *   - 'mark': no disc. The numeral itself in the metal's ink, at the size
+ *     and weight of the places under it (so the column reads as one run of
+ *     numbers), with a short bar of the metal under it, a podium's step.
  */
-export function Medal({ rank, size, fontSize }: { rank: number; size: number; fontSize: number }) {
+export const MEDAL_STYLE: 'coin' | 'mark' = 'coin';
+
+/**
+ * The place's mark for 1st, 2nd and 3rd (owner, Oct 28: "have first second
+ * third be gold silver bronze"). `size` is the place column's width,
+ * `fontSize` the coin's numeral; the bare mark uses `markSize`, the size of
+ * the numerals below 3rd in the same list, so the two line up.
+ */
+export function Medal({ rank, size, fontSize, markSize = Math.round(fontSize * 1.35) }: { rank: number; size: number; fontSize: number; markSize?: number }) {
   useTheme();
-  const id = useId().replace(/:/g, '');
   const metal = metalOf(rank);
   if (!metal) return null;
   const [ink, fill] = metal;
   const dark = pageIsDark();
-  return (
-    <View style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: fill, borderWidth: 1, borderColor: withAlpha(ink, dark ? 0.5 : 0.36), alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
-      <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-        <Svg width="100%" height="100%">
-          <Defs>
-            <LinearGradient id={`m${id}`} x1="0.2" y1="0" x2="0.6" y2="1">
-              <Stop offset="0" stopColor={colors.onMedia} stopOpacity={dark ? 0.1 : 0.55} />
-              <Stop offset="0.55" stopColor={colors.onMedia} stopOpacity={0} />
-            </LinearGradient>
-          </Defs>
-          <Rect x="0" y="0" width="100%" height="100%" fill={`url(#m${id})`} />
-        </Svg>
+  if (MEDAL_STYLE === 'mark') {
+    return (
+      <View style={{ width: size, alignItems: 'center' }}>
+        <Text maxFontSizeMultiplier={1} style={{ ...font('700'), fontSize: markSize, lineHeight: Math.round(markSize * 1.12), letterSpacing: -0.6, color: ink, fontVariant: ['tabular-nums'], textAlign: 'center', includeFontPadding: false }}>{rank}</Text>
+        <View style={{ width: Math.round(markSize * 0.5), height: 2.5, borderRadius: 2, marginTop: 1, backgroundColor: withAlpha(ink, dark ? 0.85 : 0.7) }} />
       </View>
-      <View pointerEvents="none" style={{ position: 'absolute', top: 2.5, left: 2.5, right: 2.5, bottom: 2.5, borderRadius: size / 2, borderWidth: StyleSheet.hairlineWidth, borderColor: withAlpha(ink, dark ? 0.3 : 0.22) }} />
-      <Text maxFontSizeMultiplier={1} style={{ ...font('700'), fontSize, lineHeight: Math.round(fontSize * 1.15), letterSpacing: -0.3, color: ink, fontVariant: ['tabular-nums'], textAlign: 'center', includeFontPadding: false }}>{rank}</Text>
+    );
+  }
+  const d = Math.round(size * 0.84);
+  return (
+    <View style={{ width: d, height: d, borderRadius: d / 2, backgroundColor: fill, borderWidth: 1.25, borderColor: withAlpha(ink, dark ? 0.62 : 0.5), alignItems: 'center', justifyContent: 'center' }}>
+      <Text maxFontSizeMultiplier={1} style={{ ...font('700'), fontSize: Math.round(fontSize * 0.92), lineHeight: Math.round(fontSize * 1.1), letterSpacing: -0.2, color: ink, fontVariant: ['tabular-nums'], textAlign: 'center', includeFontPadding: false }}>{rank}</Text>
     </View>
   );
 }
@@ -184,7 +188,9 @@ const styleDefinitions = StyleSheet.create({
   divider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, marginHorizontal: 6, alignSelf: 'flex-start' },
   // Round 5: the board's head row. The letters' spacing also follows the last one, so the right-hand word gives it
   // back to end exactly where the numbers do, and the centred one is nudged by half of it.
-  head: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.md },
+  // Owner, Oct 28 ("It should be like the headers. And then the table chart"): the head row is the table's top,
+  // a hairline under it, so it reads with the rows under it, not with the section's title above.
+  head: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   headText: { ...typography.caption, letterSpacing: HEAD_TRACK, textTransform: 'uppercase', color: colors.textFaint },
   headRank: { alignItems: 'center' },
   headRankText: { width: 64, textAlign: 'center', paddingLeft: HEAD_TRACK },
