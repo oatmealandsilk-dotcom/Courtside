@@ -279,24 +279,29 @@ const HABIT_MIN = 4;
 const HABIT_SHARE = 0.6;
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
+/** What a filled face says: its two short lines, and the same said in full for VoiceOver. */
+export interface PlayLine { lines: [string, string]; spoken: string }
+
 /**
  * The quiet words under a filled face: when this player usually plays, read
  * from their own last sessions, so they say something true and useful to
- * someone looking for a hit ("Plays evenings": ask them after work). Two
+ * someone looking for a hit ("Usually evenings": ask them after work). Two
  * short lines, the way a ringed face has two ("1.1 mi", "till 8pm"), so
- * every face in the row breaks the same way: ['Plays', 'evenings'].
+ * every face in the row breaks the same way: ['Usually', 'evenings'].
  *
- *   - 6 of their last 10 (at least 4 logged) on a Saturday or Sunday: "Plays weekends";
- *     starting 5pm or later: "Plays evenings"; before 11am: "Plays mornings".
+ *   - 6 of their last 10 (at least 4 logged) on a Saturday or Sunday: "Usually weekends";
+ *     starting 5pm or later: "Usually evenings"; before 11am: "Usually mornings".
  *     Two at once: the stronger one.
  *   - No clear habit: when they last played ("Played yesterday", "Played Saturday"),
  *     never a time or a place.
  *   - Nothing logged in a week: their hits this month.
  *
- * Present tense on purpose ("Plays", never "Free"): a filled face is a
- * regular, not someone up today; only the green ring says that.
+ * "Usually", the owner's own word (Oct 28: "it says like usually active under
+ * their name"), and never a bare "Plays evenings": under "Up to hit today"
+ * that could read as "playing this evening". A filled face is a regular, not
+ * someone up today; only the green ring says that.
  */
-export function playLine(log: PlayLog | undefined, hits: number, now: Date = new Date()): [string, string] {
+export function playLine(log: PlayLog | undefined, hits: number, now: Date = new Date()): PlayLine {
   const last10 = log?.sessions.slice(0, 10) ?? [];
   if (last10.length >= HABIT_MIN) {
     const share = (test: (s: [number, number]) => boolean) => last10.filter(test).length / last10.length;
@@ -306,10 +311,9 @@ export function playLine(log: PlayLog | undefined, hits: number, now: Date = new
       ['mornings', share(([, h]) => h < 11)],
     ];
     const best = habits.filter(([, s]) => s >= HABIT_SHARE).sort((a, b) => b[1] - a[1])[0];
-    if (best) return ['Plays', best[0]];
+    if (best) return { lines: ['Usually', best[0]], spoken: `usually plays ${best[0]}` };
   }
-  if (log && log.lastDaysAgo === 0) return ['Played', 'today'];
-  if (log && log.lastDaysAgo === 1) return ['Played', 'yesterday'];
-  if (log && log.lastDaysAgo < 7) return ['Played', WEEKDAYS[(now.getDay() - log.lastDaysAgo + 7) % 7]];
-  return [`${hits} hits`, 'this month'];
+  const day = !log ? null : log.lastDaysAgo === 0 ? 'today' : log.lastDaysAgo === 1 ? 'yesterday' : log.lastDaysAgo < 7 ? WEEKDAYS[(now.getDay() - log.lastDaysAgo + 7) % 7] : null;
+  if (day) return { lines: ['Played', day], spoken: `played ${day === 'today' || day === 'yesterday' ? day : `on ${day}`}` };
+  return { lines: [`${hits} hits`, 'this month'], spoken: `${hits} hits this month` };
 }

@@ -71,12 +71,12 @@ export function FilledFace({ face, size, width, top = 2, onPress }: { face: Fill
   const styles = useThemedStyles(styleDefinitions);
   const box = size + 13;
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={`${face.user.name}, ${face.lines.join(' ')}. Open profile`} onPress={onPress} style={({ pressed }) => [styles.fillItem, { width, paddingTop: top }, pressed && { opacity: PRESS_DIM }]}>
+    <Pressable accessibilityRole="link" accessibilityLabel={`${face.user.name}, ${face.spoken}. Open profile`} onPress={onPress} style={({ pressed }) => [styles.fillItem, { width, paddingTop: top }, pressed && { opacity: PRESS_DIM }]}>
       <View style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
         <Avatar name={face.user.name} seed={face.user.avatarSeed} uri={face.user.avatarUrl} size={size} ring={face.user.isCoach} />
       </View>
       <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillName}>{face.user.name.split(' ')[0]}</Text>
-      {/* Two short lines, each kept whole: "Plays" / "evenings". */}
+      {/* Two short lines, each kept whole: "Usually" / "evenings". */}
       <View style={styles.fillLines}>
         <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillLine}>{face.lines[0]}</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillLine}>{face.lines[1]}</Text>

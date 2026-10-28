@@ -3,10 +3,10 @@ import { useMemo } from 'react';
 import type { User } from '@/data/types';
 import { notKnownAdult } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
-import { CITY_BOARD_MOCK, DEMO_PLAYER_HITS, DEMO_PLAY_LOG, FILL_TO, playLine } from './mock';
+import { CITY_BOARD_MOCK, DEMO_PLAYER_HITS, DEMO_PLAY_LOG, FILL_TO, playLine, type PlayLine } from './mock';
 
 /** A face after the ringed ones in Up to hit: a regular here, with when they usually play. */
-export interface FillFace { user: User; lines: [string, string]; hits: number }
+export interface FillFace extends PlayLine { user: User; hits: number }
 
 /**
  * DESIGN MOCK (design/city-board), round 3. Owner, Oct 28: "if no one is
@@ -47,6 +47,6 @@ export function useCityFill({ cityName, upIds, extra = [] }: { cityName: string 
     return [...inCity, ...more]
       .sort((a, b) => b.hits - a.hits)
       .slice(0, room)
-      .map(({ user, hits }) => ({ user, hits, lines: playLine(DEMO_PLAY_LOG[user.id], hits) }));
+      .map(({ user, hits }) => ({ user, hits, ...playLine(DEMO_PLAY_LOG[user.id], hits) }));
   }, [cityName, upIds.join(','), extra, users, currentUser, currentUserId, followingIds, blockedIds, lastSeen]); // eslint-disable-line react-hooks/exhaustive-deps
 }

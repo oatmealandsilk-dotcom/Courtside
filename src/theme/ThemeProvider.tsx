@@ -197,9 +197,10 @@ const usOpenColors: Palette = {
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',
   // Gold a warmer amber than the ball's yellow (the brand here), so 1st never reads as "yours";
-  // silver a bright steel on a blue-grey coin; bronze a copper.
+  // silver a bright steel on a grey steel coin (a blue-grey one read as the page's own navy, not as
+  // metal; review, Oct 28); bronze a copper.
   medalGold: '#F0C258', medalGoldFill: '#4B4127',
-  medalSilver: '#D6DFE9', medalSilverFill: '#304862',
+  medalSilver: '#D9E0E7', medalSilverFill: '#3B444E',
   medalBronze: '#E9A676', medalBronzeFill: '#4B3934',
 };
 
