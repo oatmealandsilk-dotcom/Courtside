@@ -1218,7 +1218,9 @@ const STEPS = [
       await page.eval(`(() => { document.querySelector('${players}').scrollTop = 0; document.querySelector('${threads}').scrollTop = 0; return true; })()`);
       await sleep(400);
     },
-    expect: [{ text: 'Find Players' }, { text: 'Open hits', any: true }],
+    // Oct 28: with People you may know and the city board for everyone, Open hits is below the screen at the top of
+    // Find Players; Open to hit (just under the map) shows the page came back.
+    expect: [{ text: 'Find Players' }, { text: 'Open to hit', any: true }],
   },
   {
     name: 'feed',
