@@ -806,9 +806,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // Near me (Oct 27, owner: "Near me should show people that have their location set in the area, like the city")
   // opens the players list: its town's players are listed there by their town, never put on the map (Apple
   // 5.1.2(i): pins stay friends only). Whatever card was up gives way to the list.
+  // Every people chip does the same (Oct 28, owner: "The near me my level coaches etc. should be the same sideways
+  // icons like following currently is"): Following, Open to hit, Near me, My level and Coaches each open the tray of
+  // faces at rest, the full list a pull or See all away; All keeps the bare map and its pill.
   const pickFilter = (next: MapFilter) => {
     model.setFilter(next);
-    if (next !== 'near') return;
+    if (next === 'all') return;
     setMeOpen(false);
     model.select(null);
     model.selectCourt(null);
@@ -844,7 +847,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? checkIn : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key === 'near') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key !== 'all') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
         {/* Only while zoomed out: "Zoom in to see courts", under the chips. */}
         <ChipsNoteLine>

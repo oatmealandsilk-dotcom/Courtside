@@ -427,9 +427,13 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   }, [card, filter, users, followEdges, currentUserId, followingIds, findable]);
   const tray = useMemo<Listed[]>(() => {
     const around = query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES);
+    // Coaches and Open to hit too (Oct 28, owner: "The near me my level coaches etc. should be the same sideways icons
+    // like following currently is"): Near me's own town list (its server rules), kept to coaches, or to the open to hit.
     const people = filter === 'near' ? townList
       : filter === 'level' ? townList.filter((t) => levelsClose(me.profile, t.user.profile))
-        : filter === 'following' ? followRows : null;
+        : filter === 'following' ? followRows
+          : filter === 'coaches' ? townList.filter((t) => t.user.isCoach)
+            : filter === 'open' ? townList.filter((t) => isOpenToHit(t.user)) : null;
     if (!people) return around;
     const q = query.trim().toLowerCase();
     const listed = new Set(around.map((p) => p.user.id));
