@@ -26,6 +26,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
+import { cityBoardOn } from '@/features/cityBoard/flag';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type PinnedQuestion, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearCardShots, dropPeopleShots, forgetPlaces } from '@/components/map/cardShot';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readMapCopy, readSnapshot, saveMapCopy, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
@@ -136,7 +137,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, CourtSurfaceAnswer, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, CityBoard, CityPage, CourtSurfaceAnswer, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
 import { notePlayerSurface } from '@/features/players/courts';
 import type { VotedSurface } from '@/features/places/courtSurface';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
@@ -367,6 +368,21 @@ function readDemoVisibility(): MapVisibility | null {
 }
 
 /** The switches in Settings, kept with the account. */
+/** A city board as last asked (migration 196). `key`: your own sessions when it was asked, so logging one asks again. */
+export interface CityBoardEntry { board: CityBoard | null; at: number; failed: boolean; key: string }
+/** A city's page as last asked (migration 196). */
+export interface CityPageEntry { page: CityPage | null; at: number; failed: boolean; key: string }
+/** How long a board (15 minutes, the server's refresh) and a city's page (5 minutes) are kept before asking again. */
+const CITY_BOARD_KEEP_MS = 15 * 60_000;
+const CITY_PAGE_KEEP_MS = 5 * 60_000;
+/** Your sessions, in one short key: a new one (or one taken back) changes it. */
+const mySessionsKey = (sessions: PracticeSession[], me: ID | null) => {
+  let n = 0;
+  let last = '';
+  for (const x of sessions) if (x.userId === me) { n += 1; if (x.createdAt > last) last = x.createdAt; }
+  return `${n}|${last}`;
+};
+
 export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
   /** The four map alerts (migration 60): a friend up for a hit, new hits near you, new players near you, courts you follow. */
@@ -518,6 +534,17 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
    */
   townPlayers: ID[] | null;
   /**
+   * City boards (migration 196), as last asked, by month ('YYYY-MM-01'):
+   * `board` null with `failed` false means the boards are not open to you
+   * (or the database has none yet); `failed` means the last ask did not
+   * come back (offline), and `board` is the one before it, if any.
+   */
+  cityBoards: Record<string, CityBoardEntry>;
+  /** City pages, as last asked, by "month|city". */
+  cityPages: Record<string, CityPageEntry>;
+  /** "Show me on city boards" (Privacy center; migration 196). Null on a database without it: the switch is not shown. */
+  cityBoardsVisible: boolean | null;
+  /**
    * The Question of the week (Oct 20 sweep, R5; migration 169): the thread an
    * admin pinned to the top of Discussions, and when. Null when none is
    * pinned (a pin lasts 7 days). A guest's comes with guest mode's own data.
@@ -651,7 +678,7 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
@@ -817,6 +844,19 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * no board yet), so the card stays away.
    */
   courtKings: (courtId: string) => Promise<CourtKings | null>;
+  /**
+   * City boards (migration 196): the month's board ('YYYY-MM-01', the
+   * phone's own month), kept in `cityBoards` and asked again after 15
+   * minutes, after you log a session, or when `force`. Null when the boards
+   * are not open to you (CITY_BOARD_FOR_EVERYONE / the server's flag) or the
+   * database has none yet; throws only when it could not be asked and there
+   * is no earlier board to keep.
+   */
+  loadCityBoard: (month: string, force?: boolean) => Promise<CityBoard | null>;
+  /** One city's page, the same way (kept 5 minutes, in `cityPages`). */
+  loadCityPage: (cityId: string, month: string, force?: boolean) => Promise<CityPage | null>;
+  /** "Show me on city boards" (Privacy center). Resolves false when it did not go through (the switch goes back). */
+  setCityBoardsVisible: (on: boolean) => Promise<boolean>;
   /**
    * "What surface?" at a court the map says nothing about (migration 186):
    * your own answer and what the court registered. Null when it could not be
@@ -2059,6 +2099,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
       partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
       autoLogLive: data.userState?.autoLog !== undefined ? true : prev.autoLogLive,
+      // The settings row carries city_boards only once migration 196 has run.
+      cityBoardsVisible: data.userState?.cityBoards ?? (data.userState ? null : prev.cityBoardsVisible),
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2418,6 +2460,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
     townPlayers: null,
+    cityBoards: {},
+    cityPages: {},
+    // The demo has no server to ask: its switch shows, on.
+    cityBoardsVisible: isSupabaseConfigured ? null : true,
     pinnedQuestion: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
@@ -4739,6 +4785,85 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) return remote.fetchCourtKings(courtId);
     const self = s.users.find((u) => u.id === me);
     return demoApi.courtKings({ courtId, me, sessions: s.sessions, ranked: !self?.isPrivate });
+  }, []);
+
+
+  // ---- City boards (migration 196) ----
+  // One ask at a time for each board and page; a second caller waits for the same answer.
+  const cityAsks = useRef(new Map<string, Promise<unknown>>());
+  const loadCityBoard = useCallback(async (month: string, force = false): Promise<CityBoard | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const self = s.users.find((u) => u.id === me);
+    if (!me || !cityBoardOn(self)) return null;
+    const key = mySessionsKey(s.sessions, me);
+    const kept = s.cityBoards[month];
+    if (kept && !force && !kept.failed && kept.key === key && Date.now() - kept.at < CITY_BOARD_KEEP_MS) return kept.board;
+    const askKey = `board|${month}|${key}`;
+    const asking = cityAsks.current.get(askKey) as Promise<CityBoard | null> | undefined;
+    if (asking) return asking;
+    const ask = (async () => {
+      try {
+        const board = live(me)
+          ? await remote.fetchCityBoard(month)
+          : await demoApi.cityBoard({ month, me, users: stateRef.current.users, sessions: stateRef.current.sessions });
+        setState((prev) => ({ ...prev, cityBoards: { ...prev.cityBoards, [month]: { board, at: Date.now(), failed: false, key } } }));
+        return board;
+      } catch (err) {
+        // Offline: keep the last board there was, marked, so the page keeps it and can say so.
+        const was = stateRef.current.cityBoards[month]?.board ?? null;
+        setState((prev) => ({ ...prev, cityBoards: { ...prev.cityBoards, [month]: { board: was, at: Date.now(), failed: true, key } } }));
+        if (was) return was;
+        throw err;
+      } finally {
+        cityAsks.current.delete(askKey);
+      }
+    })();
+    cityAsks.current.set(askKey, ask);
+    return ask;
+  }, []);
+  const loadCityPage = useCallback(async (cityId: string, month: string, force = false): Promise<CityPage | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const self = s.users.find((u) => u.id === me);
+    if (!me || !cityBoardOn(self)) return null;
+    const key = mySessionsKey(s.sessions, me);
+    const at = `${month}|${cityId}`;
+    const kept = s.cityPages[at];
+    if (kept && !force && !kept.failed && kept.key === key && Date.now() - kept.at < CITY_PAGE_KEEP_MS) return kept.page;
+    const askKey = `page|${at}|${key}`;
+    const asking = cityAsks.current.get(askKey) as Promise<CityPage | null> | undefined;
+    if (asking) return asking;
+    const ask = (async () => {
+      try {
+        const now = stateRef.current;
+        const page = live(me)
+          ? await remote.fetchCityPage(cityId, month)
+          : await demoApi.cityPage({ cityId, month, me, users: now.users, posts: now.posts, sessions: now.sessions, followingIds: now.followingIds, followEdges: now.followEdges, blockedIds: now.blockedIds, mutedIds: now.mutedIds });
+        // The clip's post, so the page can play it (it may be older than anything the feed holds).
+        if (page?.clip && live(me)) void loadPost(page.clip.postId);
+        setState((prev) => ({ ...prev, cityPages: { ...prev.cityPages, [at]: { page, at: Date.now(), failed: false, key } } }));
+        return page;
+      } catch (err) {
+        const was = stateRef.current.cityPages[at]?.page ?? null;
+        setState((prev) => ({ ...prev, cityPages: { ...prev.cityPages, [at]: { page: was, at: Date.now(), failed: true, key } } }));
+        if (was) return was;
+        throw err;
+      } finally {
+        cityAsks.current.delete(askKey);
+      }
+    })();
+    cityAsks.current.set(askKey, ask);
+    return ask;
+  }, []);
+  const setCityBoardsVisible = useCallback(async (on: boolean): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return false;
+    const was = stateRef.current.cityBoardsVisible;
+    setState((prev) => ({ ...prev, cityBoardsVisible: on }));
+    const ok = live(me) ? await remote.setCityBoardsVisible(me, on) : await demoApi.setCityBoardsVisible(on);
+    if (!ok) setState((prev) => ({ ...prev, cityBoardsVisible: was }));
+    return ok;
   }, []);
 
   // The same court and day asked again within a minute (the toast, the pill, the sheet) is answered from here.
@@ -9603,6 +9728,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      loadCityBoard,
+      loadCityPage,
+      setCityBoardsVisible,
       courtSurface,
       voteCourtSurface,
       flyby,
@@ -9854,6 +9982,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      loadCityBoard,
+      loadCityPage,
+      setCityBoardsVisible,
       courtSurface,
       voteCourtSurface,
       flyby,
@@ -10241,7 +10372,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
     hitRequests: [], lastSeen: {}, followingIds: [], followEdges: [], followRequests: [], tips: [], sessions: [], sessionTags: [],
     saved: { postIds: [], questionIds: [] }, mutedIds: [], reportedIds: [], blockedIds: [], blockedMeIds: [], alertIds: [],
-    newOnCourtside: null, townPlayers: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
+    newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
   } satisfies Partial<AppState>), [isGuest, guest]);
   const value = useMemo<AppContextValue>(
     () => (guestValue

@@ -62,6 +62,13 @@ export const lightColors = {
   // A face with no photo, on the Send to sheet only (Avatar quiet): six quiet tones, one per person by their seed, so a
   // grid of initials never reads as one colour. Low in colour on purpose; the page's text reads on every one.
   avatarTint1: '#DCE3D3', avatarTint2: '#E8DFCC', avatarTint3: '#ECD9D0', avatarTint4: '#D6DFE4', avatarTint5: '#E0DAE3', avatarTint6: '#E2E0CF',
+  // 1st, 2nd and 3rd on a board (Oct 28, owner: "have first second third be gold silver bronze"): each
+  // metal's ink (the place's numeral, 4.5:1 on its own coin and on the page) and its coin (a pale disc
+  // behind the numeral, so silver reads as silver and not as a greyed-out 4th). Every court tunes its own:
+  // on a light page a deep metal ink on a pale coin, on a dark one a bright ink on a deep coin.
+  medalGold: '#7F5D0D', medalGoldFill: '#F2E3B6',
+  medalSilver: '#59656F', medalSilverFill: '#E2E6EA',
+  medalBronze: '#8D5130', medalBronzeFill: '#EFDAC3',
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
