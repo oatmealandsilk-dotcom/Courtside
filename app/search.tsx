@@ -211,7 +211,7 @@ export default function Search() {
   const allNear = suggested.length > 0 && suggested.every((s) => !!myTown && townOf(s.user.location) === myTown);
   // Short enough to fit beside the Follow button on a phone.
   const suggestionReason = (user: User, reason: string) =>
-    myTown && townOf(user.location) === myTown ? 'Your town' : user.isCoach ? 'Coach' : reason === 'Interacted with you' ? 'Knows you' : '';
+    myTown && townOf(user.location) === myTown ? 'Your town' : user.isCoach ? 'Coach' : /^(Liked your|Commented on your|You liked their|In a chat with you|Followed by )/.test(reason) ? reason : '';
 
   /* ---------------------------------- Courts --------------------------------- */
   // Once, as the page opens: the courts about 15 miles around you, or none after eight seconds.
