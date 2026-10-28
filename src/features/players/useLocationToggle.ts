@@ -8,6 +8,7 @@ import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type Ti
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
 import { useOpenClock } from '@/features/players/useOpenClock';
+import { learned } from '@/features/tips/tips';
 import { afterLanding, swoopAsks, swoopFinding, swoopFound } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 
@@ -124,6 +125,8 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     if (busy) return;
     const tap = ++turn.current;
     dismissHideTip();
+    // Tapped once: Up to hit's tip (upToHitTip) has nothing left to tell them.
+    learned('up-to-hit');
     if (until) { await actions.checkOutOfMap(); return; }
     let first = false;
     if (!saidYes(mapVisibility)) {

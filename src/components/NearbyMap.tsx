@@ -28,6 +28,9 @@ import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/upToHitTip';
+import { tipWaiting } from '@/features/tips/tips';
+import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, armGrow, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
@@ -292,6 +295,12 @@ export function NearbyMap(props: NearbyMapProps) {
   const spot = useCardOnScreen();
   /** Whether the card is in view right now: the curtain not over it, its tab and section on show, on the screen, the app in front. */
   const inViewNow = () => curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState === 'active' && spot.onScreen();
+  // Up to hit's one tip (upToHitTip): the Community card counts its visits, and on the 2nd or 3rd, to someone who has
+  // never tapped Up to hit (nor been on the map), not on No one, not in the tutorial, it points at the pill.
+  const tourOpen = useTourOpen();
+  const uthVisit = useFindPlayersVisit(growsHere && onScreen && props.visible !== false && !tourOpen);
+  const uthTip = growsHere && upToHitTipOn(me) && tipVisit(uthVisit) && onScreen && props.visible !== false && !tourOpen
+    && mapVisibility !== 'none' && !settingsUnknown && !lastSeen[me.id] && tipWaiting('up-to-hit');
   // Where the card is centred stays put while it is seen (cardHold): a fix landing then waits until it is out of view.
   const place = useHeldCardPlace(expanded, at, !!locationOn, locating, () => (cardUp || photoIn) && inViewNow());
   // The town the card showed last time, with Location on and no fix yet (mapModel): read until it has shown something.
@@ -746,7 +755,7 @@ export function NearbyMap(props: NearbyMapProps) {
             </Reanimated.View>
           ) : null}
           <GrowAwayContext.Provider value={growsHere}>
-            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} />
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} />
             <CardCredit />
           </GrowAwayContext.Provider>
         </View>

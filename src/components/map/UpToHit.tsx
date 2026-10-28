@@ -9,6 +9,7 @@ import { BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
 import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { LIGHT_UP, litLine } from '@/features/places/lightUp';
+import { useTipShowing } from '@/features/tips/tips';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
 import { PILL_QUICK_MS, growArmed, useGrowAway } from '@/features/players/mapGrow';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -58,6 +59,8 @@ const TICK_LEN = 22;
 /** The pill's width: springs open just past its words and back (about 4%), shuts with a plain ease. */
 const WIDEN = { damping: 20, stiffness: 230, mass: 0.9 };
 const NARROW_MS = 240;
+/** The swell as its tip shows waits for the bubble to ease in (TipBubble's 260 ms), so the two arrive as one. */
+const TIP_SWELL_DELAY = 180;
 /**
  * A finger down: pressed in at once. Held by React (Pressable's own pressed look), not by an animation, so a
  * press held still for a second can never be handed back to React as an older value on an iPhone (restMotion).
@@ -197,8 +200,17 @@ export function UpToHitPill({ control }: { control: CheckInControl }) {
   // The check-in zoom's grow (mapGrow): it slips up out of the card at its own size as the page pushes in, its quick
   // moment playing as it goes.
   const away = useGrowAway('top');
+  // Its tip coming up (upToHitTip): one gentle swell of the pill and back, to say "this one" (a transform only).
+  const tipUp = useTipShowing('up-to-hit');
+  const swell = useSharedValue(1);
+  useEffect(() => {
+    if (!tipUp || m.reduce) return;
+    swell.value = withDelay(TIP_SWELL_DELAY, withSequence(withTiming(1.07, { duration: 220, easing: Easing.out(Easing.cubic) }), withSpring(1, { damping: 12, stiffness: 180 })));
+  }, [tipUp]); // eslint-disable-line react-hooks/exhaustive-deps
+  const swelled = useAnimatedStyle(() => ({ transform: [{ scale: swell.value }] }));
   return (
     <Animated.View style={[styles.pillSpot, away]}>
+      <Animated.View style={swelled}>
       <Animated.View style={m.moved}>
         <Pressable accessibilityRole="button" accessibilityState={{ busy: control.busy }} accessibilityLabel={checkInLabel(control)} hitSlop={6} onPress={control.press} style={({ pressed }) => (pressed ? PRESSED : null)}>
           <Animated.View key={k} style={[styles.pill, edge, w.style]}>
@@ -217,6 +229,7 @@ export function UpToHitPill({ control }: { control: CheckInControl }) {
             </Animated.View>
           </Animated.View>
         </Pressable>
+      </Animated.View>
       </Animated.View>
       {/* Unseen copies of both, free of the pill, to say how wide each wants to be (a point to spare, so a fraction never trails off). */}
       <View style={styles.measure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>

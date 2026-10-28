@@ -21,7 +21,7 @@ import { corner } from '@/theme/look';
  * page, with a hairline, rather than the fixed dark bubble that vanished
  * into it. On a light page it looks the same either way.
  */
-export function TipBubble({ tip, shown, onClose, style, pointer = 'down', pointerInset, pointerRight, inline = false, on = 'media' }: { tip: TipKey; shown: boolean; onClose: () => void; style?: StyleProp<ViewStyle>; pointer?: 'up' | 'down' | 'none'; /** With the bubble lined up on its left (`alignItems: 'flex-start'`): how far in from that edge the pointer sits. */ pointerInset?: number; /** With the bubble lined up on its right (`alignItems: 'flex-end'`): how far in from that edge the pointer sits. */ pointerRight?: number; /** In the page's flow, pushing what follows down while it shows. */ inline?: boolean; /** What it sits on: a video or a map (the fixed dark bubble), or a plain page (the page's own colours when it is dark). */ on?: 'media' | 'page' }) {
+export function TipBubble({ tip, words, shown, onClose, style, pointer = 'down', pointerInset, pointerRight, inline = false, on = 'media' }: { tip: TipKey; /** Its words now, when they change with the time of day (otherwise the tip's own). */ words?: string; shown: boolean; onClose: () => void; style?: StyleProp<ViewStyle>; pointer?: 'up' | 'down' | 'none'; /** With the bubble lined up on its left (`alignItems: 'flex-start'`): how far in from that edge the pointer sits. */ pointerInset?: number; /** With the bubble lined up on its right (`alignItems: 'flex-end'`): how far in from that edge the pointer sits. */ pointerRight?: number; /** In the page's flow, pushing what follows down while it shows. */ inline?: boolean; /** What it sits on: a video or a map (the fixed dark bubble), or a plain page (the page's own colours when it is dark). */ on?: 'media' | 'page' }) {
   const styles = useThemedStyles(styleDefinitions);
   const lifted = on === 'page' && pageIsDark();
   const visible = useSharedValue(0);
@@ -50,8 +50,8 @@ export function TipBubble({ tip, shown, onClose, style, pointer = 'down', pointe
   const body = (
     <>
       {pointer === 'up' ? <Animated.View style={[pointerStyle, styles.pointerUp, lifted && styles.pointerUpLifted]} /> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${tipWords(tip)} Tap to close.`} onPress={(e) => { e.stopPropagation?.(); onClose(); }} style={[styles.bubble, lifted && styles.bubbleLifted]}>
-        <Text style={[styles.text, lifted && styles.textLifted]}>{tipWords(tip)}</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${words ?? tipWords(tip)} Tap to close.`} onPress={(e) => { e.stopPropagation?.(); onClose(); }} style={[styles.bubble, lifted && styles.bubbleLifted]}>
+        <Text style={[styles.text, lifted && styles.textLifted]}>{words ?? tipWords(tip)}</Text>
         <Text style={[styles.ok, lifted && styles.okLifted]}>Got it</Text>
       </Pressable>
       {pointer === 'down' ? <Animated.View style={[pointerStyle, styles.pointerDown, lifted && styles.pointerDownLifted]} /> : null}

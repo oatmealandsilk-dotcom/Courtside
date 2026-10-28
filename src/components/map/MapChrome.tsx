@@ -30,6 +30,9 @@ import { isMapCourtId, labelOf } from '@/features/places/courtName';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { directionsTo } from '@/features/players/openInMaps';
 import { useApp } from '@/store/AppContext';
+import { TipBubble } from '@/components/TipBubble';
+import { useTip } from '@/features/tips/tips';
+import { TIP_SHOW_MS as UTH_TIP_SHOW_MS } from '@/features/players/upToHitTip';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
@@ -1623,7 +1626,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false }: { /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const labelsOut = useGrowLabels();
   // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
   const weatherAway = useGrowAway('bottom');
@@ -1669,6 +1672,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
               "Up to hit · till 10pm" on green (a tap turns it off). UpToHit: it springs to its words as the green sweeps in. */}
           <UpToHitPill control={checkIn} />
           <HideTip where="card" style={{ top: 52, right: 8 }} />
+          <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
         </>
       ) : null}
       {weather ? (
@@ -1735,6 +1739,26 @@ function HideTip({ where, style }: { where: TipSpot; style: object }) {
     </Animated.View>
   );
 }
+
+/**
+ * Up to hit's one tip (upToHitTip), hung under the card's pill: "Tap Up to hit · friends see you on the map till
+ * 10pm." The app's own tip bubble (TipBubble), so it waits its turn like every tip; it closes itself after a few
+ * seconds and never comes back (a tap on it, or on the pill, closes it too).
+ */
+function UpToHitTip({ ready, span }: { ready: boolean; span: string }) {
+  const tip = useTip('up-to-hit', ready);
+  const close = useRef(tip.close);
+  close.current = tip.close;
+  useEffect(() => {
+    if (!tip.shown) return undefined;
+    const t = setTimeout(() => close.current(), UTH_TIP_SHOW_MS);
+    // Shown once: gone off the card meanwhile (the map opened, another tab) still counts as seen.
+    return () => { clearTimeout(t); close.current(); };
+  }, [tip.shown]);
+  return <TipBubble tip="up-to-hit" words={`Tap Up to hit · friends see you on the map ${span}.`} shown={tip.shown} onClose={tip.close} pointer="up" pointerRight={UTH_TIP_POINTER} style={{ top: 48, right: 8, left: 24, alignItems: 'flex-end' }} />;
+}
+/** Where the bubble's pointer sits, in from its right edge: under the middle of "Up to hit" (the pill's right edge 4 in from the bubble's). */
+const UTH_TIP_POINTER = 40;
 
 /** While the tip is up, a soft ring breathes out from the button it points at. */
 function TipPulse({ where, size }: { where: TipSpot; size: number }) {

@@ -9,7 +9,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows' | 'up-to-hit';
 
 export const TIP_WORDS: Record<TipKey, string> = {
   'map-who-sees': 'Tap Up to hit to show friends where you are, till 10pm.',
@@ -39,6 +39,9 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // The Feed's windows (features/feed/feedWindows), pointing up at the top row; the Feed tab's hold
   // opens them too (Oct 26, owner: "Tip both").
   'feed-windows': 'Hold here or the Feed tab to see all your feeds.',
+  // The Up to hit pill on the Find Players card, once, for someone who has never tapped it (upToHitTip; Oct 28, owner:
+  // "give them a tip at some point to click the button"). The card says how long ("till 10pm", late on "for 2 hours").
+  'up-to-hit': 'Tap Up to hit · friends see you on the map till 10pm.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -121,9 +124,10 @@ const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
  * them and never turn Settings → Tips back On by being new. Empty since Oct 26: the Feed's windows
  * are for everyone, and the players who learned every tip are the most active ones, the ones the
  * owner most wants to find them ("This feature is kind of hidden"). Turning Tips off in Settings
- * still keeps every tip away, this one included (turnOffTips).
+ * still keeps every tip away, this one included (turnOffTips). Up to hit's tip (Oct 28) is late: someone
+ * who has learned every other tip has found the pill too, and Settings → Tips should not turn On for it.
  */
-const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>([]);
+const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['up-to-hit']);
 const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k));
 const baseAllDone = () => BASE_TIPS.every((k) => done.has(k));
 /** This tip will not show: Tips are off, it is done, or it came later than everything they had learned. */
@@ -196,4 +200,9 @@ export function useTip(key: TipKey, ready: boolean, answers = false): { shown: b
   }, [settled, key, snapshot, answers]);
   useEffect(() => () => { if (showing === key) { showing = null; emit(); } }, [key]);
   return { shown: showing === key && !quiet(key), close: () => learned(key) };
+}
+
+/** Whether this tip is on screen now, for something beside it (the Up to hit pill's one pulse as its tip shows); never claims it. */
+export function useTipShowing(key: TipKey): boolean {
+  return useSyncExternalStore(subscribe, () => showing === key && !quiet(key));
 }

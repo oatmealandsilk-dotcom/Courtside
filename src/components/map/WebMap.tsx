@@ -19,6 +19,9 @@ import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/upToHitTip';
+import { tipWaiting } from '@/features/tips/tips';
+import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 import { SWOOP_JS, WARM_JS, type SwoopFn } from '@/components/map/swoop';
@@ -265,6 +268,12 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_REVEAL_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocusedLater();
+  // Up to hit's one tip (upToHitTip): the Community card counts its visits, and on the 2nd or 3rd, to someone who has
+  // never tapped Up to hit (nor been on the map), not on No one, not in the tutorial, it points at the pill.
+  const tourOpen = useTourOpen();
+  const uthVisit = useFindPlayersVisit(growsHere && onScreen && props.visible !== false && !tourOpen);
+  const uthTip = growsHere && upToHitTipOn(me) && tipVisit(uthVisit) && onScreen && props.visible !== false && !tourOpen
+    && mapVisibility !== 'none' && !settingsUnknown && !lastSeen[me.id] && tipWaiting('up-to-hit');
   // Scrolled off the screen (reading the list under it) counts as out of view too.
   const spot = useCardOnScreen();
   outOfView.current = () => !onScreen || props.visible === false || props.inView?.() === false || !spot.onScreen();
@@ -863,7 +872,7 @@ export function NearbyMap(props: NearbyMapProps) {
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends up to hit" onPress={openTap} disabled={!onExpand} style={StyleSheet.absoluteFill} />
           <GrowAwayContext.Provider value={growsHere}>
-            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} />
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} />
             <CardCredit />
           </GrowAwayContext.Provider>
         </View>
