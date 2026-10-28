@@ -328,6 +328,46 @@ function readAsked(key: string): boolean | null {
 }
 
 /**
+ * The phone's own Location switch (courts near you, where the map opens; never
+ * shared), and whose it is (Oct 28, owner: "Middle"): the account that turned it
+ * on here. The same account signing back in finds it on; a different account
+ * signing in on this device starts with it off. Turned on while signed out (or
+ * left on by an older version, which kept no owner): the first account in takes it.
+ */
+const LOCATION_KEY = 'courtside-location';
+const LOCATION_OWNER_KEY = 'courtside-location-owner';
+function rememberLocation(on: boolean, owner: ID | null) {
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(LOCATION_KEY, on ? 'on' : 'off');
+      if (on && owner) localStorage.setItem(LOCATION_OWNER_KEY, owner);
+      else if (on) localStorage.removeItem(LOCATION_OWNER_KEY);
+    } else if (on && owner) {
+      void AsyncStorage.multiSet([[LOCATION_KEY, 'on'], [LOCATION_OWNER_KEY, owner]]).catch(() => {});
+    } else {
+      void AsyncStorage.setItem(LOCATION_KEY, on ? 'on' : 'off').catch(() => {});
+      if (on) void AsyncStorage.removeItem(LOCATION_OWNER_KEY).catch(() => {});
+    }
+  } catch {}
+}
+/** A different account signed in: the switch goes off here, and is nobody's until it is turned on again. */
+function forgetLocationOwner() {
+  try {
+    if (Platform.OS === 'web') { localStorage.setItem(LOCATION_KEY, 'off'); localStorage.removeItem(LOCATION_OWNER_KEY); }
+    else void AsyncStorage.setItem(LOCATION_KEY, 'off').then(() => AsyncStorage.removeItem(LOCATION_OWNER_KEY)).catch(() => {});
+  } catch {}
+}
+/** The switch as this device keeps it ('on', 'off', or null: never chosen) and its owner. Throws when storage cannot be read. */
+async function readLocation(): Promise<{ flag: string | null; owner: string | null }> {
+  if (Platform.OS === 'web') return { flag: localStorage.getItem(LOCATION_KEY), owner: localStorage.getItem(LOCATION_OWNER_KEY) };
+  const [[, flag], [, owner]] = await AsyncStorage.multiGet([LOCATION_KEY, LOCATION_OWNER_KEY]);
+  return { flag, owner };
+}
+
+/** The longest signing out waits for your check-in to end on the server (endCheckInFor); the request goes on after. */
+const SIGN_OUT_CHECK_OUT_MS = 3000;
+
+/**
  * A Location off that has not reached the server yet: the account whose spot
  * still needs forgetting, kept on this device until a forget goes through.
  */
@@ -2471,8 +2511,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ...emptyFeedGroups,
     ...emptyLiveSession,
     hitRequests: [],
-    locationEnabled: readFlag('courtside-location'),
-    locationAsked: readAsked('courtside-location'),
+    locationEnabled: readFlag(LOCATION_KEY),
+    locationAsked: readAsked(LOCATION_KEY),
     detectedLocation: null,
     detectedCoords: null,
   });
@@ -3617,12 +3657,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const changeEmail = useCallback((email: string) => remoteAuth.updateEmail(email), []);
   const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
+  /**
+   * Signing out ends your Up to hit first (Oct 28; the owner was told "signing out will end your
+   * check-in (no one sees you once you're signed out)"): the server takes your pin off friends' maps
+   * and you out of any court, as Turn off does (checkOutOfMap), while the login can still ask it to.
+   * Only when something of yours may be showing: a pin, a court, a live session checked in, or a map
+   * not loaded yet (a check-in from another phone). Never in the way of signing out: it waits at most
+   * a few seconds and lets a failure go. Switching accounts (Add account too) keeps it: the same
+   * person is still on this phone, still signed in to that account.
+   */
+  const endCheckInFor = (me: ID | null): Promise<void> => {
+    const s = stateRef.current;
+    if (!live(me) || s.currentUserId !== me) return Promise.resolve();
+    const showing = !s.lastSeenLoaded || !!s.lastSeen[me!] || !!s.liveSession?.checkedIn
+      || Object.values(s.courtNow).some((row) => row.youHere) || !!s.followedCourts?.some((c) => c.youHere);
+    if (!showing) return Promise.resolve();
+    return Promise.race([
+      remote.checkOutOfMap().then(() => undefined, () => undefined),
+      new Promise<void>((resolve) => { setTimeout(resolve, SIGN_OUT_CHECK_OUT_MS); }),
+    ]);
+  };
+
   const signOutEverywhere = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     void forgetLinkPreviews();
     if (isSupabaseConfigured) {
-      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does).
-      await forgetPushToken();
+      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does),
+      // and your Up to hit ends (endCheckInFor).
+      await Promise.all([endCheckInFor(me), forgetPushToken()]);
       try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
     }
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
@@ -3715,6 +3777,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback((options: { keepLogin?: boolean } = {}) => {
     // Nothing of this account stays on the device for the next person.
     const leaving = stateRef.current.currentUserId;
+    // Your Up to hit ends on the server first, while the login still exists (endCheckInFor); Add account keeps it.
+    const checkedOut = options.keepLogin ? Promise.resolve() : endCheckInFor(leaving);
     if (leaving) void clearSnapshot(leaving);
     // Nor the pictures of its map card, or where that card was (cardShot).
     clearCardShots();
@@ -3726,8 +3790,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // (keepLogin), so switching back stays a tap; a phone keeps its logins
     // in its keychain, as before.
     const endLogin = Platform.OS === 'web' && !options.keepLogin && !!leaving;
-    // This phone stops getting the account's alerts before the session ends (the removal needs it).
-    if (isSupabaseConfigured) void forgetPushToken().finally(() => (endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
+    // This phone stops getting the account's alerts before the session ends (the removal needs it), and your check-in ends.
+    if (isSupabaseConfigured) void Promise.all([checkedOut, forgetPushToken()]).finally(() => (endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
     if (endLogin && leaving) void forgetAccount(leaving).catch(() => undefined);
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
     // stops them, never an open that merely could not read the session (useWorkoutWatch).
@@ -4140,6 +4204,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return ok;
   }, [loadLastSeen]);
 
+  /**
+   * Counts every turn of the Location switch (on, off, or on with a check-in), so a sign-in's
+   * look at whose the switch is (see "Location belongs to") never undoes a turn made meanwhile.
+   */
+  const locationTurn = useRef(0);
+
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
   const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
@@ -4153,8 +4223,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const place = nearestPlace(fix.lat, fix.lng);
     const ends = checkInEnds().toISOString();
     // The phone may use where it is for courts near you from now on, as Location on does (never sent on its own).
+    // Yours on this device, as Location on is (rememberLocation).
+    locationTurn.current += 1;
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
-    try { if (Platform.OS === 'web') localStorage.setItem('courtside-location', 'on'); else void AsyncStorage.setItem('courtside-location', 'on').catch(() => {}); } catch {}
+    rememberLocation(true, me);
     const placeMine = (until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
       ...prev,
       lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: fix.lat, lng: fix.lng, place: 'exact', city: place.name.split(',')[0], seenAt: new Date().toISOString(), until } },
@@ -8378,12 +8450,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * to show, or null when everything went fine.
    */
   const setLocationEnabled = useCallback(async (enabled: boolean): Promise<string | null> => {
-    const remember = (on: boolean) => {
-      try {
-        if (Platform.OS === 'web') localStorage.setItem('courtside-location', on ? 'on' : 'off');
-        else void AsyncStorage.setItem('courtside-location', on ? 'on' : 'off').catch(() => {});
-      } catch {}
-    };
+    // On, it is yours on this device: the same account finds it on next time, another starts with it off.
+    const remember = (on: boolean) => rememberLocation(on, stateRef.current.currentUserId);
+    locationTurn.current += 1;
     if (!enabled) {
       remember(false);
       // Location off: kept pictures of the map card with people on them go (cardShot).
@@ -8465,13 +8534,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.
+  // Another account's on stays off for whoever is signed in by the time it is read.
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    AsyncStorage.getItem('courtside-location')
-      .then((flag) => { setState((prev) => ({ ...prev, locationAsked: flag !== null, locationEnabled: prev.locationEnabled || flag === 'on' })); })
+    readLocation()
+      .then(({ flag, owner }) => { setState((prev) => ({ ...prev, locationAsked: flag !== null, locationEnabled: prev.locationEnabled || (flag === 'on' && (!owner || !prev.currentUserId || owner === prev.currentUserId)) })); })
       // Unreadable counts as chosen: never an ask set off by a storage hiccup.
       .catch(() => { setState((prev) => ({ ...prev, locationAsked: true })); });
   }, []);
+
+  // Location belongs to whoever turned it on here (Oct 28, owner: "Middle"; rememberLocation): the
+  // same account signing back in finds it on, a different account signing in on this device (a sign-in,
+  // Switch account, the demo) starts with it off, with nothing of where the phone was last found. An on
+  // with no owner (turned on while signed out, or by an older version) is taken by the first account in.
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!me) return;
+    const turn = locationTurn.current;
+    readLocation().then(({ flag, owner }) => {
+      if (stateRef.current.currentUserId !== me || locationTurn.current !== turn || owner === me) return;
+      if (!owner) { if (flag === 'on') rememberLocation(true, me); return; }
+      forgetLocationOwner();
+      setState((prev) => (prev.currentUserId !== me ? prev : { ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null }));
+    }).catch(() => undefined);
+  }, [state.currentUserId]);
 
   // Someone who left Location on last time gets the city refreshed quietly.
   useEffect(() => {
@@ -8479,7 +8565,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPosition().then((result) => {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
-        setState((prev) => ({ ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
+        // Turned off meanwhile (by hand, or another account signed in): the answer is dropped.
+        setState((prev) => (!prev.locationEnabled ? prev : { ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
       } else if (result.reason === 'denied') {
         // Taken away in the device's settings since: the switch says so.
         setState((prev) => ({ ...prev, locationEnabled: false }));
