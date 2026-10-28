@@ -696,7 +696,7 @@ const Lens = React.memo(function Lens({ geo, fallback, fill, glass, glassDark, s
  * Each motion's (barLens's LensMotion, in lensKind's order: tuned, liquid, lens) most stretch past the
  * capsule's own width while it travels, as a share of that width.
  */
-const STRETCH_MAX = [0.25, 0.45, 0.15] as const;
+const STRETCH_MAX = [0.25, 0.36, 0.15] as const;
 /** Each one's lift at the touch: this much taller (and as much wider), as a share of its height (tuned about 1.06, the lens's swell 1.14). */
 const LIFTS = [0.06, 0.04, 0.14] as const;
 /** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers. */
@@ -723,10 +723,11 @@ const chase = (k: number) => ({ stiffness: k, damping: 2 * Math.sqrt(k), mass: 1
 const TRAIL_SPRINGS = [chase(6000), chase(6000), chase(9000)] as const;
 const TRAIL_RIDE = chase(1600);
 /**
- * The liquid capsule's trailing edge: a spring of its own aimed at the tab (not chasing the front), slower
- * than the front's 230 ms, so the front pulls ahead and the back catches up as it lands.
+ * The liquid capsule's trailing edge (review, Oct 28: 400 ms left a slow creep after landing and a long smear
+ * across the +; 330 ms gathers it up with the front): a spring of its own aimed at the tab (not chasing the front), slower
+ * than the front's 250 ms, so the front pulls ahead and the back catches up as it lands.
  */
-const LIQUID_TRAIL = { dampingRatio: 1, duration: 400, overshootClamping: true } as const;
+const LIQUID_TRAIL = { dampingRatio: 1, duration: 330, overshootClamping: true } as const;
 /** The middle piece's own width before it is stretched (any width: it is only ever scaled). */
 const MID_W = 100;
 /** The lens's highlight: a short soft bar near its top that rides along with it. */

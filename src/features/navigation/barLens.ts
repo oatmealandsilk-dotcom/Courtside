@@ -94,8 +94,8 @@ const LENS_SPRING = { dampingRatio: 1, duration: 420, overshootClamping: true } 
  * How the new bar's capsule travels between tabs (Oct 28, owner, after the first video: "The new bottom is
  * better, still could be better animation"). Three, one line apart (TabBarLooks' StretchLens draws them):
  *
- *   'liquid'  its two ends ride two springs, the leading one quicker (about 230 ms) than the trailing one
- *             (about 400 ms): it stretches like a drop of liquid toward the tab, a touch flatter while
+ *   'liquid'  its two ends ride two springs, the leading one quicker (about 250 ms) than the trailing one
+ *             (about 330 ms): it stretches like a drop of liquid toward the tab, a touch flatter while
  *             stretched, and the back catches up as it lands. No bounce, never past the tab.
  *   'lens'    at the touch it swells into a glassier lens (bigger, a brighter rim, a highlight riding on
  *             it), travels a little stretched, and shrinks back as it lands, as iOS 26's own tab bar.
@@ -135,7 +135,7 @@ export function lensKindOf(motion: LensMotion): number {
 /** Each motion's leading spring (critically damped: no bounce, never past the tab). */
 const NEW_SPRINGS = [
   { dampingRatio: 1, duration: 240, overshootClamping: true },
-  { dampingRatio: 1, duration: 230, overshootClamping: true },
+  { dampingRatio: 1, duration: 250, overshootClamping: true },
   { dampingRatio: 1, duration: 320, overshootClamping: true },
 ] as const;
 /** 1 from the moment a tap or a slide along the bar sends the new bar's lens to a tab until it lands there (its soft tap on landing). */
