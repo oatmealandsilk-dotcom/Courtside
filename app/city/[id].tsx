@@ -1,4 +1,4 @@
-import { PRESS_DIM } from '@/theme/press';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
@@ -13,6 +13,7 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
+import { PEEK_CARD_W, PeekCardBody } from '@/components/place/CourtsNearPeek';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
@@ -24,9 +25,9 @@ import { courtHref } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
-import type { Post, User } from '@/data/types';
+import type { ActiveCourt, Post, User } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
@@ -59,9 +60,12 @@ interface PlayerLine { user: User; sessions: number; rank: number; me: boolean }
  *   5. Most active courts, right under Top players (owner, Oct 28: "Under
  *      here should be most active courts"): the city's courts by visits this
  *      month, a tap opening the court's page; none yet, one calm line saying
- *      how to put one there (never a missing section).
- *   (Round 5: both lists carry a head row, Rank · Player · Sessions and
- *   Court · Visits, and their numbers stand bare.)
+ *      how to put one there (never a missing section). As court cards, not a
+ *      second list (owner, Oct 28: "should be like the rectangles, not
+ *      looking the same as the list above"): design A, a sideways row of
+ *      Courts near you's cards.
+ *   (Round 5: Top players carries a head row, Rank · Player · Sessions, and
+ *   its numbers stand bare.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
  * Who is shown is the server's call, for you (city_page): players by the
@@ -248,18 +252,7 @@ export default function CityPage() {
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Most active courts</Text>
         </View>
-        {activeCourts.length ? (
-          <>
-            {/* Not ranked (its rows have no places), so no "Rank". */}
-            <BoardHead name="Court" value="Visits" rankWidth={null} style={styles.boardHead} />
-            {activeCourts.map((c, i) => (
-              <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={`${c.name}, ${visitsWords(c.visits)} this month. Open court`} onPress={() => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }))} style={({ pressed }) => [styles.courtRow, i > 0 && styles.line, pressed && { opacity: PRESS_DIM }]}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, styles.courtName]}>{c.name}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.visits}</Text>
-              </Pressable>
-            ))}
-          </>
-        ) : (
+        {activeCourts.length ? <ActiveCourtsRow courts={activeCourts} /> : (
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtsEmpty}>Log a session at a court to put it here</Text>
         )}
       </View>
@@ -296,6 +289,39 @@ export default function CityPage() {
     </View>
   );
 }
+
+/**
+ * Most active courts, design A: a sideways row of Courts near you's cards
+ * (the court's map across the top, its name and visits under it), most
+ * visits first, its place a small chip on the map ("#1"; level counts share
+ * one; none for a city's only court). Swipe for more. The maps are only ever pictures kept from before
+ * (draw off): this page never draws one, so the phone's hidden map drawing
+ * stays on Find Players and in chats, and a court not drawn yet shows the
+ * cards' own stand-in. A tap opens the court's page.
+ */
+function ActiveCourtsRow({ courts }: { courts: ActiveCourt[] }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courtsScroll} contentContainerStyle={styles.courtsRow}>
+      {courts.map((c) => {
+        const place = placeAmong(courts, c);
+        return (
+          <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place)} onPress={() => openActiveCourt(c)}
+            style={({ pressed }) => [styles.courtCard, { width: PEEK_CARD_W }, pressed && styles.courtPressed]}>
+            {/* Its place only beside others: "#1" of one says nothing. */}
+            <PeekCardBody name={c.name} lat={c.lat} lng={c.lng} meta={visitsWords(c.visits)} tag={courts.length > 1 ? `#${place}` : null} draw={false} />
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** A court's place among the city's most active: 1 + how many have more visits (level counts share a place). */
+const placeAmong = (courts: ActiveCourt[], c: ActiveCourt) => 1 + courts.filter((k) => k.visits > c.visits).length;
+/** What VoiceOver hears for a court's card. */
+const courtSaid = (c: ActiveCourt, place: number) => `${c.name}, ${visitsWords(c.visits)} this month, number ${place}. Open court`;
+const openActiveCourt = (c: ActiveCourt) => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }));
 
 /** Still coming: Up to hit's faces and Top players' rows as quiet shapes, so nothing jumps when they land. */
 function LoadingPage() {
@@ -499,9 +525,12 @@ const styleDefinitions = StyleSheet.create({
   sub: { ...typography.small, color: colors.textFaint },
   subMine: { ...typography.small, ...font('500'), color: colors.text },
   value: { ...font('700'), fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
-  courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 58, paddingHorizontal: spacing.md },
-  courtName: { flex: 1, minWidth: 0 },
-  courtsEmpty: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  // Most active courts: Courts near you's strip and cards (its outline, corners and press), from the page's margins.
+  courtsScroll: { marginHorizontal: -spacing.lg, flexGrow: 0 },
+  courtsRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.xs },
+  courtCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  courtPressed: { transform: [{ scale: PRESS_SHRINK }] },
+  courtsEmpty: { ...typography.body, color: colors.textMuted, paddingTop: spacing.xs },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
   footHead: { ...typography.heading, color: colors.text, textAlign: 'center' },
   footBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
