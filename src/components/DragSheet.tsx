@@ -182,6 +182,13 @@ export function DragSheet(props: {
    * ignores it.
    */
   contentHeight?: number;
+  /**
+   * With contentHeight: the opening waits for that height (at most 150ms),
+   * so the sheet rises once, straight to where it stays, never up to
+   * `peekFraction` first and then down to its contents (a consent sheet
+   * that must not bounce, review Oct 28). Opt-in; the stage ignores it.
+   */
+  waitForFit?: boolean;
   /** On a wide computer screen the sheet docks to the right (see the .web twin); a phone ignores it. */
   side?: boolean;
   /** The sheet has come to rest where it was going (first: it has finished opening). */
@@ -249,6 +256,7 @@ function PlainSheet({
   closeSignal = 0,
   onSettled,
   contentHeight,
+  waitForFit = false,
   beforeClose,
   ownBack = false,
   handOverSignal = 0,
@@ -263,6 +271,7 @@ function PlainSheet({
   closeSignal?: number;
   onSettled?: () => void;
   contentHeight?: number;
+  waitForFit?: boolean;
   beforeClose?: () => boolean;
   ownBack?: boolean;
   handOverSignal?: number;
@@ -324,6 +333,8 @@ function PlainSheet({
   latestOpen.current = openOffset;
   // Whether it has been sent to rest yet (a sheet handed over waits for its contents' height first).
   const sent = useRef(false);
+  // The opening's first move, kept for waitForFit (it waits for its contents' height, the effect below).
+  const riseNow = useRef<() => void>(() => undefined);
   useEffect(() => {
     // Settled however the opening ends: at rest, or cut short by the keyboard
     // taking it up ("Add a comment") or a finger on the handle.
@@ -338,7 +349,14 @@ function PlainSheet({
       restY.value = latestOpen.current;
       translateY.value = withSpring(latestOpen.current, slideOpen ? SLIDE_SPRING : SPRING, (finished) => { landed(finished); runOnJS(settled)(); });
     };
-    if (!arriving) { rise(); return undefined; }
+    riseNow.current = rise;
+    if (!arriving && !waitForFit) { rise(); return undefined; }
+    // waitForFit: it rises once its contents have measured (below), straight to
+    // their height; this is only the fallback if they never say.
+    if (!arriving) {
+      const wait = setTimeout(rise, 150);
+      return () => clearTimeout(wait);
+    }
     // Handed over: it waits where it is for its contents' height (the effect
     // below), so it settles once, never up to the opening height and back down.
     contentOpacity.value = withTiming(1, { duration: HAND_IN_MS, easing: EASE });
@@ -355,6 +373,8 @@ function PlainSheet({
   // that first fitted a short page is never left stuck short. The browser's
   // twin measures again on every change for the same reason.
   useEffect(() => {
+    // waitForFit, not risen yet: the rise below goes there itself.
+    if (waitForFit && !sent.current) return;
     if (touched.current || dismissedRef.current || closing.value || openOffset === restAt.current) return;
     sent.current = true;
     restAt.current = openOffset;
@@ -362,6 +382,10 @@ function PlainSheet({
     translateY.value = withSpring(openOffset, slideOpen ? SLIDE_SPRING : SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitted]);
+  // waitForFit: its contents (and header) have measured, so it rises now, once, to where it stays.
+  useEffect(() => {
+    if (waitForFit && contentHeight && headH) riseNow.current();
+  }, [waitForFit, contentHeight, headH]);
 
   const finish = () => {
     if (dismissedRef.current) return;

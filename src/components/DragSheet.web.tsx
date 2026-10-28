@@ -75,6 +75,7 @@ export function DragSheet({
   closeSignal = 0,
   fitContent = false,
   contentHeight,
+  waitForFit = false,
   side = false,
   onSettled,
   stage,
@@ -97,6 +98,8 @@ export function DragSheet({
   fitContent?: boolean;
   /** How tall its contents are, once known: a phone's sheet opens only as tall as its header and that need (see the native twin). */
   contentHeight?: number;
+  /** With contentHeight: a phone's sheet opens once its contents have measured (at most 150ms), straight to their height (see the native twin). */
+  waitForFit?: boolean;
   /** On a wide computer screen, dock to the right instead of covering the middle, so what it is about stays in view. */
   side?: boolean;
   /** The sheet has come to rest where it was going (first: it has finished opening). */
@@ -128,7 +131,7 @@ export function DragSheet({
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
   if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} waitForFit={waitForFit} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen}>{children}</Sheet>;
 }
 
 /** The latest beforeClose, and whether a close the person started may go ahead now. */
@@ -312,6 +315,7 @@ function Sheet({
   onSettled,
   active,
   contentHeight,
+  waitForFit = false,
   beforeClose,
   handOverSignal = 0,
   plain = false,
@@ -325,6 +329,7 @@ function Sheet({
   onSettled?: () => void;
   active: boolean;
   contentHeight?: number;
+  waitForFit?: boolean;
   beforeClose?: () => boolean;
   handOverSignal?: number;
   plain?: boolean;
@@ -404,9 +409,10 @@ function Sheet({
       for (const el of [headWords.current, body.current]) el?.animate([{ opacity: HAND_IN_FROM }, { opacity: 1 }], { duration: HAND_IN_MS, easing: EASE, fill: 'backwards' });
     }
     // One frame so the opening slide is seen rather than starting already open.
-    // Handed over, it waits for its contents' height instead (the effect below), so it settles once, never up and back down.
-    const frame = requestAnimationFrame(() => { if (!from || fit.current) place(geometry.current.openOffset, OPEN_MS); });
-    const late = from ? window.setTimeout(() => { if (!fit.current && !touched.current && !leaving.current) place(geometry.current.openOffset, OPEN_MS); }, 250) : 0;
+    // Handed over (or waitForFit), it waits for its contents' height instead (the effect below), so it settles once, never up and back down.
+    const waits = !!from || waitForFit;
+    const frame = requestAnimationFrame(() => { if (!waits || fit.current) place(geometry.current.openOffset, OPEN_MS); });
+    const late = waits ? window.setTimeout(() => { if (!fit.current && !touched.current && !leaving.current) place(geometry.current.openOffset, OPEN_MS); }, from ? 250 : 150) : 0;
     const settled = setTimeout(() => onSettled?.(), OPEN_MS + 20);
     window.addEventListener('resize', measure);
     // A phone's keyboard shrinks the visible area without a window resize; the sheet re-measures and keeps its box above it.

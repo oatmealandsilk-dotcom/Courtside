@@ -116,19 +116,30 @@ export function useWhoSeesYouUp(): boolean {
 }
 
 /**
- * Opens "Who can see you on the map?". `first`: before the first Check in,
- * a yes or Not now (then Apple's prompt, with the check-in). `manage`: the
- * same two answers, saved as they are tapped. Resolves with the answer, or
- * null if it was closed without one.
+ * What opened the first ask, so it promises only what is true there: `uth`,
+ * the Up to hit button (it ends by itself at 10pm, or after 2 hours late in
+ * the day); `court`, I'm playing here on a court's sheet; `live`, Show friends
+ * on a live session; `teenOpen`, a teen's Open to hit (it ends at the time
+ * they picked); `reask`, the re-ask card's Turn on (nothing is shared yet).
+ * Anything but `uth` reads the general words: only when you choose to share,
+ * and it ends by itself (review, Oct 28).
  */
-export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility | null> {
+export type WhoSeesFrom = 'uth' | 'court' | 'live' | 'teenOpen' | 'reask';
+
+/**
+ * Opens "Who can see you on the map?". `first`: before the first Check in,
+ * a yes or Not now (then Apple's prompt, with the check-in); `from` says what
+ * asked. `manage`: the same two answers, saved as they are tapped. Resolves
+ * with the answer, or null if it was closed without one.
+ */
+export function askWhoSeesYou(mode: 'first' | 'manage', from?: WhoSeesFrom): Promise<MapVisibility | null> {
   learnedTip('map-who-sees');
   // Only one at a time: a second tap while it is up opens nothing more.
   if (waiting) return Promise.resolve(null);
   return new Promise((resolve) => {
     waiting = resolve;
     emitUp();
-    router.push({ pathname: '/map-visibility', params: { mode } });
+    router.push({ pathname: '/map-visibility', params: from ? { mode, from } : { mode } });
   });
 }
 
@@ -140,10 +151,10 @@ export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility |
  * holds the same rule). Resolves whether to go on. No one: false, unasked
  * (the page already says it, and Settings changes it).
  */
-export async function yesFirst(now: MapVisibility | null | undefined): Promise<boolean> {
+export async function yesFirst(now: MapVisibility | null | undefined, from: WhoSeesFrom): Promise<boolean> {
   if (saidYes(now)) return true;
   if (now === 'none') return false;
-  return saidYes(await askWhoSeesYou('first'));
+  return saidYes(await askWhoSeesYou('first', from));
 }
 
 /** The screen has closed: with what was chosen, or null. */

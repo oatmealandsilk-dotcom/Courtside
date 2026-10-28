@@ -100,7 +100,7 @@ export default function LiveSessionPage() {
   const tryCheckIn = async () => {
     if (asking) return;
     // A yes first, or nothing at all (Apple 5.1.2(i), migration 191).
-    if (!(await yesFirst(mapVisibility))) return;
+    if (!(await yesFirst(mapVisibility, 'live'))) return;
     setAsking(true);
     if (!locationEnabled) {
       // The check-in follows once Location is on (see checkInWhenOn above).

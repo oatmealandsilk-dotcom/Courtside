@@ -78,7 +78,7 @@ export default function CourtNowSheet() {
     setError('');
     if (!next) { await actions.checkOutOfCourt(); return; }
     // No yes yet: "Who can see you on the map?" first, and nothing without a yes (Apple 5.1.2(i), migration 191).
-    if (!(await yesFirst(mapVisibility))) return;
+    if (!(await yesFirst(mapVisibility, 'court'))) return;
     const problem = await actions.checkInAtCourt(courtId);
     if (problem) setError(problem);
   };

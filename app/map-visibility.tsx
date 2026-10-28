@@ -23,10 +23,13 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  * day. Strangers never see where you are. No: nothing of yours is ever on
  * the map.
  *
- * `mode=first`: the first time you tap Check in. "Friends · people you both
- * follow" saves the yes; then Apple's own location prompt, then the check-in.
+ * `mode=first`: the first time you tap Up to hit. "Friends · people you both
+ * follow" saves the yes; then Apple's own location prompt, then Up to hit.
  * "Not now" (or closing it) saves nothing and shares nothing; it asks again
- * the next time you tap Check in.
+ * the next time you tap Up to hit. `from` says what asked (WhoSeesFrom):
+ * only Up to hit's ask names Up to hit and 10pm; I'm playing here, Show
+ * friends, a teen's Open to hit and the re-ask each end on their own clock,
+ * so theirs say only that it ends by itself.
  * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
  * also takes any live check-in off the map.
  *
@@ -36,8 +39,10 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; from?: string }>();
   const first = params.mode !== 'manage';
+  // Up to hit's own words (and Settings → Privacy, which explains Up to hit); any other ask, the general ones.
+  const upToHit = !first || params.from === 'uth';
   const { actions, mapVisibility, currentUser, teenMap } = useApp();
   const teen = onTeenMap(currentUser, teenMap);
   const yesNow = mapVisibility === 'mutuals' || mapVisibility === 'nearby';
@@ -49,6 +54,13 @@ export default function MapVisibilitySheet() {
   // without these heights a phone's sheet opened to its peek and left a wide empty gap above the buttons.
   const [contentH, setContentH] = useState(0);
   const [footH, setFootH] = useState(0);
+  // Big iPhone Text Size (a teen's notice too) can make the words taller than the sheet; they then scroll under
+  // the buttons, so the scroll bar shows and flashes once the sheet has opened, saying there is more (review, Oct 28).
+  const scroll = useRef<ScrollView>(null);
+  const sizes = useRef({ content: 0, view: 0, settled: false });
+  const [overflow, setOverflow] = useState(false);
+  const checkOverflow = () => { const z = sizes.current; if (z.settled) setOverflow(z.content > z.view + 1); };
+  useEffect(() => { if (overflow) scroll.current?.flashScrollIndicators(); }, [overflow]);
   // What the screen closes with: the answer once it is saved, else nothing.
   const answer = useRef<MapVisibility | null>(null);
   const close = () => setCloseSignal((n) => n + 1);
@@ -74,16 +86,26 @@ export default function MapVisibilitySheet() {
       peekFraction={first ? 0.8 : 0.7}
       fitContent
       contentHeight={contentH && footH ? contentH + footH : undefined}
+      // It rises once, straight to its words and buttons, never up to the peek and back down.
+      waitForFit
+      onSettled={() => { sizes.current.settled = true; checkOverflow(); }}
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
       header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time in Settings → Privacy.' : undefined} onClose={close} />}
     >
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
+      <ScrollView
+        ref={scroll}
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={overflow}
+        onLayout={(e) => { sizes.current.view = e.nativeEvent.layout.height; checkOverflow(); }}
+        onContentSizeChange={(_, h) => { const r = Math.ceil(h); sizes.current.content = r; if (r !== contentH) setContentH(r); checkOverflow(); }}
+      >
         {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
         <View style={styles.facts}>
-          {FACTS.map((f) => (
-            <Text key={f.text} style={styles.factText}>{f.text}</Text>
+          {facts(upToHit).map((f) => (
+            <Text key={f} style={styles.factText}>{f}</Text>
           ))}
         </View>
         {teen ? (
@@ -131,12 +153,19 @@ export default function MapVisibilitySheet() {
   );
 }
 
-/** What a yes means, said plainly before it is given. */
-const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-  { icon: 'hand-left-outline', text: 'You show on the map only when you tap Up to hit. Never on your own.' },
-  { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
-  { icon: 'time-outline', text: 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.' },
-];
+/**
+ * What a yes means, said plainly before it is given. Asked from Up to hit (and
+ * in Settings → Privacy): its tap and its 10pm. Asked from anywhere else (I'm
+ * playing here, Show friends, a teen's Open to hit, the re-ask), the same
+ * promise without Up to hit's clock, since each of those ends on its own.
+ */
+function facts(upToHit: boolean): string[] {
+  return [
+    upToHit ? 'You show on the map only when you tap Up to hit. Never on your own.' : 'You show on the map only when you choose to share. Never on your own.',
+    'Only friends who follow each other with you see your pin. Strangers never see where you are.',
+    upToHit ? 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.' : 'It ends by itself, and you can turn it off any time.',
+  ];
+}
 
 /** Where the six faces round you sit, and which two follow you back. */
 const AROUND = [
