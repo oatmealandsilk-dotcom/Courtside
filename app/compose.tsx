@@ -429,7 +429,9 @@ function Compose() {
   // Opened from a court's page ("Post from here"): that court is already the place.
   // From Finish, where the session was started, for someone known to be an
   // adult only (a place on a post says where a minor plays: owner decision 7).
-  const [location, setLocation] = useState(params.courtName?.trim() || (fromLive && adult ? livePlace(fromLive) : ''));
+  // Since Oct 27 (audit #5) no place at all for someone not known to be an adult, typed or picked:
+  // the server clears it too (migration 191).
+  const [location, setLocation] = useState(adult ? params.courtName?.trim() || (fromLive ? livePlace(fromLive) : '') : '');
   // The court it was played on, when the location was picked from the courts list.
   // Only ever put on the post for someone known to be an adult (owner decision
   // 7, below): for anyone else the place goes on as words, without the court.
@@ -1042,7 +1044,7 @@ function Compose() {
         body: body.trim() || (stats ? pickCaption(opened) : ''),
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
         taggedUserIds: postTags,
-        location: location.trim() || undefined,
+        location: (adult && location.trim()) || undefined,
         court: adult && location.trim() && court && !groupPost ? court : undefined,
         featureOk: stats || groupPost ? false : featureOk ? undefined : false,
         groupId: shareTo ?? undefined,
@@ -1079,7 +1081,7 @@ function Compose() {
       body: body.trim(),
       tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map(tag=>tag.slice(1).toLowerCase()))),
       taggedUserIds: postTags,
-      location: location.trim() || undefined,
+      location: (adult && location.trim()) || undefined,
       court: adult && location.trim() && court && !groupPost ? court : undefined,
       featureOk: stats || groupPost ? false : featureOk ? undefined : false,
       groupId: shareTo ?? undefined,
@@ -1162,7 +1164,7 @@ function Compose() {
         body: body.trim() || logCaption,
         tags: Array.from(new Set((body.match(/#[\p{L}\p{N}_]+/gu) ?? []).map((tag) => tag.slice(1).toLowerCase()))),
         taggedUserIds: postTags,
-        location: location.trim() || undefined,
+        location: (adult && location.trim()) || undefined,
         court: adult && location.trim() && court ? court : undefined,
         featureOk: false,
         imageUrl: media?.kind === 'photo' ? media.uri : undefined,
@@ -1322,8 +1324,9 @@ function Compose() {
     return () => { opened = true; clearTimeout(fallback); stop(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Where it was: "Played at …?" when you are standing at a court, or Add location.
-  const placeRows = (
+  // Where it was: "Played at …?" when you are standing at a court, or Add location. Never for
+  // someone not known to be an adult (owner decision 7; Oct 27 audit #5): a place says where a minor plays.
+  const placeRows = !adult ? null : (
     <>
                   {/* Never for a workout away from a court (a run, a lift): "Played at" is for tennis. */}
                   {!location && nearCourt && !nearWaved && !workoutLog && (mode === 'post' || mode === 'clip' || logMode) ? (

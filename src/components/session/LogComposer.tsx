@@ -14,6 +14,7 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { buttonShape, colors, font, lift, spacing, withAlpha } from '@/theme';
 import { SessionCard, type CardPerson } from './SessionCard';
 import { CountUp } from './CountUp';
+import type { CountPlay } from './countFormat';
 import { DrawnTick } from './DrawnTick';
 import { PostPreview, type PreviewMedia } from './PostPreview';
 import { corner } from '@/theme/look';
@@ -65,9 +66,10 @@ export function LogComposerTop({ session, people, hidden, waiting, media, prepar
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const size = useLogSizes();
-  // The card counts up once, a moment after the composer opens.
-  const [play, setPlay] = useState(false);
-  useEffect(() => { if (session && !play) setPlay(true); }, [!!session]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card counts up once, a moment after the composer opens. Until then its numbers wait at their
+  // starting point ('wait'), never in full: in full for a frame, they could only fall back to 0 to count.
+  const [play, setPlay] = useState<CountPlay>('wait');
+  useEffect(() => { if (session && play !== true) setPlay(true); }, [!!session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (media) {
     return (

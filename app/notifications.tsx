@@ -130,7 +130,8 @@ const VERB: Record<NotificationKind, string> = {
   upvote: 'upvoted your thread',
   'upvote-reply': 'upvoted your reply',
   milestone: 'just passed',
-  joined: 'just joined CourtSide near you',
+  // Their town, never how near (Oct 27 audit #8): the row's preview is the town on their profile.
+  joined: 'just joined CourtSide in your town',
   'hit-join': 'is in for your hit',
   'hit-match': 'is also looking for a hit',
   'hit-invite': 'invited you to hit',
@@ -140,7 +141,7 @@ const VERB: Record<NotificationKind, string> = {
   activity: LESS_AI ? '' : 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
   'map-new-hit': 'posted an open hit near you',
-  'map-new-player': 'is new and checked in near you',
+  'map-new-player': 'is new to CourtSide and checked in',
   'court-activity': 'posted at a court you follow',
   // "in a match" or "in a practice" comes from the row's preview (migration 62); see verbFor.
   'session-tag': 'tagged you in a session',
@@ -365,7 +366,7 @@ export default function Notifications() {
     ? { line: FRIENDS_LINE, label: 'Add friends', go: findPlayers }
     : mapLead === 'invite'
       ? { line: 'Bring the people you play with.', label: 'Invite', go: () => router.push('/invite') }
-      : { line: 'See who plays near you.', label: 'Find players', go: findPlayers };
+      : { line: 'See who plays in your town.', label: 'Find players', go: findPlayers };
   // "New hit at Alder Park" opens the map on that court: where it is comes from the courts you follow.
   const courtRows = notifications.some((n) => n.kind === 'court-activity');
   useEffect(() => { if (courtRows && followedCourts === null) void actions.loadFollowedCourts(); }, [courtRows, followedCourts, actions]);
@@ -652,7 +653,7 @@ export default function Notifications() {
           title={welcome.shown ? 'Nothing else yet' : 'Nothing yet'}
           body="Likes, replies and shares on your posts land here. Following players is the quickest way to get some."
           // The welcome above already offers the way on.
-          action={welcome.shown ? undefined : { label: 'Find players near you', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
+          action={welcome.shown ? undefined : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
       ) : (
         // The rows there on opening are simply there; one that goes (a request declined) fades out

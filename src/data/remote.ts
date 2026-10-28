@@ -4343,6 +4343,18 @@ export const remote = {
     return ((data ?? []) as { user_id: ID; joined_at: string }[]).map((r) => ({ userId: r.user_id, joinedAt: r.joined_at }));
   },
   /**
+   * Near me (migration 190, players_in_town): the players whose own profile
+   * town is yours, as the server decides who may be listed to you (friends
+   * who follow each other with you; anyone else only a known adult, to a
+   * known adult), most recently active first. Only ids: never a spot, a
+   * distance or an age. Null on a database without it, or a failed ask.
+   */
+  async fetchPlayersInTown(): Promise<ID[] | null> {
+    const { data, error } = await need().rpc('players_in_town');
+    if (error) { if (!missingFunction(error)) fail('players in town')(error); return null; }
+    return ((data ?? []) as { user_id: ID }[]).map((r) => r.user_id);
+  },
+  /**
    * Check in (migration 189): your spot, read once when you tapped Check in,
    * for friends who follow each other with you until `until` (the server
    * holds it to 15 minutes .. 16 hours from now). Resolves when it ends, or
@@ -4449,7 +4461,7 @@ export const remote = {
     return 'That didn’t go through. Try again.';
   },
   /** "I'm playing here": when it ends, or why not, as the server says it. */
-  async checkInAtCourt(courtId: string, at: { lat: number; lng: number }): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'failed' }> {
+  async checkInAtCourt(courtId: string, at: { lat: number; lng: number }): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'ask_first' | 'failed' }> {
     // Where the phone is now, only so the server can check you are at the court (migration 189): it is never kept; the pin is the court.
     const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId, p_lat: at.lat, p_lng: at.lng });
     if (!error && typeof data === 'string') return { until: data };
@@ -4457,7 +4469,9 @@ export const remote = {
     const said = error?.message ?? '';
     // 'hidden': you chose Only me on the map (migration 63), so nobody sees you at a court either.
     return { error: /adults_only/.test(said) ? 'adults_only' : /location_off/.test(said) ? 'location_off' : /too_far/.test(said) ? 'too_far'
-      : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : /hidden/.test(said) ? 'hidden' : 'failed' };
+      : /closed_court/.test(said) ? 'closed_court' : /slow down/.test(said) ? 'slow_down' : /hidden/.test(said) ? 'hidden'
+        // No yes to "Who can see you on the map?" yet (migration 191): asked first, then tried again.
+        : /ask_first/.test(said) ? 'ask_first' : 'failed' };
   },
   /** False when it did not go through (you still show as playing there). */
   async checkOutOfCourt(): Promise<boolean> {
@@ -4663,8 +4677,8 @@ export const remote = {
     if (patch.name !== undefined) row.name = patch.name;
     if (patch.bio !== undefined) row.bio = patch.bio;
     if (patch.location !== undefined) row.location = patch.location;
-    // A town, not a spot (security review, Oct 5): profiles are public, and "Use my location" hands over the phone's own fix, so only two decimals (about 1 km) ever leave the phone. The server rounds too.
-    const town = (n?: number) => (n == null ? null : Math.round(n * 100) / 100);
+    // A town, not a spot (security review, Oct 5; Oct 27 audit #1): one decimal, about 10 km, ever leaves the phone, and "Use my location" sends the town's centre, never the phone's own fix. The server rounds the same (migration 191), and nobody else can read it (121, carried in 191).
+    const town = (n?: number) => (n == null ? null : Math.round(n * 10) / 10);
     if (patch.cityAt !== undefined) { row.city_lat = town(patch.cityAt?.lat); row.city_lng = town(patch.cityAt?.lng); }
     if (patch.avatarUrl !== undefined) row.avatar_url = patch.avatarUrl;
     // Since migration 123 the database files tournament plans privately as the

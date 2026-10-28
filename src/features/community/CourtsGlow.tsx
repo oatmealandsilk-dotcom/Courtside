@@ -36,10 +36,10 @@ export function useCourtsGlowOn(): boolean {
 
 /** How far above the section the drawing starts, and how far below it runs (the right light lives down there). */
 const ABOVE = 40;
-const BELOW = 420;
+const BELOW = 470;
 /** Where each light sits: the left one low in the section, the right one well under it (points). */
 const LEFT_AT = 0.8;
-const RIGHT_BELOW = 210;
+const RIGHT_BELOW = 260;
 
 /** Which of the palette's colours each side's light takes, per court. */
 const THEME_LIGHTS: Record<ThemeName, readonly ['court' | 'brand', 'court' | 'brand' | 'cardGlowBottom' | 'cardTouch']> = {
@@ -56,7 +56,8 @@ const THEME_LIGHTS: Record<ThemeName, readonly ['court' | 'brand', 'court' | 'br
  * How far each light moves its page at its centre (RGB distance): the same on every court, so a
  * pale colour on a pale page shows as much as a deep one, never more. 46 is Clean's green at 15%.
  */
-const STRENGTH = 46;
+// Oct 28 (owner: "the gradients here could be dialed back a tiny tiny bit, also make the one on the right a tiny bit lower"): 46 → 40, right light 50 pt lower.
+const STRENGTH = 40;
 const MAX_ALPHA = 0.5;
 
 const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));

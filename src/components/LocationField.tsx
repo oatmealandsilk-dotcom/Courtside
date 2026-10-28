@@ -13,7 +13,8 @@ import { colors, radius, spacing, typography, font } from '@/theme';
  * A city box that offers places as you type — the built-in list at once,
  * then any town in the world a beat later — and, when Location is on in
  * Settings, a one-tap "use where I am". Picking a place hands back where
- * it is too, so the map can put this person in their own town.
+ * it is too (the town's centre, never the phone's own spot), so the map can
+ * put this person in their own town.
  */
 /** How many leading letters of a place the typed text already covers. */
 const matchLength = (name: string, typed: string) => {
@@ -78,7 +79,9 @@ export function LocationField({ value, onChange }: { value: string; onChange: (n
         ) : null}
       </View>
       {showDetected ? (
-        <Pressable accessibilityRole="button" onPress={() => { const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, detectedCoords ?? (bank ? { lat: bank.lat, lng: bank.lng } : null)); setFocused(false); }} style={styles.detected}>
+        // The town's own centre, never where the phone is (Oct 27 audit #1): a profile keeps a town,
+        // not someone's home. detectedLocation is always a town from the built-in list (nearestPlace).
+        <Pressable accessibilityRole="button" onPress={() => { const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, bank ? { lat: bank.lat, lng: bank.lng } : null); setFocused(false); }} style={styles.detected}>
           <Ionicons name="navigate" size={16} color={colors.brand} />
           <Text style={styles.detectedText}>Use my location · {detectedLocation}</Text>
         </Pressable>

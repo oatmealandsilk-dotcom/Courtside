@@ -8,9 +8,9 @@
  */
 export type CountPart = 'int' | 'hours' | 'minutes2' | 'dec1' | 'clockHours' | 'clockMinutes2';
 /**
- * When a number counts: false, it shows in full, still; true, it counts up (once); 'wait', it shows its
- * starting point, ready to count the moment it turns true (a Feed page on its way in, Oct 27, owner: "It
- * starts too late the numbers counting").
+ * When a number counts: false, it shows in full, still; true, it counts up from its starting point; 'wait',
+ * it shows its starting point, ready to count the moment it turns true (a Feed page on its way in, Oct 27,
+ * owner: "It starts too late the numbers counting"; see features/feed/pageCount).
  */
 export type CountPlay = boolean | 'wait';
 

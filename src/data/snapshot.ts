@@ -107,9 +107,10 @@ export async function clearSnapshot(me: ID): Promise<void> {
  * community tab should load in "absolute peak"): the pins on the map card,
  * the Open to hit rings and New on CourtSide, so the page the app opens on
  * shows them at once instead of after the map's own load. Only what this
- * account was last shown, only for four hours (a pin is someone's last shared
- * spot: a day-old one is more confusing than helpful), and the fresh load
- * replaces it as soon as it lands. Deleted with the main copy.
+ * account was last shown, only for 15 minutes (a pin is a friend's check-in,
+ * which may have ended since: Oct 27 audit #13), never a pin whose check-in
+ * has ended, and the fresh load replaces it as soon as it lands. Deleted with
+ * the main copy.
  */
 export interface MapCopy {
   lastSeen: Record<ID, LastSeen>;
@@ -120,7 +121,7 @@ export interface MapCopy {
 }
 const MAP_VERSION = 1;
 const mapKey = (me: ID) => `courtside-mapcopy-v${MAP_VERSION}:${me}`;
-const MAP_MAX_AGE_MS = 4 * 3_600_000;
+const MAP_MAX_AGE_MS = 15 * 60_000;
 /** Pins kept at most: the nearest-first answer rarely has more round a town. */
 const MAP_MAX_PINS = 150;
 
@@ -140,7 +141,10 @@ export async function readMapCopy(me: ID): Promise<MapCopy | null> {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v?: number; savedAt?: number; data?: MapCopy };
     if (parsed.v !== MAP_VERSION || !parsed.data?.lastSeen || !parsed.savedAt || Date.now() - parsed.savedAt > MAP_MAX_AGE_MS) return null;
-    return parsed.data;
+    // A check-in that has ended since is never put back up, even for the moment before the fresh load.
+    const now = Date.now();
+    const lastSeen = Object.fromEntries(Object.entries(parsed.data.lastSeen).filter(([, r]) => !r.until || Date.parse(r.until) > now));
+    return { ...parsed.data, lastSeen };
   } catch {
     return null;
   }

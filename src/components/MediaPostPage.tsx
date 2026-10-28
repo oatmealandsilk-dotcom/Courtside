@@ -29,6 +29,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
+import { PageCount } from '@/features/feed/pageCount';
 import { PushedDownTag } from '@/components/PushedDownTag';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
@@ -91,8 +92,8 @@ const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 const counted = new Set<string>();
 /**
  * A post whose page is already on show with its numbers before it is the page on screen (the Feed's
- * windows growing its feed back to the whole screen): its strip keeps them, never dropping to 0 to
- * count up as its feed takes over.
+ * windows growing its feed back to the whole screen): its strip, built from here on, shows them in full
+ * rather than counting up as its feed takes over.
  */
 export function markStripShown(postId: string) { counted.add(postId); }
 /** The breathing room either side of a post on a computer, when the window has it to spare. */
@@ -147,13 +148,6 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const { comments, currentUser, currentUserId, actions, blockedIds } = useApp();
   const streak = shownStreak(author, currentUserId);
   const footZones = postZones(post.session);
-  // The strip's numbers count up the first time its page is on show this run.
-  const [stripPlay, setStripPlay] = useState(false);
-  useEffect(() => {
-    if (!active || !post.session || counted.has(post.id)) return;
-    counted.add(post.id);
-    setStripPlay(true);
-  }, [active, post.id, post.session]);
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
   // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
   // Never one hidden by the owner's Hidden words (migration 117), unless it is yours: the sheet lists those under "Hidden comments".
@@ -404,7 +398,10 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
         <View style={styles.under} onLayout={measured(setFoot, foot)}>
           {/* A session's stats (a tracker's numbers, or one from the author's log), straight under the picture; a tap opens them all. */}
           {post.session && hasSessionStats(post.session) ? (
-            <SessionStrip session={post.session} author={author.name} hidden={blockedIds} play={stripPlay} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />
+            // Its numbers count up the first time the page comes in, from the moment a decided swipe heads for it, as a session's own card's do (PageCount).
+            <PageCount seen={counted} postId={post.id} active={active}>
+              {(play) => <SessionStrip session={post.session!} author={author.name} hidden={blockedIds} play={play} beat={0} onPress={() => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } })} />}
+            </PageCount>
           ) : null}
           {post.body ? (
             // A tap on the words opens the comments, the whole caption at their top, as on Instagram (Oct 12, owner).

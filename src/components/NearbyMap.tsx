@@ -23,7 +23,7 @@ import { livePin } from '@/features/activity/liveSession';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
-import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
+import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { askToHit } from '@/features/players/courtLink';
@@ -446,7 +446,7 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
-        accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of players, courts and hits near you'}
+        accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends who checked in'}
         onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
@@ -522,7 +522,22 @@ export function NearbyMap(props: NearbyMapProps) {
   // The map's buttons, riding on whatever is up along the bottom; on the players list, they fade as it rises (ListCrown).
   // Made for each layer from its own key, so one on its way out keeps the buttons it had: only the bare map's carry the
   // players pill (Oct 10: made from what was up now, a closing card's buttons grew the pill as it sank, the ⓘ jumping up over it).
-  const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
+  // Near me (Oct 27, owner: "Near me should show people that have their location set in the area, like the city")
+  // opens the players list: its town's players are listed there by their town, never put on the map (Apple
+  // 5.1.2(i): pins stay friends only). Whatever card was up gives way to the list.
+  const pickFilter = (next: MapFilter) => {
+    model.setFilter(next);
+    if (next !== 'near') return;
+    setMeOpen(false);
+    model.select(null);
+    model.selectCourt(null);
+    model.selectHit(null);
+    model.clearPlace();
+    setListTall(false);
+    trayAt.current = 0;
+    setListOpen(true);
+  };
+  const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} nearTown={model.nearTown} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
   // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
   const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
@@ -532,7 +547,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? checkIn : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={model.setFilter} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key === 'near') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
         {/* Only while zoomed out: "Zoom in to see courts", under the chips. */}
         <ChipsNoteLine>
@@ -556,7 +571,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : foot(stageKey === 'where' ? (
             <WhereCard locating={locating} onLocation={onToggleLocation} />
           ) : stageKey === 'list' ? (
-            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} openTall={listTall} onTall={setListTall} room={{ height: mapH, top: chipsEnd, foot: barInset }} stripAt={trayAt} />
+            <PlayersSheet items={model.tray} cityName={cityName} onSelect={model.select} onProfile={onOpen} nearTown={model.nearTown} query={model.query} filter={model.filter} courts={model.nearestCourts} onPickCourt={model.selectCourt} lock={lock} onUnlock={unlock} onClose={() => setListOpen(false)} openTall={listTall} onTall={setListTall} room={{ height: mapH, top: chipsEnd, foot: barInset }} stripAt={trayAt} />
           ) : meOpen ? (
             <YouSheet me={me} open={openToHit} teen={teen} onToggle={(on) => { void toggleOpen(on); }} onProfile={() => { setMeOpen(false); router.push('/(tabs)/profile'); }} onClose={() => setMeOpen(false)} seenBy={mapVisibility} onSeenBy={choosing ? () => { void askWhoSeesYou('manage'); } : undefined} />
           ) : model.selected ? (

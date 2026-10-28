@@ -50,6 +50,9 @@ export default function EditPost() {
   // decision 7), and never on a group-only post (the server keeps those off
   // every court's page). Otherwise the place stays as words.
   const courtOk = !!currentUser && !notKnownAdult(currentUser) && !post?.groupId;
+  // And no place at all, typed or picked, for someone not known to be an adult (Oct 27 audit #5;
+  // the server clears it too, migration 191): a place says where a minor plays.
+  const placeOk = !!currentUser && !notKnownAdult(currentUser);
   const pickPlace = (typed: string) => openPlacePicker((value, picked) => { setLocation(value); setCourt(courtOk ? picked ?? null : null); }, typed);
   const [closeSignal, setCloseSignal] = useState(0);
   // Opened before the post had loaded (a reload, a link): the fields fill in
@@ -143,7 +146,7 @@ export default function EditPost() {
         showToast({ title: 'Not saved', body: 'It has words that break CourtSide’s rules. Change them and save again.', icon: 'alert-circle-outline', long: true });
         return;
       }
-      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location, court: courtOk ? court : null, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
+      if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location: placeOk ? location : '', court: courtOk ? court : null, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
       if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
       setCloseSignal((n) => n + 1);
     });
@@ -178,7 +181,7 @@ export default function EditPost() {
           </>
         ) : (
           <>
-            <Field label="Caption" labelRight={<LocationLink value={location} court={!!court && courtOk} onPress={() => pickPlace(location)} onClear={() => { setLocation(''); setCourt(null); }} />} value={body} onChangeText={setBody} multiline minHeight={80} mentions maxLength={POST_MAX} />
+            <Field label="Caption" labelRight={placeOk ? <LocationLink value={location} court={!!court && courtOk} onPress={() => pickPlace(location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined} value={body} onChangeText={setBody} multiline minHeight={80} mentions maxLength={POST_MAX} />
             <TagPlayers tagged={tagged} onChange={setTagged} />
             {numbers && available.length ? <HealthShareRow activity={numbers} choice={healthShown} onChoice={setHealth} /> : null}
             {/* The composer's switch, word for word: the Terms ("When CourtSide features your post") and the privacy policy quote it. */}
