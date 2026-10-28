@@ -3328,6 +3328,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  // Counts every account arriving on screen (a sign-in, a switch, the same account again), so a
+  // Log out still finishing never takes away the login of whoever signed in after it (signOut).
+  const signInTurn = useRef(0);
+  const lastSignedIn = useRef(state.currentUserId);
+  if (state.currentUserId !== lastSignedIn.current) {
+    if (state.currentUserId) signInTurn.current += 1;
+    lastSignedIn.current = state.currentUserId;
+  }
   /** Unpaid bookings already re-checked with Stripe this run (see refreshCoaching). */
   const askedAboutPayment = useRef<Set<ID>>(new Set());
 
@@ -3791,7 +3799,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // in its keychain, as before.
     const endLogin = Platform.OS === 'web' && !options.keepLogin && !!leaving;
     // This phone stops getting the account's alerts before the session ends (the removal needs it), and your check-in ends.
-    if (isSupabaseConfigured) void Promise.all([checkedOut, forgetPushToken()]).finally(() => (endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
+    // Someone signed in while those were still going (the sign-in screen is quick): the login on this
+    // device is theirs by then, so it is left alone rather than ended in their place.
+    const turnAt = signInTurn.current;
+    if (isSupabaseConfigured) void Promise.all([checkedOut, forgetPushToken()]).finally(() => (signInTurn.current !== turnAt ? undefined : endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
     if (endLogin && leaving) void forgetAccount(leaving).catch(() => undefined);
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
     // stops them, never an open that merely could not read the session (useWorkoutWatch).
