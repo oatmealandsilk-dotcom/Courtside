@@ -37,7 +37,7 @@ import { TextScale } from '@/theme/textScale';
 export const PEEK_CARD_W = 168;
 /** The map across the top, inside the card's 1 pt outline. */
 const PEEK_W = PEEK_CARD_W - 2;
-const PEEK_H = 84;
+export const PEEK_H = 84;
 /** How close in: the park and the streets right around it. */
 const ZOOM = 15;
 /** The words' margins: the sides and foot alike, the top a little less (the map's edge is a line already). */
@@ -80,23 +80,42 @@ export interface PeekCardProps {
   lng: number;
   /** The line under the name: how far, how many courts, lights. */
   meta: string;
-  kind: SurfaceKind | null;
+  kind?: SurfaceKind | null;
   /** The surface's colour (CourtsNear's surfaceTint). */
-  tint: string;
+  tint?: string;
   /** The soonest open hit ("Tmrw 9 AM"), else how much was posted there. */
-  hit: string | null;
-  posts: string | null;
+  hit?: string | null;
+  posts?: string | null;
   /** Whether this card may draw its map now (on screen, and the opening over). */
   draw: boolean;
+  /** The card's width, where it is not Courts near you's (Most active courts on a city's page). */
+  width?: number;
+  /** The map's height, where it is not Courts near you's. */
+  mapHeight?: number;
+  /** A small plain chip first on the map's foot: a court's place among a city's most active ("#1"). */
+  tag?: string | null;
+  /** The words take only their own room, not two lines' of name: a card alone in its row, with no other to match. */
+  fit?: boolean;
+  /** A bigger name: the one wide card at the top of a list. */
+  big?: boolean;
 }
 
 /** What a card shows. The card's frame (the press, its outline) is CourtsNear's, with peekFrame. */
 export function PeekCardBody(p: PeekCardProps) {
   const styles = useThemedStyles(styleDefinitions);
+  // Inside the card's 1 pt outline, as Courts near you's.
+  const mapW = p.width === undefined ? PEEK_W : p.width - 2;
+  const mapH = p.mapHeight ?? PEEK_H;
+  const words = (
+    <>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, p.big && styles.nameBig]} numberOfLines={2}>{p.name}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{p.meta}</Text>
+    </>
+  );
   return (
     <>
-      <View style={styles.peek}>
-        <CourtMapThumb lat={p.lat} lng={p.lng} width={PEEK_W} height={PEEK_H} zoom={ZOOM} draw={p.draw} />
+      <View style={[styles.peek, mapW !== PEEK_W || mapH !== PEEK_H ? { width: mapW, height: mapH } : null]}>
+        <CourtMapThumb lat={p.lat} lng={p.lng} width={mapW} height={mapH} zoom={ZOOM} draw={p.draw} />
         <Pin />
         {/* The map's licence asks for its credit on the map: a tiny ⓘ in the corner that shows it on a tap (Oct 25, owner: "For open street map
             can you just put a small dot instead of the full word"). Its own press: a tap on it shows the credit, never opens the court. */}
@@ -104,6 +123,7 @@ export function PeekCardBody(p: PeekCardProps) {
         {/* On the map's foot: the surface and what's on there, small light chips. Beside an open hit the
             surface is its dot alone, so the hit's time always reads whole. */}
         <View style={styles.chips} pointerEvents="none">
+          {p.tag ? <View style={styles.chip}><Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.chipText, styles.tagText]} numberOfLines={1}>{p.tag}</Text></View> : null}
           {p.kind ? (
             <View style={styles.chip}>
               <View style={[styles.dot, { backgroundColor: p.tint }]} />
@@ -115,14 +135,14 @@ export function PeekCardBody(p: PeekCardProps) {
         </View>
       </View>
       <View style={styles.words}>
-        {/* Two lines of name and one of distance, unseen, so every card is one height; the words sit on it from the top. */}
-        <View>
-          <Room />
-          <View style={styles.over}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={2}>{p.name}</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{p.meta}</Text>
+        {/* Two lines of name and one of distance, unseen, so every card is one height; the words sit on it from the top.
+            A card alone in its row (fit) has none to match: just its words. */}
+        {p.fit ? <View>{words}</View> : (
+          <View>
+            <Room />
+            <View style={styles.over}>{words}</View>
           </View>
-        </View>
+        )}
       </View>
     </>
   );
@@ -194,6 +214,8 @@ const styleDefinitions = StyleSheet.create({
   // they ignored its padding, which is what put the name against the map and the card's edge).
   words: { paddingHorizontal: SIDE, paddingTop: UNDER_MAP, paddingBottom: SIDE },
   name: { ...typography.bodyStrong, fontSize: 15.5, letterSpacing: -0.2, lineHeight: 19, color: colors.text },
+  nameBig: { ...typography.heading, lineHeight: 22 },
+  tagText: { ...font('600'), fontVariant: ['tabular-nums'] },
   meta: { ...typography.small, lineHeight: 17, marginTop: 3, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   over: { position: 'absolute', top: 0, left: 0, right: 0 },
   unseen: { opacity: 0 },

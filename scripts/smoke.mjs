@@ -1735,7 +1735,8 @@ const STEPS = [
       // Most active courts, right under Top players (migration 198; owner, Oct 28: "Under here should be most active courts").
       await page.reveal({ text: 'Most active courts' }, 20000);
     },
-    expect: [{ text: 'Most active courts' }, { label: 'Court, Visits' }],
+    // As court cards (owner, Oct 28: "should be like the rectangles"): the top one says its visits and place.
+    expect: [{ text: 'Most active courts' }, { label: /^.+, \d+ visits? this month, number 1\. Open court$/ }],
     after: async (page) => {
       // Admin no more for anything after this: the next visit starts as everyone else does.
       await page.eval("sessionStorage.removeItem('courtside-demo-admin')");
