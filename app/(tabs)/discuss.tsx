@@ -725,8 +725,6 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             on their map yet, the same card as "Bring your friends". */}
         {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
-        {/* City boards (admins first): the month's board in the invite card's place, fading into Open to hit. */}
-        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
@@ -737,6 +735,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <UpToday me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
+        {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
+            People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
+        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}

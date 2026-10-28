@@ -21,8 +21,9 @@ const RANK_W = 32;
 const IN_RUN = 5;
 
 /**
- * Find Players, under the map, in place of "You're early in …" (owner,
- * Oct 27: "maybe we just replace it with the leaderboard that fades"): this
+ * Find Players, in place of "You're early in …" (owner, Oct 27: "maybe we
+ * just replace it with the leaderboard that fades"), under Up to hit / "Most
+ * active in <city>" (owner, Oct 28: "People first"): this
  * month's city board, fading into the page, with "See all cities" on the
  * fade. One tap opens the full board. The numbers are the server's
  * (city_board, migration 196), yours up to the minute in your own city.
