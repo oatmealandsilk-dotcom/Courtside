@@ -41,6 +41,9 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
+import { CityBoardPreview } from '@/components/CityBoardPreview';
+import { CITY_BOARD_MOCK } from '@/features/cityBoard/mock';
+import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
@@ -488,7 +491,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Only for a known adult: a teen sees only friends who follow each other
   // with them (migration 78; before it, nobody), so an empty list says nothing
   // about the town for them.
-  const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // DESIGN MOCK (design/city-board): 'early' forces the old card for a before picture.
+  const early = CITY_BOARD_MOCK === 'early' || (CITY_BOARD_MOCK === 'off' && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0);
+  const homeCityId = useHomeCityId();
   // The same moment for a teen, or anyone not known to be an adult (Oct 5,
   // owner: "Do all"): no friend on their map yet, which for them says only
   // that their friends are not here yet. "Bring your friends" takes the
@@ -696,6 +701,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             on their map yet, the same card as "Bring your friends". */}
         {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
+        {/* DESIGN MOCK (design/city-board): the city board in the invite card's place, fading into Open to hit. */}
+        {!search && CITY_BOARD_MOCK === 'board' ? <FirstReveal order={0}><CityBoardPreview homeCityId={homeCityId} /></FirstReveal> : null}
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
