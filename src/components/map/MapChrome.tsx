@@ -31,7 +31,8 @@ import { useCourtHits } from '@/features/places/useCourtHits';
 import { directionsTo } from '@/features/players/openInMaps';
 import { useApp } from '@/store/AppContext';
 import { TipBubble } from '@/components/TipBubble';
-import { useTip } from '@/features/tips/tips';
+import { releaseTip, useTip } from '@/features/tips/tips';
+import { REASK_SHOW_MS, noteReaskNotNow, noteReaskShown, noteReaskYes } from '@/features/players/noOneReask';
 import { TIP_SHOW_MS as UTH_TIP_SHOW_MS } from '@/features/players/upToHitTip';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
@@ -60,7 +61,7 @@ import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadro
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
-import { dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
 import { UpToHitPill, UpToHitRound } from '@/components/map/UpToHit';
 import { formatSpotMiles } from '@/features/players/geo';
@@ -1633,7 +1634,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, chip = false }: { /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, reask = false, chip = false }: { /** The No one re-ask may come now (noOneReask: the Community card, due for this person). */ reask?: boolean; /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const labelsOut = useGrowLabels();
   // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
   const weatherAway = useGrowAway('bottom');
@@ -1706,6 +1707,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <UpToHitPill control={checkIn} />
           <HideTip where="card" style={{ top: 52, right: 8 }} />
           <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
+          <NoOneReaskTip ready={reask && !checkIn.on && !checkIn.busy} span={checkIn.span} />
         </>
       ) : null}
       {weatherChip && !chip ? (
@@ -1786,6 +1788,53 @@ function UpToHitTip({ ready, span }: { ready: boolean; span: string }) {
     return () => { clearTimeout(t); close.current(); };
   }, [tip.shown]);
   return <TipBubble tip="up-to-hit" words={`Tap Up to hit · friends see you on the map ${span}.`} shown={tip.shown} onClose={tip.close} pointer="up" pointerRight={UTH_TIP_POINTER} style={{ top: 48, right: 8, left: 24, alignItems: 'flex-end' }} />;
+}
+/**
+ * The No one re-ask (noOneReask), in the same place and bubble as Up to hit's tip: "Friends can see you when you tap
+ * Up to hit · only people you both follow, till 10pm", with Turn on (our "Who can see you on the map?", its first
+ * look: Friends or Not now; Apple's prompt still only comes on the next Up to hit, after a yes) and Not now. It waits
+ * its turn like every tip, goes by itself after a while (asked, not a Not now), and comes back only as noOneReask says.
+ */
+function NoOneReaskTip({ ready, span }: { ready: boolean; span: string }) {
+  const { currentUserId } = useApp();
+  const tip = useTip('no-one-reask', ready);
+  const [gone, setGone] = useState(false);
+  const shown = tip.shown && !gone;
+  const id = useRef(currentUserId);
+  id.current = currentUserId;
+  useEffect(() => {
+    if (!tip.shown || !id.current) return undefined;
+    noteReaskShown(id.current);
+    const t = setTimeout(() => { setGone(true); releaseTip('no-one-reask'); }, REASK_SHOW_MS);
+    return () => { clearTimeout(t); releaseTip('no-one-reask'); };
+  }, [tip.shown]);
+  const notNow = () => {
+    setGone(true);
+    releaseTip('no-one-reask');
+    if (id.current) noteReaskNotNow(id.current);
+  };
+  const turnOn = () => {
+    setGone(true);
+    releaseTip('no-one-reask');
+    const who = id.current;
+    void askWhoSeesYou('first').then((v) => {
+      if (!who) return;
+      if (saidYes(v)) noteReaskYes(who);
+      else noteReaskNotNow(who);
+    });
+  };
+  return (
+    <TipBubble
+      tip="no-one-reask"
+      words={`Friends can see you when you tap Up to hit · only people you both follow, ${span}.`}
+      shown={shown}
+      onClose={notNow}
+      actions={[{ label: 'Not now', onPress: notNow }, { label: 'Turn on', onPress: turnOn, strong: true }]}
+      pointer="up"
+      pointerRight={UTH_TIP_POINTER}
+      style={{ top: 48, right: 8, left: 24, alignItems: 'flex-end' }}
+    />
+  );
 }
 /** Where the bubble's pointer sits, in from its right edge: under the middle of "Up to hit" (the pill's right edge 4 in from the bubble's). */
 const UTH_TIP_POINTER = 40;

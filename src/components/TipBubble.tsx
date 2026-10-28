@@ -21,7 +21,7 @@ import { corner } from '@/theme/look';
  * page, with a hairline, rather than the fixed dark bubble that vanished
  * into it. On a light page it looks the same either way.
  */
-export function TipBubble({ tip, words, shown, onClose, style, pointer = 'down', pointerInset, pointerRight, inline = false, on = 'media' }: { tip: TipKey; /** Its words now, when they change with the time of day (otherwise the tip's own). */ words?: string; shown: boolean; onClose: () => void; style?: StyleProp<ViewStyle>; pointer?: 'up' | 'down' | 'none'; /** With the bubble lined up on its left (`alignItems: 'flex-start'`): how far in from that edge the pointer sits. */ pointerInset?: number; /** With the bubble lined up on its right (`alignItems: 'flex-end'`): how far in from that edge the pointer sits. */ pointerRight?: number; /** In the page's flow, pushing what follows down while it shows. */ inline?: boolean; /** What it sits on: a video or a map (the fixed dark bubble), or a plain page (the page's own colours when it is dark). */ on?: 'media' | 'page' }) {
+export function TipBubble({ tip, words, shown, onClose, style, pointer = 'down', pointerInset, pointerRight, inline = false, on = 'media', actions }: { /** Two answers in place of "Got it" (the No one re-ask's Turn on and Not now): the bubble itself then takes no tap. */ actions?: { label: string; onPress: () => void; strong?: boolean }[]; tip: TipKey; /** Its words now, when they change with the time of day (otherwise the tip's own). */ words?: string; shown: boolean; onClose: () => void; style?: StyleProp<ViewStyle>; pointer?: 'up' | 'down' | 'none'; /** With the bubble lined up on its left (`alignItems: 'flex-start'`): how far in from that edge the pointer sits. */ pointerInset?: number; /** With the bubble lined up on its right (`alignItems: 'flex-end'`): how far in from that edge the pointer sits. */ pointerRight?: number; /** In the page's flow, pushing what follows down while it shows. */ inline?: boolean; /** What it sits on: a video or a map (the fixed dark bubble), or a plain page (the page's own colours when it is dark). */ on?: 'media' | 'page' }) {
   const styles = useThemedStyles(styleDefinitions);
   const lifted = on === 'page' && pageIsDark();
   const visible = useSharedValue(0);
@@ -50,10 +50,23 @@ export function TipBubble({ tip, words, shown, onClose, style, pointer = 'down',
   const body = (
     <>
       {pointer === 'up' ? <Animated.View style={[pointerStyle, styles.pointerUp, lifted && styles.pointerUpLifted]} /> : null}
-      <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${words ?? tipWords(tip)} Tap to close.`} onPress={(e) => { e.stopPropagation?.(); onClose(); }} style={[styles.bubble, lifted && styles.bubbleLifted]}>
-        <Text style={[styles.text, lifted && styles.textLifted]}>{words ?? tipWords(tip)}</Text>
-        <Text style={[styles.ok, lifted && styles.okLifted]}>Got it</Text>
-      </Pressable>
+      {actions ? (
+        <Animated.View accessibilityRole="alert" style={[styles.bubble, styles.bubbleAsk, lifted && styles.bubbleLifted]}>
+          <Text style={[styles.text, lifted && styles.textLifted]}>{words ?? tipWords(tip)}</Text>
+          <Animated.View style={styles.asks}>
+            {actions.map((a) => (
+              <Pressable key={a.label} accessibilityRole="button" hitSlop={8} onPress={(e) => { e.stopPropagation?.(); a.onPress(); }} style={({ pressed }) => [styles.ask, pressed && { opacity: 0.6 }]}>
+                <Text style={[a.strong ? styles.ok : styles.askQuiet, a.strong && lifted && styles.okLifted, !a.strong && lifted && styles.askQuietLifted]}>{a.label}</Text>
+              </Pressable>
+            ))}
+          </Animated.View>
+        </Animated.View>
+      ) : (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Tip: ${words ?? tipWords(tip)} Tap to close.`} onPress={(e) => { e.stopPropagation?.(); onClose(); }} style={[styles.bubble, lifted && styles.bubbleLifted]}>
+          <Text style={[styles.text, lifted && styles.textLifted]}>{words ?? tipWords(tip)}</Text>
+          <Text style={[styles.ok, lifted && styles.okLifted]}>Got it</Text>
+        </Pressable>
+      )}
       {pointer === 'down' ? <Animated.View style={[pointerStyle, styles.pointerDown, lifted && styles.pointerDownLifted]} /> : null}
     </>
   );
@@ -82,6 +95,12 @@ const styleDefinitions = StyleSheet.create({
   text: { flexShrink: 1, color: '#FFFFFF', fontSize: 14, lineHeight: 19, ...font('500') },
   // Never squeezed onto two lines by a long tip.
   ok: { flexShrink: 0, color: '#A9D3B0', fontSize: 13, ...font('700') },
+  // With two answers: the words, then the answers on their own row at the right.
+  bubbleAsk: { flexDirection: 'column', alignItems: 'stretch', gap: 8 },
+  asks: { flexDirection: 'row', justifyContent: 'flex-end', gap: 18 },
+  ask: { paddingVertical: 2 },
+  askQuiet: { color: 'rgba(255,255,255,0.7)', fontSize: 13, ...font('600') },
+  askQuietLifted: { color: colors.textMuted },
   pointer: { width: 12, height: 12, backgroundColor: INK, transform: [{ rotate: '45deg' }] },
   pointerDown: { marginTop: -7 },
   pointerUp: { marginBottom: -7 },
