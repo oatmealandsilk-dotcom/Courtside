@@ -7,6 +7,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { MIN_PLAYERS, daysLeftLabel, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, sessionsWords, whenWords, type RankedCity } from '@/features/cityBoard/board';
 import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
+import { cityLabel, zeroCities, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard } from '@/features/cityBoard/useCityBoard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
@@ -37,28 +38,45 @@ const IN_RUN = 5;
  *   - Your city not ranked yet: "Durham needs 2 more players to make the
  *     board" (never whether one other is there), and the way to invite.
  *   - No town the boards know: how to pick one.
+ * Under the ranked cities, every other city at 0 (owner, Oct 28: "Also add
+ * the other cities on the list. You can just put them at 0"), nearest to
+ * yours first, so the board is never one lonely row: a dash for a place,
+ * 0 sessions. They come from the phone's own list (catalog.ts), never the
+ * server, so a city with too few players to rank looks exactly like one
+ * with nobody. Yours, not ranked yet, is among them, tinted, its number a
+ * dash (you know you played there).
  * Movement this week sits beside each city; a city on a run gets the filled mark.
- * Find Players shows it only while there is something to show (CityBoardSlot).
+ * Find Players shows it while it is on its way, while any city is ranked, or
+ * (in a month with none ranked yet) while you have a town: your city at the
+ * top of the cities at 0. With no town and none ranked it is an A to Z of
+ * zeros that says nothing, so Find Players keeps its own card there.
  */
 export function CityBoardPreview() {
   const styles = useThemedStyles(styleDefinitions);
   const { status, board, cities, month } = useCityBoard();
   const ranked = useMemo(() => rankCities(cities, 'total'), [cities]);
   const me = board?.me ?? null;
-  const mine = ranked.find((c) => c.id === me?.cityId) ?? null;
-  const unranked = !mine && me?.cityId && me.cityName ? { name: me.cityName, needed: me.playersNeeded ?? MIN_PLAYERS } : null;
+  const homeId = me?.cityId ?? null;
+  // The ranked cities, then every other at 0, nearest to yours first (never by anything they did). In a month
+  // with none ranked yet (the first days of one), every city at 0, yours first.
+  const ready = status === 'ready';
+  const rows = useMemo<Row[]>(() => (ready ? [...ranked, ...zeroCities(new Set(ranked.map((c) => c.id)), homeId)] : []), [ready, ranked, homeId]);
+  const mine = ranked.find((c) => c.id === homeId) ?? null;
+  const unranked = !mine && me?.cityId && me.cityName ? { name: cityLabel({ name: me.cityName, region: me.region ?? '' }), needed: me.playersNeeded ?? MIN_PLAYERS } : null;
   const noTown = status === 'ready' && !!me && !me.cityId;
-  const at = mine ? ranked.indexOf(mine) : -1;
+  // Your city's row, ranked or (not yet) at 0.
+  const home = homeId ? rows.find((c) => c.id === homeId) ?? null : null;
+  const at = home ? rows.indexOf(home) : -1;
   const apart = at >= IN_RUN;
-  const top = apart ? ranked.slice(0, 3) : ranked.slice(0, Math.max(5, at + 2));
-  const below = apart ? ranked[at + 1] ?? null : null;
+  const top = apart ? rows.slice(0, 3) : rows.slice(0, Math.max(5, at + 2));
+  const below = apart ? rows[at + 1] ?? null : null;
   const target = mine ? nextTarget(ranked, mine.id, 'total') : null;
   const final = isFinal(month);
 
   // One line of news under the title, the race's latest: about your city when there is one.
   const moment = useMemo(() => {
     if (!board) return null;
-    const name = (id: string) => board.cities.find((c) => c.id === id)?.name ?? null;
+    const name = (id: string) => { const c = board.cities.find((x) => x.id === id); return c ? cityLabel(c) : null; };
     const now = new Date();
     const lines = board.events.flatMap((e) => {
       const who = name(e.who);
@@ -73,11 +91,11 @@ export function CityBoardPreview() {
   const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
   const title = final ? `Cities in ${monthName(month)}` : 'Cities this month';
   const loading = status === 'loading';
-  const listed = ranked.length > 0;
+  const listed = rows.length > 0;
 
   // What VoiceOver hears for the card (one link): the line under the title, then the rows it shows, each with its unit ("512 sessions").
-  const shown = [...top, ...(apart && mine ? [mine, ...(below ? [below] : [])] : [])];
-  const spokenRows = shown.map((c) => `${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${sessionsWords(c.sessions)}`).join('. ');
+  const shown = [...top, ...(apart && home ? [home, ...(below ? [below] : [])] : [])];
+  const spokenRows = shown.map((c) => rowWords(c, c.id === homeId)).join('. ');
   const spokenNote = unranked ? ` ${unranked.name} needs ${morePlayersWords(unranked.needed)} to make the board.`
     : noTown ? ' Pick your town from the search in Edit profile to join a city board.'
       : moment ? ` ${moment.text}, ${moment.when}.` : '';
@@ -134,10 +152,10 @@ export function CityBoardPreview() {
         </View>
       ) : listed ? (
         <View style={styles.rows}>
-          {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} final={final} />)}
-          {apart && mine ? (
+          {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === homeId} line={i > 0 && top[i - 1].id !== homeId && c.id !== homeId} target={c.id === mine?.id ? target : null} final={final} />)}
+          {apart && home ? (
             <View style={styles.yours}>
-              <PreviewRow city={mine} mine target={target} final={final} />
+              <PreviewRow city={home} mine target={target} final={final} />
               {below ? <PreviewRow city={below} mine={false} /> : null}
             </View>
           ) : null}
@@ -166,26 +184,40 @@ function SkeletonRow({ line }: { line: boolean }) {
   );
 }
 
-/** A city's row here: place, name, this week's movement, sessions logged. Yours is tinted, with the number to chase under its name. */
-function PreviewRow({ city, mine, line = false, target = null, final = false }: { city: RankedCity; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget>; /** Last month's, on the 1st: how far behind it finished. */ final?: boolean }) {
+/** A row on the card: a ranked city, or one at 0. */
+type Row = RankedCity | ZeroCity;
+const isZero = (c: Row): c is ZeroCity => 'zero' in c;
+
+/** What VoiceOver hears for a row: "1st, Raleigh, your city, 68 sessions"; "Not ranked, Greensboro, 0 sessions"; yours not ranked: no number. */
+const rowWords = (c: Row, mine: boolean) => (isZero(c)
+  ? `Not ranked, ${cityLabel(c)}${mine ? ', your city' : ', 0 sessions'}`
+  : `${ordinal(c.rank)}, ${cityLabel(c)}${mine ? ', your city' : ''}, ${sessionsWords(c.sessions)}`);
+
+/**
+ * A city's row here: place, name, this week's movement, sessions logged. Yours is tinted, with the number to chase under its name.
+ * A city at 0: a dash for its place (no place yet, rather than a long tie for 2nd) and 0, both in the faint ink of
+ * the places below 3rd; yours, not ranked yet, a dash for its number too.
+ */
+function PreviewRow({ city, mine, line = false, target = null, final = false }: { city: Row; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget>; /** Last month's, on the 1st: how far behind it finished. */ final?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const podium = city.rank <= 3;
+  const zero = isZero(city);
+  const podium = !zero && city.rank <= 3;
   return (
     <View style={[styles.row, mine ? styles.rowMine : line && styles.rowLine]}>
       {/* 1st to 3rd on a coin of their metal (round 3); yours keeps its metal, its name says it is yours. */}
       <View style={styles.rankCol}>
-        {hasCoin(city.rank)
+        {!zero && hasCoin(city.rank)
           ? <Medal rank={city.rank} size={RANK_W} fontSize={16} markSize={22} />
-          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine]}>{city.rank}</Text>}
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, zero && styles.rankDash, mine && styles.inkMine]}>{zero ? '–' : city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{city.name}</Text>
-          <Movement moved={city.moved} long={mine} />
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{cityLabel(city)}</Text>
+          {!zero ? <Movement moved={city.moved} long={mine} /> : null}
         </View>
-        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{!final ? `${target.gap} to pass ${target.city.name}` : target.gap === 1 ? `Level with ${target.city.name}` : `${target.gap - 1} behind ${target.city.name}`}</Text> : null}
+        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{!final ? `${target.gap} to pass ${cityLabel(target.city)}` : target.gap === 1 ? `Level with ${cityLabel(target.city)}` : `${target.gap - 1} behind ${cityLabel(target.city)}`}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.sessions}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, zero && styles.valueZero, mine && styles.inkMine]}>{zero ? (mine ? '–' : '0') : city.sessions}</Text>
     </View>
   );
 }
@@ -239,6 +271,9 @@ const styleDefinitions = StyleSheet.create({
   nameMine: { ...font('600'), color: colors.brand },
   target: { ...typography.small, ...font('500'), color: colors.text },
   value: { ...font('700'), fontSize: 16, color: colors.text, fontVariant: ['tabular-nums'] },
+  // A city at 0: a light dash for its place, its number in the faint ink of the places below 3rd, so the ranked numbers read first.
+  rankDash: { ...font('500') },
+  valueZero: { color: colors.textFaint },
   // Your row, under the top 3: set apart by space alone (no dots), the city behind you fading under it.
   yours: { marginTop: spacing.md },
   more: { marginTop: -16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },

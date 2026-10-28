@@ -11,6 +11,7 @@ import { Wash } from '@/components/Wash';
 import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { MIN_PLAYERS, isFinal, isHot, monthName, morePlayersWords, nextTarget, ordinal, rankCities, resetsOn, sessionsWords, whenWords, type BoardMode, type RankedCity } from '@/features/cityBoard/board';
 import { useCityBoard } from '@/features/cityBoard/useCityBoard';
+import { cityLabel, zeroCities, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useBarInset } from '@/features/navigation/barInset';
 import { goBack } from '@/lib/goBack';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -63,7 +64,14 @@ const rect = (node: unknown): DOMRect | null => {
  *     the top that says like position or rank or whatever and then city, and
  *     then sessions. Like a header"); scrolled down the long list, the tabs
  *     and the head row stay pinned at the top, so the columns stay named;
- *   - the week's moments on top ("Raleigh passed Atlanta · today").
+ *   - the week's moments on top ("Raleigh passed Atlanta · today");
+ *   - under the ranked cities, every other city at 0 (owner, Oct 28: "Also
+ *     add the other cities on the list. You can just put them at 0"): a dash
+ *     for a place, 0, nearest to yours first, else A to Z; never ordered by
+ *     anything they did. They come from the phone's own list (catalog.ts),
+ *     never the server, so a city with too few players to rank looks exactly
+ *     like one where nobody has played. "214 cities · 1 ranked" over the
+ *     table; places and "of 15" count ranked cities only.
  * Starts again on the 1st (which shows last month's final board). Every
  * number but yours is as of yesterday; yours is up to the minute, added to
  * your own city only (withMine). Still coming: the rows' shapes; offline:
@@ -75,18 +83,23 @@ export default function CityBoard() {
   const { status, stale, month, board: data, cities, mySessions, countsHere, retry } = useCityBoard();
   const board = useMemo(() => rankCities(cities, mode), [cities, mode]);
   const homeId = data?.me.cityId ?? null;
+  // Every other city at 0, nearest to yours first: the same on both tabs (nothing they did can move them). In a
+  // month with none ranked yet, every city (keyed by the ids, so a new count of yours does not sort them again).
+  const rankedIds = useMemo(() => cities.map((c) => c.id).sort().join(','), [cities]);
+  const zeros = useMemo(() => zeroCities(new Set(rankedIds ? rankedIds.split(',') : []), homeId), [rankedIds, homeId]);
   const mine = board.find((c) => c.id === homeId) ?? null;
   const at = mine ? board.indexOf(mine) : -1;
-  const unrankedHome = !mine && homeId && data?.me.cityName ? { name: data.me.cityName, needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
+  const unrankedHome = !mine && homeId && data?.me.cityName ? { name: cityLabel({ name: data.me.cityName, region: data.me.region ?? '' }), needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
   const per = mode === 'per';
   const target = mine ? nextTarget(board, mine.id, mode) : null;
-  const open = (id: string) => router.push({ pathname: '/city/[id]', params: { id } });
+  // Kept the same between draws, so the 200 rows at 0 are not drawn again when the tab or the page moves.
+  const open = useCallback((id: string) => router.push({ pathname: '/city/[id]', params: { id } }), []);
   const final = isFinal(month);
 
   // The week's news: yours first, two lines at most.
   const moments = useMemo(() => {
     if (!data) return [];
-    const name = (id: string) => data.cities.find((c) => c.id === id)?.name ?? null;
+    const name = (id: string) => { const c = data.cities.find((x) => x.id === id); return c ? cityLabel(c) : null; };
     const now = new Date();
     const lines = data.events.flatMap((e, i) => {
       const who = name(e.who);
@@ -163,10 +176,10 @@ export default function CityBoard() {
   // Last month's final board (the 1st): how far behind it finished, not how many to pass.
   const behind = target ? target.city.value - mine!.value : 0;
   const chaseWords = !mine ? '' : target
-    ? (per ? behind < 0.05 : final && behind === 0) ? `Level with ${target.city.name}`
-      : final ? `${per ? behind.toFixed(1) : behind} behind ${target.city.name}`
-        : `${per ? target.gap.toFixed(1) : target.gap} to pass ${target.city.name}`
-    : board[1] ? `${per ? (mine.value - board[1].value).toFixed(1) : mine.sessions - board[1].sessions} clear of ${board[1].name}` : 'Only city ranked yet';
+    ? (per ? behind < 0.05 : final && behind === 0) ? `Level with ${cityLabel(target.city)}`
+      : final ? `${per ? behind.toFixed(1) : behind} behind ${cityLabel(target.city)}`
+        : `${per ? target.gap.toFixed(1) : target.gap} to pass ${cityLabel(target.city)}`
+    : board[1] ? `${per ? (mine.value - board[1].value).toFixed(1) : mine.sessions - board[1].sessions} clear of ${cityLabel(board[1])}` : 'Only city ranked yet';
   const valueOf = (c: RankedCity) => (per ? c.value.toFixed(1) : String(c.sessions));
   const subOf = (c: RankedCity) => {
     if (c.id === mine?.id) {
@@ -207,11 +220,13 @@ export default function CityBoard() {
 
         {/* The table's head: how many, and what it is ranked by (tap the other to re-rank); under it, what each
             column is. Pinned at the top while the long list scrolls under it. */}
-        {status === 'loading' || (status === 'ready' && board.length > 0) ? (<>
+        {/* Ready, there is always a table: in a month with none ranked yet, every city at 0 ("214 cities · 0 ranked"). */}
+        {status === 'loading' || status === 'ready' ? (<>
         {/* Measured again once the board lands (the news lines above it arrive with it). */}
         <PinnedHead key={`${status}-${mode}`} offsetY={offsetY} viewTop={viewTop} headTop={headTop} headH={headH}>
         <View style={styles.tableHead}>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headCount}>{status === 'loading' ? ' ' : `${board.length} ${board.length === 1 ? 'city' : 'cities'}`}</Text>
+          {/* Every city listed, and how many of them are ranked (the places, and a city page's "of 15", count those only). */}
+          <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.headCount}>{status === 'loading' ? ' ' : `${board.length + zeros.length} ${board.length + zeros.length === 1 ? 'city' : 'cities'} · ${board.length} ranked`}</Text>
           <View style={styles.sorts} accessibilityRole="tablist" accessibilityLabel="Rank cities by">
             {([['total', 'Sessions'], ['per', 'Per player']] as const).map(([value, label]) => {
               const on = mode === value;
@@ -240,12 +255,14 @@ export default function CityBoard() {
           {board.map((c, i) => (
             <React.Fragment key={c.id}>
               {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
-              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.sessions)}${c.id === mine?.id ? `. ${subOf(c)}` : ''}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${cityLabel(c)}${c.id === mine?.id ? ', your city' : ''}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.sessions)}${c.id === mine?.id ? `. ${subOf(c)}` : ''}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
                 <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} />
               </Pressable>
             </React.Fragment>
           ))}
         </View>
+        {/* Every other city at 0, under the ranked ones. Outside the tab's list: switching tabs leaves them be. */}
+        {status === 'ready' && zeros.length ? <ZeroRows rows={zeros} homeId={homeId} needed={unrankedHome?.needed ?? null} clearTop={!board.length || board[board.length - 1].id === mine?.id} onOpen={open} /> : null}
 
         </>) : null}
 
@@ -260,12 +277,12 @@ export default function CityBoard() {
           {!homeId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.unranked}>Pick your town from the search in Edit profile to join a city board.</Text> : null}
           {mine || unrankedHome ? (
             <View style={styles.climb}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {(mine ?? unrankedHome)!.name} climb</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {mine ? cityLabel(mine) : unrankedHome!.name} climb</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbBody}>Every session a player from here logs counts.</Text>
               <View style={styles.climbButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged this month by players who call it home. A city needs {MIN_PLAYERS} players to be ranked.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged this month by players who call it home. A city needs {MIN_PLAYERS} players to be ranked; until then it shows 0.</Text>
         </View>
         ) : null}
       </Screen>
@@ -275,7 +292,7 @@ export default function CityBoard() {
           it. Scrolling down to it hands over in place; one tap takes you there. */}
       {mine ? (
         <Animated.View pointerEvents="box-none" style={[styles.dock, { height: barInset + DOCK_ROW_TOP }, youStyle]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.sessions)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${cityLabel(mine)}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.sessions)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
             <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} />
           </Pressable>
         </Animated.View>
@@ -368,6 +385,64 @@ function SkeletonRow({ podium, line }: { podium: boolean; line: boolean }) {
   );
 }
 
+/** The cities at 0: the first screenful with the page, the rest a batch at a time once it has slid in, so opening stays quick with 200 rows. */
+const ZERO_FIRST = 12;
+/** A row at 0 is one line (no players under its name), so a little shorter than a ranked one. */
+const ZERO_H = 54;
+const ZERO_BATCH = 50;
+
+/**
+ * Every other city at 0, under the ranked ones, nearest to yours first. A
+ * dash for a place (no place yet: not 200 cities tied for 2nd), the name,
+ * 0. Yours, not ranked yet, is among them, tinted, with what it needs and
+ * a dash for its number (you know you played there). A tap opens the city.
+ */
+const ZeroRows = React.memo(function ZeroRows({ rows, homeId, needed, clearTop, onOpen }: {
+  rows: ZeroCity[];
+  homeId: string | null;
+  /** Your city, not ranked yet: how many more players it needs. */
+  needed: number | null;
+  /** No line over the first row here: it opens the table (none ranked), or the last ranked row is yours (tinted). */
+  clearTop: boolean;
+  onOpen: (id: string) => void;
+}) {
+  const [count, setCount] = useState(() => Math.min(rows.length, ZERO_FIRST));
+  useEffect(() => {
+    if (count >= rows.length) return;
+    const t = setTimeout(() => setCount((n) => Math.min(rows.length, n + ZERO_BATCH)), count <= ZERO_FIRST ? 450 : 30);
+    return () => clearTimeout(t);
+  }, [count, rows.length]);
+  return (
+    <View>
+      {rows.slice(0, count).map((c, i) => {
+        const mine = c.id === homeId;
+        const sub = mine ? (needed ? `Needs ${morePlayersWords(needed)} to be ranked` : 'Not ranked yet') : null;
+        return (
+          <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`Not ranked, ${cityLabel(c)}${mine ? `, your city. ${sub}` : ', 0 sessions'}`} onPress={() => onOpen(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+            <ZeroRow city={c} mine={mine} sub={sub} line={!mine && !(i === 0 ? clearTop : rows[i - 1].id === homeId)} />
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+});
+
+const ZeroRow = React.memo(function ZeroRow({ city, mine, sub, line }: { city: ZeroCity; mine: boolean; sub: string | null; line: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={[styles.row, { height: sub ? ROW_H : ZERO_H }, mine ? styles.rowMine : line && styles.rowLine]}>
+      <View style={styles.rankCol}>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, styles.rankLow, styles.rankDash, mine && styles.rankMine]}>–</Text>
+      </View>
+      <View style={styles.nameCol}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, styles.nameZero, mine && styles.nameMine]}>{cityLabel(city)}</Text>
+        {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.sub, styles.subMine]}>{sub}</Text> : null}
+      </View>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, styles.valueZero, mine && styles.valueMine]}>{mine ? '–' : '0'}</Text>
+    </View>
+  );
+});
+
 function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
@@ -381,7 +456,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: Ra
       </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, podium && styles.namePodium, mine && styles.nameMine]}>{city.name}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, podium && styles.namePodium, mine && styles.nameMine]}>{cityLabel(city)}</Text>
           {showMove ? <Movement moved={city.moved} /> : null}
         </View>
         <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.sub, mine && styles.subMine]}>{sub}</Text>
@@ -434,6 +509,11 @@ const styleDefinitions = StyleSheet.create({
   value: { ...font('700'), fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'], minWidth: 44, textAlign: 'right' },
   valuePodium: { fontSize: 19 },
   valueMine: { color: colors.brand },
+  // A city at 0: a light dash for its place, its name a weight lighter, its number in the faint ink of the places
+  // below 3rd, so the ranked rows read first.
+  rankDash: { ...font('500') },
+  nameZero: { ...font('500') },
+  valueZero: { color: colors.textFaint },
   // Under 3rd: the podium's edge.
   cut: { height: CUT_H, justifyContent: 'center' },
   cutLine: { height: 1, backgroundColor: colors.text, opacity: 0.7, marginHorizontal: spacing.md },
