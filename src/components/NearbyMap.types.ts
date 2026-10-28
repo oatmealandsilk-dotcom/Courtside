@@ -1,6 +1,7 @@
 import type { TaggedCourt, User } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
+import type { GrowPlan } from '@/features/players/mapGrow';
 
 export interface NearbyMapProps {
   me: User; players: User[]; onOpen: (id: string) => void;
@@ -62,4 +63,13 @@ export interface NearbyMapProps {
    * of the card that is not what the app opens on (the feed's FeedFindPlayers), so it never slows it.
    */
   holdCurtain?: boolean;
+  /**
+   * The check-in zoom (mapGrow): the still card on the Community tab grows into the full map once you are up
+   * (the page around it pushing in), rather than the full map sliding in. Only where the page can push in.
+   */
+  grow?: boolean;
+  /** The full map, opened by the card growing into it: where it starts (the grown card's own view) and the picture over it. */
+  growFrom?: GrowPlan | null;
+  /** The grown card has handed over to the full map (it is now just the full map): told once. */
+  onGrown?: () => void;
 }

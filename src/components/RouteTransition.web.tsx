@@ -45,10 +45,11 @@ SHEETS.add('/review-request');
 export function RouteTransition({ children }: { children: React.ReactNode }) {
   const content = useRef<HTMLDivElement>(null);
   const pathname = usePathname();
-  const { section, from } = useGlobalSearchParams<{ section?: string; from?: string }>();
+  const { section, from, grow } = useGlobalSearchParams<{ section?: string; from?: string; grow?: string }>();
   // A setup page opened from inside the app (?from=profile, ?from=settings) is an ordinary page,
   // not setup: it slides in like one (found in review, Oct 20).
-  const key = `${pathname}:${section ?? ''}:${from ? 'in' : ''}`;
+  // The full map opened by the Community card growing into it (the check-in zoom, mapGrow) brings its own move: no slide.
+  const key = `${pathname}:${section ?? ''}:${from ? 'in' : ''}:${grow ? 'grow' : ''}`;
   const trail = useRef<string[]>([key]);
   useLayoutEffect(() => {
     const trailing = trail.current;
@@ -59,6 +60,7 @@ export function RouteTransition({ children }: { children: React.ReactNode }) {
     else trailing.push(key);
     if (trailing.length > 30) trailing.shift();
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    if (!wentBack && key.endsWith(':grow')) return;
     const [beforePath, , beforeFrom] = before.split(':');
     if (SHEETS.has(pathname) || SHEETS.has(beforePath)) return;
     const tabToTab = TABS.has(pathname) && TABS.has(beforePath);
