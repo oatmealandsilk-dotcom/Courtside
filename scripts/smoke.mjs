@@ -1717,8 +1717,8 @@ const STEPS = [
       await page.tap({ label: /See all cities$/ });
       await page.waitFor({ text: /^\d+ cities$/ }, 20000);
       await page.waitFor({ label: 'Rank, City, Sessions' });
-      await page.reveal({ label: /^\d+(st|nd|rd|th), Los Angeles, \d+ sessions?$/ }, 20000);
-      await page.tap({ label: /^\d+(st|nd|rd|th), Los Angeles, \d+ sessions?$/ });
+      await page.reveal({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ }, 20000);
+      await page.tap({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ });
       await page.waitFor({ text: /^of \d+$/ }, 20000);
       await page.reveal({ text: 'Top players' }, 20000);
     },

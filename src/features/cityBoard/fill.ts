@@ -24,10 +24,10 @@ const NONE: FillFace[] = [];
  * never you). The words under each are the server's: "Usually evenings",
  * "Played Saturday", and a number only for someone also on Top players
  * (else "Active this month"). Anyone this phone has blocked or muted since
- * is left off here too. Empty while the page has not come.
+ * (or who has blocked you since) is left off here too. Empty while the page has not come.
  */
 export function useCityFill(page: CityPage | null | undefined, upIds: ID[]): FillFace[] {
-  const { users, currentUserId, blockedIds, mutedIds } = useApp();
+  const { users, currentUserId, blockedIds, blockedMeIds, mutedIds } = useApp();
   const upKey = upIds.join(',');
   return useMemo(() => {
     if (!page?.fill.length) return NONE;
@@ -39,9 +39,9 @@ export function useCityFill(page: CityPage | null | undefined, upIds: ID[]): Fil
     return page.fill
       .flatMap((f) => {
         const user = byId.get(f.userId);
-        if (!user || user.id === currentUserId || up.has(user.id) || blockedIds.includes(user.id) || mutedIds.includes(user.id)) return [];
+        if (!user || user.id === currentUserId || up.has(user.id) || blockedIds.includes(user.id) || blockedMeIds.includes(user.id) || mutedIds.includes(user.id)) return [];
         return [{ user, ...playWords(f, now) }];
       })
       .slice(0, room);
-  }, [page, upKey, users, currentUserId, blockedIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, upKey, users, currentUserId, blockedIds, blockedMeIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
 }

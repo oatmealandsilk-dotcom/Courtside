@@ -43,8 +43,12 @@ export function useCityBoard(): {
 } {
   const { currentUser, currentUserId, sessions, cityBoards, actions } = useApp();
   const on = cityBoardOn(currentUser);
+  // Worked out on every draw, never kept: Find Players stays open for days on a phone, and the board must
+  // move on to the new month (and ask again on a new day) without the app being closed first.
   const first = boardMonth();
-  const [month, setMonth] = useState(() => (fellBack && fellBack.from === first ? fellBack.to : first));
+  const today = new Date().toDateString();
+  const [, redraw] = useState(0);
+  const month = fellBack && fellBack.from === first ? fellBack.to : first;
   const mine = useMySessionCount();
   const [tries, setTries] = useState(0);
   useEffect(() => {
@@ -54,11 +58,11 @@ export function useCityBoard(): {
       // The 1st: last month's final board, unless it has nothing on it (then this month's, which has begun).
       if (live && b && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
         fellBack = { from: month, to: thisMonth() };
-        setMonth(thisMonth());
+        redraw((n) => n + 1);
       }
     }, () => undefined);
     return () => { live = false; };
-  }, [on, month, mine, tries, actions]);
+  }, [on, month, today, mine, tries, actions]);
   const entry = on ? cityBoards[month] : undefined;
   const board = entry?.board ?? null;
   const status: BoardStatus = !on ? 'off' : !entry ? 'loading' : board ? 'ready' : entry.failed ? 'error' : 'off';
@@ -79,11 +83,12 @@ export function useCityPage(cityId: string | null, month: string): { status: Boa
   const { currentUser, currentUserId, sessions, cityPages, actions } = useApp();
   const on = cityBoardOn(currentUser) && !!cityId;
   const mine = useMySessionCount();
+  const today = new Date().toDateString();
   const [tries, setTries] = useState(0);
   useEffect(() => {
     if (!on || !cityId) return;
     actions.loadCityPage(cityId, month, tries > 0).catch(() => undefined);
-  }, [on, cityId, month, mine, tries, actions]);
+  }, [on, cityId, month, today, mine, tries, actions]);
   const entry = on && cityId ? cityPages[`${month}|${cityId}`] : undefined;
   const page = entry?.page ?? null;
   const status: BoardStatus = !on ? 'off' : !entry ? 'loading' : page ? 'ready' : entry.failed ? 'error' : 'off';

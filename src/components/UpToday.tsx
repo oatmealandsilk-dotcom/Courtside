@@ -162,7 +162,10 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.title}>{!people.length && fill.length && fillTitle ? fillTitle : 'Open to hit'}</Text>
+        {/* City boards (round 3): "Most active in Los Angeles" while the regulars fill an empty row; otherwise exactly as before. */}
+        {!people.length && fill.length && fillTitle
+          ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, styles.titleFit]}>{fillTitle}</Text>
+          : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Open to hit</Text>}
         {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <View>
@@ -234,7 +237,8 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
-  title: { ...typography.title, color: colors.text, flexShrink: 1 },
+  title: { ...typography.title, color: colors.text },
+  titleFit: { flexShrink: 1 },
   count: { ...typography.small, color: colors.textMuted },
   // Runs to the screen's edges, the way the stories rail does, and a little above and below the
   // faces' line (into the gaps around it), so the halos and your "Free today" are never cut off.

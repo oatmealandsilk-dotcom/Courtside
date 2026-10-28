@@ -74,14 +74,24 @@ export function CityBoardPreview() {
   const loading = status === 'loading';
   const listed = ranked.length > 0;
 
-  // What VoiceOver hears for the card (one link): the rows it shows, each with its unit ("512 sessions").
+  // What VoiceOver hears for the card (one link): the line under the title, then the rows it shows, each with its unit ("512 sessions").
   const shown = [...top, ...(apart && mine ? [mine, ...(below ? [below] : [])] : [])];
   const spokenRows = shown.map((c) => `${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${sessionsWords(c.sessions)}`).join('. ');
+  const spokenNote = unranked ? ` ${unranked.name} needs ${morePlayersWords(unranked.needed)} to make the board.`
+    : noTown ? ' Pick your town from the search in Edit profile to join a city board.'
+      : moment ? ` ${moment.text}, ${moment.when}.` : '';
+  // The link under the note ("Invite a hitting partner", "Edit profile"): while the card is one link for VoiceOver,
+  // its children are hidden from it, so the same link is offered as the card's action; with no list (the card is
+  // not a link then), VoiceOver reaches the link itself.
+  const extra = unranked ? { label: 'Invite a hitting partner', go: '/invite' as const } : noTown ? { label: 'Edit profile', go: '/edit-profile' as const } : null;
 
   return (
     <Pressable
+      accessible={loading || listed}
       accessibilityRole="link"
-      accessibilityLabel={loading ? `${title}. Loading` : `${title}, by tennis sessions logged.${spokenRows ? ` ${spokenRows}.` : ''} See all cities`}
+      accessibilityLabel={loading ? `${title}. Loading` : `${title}, by tennis sessions logged.${spokenNote}${spokenRows ? ` ${spokenRows}.` : ''} See all cities`}
+      accessibilityActions={listed && extra ? [{ name: 'extra', label: extra.label }] : undefined}
+      onAccessibilityAction={(e) => { if (extra && e.nativeEvent.actionName === 'extra') router.push(extra.go); }}
       disabled={!loading && !listed}
       onPress={() => router.push('/city-board')}
       style={({ pressed }) => [styles.wrap, pressed && { opacity: PRESS_DIM }]}

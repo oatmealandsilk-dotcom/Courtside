@@ -72,7 +72,7 @@ export default function CityPage() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
   const cityId = String(id ?? '');
-  const { users, posts, currentUser, currentUserId, blockedIds, mutedIds } = useApp();
+  const { users, posts, currentUser, currentUserId, blockedIds, blockedMeIds, mutedIds } = useApp();
   const boardNow = useCityBoard();
   const { status, stale, page, mySessions, retry } = useCityPage(cityId || null, boardNow.month);
   const city = page?.city ?? null;
@@ -90,7 +90,8 @@ export default function CityPage() {
   const top = isPhone ? insets.top : 0;
   const heroH = Math.round(Math.min(Math.max(windowH * 0.58, 420), 560));
   const byId = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
-  const hidden = (uid: string) => blockedIds.includes(uid) || mutedIds.includes(uid);
+  // The server leaves these off already; a page kept for a few minutes still drops anyone blocked either way, or muted, since.
+  const hidden = (uid: string) => blockedIds.includes(uid) || blockedMeIds.includes(uid) || mutedIds.includes(uid);
 
   // Top players: the rows the server named for you, and you (your sessions up to the minute), placed among them.
   const players = useMemo<PlayerLine[]>(() => {
@@ -102,7 +103,7 @@ export default function CityPage() {
     const you = page.me && page.me.rank !== null && currentUser ? [{ user: currentUser, sessions: mySessions, me: true }] : [];
     // You first among level rows, as the server places you.
     return rankRows([...you, ...others]);
-  }, [page, city, byId, currentUser, currentUserId, mySessions, blockedIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [page, city, byId, currentUser, currentUserId, mySessions, blockedIds, blockedMeIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
   const me = players.find((p) => p.me);
   const topPlayers = players.slice(0, TOP);
   const pinMe = me && !topPlayers.includes(me) ? me : null;
@@ -114,7 +115,7 @@ export default function CityPage() {
   const upShown = useMemo(() => (page?.up ?? []).flatMap((uid) => {
     const u = byId.get(uid);
     return u && u.id !== currentUserId && !hidden(u.id) ? [{ user: u, till: tillLabel(u.openToHitUntil) ?? 'today' }] : [];
-  }), [page, byId, currentUserId, blockedIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [page, byId, currentUserId, blockedIds, blockedMeIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps
   // Round 3 (owner, Oct 28: "if no one is active in up to hit today ... put like, most active players in the
   // city. that way it stays full"): who is up first, ringed; then the city's regulars, plain, to FILL_TO faces.
   const fill = useCityFill(page, upShown.map((x) => x.user.id));

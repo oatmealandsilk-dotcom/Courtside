@@ -240,7 +240,7 @@ export default function CityBoard() {
           {board.map((c, i) => (
             <React.Fragment key={c.id}>
               {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
-              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.sessions)}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.sessions)}${c.id === mine?.id ? `. ${subOf(c)}` : ''}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
                 <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} />
               </Pressable>
             </React.Fragment>
