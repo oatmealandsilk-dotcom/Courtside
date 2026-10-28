@@ -8,12 +8,12 @@ export const CURRENT_USER_ID = 'u-you';
 export const users: User[] = [
   {
     id: CURRENT_USER_ID,
-    handle: 'you',
-    name: 'Alex Rivera',
+    handle: 'robertzchen',
+    name: 'Robert Chen',
     bio: '4.0 baseliner trying to build a second serve I actually trust. Weekend league + one tournament a season.',
     location: 'Los Angeles, CA',
     joinedAt: isoDaysAgo(410),
-    avatarSeed: 'alex-rivera',
+    avatarSeed: 'robert-chen',
     isCoach: false,
     // A confirmed adult, so the demo shows what an adult sees (the heart-rate switch on a session's post).
     ageGroup: 'adult',

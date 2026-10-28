@@ -411,7 +411,7 @@ export const posts: Post[] = [
     body: 'An hour of crosscourt patterns. Good legs today.',
     session: {
       focus: 'Practice', minutes: 60, drills: [], sessionId: 'ses-mira-1', kind: 'practice', day: dayAgo(5),
-      with: [{ id: CURRENT_USER_ID, handle: 'you', name: 'Alex Rivera', role: 'partner' }],
+      with: [{ id: CURRENT_USER_ID, handle: 'robertzchen', name: 'Robert Chen', role: 'partner' }],
     },
     likedBy: [CURRENT_USER_ID, 'u-june'],
     commentIds: [],
