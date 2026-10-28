@@ -58,7 +58,7 @@ import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
-import { LIGHT_UP, litShort } from '@/features/places/lightUp';
+import { LIGHT_UP, litLine, litTill } from '@/features/places/lightUp';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -491,8 +491,8 @@ const checkInLabel = (c: CheckInControl) => (c.on ? `You’re lit up, friends se
 
 /**
  * The Light up button's own words (Oct 27, owner: "Light up"; migration 189):
- * "Light up", or while you are lit up, short and calm, till when ("Lit · 10pm";
- * a tap turns it off).
+ * "Light up", or while you are lit up, the owner's words: "You’re lit up · till 10pm"
+ * (a tap turns it off).
  */
 function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -501,7 +501,7 @@ function CheckInWords({ control, size }: { control: CheckInControl; size: number
     <View pointerEvents="none" style={styles.checkInRow}>
       {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on && control.until ? litShort(control.until) : LIGHT_UP}
+        {control.on && control.until ? litLine(litTill(control.until)) : LIGHT_UP}
       </Text>
     </View>
   );

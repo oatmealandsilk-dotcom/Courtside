@@ -18,14 +18,15 @@ import { useApp } from '@/store/AppContext';
  * whats a better thing more encourgaing to peplel", and "go" to "Light up").
  *
  * 1. The words, for everyone: the button that shares your spot with friends
- *    says "Light up"; while on, "You're lit up · till 10pm" ("for 2 hours"
- *    late), "Lit · 10pm" on the Find Players card; "Turn off" stops it. What
+ *    says "Light up"; while on, "You're lit up · till 10pm" (the owner's
+ *    words, on the Find Players card's button and in the toast; "for 2 hours"
+ *    in the toast late in the day); "Turn off" stops it. What
  *    it does is unchanged (migration 189): one tap, read once, friends who
  *    follow each other with you, until 10pm, never on its own.
  *
  * 2. Courts light up (LIGHT_UP_COURTS_FOR_EVERYONE, admins first): on the
- *    maps (the card and the full map, phone and browser alike: the pins are
- *    the same HTML in both, markers.ts), a court glows by how much is on
+ *    full map (phone and browser alike: the pins are the same HTML in both,
+ *    markers.ts), a court glows by how much is on
  *    there right now: people playing there ("I'm playing here", which a
  *    light-up at a court now does too) and open hits there today. Quiet as
  *    ever with nothing on; warm (1), lit (2 or 3), hot (4 or more): a soft,
@@ -65,9 +66,7 @@ export const LIGHT_UP = 'Light up';
 export const litSpan = (now: Date = new Date()): string => (now.getHours() >= 20 ? 'for 2 hours' : `till ${clock(checkInEnds(now))}`);
 /** Until when yours shows: "till 10pm". */
 export const litTill = (until: string): string => `till ${clock(new Date(until))}`;
-/** The Find Players card's button while you are lit up: "Lit · 10pm". */
-export const litShort = (until: string): string => `Lit · ${clock(new Date(until))}`;
-/** The state, said whole: "You’re lit up · till 10pm". */
+/** The state, said whole (the owner's words): "You’re lit up · till 10pm", on the card's button and in the toast. */
 export const litLine = (span: string): string => `You’re lit up · ${span}`;
 
 /* ---------------------------------------------------- the court you're at */
@@ -193,15 +192,18 @@ function nearestKey(courts: Court[]): string {
 }
 
 /**
- * The glow of the courts on a map (the card's courts around your town, or the
- * full map's pins), asking the server how each is right now as the map comes
- * to rest and every few minutes while it stays open. Null while courts do not
- * light up for you (the map then looks exactly as before).
+ * The glow of the full map's court pins, asking the server how each is right
+ * now as the map comes to rest and every few minutes while it stays open. Null
+ * on the still Find Players card and while courts do not light up for you (the
+ * map then looks exactly as before). Not on the card: at its zoom a town's
+ * courts sit round its name and lines in the middle, so lit badges there piled
+ * onto the words and the faces (Oct 27 review); and the card shows people and
+ * hits only, courts live on the full map (Oct 3, owner).
  */
 export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[], playingAt?: string | null): Map<string, CourtGlow> | null {
-  const on = useLightUpCourts();
+  const on = useLightUpCourts() && expanded;
   const { courtNow, actions, currentUserId } = useApp();
-  const pool = expanded ? model.courts : model.cardPool;
+  const pool = model.courts;
   const key = useMemo(() => (on ? nearestKey(pool) : ''), [on, pool]);
   const { loadCourtsNow } = actions;
   useEffect(() => {

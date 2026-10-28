@@ -89,7 +89,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
       // Standing at a court: it lights up too, from this same tap (Light up, admins first).
       const spot: { lat: number; lng: number } | null = at;
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
-      showToast({ title: litLine(litSpan()), body: court ? `${court} lights up too. Friends who follow you back see you.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      showToast({ title: litLine(litSpan()), body: court ? `${court} lights up too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);

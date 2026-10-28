@@ -422,8 +422,6 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     return () => { on = false; };
   }, [card, cityLat, cityLng]);
   const cardCourts = useMemo(() => (card && city ? cardCourtList.slice(0, CARD_COURTS) : []), [card, city, cardCourtList]);
-  // All of the card's town's courts, for the ones lit up right now (Light up, features/places/lightUp).
-  const cardPool = useMemo(() => (card && city ? cardCourtList : []), [card, city, cardCourtList]);
   // The still card's rings: the city's courts played on this week.
   useEffect(() => {
     if (!card || cityLat === undefined || cityLng === undefined) return;
@@ -466,7 +464,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     home, homeKnown, homeView, mePos, city, cityName, cityPending, cityExact, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,
     place, pickPlace, clearPlace, placeSearch, placeRows: placeCourts.rows, placeLoading: placeCourts.loading, placeFailed: placeCourts.failed, retryPlace: placeCourts.retry,
     courtsOn, toggleCourts, courts: card ? [] : pins, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
-    cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts, cardPool,
+    cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,
   };
 }
 

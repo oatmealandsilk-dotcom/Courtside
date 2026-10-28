@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtDotHtml, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { CourtGlow } from '@/features/places/lightUp';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
@@ -9,8 +9,6 @@ import { isOpenToHit } from '@/features/players/openToHit';
 import { surfaceAdjective, surfaceKind } from '@/features/places/courtSurface';
 import { LESS_AI_COURTS } from '@/theme/look';
 
-/** The still card's lit courts (Light up): the liveliest few, so a busy town's middle never fills with glow. */
-const CARD_LIT = 4;
 /** Your face on your own pin, a touch bigger than everyone else's. */
 export const ME_SIZE = 38;
 /** Standing on a court: within about 20 m of its pin (pinList's courtUnder). */
@@ -58,8 +56,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   playing?: { courtId: string; courtName: string } | null;
   /**
    * Courts light up (Light up, features/places/lightUp; admins first): what is on at each court
-   * right now, as a still halo by level and its count ("4 here"), on the full map's court pins and,
-   * on the still card, as small lit badges. Null: the courts look exactly as before.
+   * right now, as a still halo by level and its count ("4 here"), on the full map's court pins
+   * (never on the still card). Null: the courts look exactly as before.
    */
   glow?: Map<string, CourtGlow> | null;
 }): CanvasMarker[] {
@@ -114,12 +112,6 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
-  // Lit courts are the one exception (Light up, admins first): the liveliest few as small lit badges, under
-  // the people, never a tap of its own and never gathered (the card is the one button).
-  if (!expanded && glow) {
-    const liveliest = [...glow].sort((a, b) => b[1].level - a[1].level).slice(0, CARD_LIT);
-    for (const [id, g] of liveliest) list.push({ id: `lc:${id}`, lat: g.court.lat, lng: g.court.lng, html: litCourtDotHtml(g.court, g.level), z: 1 });
-  }
   // Open hits as flags, hung above any court pin at the same spot — on the
   // full map only. On the still card the flags crowded the city's name in the
   // middle, and the hits are listed just below it anyway (Oct 2).

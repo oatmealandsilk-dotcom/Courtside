@@ -312,18 +312,6 @@ function litHalo(level: 1 | 2 | 3): string {
   return `0 0 0 2px ${colors.bg},0 0 0 ${2 + ring}px ${withAlpha(colors.brand, 0.92)},0 0 ${blur}px ${spread}px ${withAlpha(colors.brand, alpha)},`;
 }
 
-/**
- * A lit court on the still card in Find Players (Light up): the card's small court badge with the same
- * still halo as on the full map. Only lit courts show on the card (the card shows no courts otherwise,
- * Oct 3), and without their counts: that far out a town's courts sit a few points apart, round its name
- * in the middle, so words there only pile up (the full map, a tap away, says "4 here"). Never a name,
- * never a tap of its own (the card is the button).
- */
-export function litCourtDotHtml(court: Court, level: 1 | 2 | 3): string {
-  const tone = colors.court;
-  return `<div style="width:18px;height:18px;border-radius:5px;background:${colors.bg};border:1.5px solid ${tone};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${litHalo(level)}0 1px 4px rgba(0,0,0,.18);pointer-events:none">${courtGlyph(tone, 10)}</div>`;
-}
-
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
 const hitDot = () => `<i class="cs-hitdot" style="background:${colors.brand};border-color:${colors.bg}"></i>`;
 

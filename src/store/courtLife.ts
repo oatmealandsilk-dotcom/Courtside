@@ -261,7 +261,8 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
                   : 'That didn’t go through. Try again.';
       }
     }
-    haptics.commit();
+    // From a light-up's own tap (`at`), that tap has buzzed already: one buzz, not two.
+    if (!at) haptics.commit();
     // One court at a time: checking in here checks you out anywhere else.
     setState((prev) => ({
       ...prev,
