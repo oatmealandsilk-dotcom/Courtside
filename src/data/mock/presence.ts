@@ -21,7 +21,7 @@ const atPark = (n: number, name: string) => {
  * who is playing). Never a row for Ella, the teen.
  */
 export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
-  { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(65), mutual: true },
+  { userId: 'u-sam', lat: 34.0715, lng: -118.2537, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(65), mutual: true },
   { userId: 'u-omar', lat: 34.0662, lng: -118.2431, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(130), mutual: true },
   { userId: 'u-marcus', lat: 34.05518, lng: -118.24872, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(95), mutual: true },
 ] satisfies LastSeen[]).map((r) => [r.userId, r]));
