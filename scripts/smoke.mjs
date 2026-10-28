@@ -991,7 +991,7 @@ const STEPS = [
       await page.tap({ text: 'Find Players' });
       await page.waitFor({ text: 'Open hits' });
       await page.waitFor({ text: 'Use my location' });
-      if (await page.find({ label: 'Map of courts, open hits and friends who checked in', any: true })) throw new Error('a guest sees the players map');
+      if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
       if (await page.find({ text: 'Open to hit', any: true })) throw new Error('a guest sees who is open to hit');
       await guestShowsOnlyAdults(page);
     },
@@ -1025,7 +1025,7 @@ const STEPS = [
     name: 'community-map',
     title: 'Community: the map card',
     async run(page) {
-      await page.waitFor({ label: 'Map of courts, open hits and friends who checked in' });
+      await page.waitFor({ label: 'Map of courts, open hits and friends up to hit' });
       // Either the map draws (its canvas appears), or the app shows its own
       // "Map didn’t load" card. Never stuck on "Loading map…".
       const { index } = await page.waitForAny([{ css: 'canvas.maplibregl-canvas', any: true }, { text: 'Map didn’t load', any: true }], MAP_TIMEOUT);
@@ -1041,7 +1041,7 @@ const STEPS = [
       }
     },
     // Open hits sits further down since the map card grew to 400 (Oct 25): on the page, maybe below the bar.
-    // Light up (was Check in; migration 189, Apple 5.1.2(i)): the card's own button; never shared on its own.
+    // Up to hit (was Check in, then Light up; migration 189, Apple 5.1.2(i)): the card's own button; never shared on its own.
     expect: [{ text: 'Open to hit' }, { text: 'Open hits', any: true }, { label: /^Up to hit\. Friends who follow you back see you / }],
   },
   {
@@ -1054,7 +1054,7 @@ const STEPS = [
       await page.tap({ label: 'Search players, courts or places' });
       await page.type('zz');
       await page.tap({ label: 'Cancel search' });
-      await page.waitFor({ label: 'Map of courts, open hits and friends who checked in' });
+      await page.waitFor({ label: 'Map of courts, open hits and friends up to hit' });
       // The card shows its map, its picture or its own "didn't load": never an empty box.
       const shown = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); return { canvas: !!c, kept: !!(c && c.dataset.smokeKept === '1'), failed: document.body.innerText.includes('Map didn’t load') }; })()`);
       if (!shown.canvas && !shown.failed) throw new Error('after a search, the map card has neither its map nor "Map didn’t load"');

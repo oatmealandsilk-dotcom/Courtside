@@ -656,7 +656,7 @@ export function NearbyMap(props: NearbyMapProps) {
         {!cardShown ? (
           <Pressable
             accessibilityRole={failed || onExpand ? 'button' : undefined}
-            accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends who checked in'}
+            accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
             onPress={failed ? load.restart : onExpand}
             disabled={!failed && !onExpand}
             style={StyleSheet.absoluteFill}
@@ -667,7 +667,7 @@ export function NearbyMap(props: NearbyMapProps) {
           {/* The picture over all of the map until the copy inside the map itself (under the pins) has loaded. */}
           {photo && !photoGone && !photoInMap ? <img src={photo} alt="" onLoad={() => { takePhoto.current(); }} onError={() => setPhoto(null)} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }} /> : null}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
-          <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends who checked in" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
+          <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends up to hit" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
           <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} />
           <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
         </View>

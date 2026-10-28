@@ -636,11 +636,11 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
   if (locked === 'hidden') return 'On Only me, players are hidden';
-  if (filter === 'following') return 'Nobody you follow is checked in';
+  if (filter === 'following') return 'Nobody you follow is up to hit';
   if (filter === 'near') return nearTown ? `No players in ${nearTown} yet` : 'Add your city to see players';
   if (filter !== 'all') return 'Nobody matches that';
-  // The map's people are friends who checked in, at any age (migration 189; Oct 27 audit wording).
-  return courts.length ? `No friends checked in · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends checked in yet';
+  // The map's people are friends who are up to hit, at any age (migration 189; Oct 27 audit wording; Oct 28 "Up to hit").
+  return courts.length ? `No friends up to hit · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends up to hit yet';
 }
 
 /**
@@ -895,17 +895,17 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
-                : filter === 'following' ? 'Nobody you follow is checked in.'
+                : filter === 'following' ? 'Nobody you follow is up to hit.'
                   : filter === 'near' ? (nearTown ? `No players in ${nearTown} yet.` : 'Add your city to your profile to see the players in your town.')
                   : filter !== 'all' ? 'Nobody matches that.'
-                    // The map's people are friends who checked in, at any age (migration 189; the pill's own words, emptyLine).
-                    : 'No friends checked in yet. Tap a court to see what’s played there.'}
+                    // The map's people are friends who are up to hit, at any age (migration 189; the pill's own words, emptyLine).
+                    : 'No friends up to hit yet. Tap a court to see what’s played there.'}
             </Text>
           ) : (
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends checked in yet. The nearest courts:'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends up to hit yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
@@ -1135,7 +1135,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they check in.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
@@ -1303,7 +1303,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   // The map is friends only, at any age, and only on a check-in (migration 189; Oct 27 audit #8): no yes, no one.
   const ringNote = !saidYes(seenBy)
     ? 'Only you see your ring on the map.'
-    : `Friends who follow you back see your green ring ${till} while you’re checked in.`;
+    : `Friends who follow you back see your green ring ${till} while you’re up to hit.`;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -1641,7 +1641,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
             : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Check in so friends see you</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
       </View>
       {checkIn ? (

@@ -450,7 +450,7 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
-        accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends who checked in'}
+        accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
         onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
