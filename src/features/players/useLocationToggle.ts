@@ -1,8 +1,8 @@
 import { useCallback, useRef, useState } from 'react';
 import type { MapVisibility } from '@/data/types';
+import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
-import * as haptics from '@/lib/haptics';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
