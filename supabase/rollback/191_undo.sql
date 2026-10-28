@@ -9,7 +9,8 @@
 -- position included, so the leak in the audit's #1 comes back with it).
 --
 -- It cannot bring back what 191 cleared: town positions past one decimal, the
--- place on 5 teens' posts, the old rough squares (exact_spots.cells). The
+-- place on 5 teens' posts, the old rough squares (exact_spots.cells), the point
+-- of 1 past hit at a typed place. The
 -- "Players nearby" answers stay Friends (the same thing since 189).
 
 begin;

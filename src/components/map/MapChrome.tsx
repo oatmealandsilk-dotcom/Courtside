@@ -929,16 +929,17 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
-                : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
+                : filter === 'following' ? 'Nobody you follow is checked in.'
                   : filter === 'near' ? (nearTown ? `No players in ${nearTown} yet.` : 'Add your city to your profile to see the players in your town.')
-                  : filter !== 'all' ? 'Nobody nearby matches that.'
-                    : 'No one sharing nearby yet. Tap a court to see what’s played there.'}
+                  : filter !== 'all' ? 'Nobody matches that.'
+                    // The map's people are friends who checked in, at any age (migration 189; the pill's own words, emptyLine).
+                    : 'No friends checked in yet. Tap a court to see what’s played there.'}
             </Text>
           ) : (
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends checked in yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>

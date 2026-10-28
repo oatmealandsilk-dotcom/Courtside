@@ -47,14 +47,16 @@
 --       not checked in (36 on Oct 27). The time alone (seen_at) stays: the
 --       invite count reads it.
 --   #12 A hit's pin is always its court: the point comes from the courts table,
---       never from the app; a typed place keeps its name and no point.
+--       never from the app; a typed place keeps its name and no point (the 1
+--       hit already posted with a point that is no court's loses it too).
 --   #14 Open to hit's distance, Flyby and the map's hit alerts only count a
 --       check-in that is still on (not one that ended and waits for the sweep).
 --   #15 King of the Court (court_kings) answers only where its flag is on for
 --       you, as the app already asks.
 --
 -- Data this clears for good (the undo cannot bring it back): town positions
--- past one decimal, the place on 5 teens' posts, the old rough squares. And
+-- past one decimal, the place on 5 teens' posts, the old rough squares, the
+-- point of 1 past hit at a typed place (its name stays). And
 -- "Players nearby" answers become Friends (the same thing since 189).
 --
 -- Left as it is, on purpose: a teen's profile city (a profile field, not a
@@ -408,6 +410,14 @@ begin
   end if;
   return new;
 end $function$;
+
+-- The hits already posted with a point that is no court's (1 on Oct 28, a typed place from
+-- Oct 2, readable by any signed-in account): the point goes, the name stays, as for a new one.
+-- (The trigger above runs on this update too and comes to the same answer.)
+update public.hit_requests h set place = h.place - 'lat' - 'lng'
+ where jsonb_typeof(h.place) = 'object' and coalesce(h.place->>'flexible', '') <> 'true'
+   and (h.place ? 'lat' or h.place ? 'lng')
+   and not exists (select 1 from public.courts c where c.id = h.place->>'id');
 
 -- ----------------------------------------- 7. the words of two alerts (#8, #15)
 CREATE OR REPLACE FUNCTION public.push_for_notification()
@@ -948,7 +958,9 @@ begin
      or exists (select 1 from public.user_state where map_visibility = 'nearby')
      or exists (select 1 from public.posts where nullif(btrim(coalesce(location, '')), '') is not null and not public.known_adult(author_id))
      or exists (select 1 from public.exact_spots x where coalesce(x.cells, '[]'::jsonb) <> '[]'::jsonb
-                and not exists (select 1 from public.last_seen s where s.user_id = x.user_id and s.until > now())) then
+                and not exists (select 1 from public.last_seen s where s.user_id = x.user_id and s.until > now()))
+     or exists (select 1 from public.hit_requests h where jsonb_typeof(h.place) = 'object' and coalesce(h.place->>'flexible', '') <> 'true'
+                and (h.place ? 'lat' or h.place ? 'lng') and not exists (select 1 from public.courts c where c.id = h.place->>'id')) then
     raise exception 'Migration 191 stopped: something it clears is still there. Nothing was changed.';
   end if;
   if has_function_privilege('anon', 'public.check_in_at_court(text, double precision, double precision)', 'execute')
