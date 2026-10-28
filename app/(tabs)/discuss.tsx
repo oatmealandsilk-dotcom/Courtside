@@ -42,8 +42,9 @@ import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { CityBoardPreview } from '@/components/CityBoardPreview';
-import { CITY_BOARD_MOCK } from '@/features/cityBoard/mock';
+import { CITY_BOARD_MOCK, MOCK_UP_COUNT, cityById } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
+import { useCityFill } from '@/features/cityBoard/fill';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
@@ -494,6 +495,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // DESIGN MOCK (design/city-board): 'early' forces the old card for a before picture.
   const early = CITY_BOARD_MOCK === 'early' || (CITY_BOARD_MOCK === 'off' && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0);
   const homeCityId = useHomeCityId();
+  // DESIGN MOCK (design/city-board, round 3): the picture can ask for fewer up (one, or none), and the row
+  // fills behind them with your home city's regulars (by the city on their profile, never where they are).
+  const upShown = useMemo(() => (CITY_BOARD_MOCK === 'board' && MOCK_UP_COUNT !== null ? upToday.slice(0, MOCK_UP_COUNT) : upToday), [upToday]);
+  const homeCityName = homeCityId ? cityById(homeCityId)?.name ?? null : null;
+  const upFill = useCityFill({ cityName: homeCityName, upIds: upShown.map((p) => p.user.id) });
   // The same moment for a teen, or anyone not known to be an adult (Oct 5,
   // owner: "Do all"): no friend on their map yet, which for them says only
   // that their friends are not here yet. "Bring your friends" takes the
@@ -710,7 +716,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upShown} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
         {/* A quiet area leads with where to play (your courts, then the others

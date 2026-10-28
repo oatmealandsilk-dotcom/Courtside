@@ -13,8 +13,9 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
-import { Movement } from '@/features/cityBoard/BoardBits';
-import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, cityById, nextTarget, ordinal, rankCities, viewsWords } from '@/features/cityBoard/mock';
+import { FillDivider, FilledFace, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { useCityFill } from '@/features/cityBoard/fill';
+import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MOCK_UP_COUNT, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, cityById, nextTarget, ordinal, rankCities, viewsWords } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
 import { notKnownAdult } from '@/features/players/age';
@@ -128,6 +129,12 @@ export default function CityPage() {
       return u && !notKnownAdult(u) && !blockedIds.includes(u.id) ? [{ user: u, till }] : [];
     }).concat(extras.flatMap((x) => (x.free ? [{ user: x.user, till: x.free }] : [])));
   }, [city, mine, viewerTeen, users, currentUserId, blockedIds, extras, followingIds, lastSeen]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Round 3 (owner, Oct 28: "if no one is active in up to hit today ... put like, most active players in the
+  // city. that way it stays full"): who is up first, ringed; then the city's regulars, plain, to FILL_TO faces.
+  // The picture can ask for fewer up (MOCK_UP_COUNT) to show the row with one up, or none.
+  const upShown = MOCK_UP_COUNT !== null ? upToday.slice(0, MOCK_UP_COUNT) : upToday;
+  const extraPlayers = useMemo(() => extras.map(({ user, hits }) => ({ user, hits })), [extras]);
+  const fill = useCityFill({ cityName: city?.name ?? null, upIds: upShown.map((x) => x.user.id), extra: extraPlayers });
   const courts = city ? DEMO_BUSY_COURTS[city.id] ?? [] : [];
 
   // The clip on top: the month's most watched there, by an adult, public.
@@ -163,11 +170,12 @@ export default function CityPage() {
 
         <View style={styles.body} onLayout={(e) => place('body', e.nativeEvent.layout.y)}>
           {/* 2. Up to hit today: right under the clip, so it is never hunted for. */}
-          {mine || upToday.length ? (
+          {mine || upShown.length || fill.length ? (
             <View style={styles.upSection}>
               <View style={styles.head}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Up to hit today</Text>
-                {upToday.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>{upToday.length} in {city.name}</Text> : null}
+                {/* Nobody up yet: the row is the city's regulars, and its title says so (never "No one's up"). */}
+                <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" numberOfLines={1} style={[styles.sectionTitle, styles.upTitle]}>{upShown.length || !fill.length ? 'Up to hit today' : `Most active in ${city.name}`}</Text>
+                {upShown.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>{upShown.length} in {city.name}</Text> : null}
               </View>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.faces} style={styles.facesScroll}>
                 {mine && currentUser ? (
@@ -180,12 +188,17 @@ export default function CityPage() {
                     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}> </Text>
                   </Pressable>
                 ) : null}
-                {upToday.map(({ user, till }) => (
+                {upShown.map(({ user, till }) => (
                   <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, up to hit today, ${till}. Open profile`} onPress={() => { if (!user.id.startsWith(MOCK_ID)) openPlayer(user.id, currentUserId); }} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
                     <OpenRing open size={56} halo="small"><Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} /></OpenRing>
                     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>{user.name.split(' ')[0]}</Text>
                     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}>{till}</Text>
                   </Pressable>
+                ))}
+                {/* Then the regulars: no ring (that means up today), and when they usually play. */}
+                {fill.length && (mine || upShown.length) ? <FillDivider size={56} /> : null}
+                {fill.map((f) => (
+                  <FilledFace key={f.user.id} face={f} size={56} width={80} top={1} onPress={() => { if (!f.user.id.startsWith(MOCK_ID)) openPlayer(f.user.id, currentUserId); }} />
                 ))}
               </ScrollView>
             </View>
@@ -358,7 +371,12 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; 
   const styles = useThemedStyles(styleDefinitions);
   return (
     <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(p.rank)}, ${p.me ? 'you' : p.user.name}, ${p.hits} hits`} onPress={onPress} style={({ pressed }) => [styles.playerRow, p.me ? styles.rowMine : line && styles.line, pressed && { opacity: PRESS_DIM }]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.rank > 3 && styles.rankLow, p.me && styles.mineInk]}>{p.rank}</Text>
+      {/* 1st to 3rd on a coin of their metal (round 3). */}
+      <View style={styles.rankCol}>
+        {hasCoin(p.rank)
+          ? <Medal rank={p.rank} size={32} fontSize={16} />
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.rank > 3 && styles.rankLow, p.me && styles.mineInk, medalInk(p.rank) ? { color: medalInk(p.rank)! } : null]}>{p.rank}</Text>}
+      </View>
       <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={40} ring={p.user.isCoach} />
       <View style={styles.playerWords}>
         <View style={styles.playerNameLine}>
@@ -410,12 +428,14 @@ const styleDefinitions = StyleSheet.create({
   section: { paddingTop: spacing.xl, gap: 2 },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: spacing.sm },
   sectionTitle: { ...typography.title, color: colors.text },
+  upTitle: { flexShrink: 1 },
   headNote: { ...typography.small, color: colors.textMuted },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: PLAYER_H, paddingHorizontal: spacing.md },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
   youGap: { marginTop: YOU_GAP },
-  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, width: 26, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  rankCol: { width: 32, alignItems: 'center' },
+  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankLow: { color: colors.textFaint },
   mineInk: { color: colors.brand },
   playerWords: { flex: 1, minWidth: 0, gap: 1 },

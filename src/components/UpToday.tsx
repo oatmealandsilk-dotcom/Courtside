@@ -9,6 +9,8 @@ import { Avatar } from '@/components/ui';
 import { OpenRing } from '@/components/map/OpenRing';
 import { TipBubble } from '@/components/TipBubble';
 import type { ID, LastSeen, User } from '@/data/types';
+import { FillDivider, FilledFace } from '@/features/cityBoard/BoardBits';
+import type { FillFace } from '@/features/cityBoard/fill';
 import { formatSpotMiles, milesBetween, spotMilesKey } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isOpenToHit, laterUntil, tillLabel } from '@/features/players/openToHit';
@@ -43,6 +45,8 @@ const NAME_LINE = 16;
 const META_LINE = 14;
 /** A player's item (ring, name, how far, until when): yours is held at the same height, so the row never jumps as you turn on or off. */
 const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
+
+const NO_FILL: FillFace[] = [];
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -116,7 +120,9 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle }: { me: User; people: Up[]; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle }: { me: User; people: Up[];
+  /** DESIGN MOCK (design/city-board, round 3): your home city's regulars after the ringed faces, so the row never looks empty. Empty on the live app. */ fill?: FillFace[];
+  /** DESIGN MOCK: the row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -156,7 +162,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Open to hit</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.title}>{!people.length && fill.length && fillTitle ? fillTitle : 'Open to hit'}</Text>
         {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <View>
@@ -197,7 +203,10 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
             </Animated.View>
           );
         })}
-        {!people.length ? (
+        {/* DESIGN MOCK (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
+        {fill.length ? <FillDivider size={FACE} /> : null}
+        {fill.map((f) => <FilledFace key={f.user.id} face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />)}
+        {!people.length && !fill.length ? (
           <View style={styles.empty}>
             {onLocation ? (
               <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
@@ -225,7 +234,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
-  title: { ...typography.title, color: colors.text },
+  title: { ...typography.title, color: colors.text, flexShrink: 1 },
   count: { ...typography.small, color: colors.textMuted },
   // Runs to the screen's edges, the way the stories rail does, and a little above and below the
   // faces' line (into the gaps around it), so the halos and your "Free today" are never cut off.

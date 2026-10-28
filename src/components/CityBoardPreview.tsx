@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, rankCities, type RankedCity } from '@/features/cityBoard/mock';
-import { Movement } from '@/features/cityBoard/BoardBits';
+import { Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -104,7 +104,12 @@ function PreviewRow({ city, mine, line = false, target = null }: { city: RankedC
   const podium = city.rank <= 3;
   return (
     <View style={[styles.row, mine ? styles.rowMine : line && styles.rowLine]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine]}>{city.rank}</Text>
+      {/* 1st to 3rd on a coin of their metal (round 3); yours keeps its metal, its name says it is yours. */}
+      <View style={styles.rankCol}>
+        {hasCoin(city.rank)
+          ? <Medal rank={city.rank} size={32} fontSize={16} />
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
+      </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{city.name}</Text>
@@ -150,7 +155,9 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12), minHeight: 58 },
   // Big, heavy, tabular: the place is the first thing read, as on a standings table.
-  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, width: 26, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  // The place's column: a coin's width, the numerals below 3rd centred under the coins.
+  rankCol: { width: 32, alignItems: 'center' },
+  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, textAlign: 'center', fontVariant: ['tabular-nums'] },
   rankLow: { color: colors.textFaint },
   inkMine: { color: colors.brand },
   nameCol: { flex: 1, minWidth: 0, gap: 1 },

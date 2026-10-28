@@ -32,6 +32,28 @@ export const CITY_BOARD_MOCK: CityBoardMock = (() => {
 /** The city the boards treat as yours, when the picture asks for one other than the demo profile's. */
 export const MOCK_HOME_CITY: string | null = read('courtside-cityboard-city');
 
+/**
+ * Round 3 (Oct 28): how many players the picture shows as up to hit today
+ * ('0', '1'), so the fill behind them can be photographed; unset, everyone
+ * the demo has up.
+ *
+ *   localStorage['courtside-cityboard-up'] = '1'
+ */
+export const MOCK_UP_COUNT: number | null = (() => {
+  const v = read('courtside-cityboard-up');
+  const n = v === null ? NaN : Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+})();
+
+/**
+ * How 1st to 3rd wear their metal: 'coin' (the numeral on a small coin of
+ * its metal, the default) or 'ink' (the big numeral in the metal, no coin),
+ * for a side-by-side picture.
+ *
+ *   localStorage['courtside-cityboard-medal'] = 'ink'
+ */
+export const MEDAL_LOOK: 'coin' | 'ink' = read('courtside-cityboard-medal') === 'ink' ? 'ink' : 'coin';
+
 export interface BoardCity {
   id: string;
   name: string;
@@ -216,3 +238,78 @@ export const DEMO_BUSY_COURTS: Record<string, { name: string; hits: number; cour
     { name: 'Lions Park', hits: 14, courts: 5 },
   ],
 };
+
+// ---- Round 3 (Oct 28): Up to hit today never looks empty ----
+
+/**
+ * Faces in the Up to hit row before the fill stops: players up today first
+ * (green ring), then the city's most active players to this many (owner,
+ * Oct 28: "fill the rest with more circles without the ring"). With 5 up,
+ * 3 more; with 1 up, 7; with nobody up, 8.
+ */
+export const FILL_TO = 8;
+
+/**
+ * A player's latest logged sessions (made up), newest first, each as when
+ * it started: [weekday (0 Sunday … 6 Saturday), hour (0-23)]; and how many
+ * days ago the newest was. Only what the session log already holds: no
+ * place, no court, no live location.
+ */
+export interface PlayLog { sessions: [number, number][]; lastDaysAgo: number }
+
+export const DEMO_PLAY_LOG: Record<string, PlayLog> = {
+  // Los Angeles
+  'u-sam': { sessions: [[6, 9], [0, 10], [3, 18], [6, 8], [0, 9], [6, 16], [2, 19], [0, 11], [6, 9], [0, 15]], lastDaysAgo: 2 },
+  'u-marcus': { sessions: [[1, 19], [2, 18], [3, 19], [4, 20], [1, 18], [3, 18], [6, 10], [2, 19], [4, 18], [0, 9]], lastDaysAgo: 1 },
+  'u-noor': { sessions: [[6, 9], [0, 10], [6, 8], [0, 9], [6, 16], [3, 18], [0, 11], [6, 9], [0, 8], [5, 19]], lastDaysAgo: 2 },
+  'u-theo': { sessions: [[1, 7], [2, 6], [3, 7], [5, 7], [1, 6], [4, 7], [2, 7], [6, 8], [3, 6], [5, 18]], lastDaysAgo: 0 },
+  'u-lena': { sessions: [[2, 12], [6, 15], [4, 19], [0, 9], [3, 13], [1, 18], [5, 10], [6, 17]], lastDaysAgo: 1 },
+  'u-omar': { sessions: [[2, 19], [4, 18], [1, 20], [3, 19], [2, 18], [5, 17], [4, 19], [0, 16]], lastDaysAgo: 3 },
+  'u-bea': { sessions: [[6, 10], [0, 15], [6, 9], [0, 16], [6, 11], [3, 19]], lastDaysAgo: 2 },
+  'u-jonah': { sessions: [[2, 12], [5, 18], [6, 10], [3, 13], [1, 7]], lastDaysAgo: 3 },
+  'u-ivy': { sessions: [[4, 18], [6, 10], [2, 7]], lastDaysAgo: 5 },
+  'u-diego': { sessions: [[1, 19], [3, 20], [4, 18], [2, 19], [0, 10]], lastDaysAgo: 1 },
+  // Austin (the made-up players on its page)
+  'mock-hannah-wright': { sessions: [[6, 8], [0, 9], [6, 9], [0, 8], [6, 10], [2, 18]], lastDaysAgo: 2 },
+  'mock-grace-liu': { sessions: [[1, 6], [3, 7], [5, 6], [2, 7], [4, 6]], lastDaysAgo: 1 },
+};
+
+/** The habit needs this many sessions to go on, and this share of them to say "usually". */
+const HABIT_MIN = 4;
+const HABIT_SHARE = 0.6;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/**
+ * The quiet words under a filled face: when this player usually plays, read
+ * from their own last sessions, so they say something true and useful to
+ * someone looking for a hit ("Plays evenings": ask them after work). Two
+ * short lines, the way a ringed face has two ("1.1 mi", "till 8pm"), so
+ * every face in the row breaks the same way: ['Plays', 'evenings'].
+ *
+ *   - 6 of their last 10 (at least 4 logged) on a Saturday or Sunday: "Plays weekends";
+ *     starting 5pm or later: "Plays evenings"; before 11am: "Plays mornings".
+ *     Two at once: the stronger one.
+ *   - No clear habit: when they last played ("Played yesterday", "Played Saturday"),
+ *     never a time or a place.
+ *   - Nothing logged in a week: their hits this month.
+ *
+ * Present tense on purpose ("Plays", never "Free"): a filled face is a
+ * regular, not someone up today; only the green ring says that.
+ */
+export function playLine(log: PlayLog | undefined, hits: number, now: Date = new Date()): [string, string] {
+  const last10 = log?.sessions.slice(0, 10) ?? [];
+  if (last10.length >= HABIT_MIN) {
+    const share = (test: (s: [number, number]) => boolean) => last10.filter(test).length / last10.length;
+    const habits: [string, number][] = [
+      ['weekends', share(([d]) => d === 0 || d === 6)],
+      ['evenings', share(([, h]) => h >= 17)],
+      ['mornings', share(([, h]) => h < 11)],
+    ];
+    const best = habits.filter(([, s]) => s >= HABIT_SHARE).sort((a, b) => b[1] - a[1])[0];
+    if (best) return ['Plays', best[0]];
+  }
+  if (log && log.lastDaysAgo === 0) return ['Played', 'today'];
+  if (log && log.lastDaysAgo === 1) return ['Played', 'yesterday'];
+  if (log && log.lastDaysAgo < 7) return ['Played', WEEKDAYS[(now.getDay() - log.lastDaysAgo + 7) % 7]];
+  return [`${hits} hits`, 'this month'];
+}

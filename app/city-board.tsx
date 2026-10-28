@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Button, Screen } from '@/components/ui';
-import { Movement } from '@/features/cityBoard/BoardBits';
+import { Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, cityById, isHot, nextTarget, ordinal, rankCities, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -221,7 +221,13 @@ function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: Ra
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={[styles.row, { height: podium ? PODIUM_H : ROW_H }, mine ? styles.rowMine : line && styles.rowLine]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine]}>{city.rank}</Text>
+      {/* 1st to 3rd on a coin of their metal (round 3, owner: "have first second third be gold silver bronze").
+          By place, not by row: two cities level on 2nd both wear silver. Yours keeps its metal; its name says it is yours. */}
+      <View style={styles.rankCol}>
+        {hasCoin(city.rank)
+          ? <Medal rank={city.rank} size={40} fontSize={21} />
+          : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine, medalInk(city.rank) ? { color: medalInk(city.rank)! } : null]}>{city.rank}</Text>}
+      </View>
       <View style={styles.nameCol}>
         <View style={styles.nameLine}>
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, podium && styles.namePodium, mine && styles.nameMine]}>{city.name}</Text>
@@ -253,7 +259,10 @@ const styleDefinitions = StyleSheet.create({
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
   // The place: big, heavy and tabular, a standings table's first column.
-  rank: { ...font('700'), fontSize: 26, letterSpacing: -1, width: 38, textAlign: 'right', fontVariant: ['tabular-nums'], color: colors.text },
+  // The place's column: a podium coin's width, every numeral centred under the coins; it gives back the
+  // two points it grew by (from 38), so the names start where they did and their lines still fit.
+  rankCol: { width: 40, marginRight: -2, alignItems: 'center' },
+  rank: { ...font('700'), fontSize: 26, letterSpacing: -1, textAlign: 'center', fontVariant: ['tabular-nums'], color: colors.text },
   rankPodium: { fontSize: 34, letterSpacing: -1.4, color: colors.text },
   rankLow: { color: colors.textFaint },
   rankMine: { color: colors.brand },
