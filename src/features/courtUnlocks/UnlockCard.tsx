@@ -37,10 +37,13 @@ export function UnlockCard() {
   const still = useReducedMotion();
   const { court, nth } = useUnlock();
   const W = Math.min(width, 560);
-  const CW = Math.min(W - 2 * 42, 310);
+  // Smaller on a short phone, so the card, the two lines and the buttons always fit on one screen.
+  const CW = Math.min(W - 2 * 42, 310, Math.round((height - 450) / 1.2));
   const CH = Math.round(CW * 1.2);
   const MW = CW - 24;
-  const MH = Math.round(CW * 0.58);
+  // The map window takes whatever the card has left under its name (one line or two), so the card never
+  // has an empty band in it; the picture is drawn this tall and the window shows its middle.
+  const MH = Math.round(CH * 0.62);
   const k = pxPerMetre(CARD_ZOOM, court.lat);
   const foot = footprintSize(NEW_COURT_FACTS.courts, k);
 
@@ -91,52 +94,57 @@ export function UnlockCard() {
       <CloseButton top={insets.top + 10} />
 
       <View style={[styles.body, { paddingTop: insets.top + 58, paddingBottom: insets.bottom + spacing.lg }]}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.over}>Court unlocked</Text>
-        <Animated.View style={[styles.cardSlot, { width: CW, height: CH }, lifted]}>
-          {/* Face down: your colour and the CourtSide mark. */}
-          <Animated.View style={[styles.face, styles.back, { width: CW, height: CH }, back]}>
-            <BrandWash glow radius={corner(20)} />
-            <View style={styles.backRim} />
-            <BrandMark size={Math.round(CW * 0.3)} color={colors.brandInk} />
-          </Animated.View>
-          {/* Face up. */}
-          <Animated.View style={[styles.face, styles.front, { width: CW, height: CH }, front]}>
-            <View style={styles.top}>
-              <Text maxFontSizeMultiplier={1.1} style={styles.no}>No. {nth}</Text>
-              <Text maxFontSizeMultiplier={1.1} style={styles.day}>{NEW_COURT_FACTS.day}</Text>
-            </View>
-            <View style={[styles.window, { width: MW, height: MH }]}>
-              <CourtMapThumb lat={court.lat} lng={court.lng} width={MW} height={MH} zoom={CARD_ZOOM} />
-              <View pointerEvents="none" style={[styles.foot, { left: MW / 2 - foot.width / 2 - 2, top: MH / 2 - foot.height / 2 - 2 }]}>
-                <CourtsFromAbove courts={NEW_COURT_FACTS.courts} pxPerM={k} weight={2} />
+        {/* The card, centred in the room above the words; the words and buttons sit at the bottom as in A and C. */}
+        <View style={styles.hero}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.over}>Court unlocked</Text>
+          <Animated.View style={[styles.cardSlot, { width: CW, height: CH }, lifted]}>
+            {/* Face down: your colour and the CourtSide mark. */}
+            <Animated.View style={[styles.face, styles.back, { width: CW, height: CH }, back]}>
+              <BrandWash glow radius={corner(20)} />
+              <View style={styles.backRim} />
+              <BrandMark size={Math.round(CW * 0.3)} color={colors.brandInk} />
+            </Animated.View>
+            {/* Face up. */}
+            <Animated.View style={[styles.face, styles.front, { width: CW, height: CH }, front]}>
+              <View style={styles.top}>
+                <Text maxFontSizeMultiplier={1.1} style={styles.no}>No. {nth}</Text>
+                <Text maxFontSizeMultiplier={1.1} style={styles.day}>{NEW_COURT_FACTS.day}</Text>
               </View>
-            </View>
-            <Text maxFontSizeMultiplier={1.15} style={styles.name} numberOfLines={2}>{court.name}</Text>
-            <View style={styles.facts}>
-              <Fact value={NEW_COURT_FACTS.surface} label="Surface" />
-              <View style={styles.factLine} />
-              <Fact value={String(NEW_COURT_FACTS.courts)} label="Courts" />
-              <View style={styles.factLine} />
-              <Fact value={NEW_COURT_FACTS.fromHome} label="From home" />
-            </View>
-            {/* One light across the card as it lands. */}
-            <Animated.View pointerEvents="none" style={[styles.sweep, { height: CH * 1.6, top: -CH * 0.3 }, sweep]}>
-              <Svg width={70} height={CH * 1.6}>
-                <Defs>
-                  <LinearGradient id="cardLight" x1="0" y1="0" x2="1" y2="0">
-                    <Stop offset="0" stopColor={colors.surface} stopOpacity={0} />
-                    <Stop offset="0.5" stopColor={colors.surface} stopOpacity={0.55} />
-                    <Stop offset="1" stopColor={colors.surface} stopOpacity={0} />
-                  </LinearGradient>
-                </Defs>
-                <Rect x={0} y={0} width={70} height={CH * 1.6} fill="url(#cardLight)" />
-              </Svg>
+              <View style={[styles.window, { width: MW }]}>
+                <View style={{ width: MW, height: MH }}>
+                  <CourtMapThumb lat={court.lat} lng={court.lng} width={MW} height={MH} zoom={CARD_ZOOM} />
+                  <View pointerEvents="none" style={[styles.foot, { left: MW / 2 - foot.width / 2 - 2, top: MH / 2 - foot.height / 2 - 2 }]}>
+                    <CourtsFromAbove courts={NEW_COURT_FACTS.courts} pxPerM={k} weight={2} />
+                  </View>
+                </View>
+              </View>
+              <Text maxFontSizeMultiplier={1.15} style={styles.name} numberOfLines={2}>{court.name}</Text>
+              <View style={styles.facts}>
+                <Fact value={NEW_COURT_FACTS.surface} label="Surface" />
+                <View style={styles.factLine} />
+                <Fact value={String(NEW_COURT_FACTS.courts)} label="Courts" />
+                <View style={styles.factLine} />
+                <Fact value={NEW_COURT_FACTS.fromHome} label="From home" />
+              </View>
+              {/* One light across the card as it lands. */}
+              <Animated.View pointerEvents="none" style={[styles.sweep, { height: CH * 1.6, top: -CH * 0.3 }, sweep]}>
+                <Svg width={70} height={CH * 1.6}>
+                  <Defs>
+                    <LinearGradient id="cardLight" x1="0" y1="0" x2="1" y2="0">
+                      <Stop offset="0" stopColor={colors.surface} stopOpacity={0} />
+                      <Stop offset="0.5" stopColor={colors.surface} stopOpacity={0.55} />
+                      <Stop offset="1" stopColor={colors.surface} stopOpacity={0} />
+                    </LinearGradient>
+                  </Defs>
+                  <Rect x={0} y={0} width={70} height={CH * 1.6} fill="url(#cardLight)" />
+                </Svg>
+              </Animated.View>
             </Animated.View>
           </Animated.View>
-        </Animated.View>
+        </View>
 
         <View style={styles.rows}><UnlockRows /></View>
-        <View style={styles.bottom}><UnlockActions /></View>
+        <UnlockActions />
       </View>
     </View>
   );
@@ -157,6 +165,7 @@ const styleDefinitions = StyleSheet.create({
   ground: { position: 'absolute', top: 0, overflow: 'hidden' },
   body: { width: '100%', maxWidth: 560, flex: 1, paddingHorizontal: spacing.lg + 4 },
   over: { ...font('600'), fontSize: 16, color: colors.brand, textAlign: 'center' },
+  hero: { flex: 1, justifyContent: 'center', paddingBottom: spacing.sm },
   cardSlot: { alignSelf: 'center', marginTop: 14 },
   face: { position: 'absolute', left: 0, top: 0, borderRadius: corner(20), backfaceVisibility: 'hidden', overflow: 'hidden' },
   back: { backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
@@ -165,15 +174,14 @@ const styleDefinitions = StyleSheet.create({
   top: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 2, marginBottom: 10 },
   no: { ...wordmarkFont('900'), fontSize: 22, letterSpacing: -0.8, color: colors.cardFigure, fontVariant: ['tabular-nums'] },
   day: { ...font('600'), fontSize: 12, color: colors.cardMuted },
-  window: { borderRadius: corner(12), overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  window: { flex: 1, borderRadius: corner(12), overflow: 'hidden', backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   foot: { position: 'absolute', transform: [{ rotate: '-20deg' }] },
   name: { ...font('700'), fontSize: 22, lineHeight: 25, letterSpacing: -0.6, color: colors.cardInk, marginTop: 12, paddingHorizontal: 2 },
-  facts: { flexDirection: 'row', alignItems: 'stretch', marginTop: 'auto', paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withAlpha(colors.cardInk, 0.2) },
+  facts: { flexDirection: 'row', alignItems: 'stretch', marginTop: 12, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: withAlpha(colors.cardInk, 0.2) },
   fact: { flex: 1, alignItems: 'center', gap: 1 },
   factLine: { width: StyleSheet.hairlineWidth, backgroundColor: withAlpha(colors.cardInk, 0.2) },
   factValue: { ...font('700'), fontSize: 15, color: colors.cardInk, fontVariant: ['tabular-nums'] },
   factLabel: { ...font('500'), fontSize: 11, color: colors.cardMuted },
   sweep: { position: 'absolute', left: 0, width: 70 },
-  rows: { marginTop: spacing.xl },
-  bottom: { marginTop: 'auto' },
+  rows: { marginTop: spacing.md },
 });

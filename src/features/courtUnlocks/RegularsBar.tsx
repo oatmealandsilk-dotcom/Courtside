@@ -29,8 +29,9 @@ import { TextScale } from '@/theme/textScale';
  * choice; a teen only to their friends. Who is there now: a friend wears a
  * small green dot; a stranger never does. The head's "here now" follows the
  * owner's rule for people at a court ("2 or less ... the icons of them";
- * more, "the icon and then +x", never a person sign with a number): a
- * friend's face, everyone else a plain face with nothing of who they are.
+ * more, "the icon and then +x", never a person sign with a number), the
+ * same as the lit court on the map above it: two faces, then "+x". A
+ * friend's face; everyone else a plain face with nothing of who they are.
  */
 const FACE = 54;
 const ITEM_W = 72;
@@ -54,7 +55,8 @@ export function RegularsBar({ court }: { court: { name: string } }) {
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Regulars here</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.count}>{total || 'None yet'}</Text>
-        {data.hereNow ? <HereNow n={data.hereNow} friends={friendsHere} /> : null}
+        {/* One stranger alone is never counted (the server's rule for court counts): only a friend, or two and up. */}
+        {data.hereNow >= 2 || (data.hereNow && friendsHere.length) ? <HereNow n={data.hereNow} friends={friendsHere} /> : null}
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
         {mine && currentUser ? (
@@ -92,12 +94,13 @@ export function RegularsBar({ court }: { court: { name: string } }) {
 }
 
 /**
- * "Here now" in the head: two or fewer, a face each; more, the first face
- * and "+2". A friend's own face; anyone else a plain face (NoFace).
+ * "Here now" in the head: two or fewer, a face each; more, two faces and
+ * "+x", as the lit court on the map shows them. A friend's own face; anyone
+ * else a plain face (NoFace).
  */
 function HereNow({ n, friends }: { n: number; friends: User[] }) {
   const styles = useThemedStyles(styleDefinitions);
-  const shown = n <= 2 ? n : 1;
+  const shown = Math.min(n, 2);
   const faces = Array.from({ length: shown }, (_, i) => friends[i] ?? null);
   const said = friends.length ? `${friends.map((u) => u.name.split(' ')[0]).join(' and ')}${n > friends.length ? ` and ${n - friends.length} more` : ''} here now` : `${n} here now`;
   return (
@@ -108,7 +111,7 @@ function HereNow({ n, friends }: { n: number; friends: User[] }) {
             {u ? <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={22} /> : <NoFace size={22} />}
           </View>
         ))}
-        {n > 2 ? <View style={[styles.nowFace, styles.nowFaceOver, styles.nowMore]}><Text maxFontSizeMultiplier={1.1} style={styles.nowMoreText}>+{n - 1}</Text></View> : null}
+        {n > 2 ? <View style={[styles.nowFace, styles.nowFaceOver, styles.nowMore]}><Text maxFontSizeMultiplier={1.1} style={styles.nowMoreText}>+{n - 2}</Text></View> : null}
       </View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nowText}>here now</Text>
     </View>
@@ -123,7 +126,8 @@ const styleDefinitions = StyleSheet.create({
   now: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 'auto' },
   nowFaces: { flexDirection: 'row', alignItems: 'center' },
   nowFace: { borderRadius: 13, borderWidth: 2, borderColor: colors.bg },
-  nowFaceOver: { marginLeft: -7 },
+  // Overlapping only by about the rim, so a friend's two letters are never cut by the face after.
+  nowFaceOver: { marginLeft: -4 },
   nowMore: { height: 26, minWidth: 26, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceAlt },
   nowMoreText: { ...font('700'), fontSize: 11, color: colors.text, fontVariant: ['tabular-nums'] },
   nowText: { ...typography.smallStrong, color: colors.open },

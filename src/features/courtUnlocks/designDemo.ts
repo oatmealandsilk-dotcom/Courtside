@@ -83,7 +83,7 @@ export const DESIGN_FRIENDS = new Set(['u-sam', 'u-marcus', 'u-omar']);
  */
 export const DESIGN_REGULARS: Record<string, { ids: string[]; hereNow: number; friendsHere: string[] }> = {
   'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], hereNow: 3, friendsHere: ['u-sam'] },
-  'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], hereNow: 1, friendsHere: [] },
+  'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], hereNow: 2, friendsHere: [] },
   'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], hereNow: 0, friendsHere: [] },
   'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], hereNow: 0, friendsHere: [] },
   'Bellwood Recreation Center': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-theo', 'u-ivy'], hereNow: 2, friendsHere: ['u-marcus'] },
