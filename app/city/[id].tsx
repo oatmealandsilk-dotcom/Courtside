@@ -13,6 +13,8 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
+import { MutualsLine } from '@/features/mutuals/MutualsCard';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords } from '@/features/cityBoard/board';
@@ -222,6 +224,8 @@ export default function CityPage() {
           <View style={styles.head}>
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
           </View>
+          {/* Design mock (?mutuals=, demo build only): a teen viewer's Top players only lists friends who follow each other, and says so. */}
+          {mutualsMock() ? <MutualsLine only style={{ marginTop: -4, marginBottom: spacing.sm }} /> : null}
           <BoardHead name="Player" value="Sessions" rankWidth={RANK_W} style={styles.boardHead} />
           <View onLayout={(e) => place('list', e.nativeEvent.layout.y)}>
             {topPlayers.map((p, i) => (

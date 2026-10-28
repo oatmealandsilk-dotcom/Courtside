@@ -20,7 +20,7 @@ const EASE = Easing.bezier(0.22, 1, 0.36, 1);
  * does exactly the same and reads "Requested" until they accept; tapping
  * it again takes the ask back.
  */
-export function FollowPill({ following, onPress, small = false, name, userId, wide = false, soft = false }: { following: boolean; onPress: () => void; small?: boolean; name?: string; userId?: string; /** Fills the width it is given (a suggestion card's button). */ wide?: boolean; /** The quiet look for a list row (Oct 25, "Quiet Follow: green word with a thin outline"): no fill, a thin brand outline, the word in the brand colour (the text's where the brand does not read on the page), no wash. Same size and tap area. */ soft?: boolean }) {
+export function FollowPill({ following, onPress, small = false, name, userId, wide = false, soft = false, back = false }: { following: boolean; /** Says "Follow back" (they follow you): the mutuals mock only, for now. */ back?: boolean; onPress: () => void; small?: boolean; name?: string; userId?: string; /** Fills the width it is given (a suggestion card's button). */ wide?: boolean; /** The quiet look for a list row (Oct 25, "Quiet Follow: green word with a thin outline"): no fill, a thin brand outline, the word in the brand colour (the text's where the brand does not read on the page), no wash. Same size and tap area. */ soft?: boolean }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
   const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
@@ -57,11 +57,11 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   };
 
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : back ? 'Follow back' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
         {soft ? null : <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>}
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
-        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
+        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : back ? 'Follow back' : 'Follow'}</Animated.Text>
       </Animated.View>
     </Pressable>
   );

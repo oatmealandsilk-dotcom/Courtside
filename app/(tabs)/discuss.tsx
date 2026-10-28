@@ -41,6 +41,8 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
+import { MutualsInline, MutualsSheet } from '@/features/mutuals/MutualsCard';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { CityBoardPreview } from '@/components/CityBoardPreview';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useCityFill } from '@/features/cityBoard/fill';
@@ -137,6 +139,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // It starts on Find Players: the app opens here, on the map (see startTab).
   // Unless a page asked for a section before this tab was built (a thread
   // opened from a link, then swiped back): that ask was kept for it.
+  // Design mock (?mutuals=a|b, demo build only): the rare "Add your friends" card. Shown every time
+  // here so it can be looked at; the rule for how often it may come up is in mutualsMock.ts.
+  const mutualsLook = previewSection ? null : mutualsMock();
+  const [mutualsOpen, setMutualsOpen] = useState(mutualsLook === 'b');
+  useEffect(() => {
+    if (mutualsLook !== 'a') return;
+    const t = setTimeout(() => setMutualsOpen(true), 1200);
+    return () => clearTimeout(t);
+  }, [mutualsLook]);
   const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && askedSection('/discuss')) || START_SECTION));
   const section = previewSection ? asSection(previewSection) : localSection;
   // A section asked for out of sight whose redraw is still on its way (background work, below):
@@ -726,6 +737,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
         {/* City boards (admins first): the month's board in the invite card's place, fading into Open to hit. */}
+        {/* Design mock (?mutuals=b, demo build only): "Follow back to see each other on the map". */}
+        {!search && mutualsLook === 'b' && mutualsOpen ? <View style={{ marginTop: spacing.lg }}><MutualsInline onClose={() => setMutualsOpen(false)} /></View> : null}
         {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
@@ -1039,7 +1052,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
   const column = isPhone ? undefined : LAYOUT.soloColumn;
-  return (
+  return (<>
+    {mutualsLook === 'a' ? <MutualsSheet visible={mutualsOpen} onClose={() => setMutualsOpen(false)} /> : null}
     <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :
@@ -1096,7 +1110,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
     </Screen>
-  );
+  </>);
 }
 
 /** The app's ease-out for things settling into place (the same curve as Fold and Collapse). */

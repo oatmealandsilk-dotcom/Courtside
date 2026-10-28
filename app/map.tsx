@@ -11,6 +11,7 @@ import { useCourtOpen } from '@/features/players/courtLink';
 import { EmptyState } from '@/components/ui';
 import { takeHandedPlace } from '@/features/places/geocode';
 import { useApp } from '@/store/AppContext';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { colors } from '@/theme';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
@@ -18,7 +19,8 @@ export default function MapScreen() {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const { users, currentUser, currentUserId, blockedIds, detectedCoords, mapLive } = useApp();
-  const players = users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
+  // Design mock (?mutuals=empty, demo build only): nobody up to hit, to show the map's empty state.
+  const players = mutualsMock() === 'empty' ? [] : users.filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id));
   const location = useLocationToggle();
   // Nothing is asked on opening the map any more (migration 189, Apple 5.1.2(i)): the map opens
   // on your town, and "Who can see you on the map?" and Apple's prompt come only with Check in.

@@ -40,6 +40,8 @@ import { useArrived } from '@/lib/useArrived';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { useMessageReady } from '@/features/messages/useMessageReady';
 import type { Post } from '@/data/types';
+import { MutualsLine } from '@/features/mutuals/MutualsCard';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
@@ -64,7 +66,7 @@ const findPlayers = { label: 'Find players', onPress: () => { requestSection('/d
 function UserProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { users, posts, coaches, currentUser, currentUserId, followingIds, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
+  const { users, posts, coaches, currentUser, currentUserId, followingIds, followEdges, followRequests, mutedIds, blockedIds, alertIds, actions } = useApp();
   const loading = useStillLoading();
   // Their posts come in when their profile is opened, so the grid and the
   // counts are whole however old the posts are.
@@ -202,7 +204,10 @@ function UserProfile() {
   };
 
   // One word, as on every app: a private account's Follow sends an ask, and the button then says so.
-  const followLabel = following ? 'Following' : requested ? 'Requested' : 'Follow';
+  // Design mock (?mutuals=, demo build only): someone who follows you that you don't follow back gets
+  // "Follow back", with the one line of why under it (mutualsMock.ts).
+  const followsYouBack = !!mutualsMock() && !following && !requested && followEdges.some((e) => e.followerId === user.id && e.followingId === currentUserId);
+  const followLabel = following ? 'Following' : requested ? 'Requested' : followsYouBack ? 'Follow back' : 'Follow';
   // Unblock, notifications and mute announce themselves, in a toast with Undo.
   const menu: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }[] = blocked
     ? [{ icon: 'checkmark-circle-outline', label: 'Unblock', onPress: () => actions.toggleBlock(user.id) }]
@@ -296,6 +301,7 @@ function UserProfile() {
         ) : (
           <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" style={{ minHeight: buttonShape.profileHeight }} /></View></View>
         )}
+        {followsYouBack && !blocked ? <MutualsLine style={{ marginTop: -spacing.xs }} /> : null}
         {coach && !blocked && !locked ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />
         ) : null}

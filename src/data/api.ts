@@ -25,6 +25,7 @@ import { milesBetween } from '@/features/players/geo';
 import { surfaceRun, type VotedSurface } from '@/features/places/courtSurface';
 import { DEMO_PARK } from './mock/courts';
 import { demoLastSeen } from './mock/presence';
+import { mutualsDemoNotifications } from '@/features/mutuals/mutualsMock';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
@@ -204,7 +205,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications), ...(fresh ? [] : demoGroupInviteNotifications())],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications), ...(fresh ? [] : demoGroupInviteNotifications()), ...(fresh ? [] : mutualsDemoNotifications(CURRENT_USER_ID))],
       detectedActivities: supabase ? [] : [...(fresh ? [] : detectedActivities), ...(found?.activities ?? [])],
       coachingRequests,
       integrations: sources,

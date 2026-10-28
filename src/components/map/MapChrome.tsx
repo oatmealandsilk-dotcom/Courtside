@@ -29,6 +29,7 @@ import { isMapCourtId, labelOf } from '@/features/places/courtName';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { directionsTo } from '@/features/players/openInMaps';
 import { useApp } from '@/store/AppContext';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
@@ -905,7 +906,19 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends up to hit yet. The nearest courts:'}</Text>
+              {/* Design mock (?mutuals=, demo build only): the way to fill the map, and why, before the courts. */}
+              {!locked && mutualsMock() ? (
+                <View style={styles.mutualsEmpty}>
+                  <View style={styles.mutualsEmptyWords}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mutualsEmptyTitle} numberOfLines={1}>No friends up to hit</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mutualsEmptyLine} numberOfLines={2}>Friends who follow each other see each other here while they’re up to hit.</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" onPress={() => { haptics.tap(); router.push('/find-contacts'); }} hitSlop={6} style={({ pressed }) => [styles.mutualsEmptyButton, pressed && { opacity: PRESS_DIM }]}>
+                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.mutualsEmptyButtonText}>Add friends</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked || mutualsMock() ? 'The nearest courts:' : 'No friends up to hit yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
@@ -1878,6 +1891,12 @@ const styleDefinitions = StyleSheet.create({
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   // The empty tray's nearest courts: one quiet line, then the courts side by side, each the search results' tile and words.
   emptyCourts: { paddingBottom: spacing.xs },
+  mutualsEmpty: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
+  mutualsEmptyWords: { flex: 1, minWidth: 0, gap: 2 },
+  mutualsEmptyTitle: { ...typography.smallStrong, fontSize: 15, color: colors.text },
+  mutualsEmptyLine: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted },
+  mutualsEmptyButton: { minHeight: 34, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center' },
+  mutualsEmptyButtonText: { ...typography.smallStrong, color: colors.brandInk },
   emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 6, paddingHorizontal: spacing.lg },
   courtStrip: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   courtChip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, maxWidth: 240, paddingLeft: 8, paddingRight: spacing.md, paddingVertical: 8, borderRadius: radius.lg, backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

@@ -13,6 +13,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar, EmptyState, Screen } from '@/components/ui';
 import { FollowPill } from '@/components/FollowPill';
+import { MutualsLine } from '@/features/mutuals/MutualsCard';
+import { mutualsMock } from '@/features/mutuals/mutualsMock';
 import { TileCover } from '@/components/TileCover';
 import { BrandMark } from '@/components/BrandMark';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -319,6 +321,8 @@ function recapHours(preview: string | undefined | null): string | null {
 }
 
 export default function Notifications() {
+  // Design mock (?mutuals=, demo build only): a follow row says "Follow back", with the line of why.
+  const mutualsOn = !!mutualsMock();
   const styles = useThemedStyles(styleDefinitions);
   const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions } = useApp();
   // Tracker sessions the server logged for you (migration 185), by the tracker session's id.
@@ -752,6 +756,7 @@ export default function Notifications() {
                     </Text>
                   ) : null}
                   <Text style={styles.time}>{relativeTime(group.createdAt)}</Text>
+                  {mutualsOn && group.kind === 'follow' && first && !followingIds.includes(first) ? <MutualsLine short style={{ marginTop: 4 }} /> : null}
                   {tag?.status === 'pending' && !tag.dropped ? (
                     <View style={styles.askRow}>
                       <Pressable
@@ -825,7 +830,7 @@ export default function Notifications() {
                   // In for your hit: straight to the hit's group chat, where the details get sorted.
                   <Pressable accessibilityRole="button" accessibilityLabel="Open the hit's chat" onPress={() => router.push(`/messages/${hitChat}`)} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Chat</Text></Pressable>
                 ) : (group.kind === 'follow' || group.kind === 'joined' || group.kind === 'map-new-player') && first && first !== currentUserId ? (
-                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
+                  <FollowPill small soft={LESS_AI_ROUND2} back={mutualsOn && group.kind === 'follow'} following={followingIds.includes(first)} userId={first} onPress={() => { const who = users.find((u) => u.id === first); if (who && followingIds.includes(first)) confirmUnfollow(who, () => actions.toggleFollow(first)); else actions.toggleFollow(first); }} name={nameOf(first).split(' ')[0]} />
                 ) : thumb ? (
                   <View style={[styles.thumb, !thumb.uri && !thumb.words && { backgroundColor: surfaceColorFor(thumb.seed) }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                     {thumb.uri ? <TileCover uri={thumb.uri} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" transition={120} />
