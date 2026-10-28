@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { MapVisibility } from '@/data/types';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -132,8 +133,12 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
   useEffect(() => {
     if (!yes) { allowed.current = false; return undefined; }
     let live = true;
-    void locationAllowed().then((ok) => { if (live) allowed.current = ok; });
-    return () => { live = false; };
+    const look = () => { void locationAllowed().then((ok) => { if (live) allowed.current = ok; }); };
+    look();
+    // Looked at again whenever the app comes back: a permission taken away in Settings (or an "Allow Once" run out)
+    // must not light the button before the phone's own prompt says yes again.
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { allowed.current = false; look(); } });
+    return () => { live = false; sub.remove(); };
   }, [yes]);
 
   const pressNow = async () => {
