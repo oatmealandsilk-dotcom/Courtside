@@ -139,7 +139,7 @@ const VERB: Record<NotificationKind, string> = {
   activity: LESS_AI ? '' : 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
   'map-new-hit': 'posted an open hit near you',
-  'map-new-player': 'is new and lit up near you',
+  'map-new-player': 'is new and up to hit near you',
   'court-activity': 'posted at a court you follow',
   // "in a match" or "in a practice" comes from the row's preview (migration 62); see verbFor.
   'session-tag': 'tagged you in a session',

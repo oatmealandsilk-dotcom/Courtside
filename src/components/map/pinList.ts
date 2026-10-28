@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litSize, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { CourtGlow } from '@/features/places/lightUp';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
@@ -55,9 +55,10 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
    */
   playing?: { courtId: string; courtName: string } | null;
   /**
-   * Courts light up (Light up, features/places/lightUp; admins first): what is on at each court
-   * right now, as a still halo by level and its count ("4 here"), on the full map's court pins
-   * (never on the still card). Null: the courts look exactly as before.
+   * Courts light up (features/places/lightUp; admins first): what is on at each court right now. A
+   * lit court is a big tile with its light moving (litCourtPinHtml) and its count ("4 here") under
+   * it; the players at it fold into its corner (friends' faces, then "+5"), with no pins of their
+   * own beside it (Oct 27 review). Full map only, never the still card. Null: as before.
    */
   glow?: Map<string, CourtGlow> | null;
 }): CanvasMarker[] {
@@ -105,10 +106,24 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const g = glow?.get(c.id);
     const tag = glow ? g?.label ?? (hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined) : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
     // Your pin standing on it already says so: the court only glows under it, no words beside.
-    const underYou = yours && !on && !!meAt && milesBetween(meAt, c) < 0.05;
+    const underYou = (yours || !!g?.you) && !on && !!meAt && milesBetween(meAt, c) < 0.05;
+    if (g) {
+      // A lit court (Oct 27 review): a big tile with its light moving, who is there tucked into its corner
+      // (friends' faces, you when your own pin is not standing on it, then "+5"), its words under it. Above
+      // plain players' pins (3), so someone just beside it never covers its corner; under you and the picked.
+      const faces = [...(g.you && !underYou ? [me] : []), ...g.friends];
+      const others = Math.max(0, g.people - (g.you ? 1 : 0) - g.friends.length);
+      const half = Math.round(litSize(g.level, on) / 2);
+      return {
+        id: `c:${c.id}`, lat: c.lat, lng: c.lng,
+        html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live }),
+        z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, n: c.count, cw: half, g: 'c' as const,
+        role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, g.label].filter(Boolean).join(', '),
+      };
+    }
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, g?.level ?? (glow && tag ? 'plain' : 0)), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
@@ -124,6 +139,10 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   }
   for (const p of shown) {
     const on = p.user.id === selectedId;
+    // At a lit court (checked in there, or placed exactly and standing on it): a face on its corner, or
+    // its "+N", in place of a pin of their own beside it (Oct 27 review). Picked, their own pin shows.
+    const litAt = glow && expanded && !on ? (p.court?.id ?? (p.rough ? undefined : courtUnder(p.at)?.slice(2))) : undefined;
+    if (litAt && glow?.has(litAt)) continue;
     const size = on ? 42 : 34;
     // Open to hit is a class on the pin (cls), so it eases on and off in place rather than redrawing;
     // an open player stands above the plain ones beside them, so a neighbour never covers their ring.

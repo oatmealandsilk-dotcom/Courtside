@@ -86,8 +86,8 @@ export const TOUR_STEPS: TourStep[] = [
     onPage: { phone: { id: 'map-lead', shape: 'box' }, wide: { id: 'map-lead', shape: 'box' } },
     barOnlyIfNotOnPage: true,
     page: MAP,
-    phone: { title: 'Your map', body: 'Courts near you, and friends who lit up.' },
-    wide: { title: 'Your map', body: 'Courts near you, and friends who lit up.' },
+    phone: { title: 'Your map', body: 'Courts near you, and friends up to hit.' },
+    wide: { title: 'Your map', body: 'Courts near you, and friends up to hit.' },
     byLead: {
       // Short: the lit card says "Send them your link", and a short tip keeps clear of the map's own lines above it.
       // The clause about hits (Oct 7, audit item 3) is the only word of them a new city's player gets here; it

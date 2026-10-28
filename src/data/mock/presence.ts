@@ -13,15 +13,15 @@ const atPark = (n: number, name: string) => {
 /**
  * The demo player's friends on the map, as map_players (migration 189)
  * would show them: only friends who follow each other with you, only while
- * their Check in lasts (until 10pm), never a stranger. Sam said "I'm playing
- * here" at Alder Park, so he shows on the court itself, up for a hit today;
- * Omar and Marcus checked in where they were (exact, for a friend). Everyone
+ * their Check in lasts (until 10pm), never a stranger. Sam and Marcus said
+ * "I'm playing here" at Alder Park, so they show on the court itself (Sam up
+ * for a hit today); Omar at Bellwood, on his own (one friend: a warm court). Everyone
  * else in the demo is a stranger to you, so their spots never reach the
  * phone: they show only through a court they chose (an open hit, a count of
  * who is playing). Never a row for Ella, the teen.
  */
 export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
   { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday(), mutual: true },
-  { userId: 'u-omar', lat: 34.0662, lng: -118.2431, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(48), mutual: true },
-  { userId: 'u-marcus', lat: 34.05518, lng: -118.24872, place: 'exact', city: 'Los Angeles', seenAt: minutesAgo(95), mutual: true },
+  { userId: 'u-omar', ...atPark(2, 'Bellwood Recreation Center'), city: 'Los Angeles', seenAt: minutesAgo(48), mutual: true },
+  { userId: 'u-marcus', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(25), mutual: true },
 ] satisfies LastSeen[]).map((r) => [r.userId, r]));

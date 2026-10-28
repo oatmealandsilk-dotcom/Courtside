@@ -67,9 +67,9 @@ export function CheckInBar({ control, compact = false, style }: { control: Check
   if (control.on || hidden || touring) return null;
   return (
     <View style={[styles.bar, compact && styles.barCompact, style]} accessibilityRole="none">
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={2} style={[styles.ask, compact && styles.askCompact]}>Light up so friends can see you?</Text>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Light up. Friends who follow you back see you ${control.span}`} accessibilityState={{ busy: control.busy }} hitSlop={6} onPress={control.press} style={({ pressed }) => [styles.yes, pressed && { opacity: PRESS_DIM }]}>
-        {control.busy ? <ActivityIndicator size="small" color={colors.bg} /> : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.yesText}>Light up</Text>}
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={2} style={[styles.ask, compact && styles.askCompact]}>Up to hit? Let friends see you on the map.</Text>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Up to hit. Friends who follow you back see you ${control.span}`} accessibilityState={{ busy: control.busy }} hitSlop={6} onPress={control.press} style={({ pressed }) => [styles.yes, pressed && { opacity: PRESS_DIM }]}>
+        {control.busy ? <ActivityIndicator size="small" color={colors.bg} /> : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.yesText}>Up to hit</Text>}
       </Pressable>
       <Pressable accessibilityRole="button" accessibilityLabel="Not now. Hide this for today" hitSlop={6} onPress={notNow} style={({ pressed }) => [styles.no, pressed && { opacity: PRESS_DIM }]}>
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.noText}>Not now</Text>

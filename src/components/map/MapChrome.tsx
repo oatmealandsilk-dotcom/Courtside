@@ -486,12 +486,12 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-/** What a Light up button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `You’re lit up, friends see you ${c.span}. Turn off` : `Light up. Friends who follow you back see you ${c.span}`);
+/** What the Up to hit button says to a screen reader: what a tap does, and for how long. */
+const checkInLabel = (c: CheckInControl) => (c.on ? `Up to hit, friends see you ${c.span}. Turn off` : `Up to hit. Friends who follow you back see you ${c.span}`);
 
 /**
- * The Light up button's own words (Oct 27, owner: "Light up"; migration 189):
- * "Light up", or while you are lit up, the owner's words: "You’re lit up · till 10pm"
+ * The Up to hit button's own words (Oct 27, the owner's pick: "Up to hit"; migration 189):
+ * "Up to hit", or while it is on: "Up to hit · till 10pm"
  * (a tap turns it off).
  */
 function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {

@@ -26,7 +26,7 @@ import { notKnownAdult } from '@/features/players/age';
  * Friends: the server treats it so.)
  */
 export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
-  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Light up, till 10pm.' },
+  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Up to hit, till 10pm.' },
   { value: 'none', label: 'No one', line: 'You never show on the map.' },
 ];
 

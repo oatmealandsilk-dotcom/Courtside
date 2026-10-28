@@ -4086,7 +4086,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
   const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
-    if (!me) return 'Sign in to light up.';
+    if (!me) return 'Sign in first.';
     const fix = await getPosition();
     if (!fix.ok) {
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
@@ -4110,8 +4110,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
     if ('error' in got) {
-      return got.error === 'ask_first' ? 'Say yes to friends seeing you light up first.'
-        : got.error === 'missing' ? 'Light up isn’t available yet. Update the app and try again.'
+      return got.error === 'ask_first' ? 'Say yes to friends seeing you on the map first.'
+        : got.error === 'missing' ? 'Up to hit isn’t available yet. Update the app and try again.'
           : 'That didn’t go through. Try again.';
     }
     haptics.commit();

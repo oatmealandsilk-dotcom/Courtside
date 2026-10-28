@@ -17,27 +17,35 @@ import { useApp } from '@/store/AppContext';
  * there"; then, of the word "Check in": "i dont like how it says check in,
  * whats a better thing more encourgaing to peplel", and "go" to "Light up").
  *
- * 1. The words, for everyone: the button that shares your spot with friends
- *    says "Light up"; while on, "You're lit up · till 10pm" (the owner's
- *    words, on the Find Players card's button and in the toast; "for 2 hours"
- *    in the toast late in the day); "Turn off" stops it. What
+ * 1. The words, for everyone (Oct 27, the owner's pick: "Up to hit"): the
+ *    button that shares your spot with friends says "Up to hit"; while on,
+ *    "Up to hit · till 10pm" (on the Find Players card's button and in the
+ *    toast; "for 2 hours" late in the day); "Turn off" stops it. What
  *    it does is unchanged (migration 189): one tap, read once, friends who
  *    follow each other with you, until 10pm, never on its own.
  *
  * 2. Courts light up (LIGHT_UP_COURTS_FOR_EVERYONE, admins first): on the
  *    full map (phone and browser alike: the pins are the same HTML in both,
  *    markers.ts), a court glows by how much is on
- *    there right now: people playing there ("I'm playing here", which a
- *    light-up at a court now does too) and open hits there today. Quiet as
- *    ever with nothing on; warm (1), lit (2 or 3), hot (4 or more): a soft,
- *    still halo in the theme's brand colour, a little bigger each level, and
- *    the small count ("4 here"). Only counts, as the server already gives
+ *    there right now: people playing there ("I'm playing here", which Up to
+ *    hit at a court now says too) and open hits there today. Quiet as ever
+ *    with nothing on; warm (1), lit (2 or 3), hot (4 or more). Oct 27 review
+ *    (owner: "way more noticble ... the courts can be bigger ... a live
+ *    gradient that flahes and animates ... really eye catching"): a lit court
+ *    is a big tile (2 to 3 times a quiet one, bigger each level) with a ring
+ *    of the theme's colours travelling round it, a sheen sweeping across, and
+ *    a soft glow breathing behind; hot courts move fastest (markers.ts
+ *    litCourtPinHtml). And "tuck the icons of people in the corner of the
+ *    court ... a couple icons and then +5 more": up to three faces of
+ *    friends who follow each other with you on its corner, then "+5" for
+ *    everyone else, in place of their own pins beside it (pinList).
+ *    Only counts, as the server already gives
  *    them (court_right_now, migration 189): a stranger is counted only once
- *    two or more adults are there, never named or shown; friends who follow
- *    each other with you count as the faces you already see; a teen is
- *    never counted, and a teen sees no one else's count.
+ *    two or more adults are there, never named or shown (no face, no pin:
+ *    only the "+5"); a teen is never counted, and a teen sees no one else's
+ *    count.
  *
- *    Lighting up while standing at a court (within SAME_COURT_MILES of its
+ *    Tapping Up to hit while standing at a court (within SAME_COURT_MILES of its
  *    pin, the map's own same-court rule) also says "I'm playing here" there:
  *    the same tap, never on its own. Not for a teen, a club's court or
  *    someone's home court (canCheckIn, the server's own rule too). Turn off
@@ -61,13 +69,13 @@ export function useLightUpCourts(): boolean {
 /* ------------------------------------------------------------- the words */
 
 /** The button, before a tap. */
-export const LIGHT_UP = 'Light up';
-/** How long a light-up made now lasts: "till 10pm", or "for 2 hours" late in the day (checkInEnds). */
+export const LIGHT_UP = 'Up to hit';
+/** How long Up to hit tapped now lasts: "till 10pm", or "for 2 hours" late in the day (checkInEnds). */
 export const litSpan = (now: Date = new Date()): string => (now.getHours() >= 20 ? 'for 2 hours' : `till ${clock(checkInEnds(now))}`);
 /** Until when yours shows: "till 10pm". */
 export const litTill = (until: string): string => `till ${clock(new Date(until))}`;
-/** The state, said whole (the owner's words): "You’re lit up · till 10pm", on the card's button and in the toast. */
-export const litLine = (span: string): string => `You’re lit up · ${span}`;
+/** The state, said whole (the owner's words): "Up to hit · till 10pm", on the card's button and in the toast. */
+export const litLine = (span: string): string => `Up to hit · ${span}`;
 
 /* ---------------------------------------------------- the court you're at */
 
@@ -121,10 +129,42 @@ export interface CourtGlow {
   /** "4 here", "You + 2 here", "You’re here", "Hit 6pm", "2 hits today". */
   label: string;
   court: Court;
+  /** How many people are there now, you included (strangers only as the server counts them). */
+  people: number;
+  /** You are there (said "I'm playing here", or playing a live session there). */
+  you: boolean;
+  /**
+   * Friends who follow each other with you, there now, most recently seen first: the only faces a
+   * court may wear (on its corner, pinList). Never a stranger, never someone who only follows you.
+   */
+  friends: User[];
+  /** Its light moves (the liveliest LIVE_MAX courts); the rest glow, still. */
+  live: boolean;
 }
+
+/**
+ * At most this many lit courts move at once (their ring travelling, their sheen and glow): the liveliest,
+ * hot first. The rest wear the same gradient, still, so a busy city never has dozens of pins animating.
+ * Only pins in or near the view are ever made (pinEngine), so these are the ones on screen.
+ */
+export const LIVE_MAX = 6;
 
 /** Quiet (0), warm (1), lit (2 or 3), hot (4 or more). */
 export const glowLevel = (score: number): GlowLevel | 0 => (score >= 4 ? 3 : score >= 2 ? 2 : score >= 1 ? 1 : 0);
+
+/** Standing on a court: within about 20 m of its pin (the same as pinList's ON_COURT_MILES). */
+const ON_COURT_MILES = 0.0125;
+
+/** The court an exact spot stands on (the nearest within ON_COURT_MILES), as pinList's courtUnder finds it. */
+function standingOn(at: LatLng, courts: Court[]): string | undefined {
+  let best: string | undefined;
+  let bestMiles = ON_COURT_MILES;
+  for (const c of courts) {
+    const miles = milesBetween(at, c);
+    if (miles < bestMiles) { bestMiles = miles; best = c.id; }
+  }
+  return best;
+}
 
 /** Whether an hour is later today on this phone's clock (an open hit still to come, or under way). */
 const today = (iso: string, now: Date) => new Date(iso).toDateString() === now.toDateString();
@@ -135,7 +175,7 @@ const today = (iso: string, now: Date) => new Date(iso).toDateString() === now.t
  * friends who follow each other with you at it (named there already), you,
  * and the open hits there today that you may see.
  */
-export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, now = new Date() }: {
+export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, users = [], now = new Date() }: {
   courts: Court[];
   courtNow: Record<string, CourtRightNow>;
   hits: MapModel['hits'];
@@ -143,14 +183,22 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, now =
   me: ID | null;
   /** Your live session's court, while you are playing there. */
   playingAt?: string | null;
+  /** Everyone the app knows, for the faces of friends the server says are there but the map's filter left out. */
+  users?: User[];
   now?: Date;
 }): Map<string, CourtGlow> {
-  const friendsAt = new Map<string, Set<ID>>();
+  // Who the map places at each court (checked in there): everyone counts; only friends who follow each other with you may wear a face.
+  const placedAt = new Map<string, Set<ID>>();
+  const faceAt = new Map<string, Placed[]>();
   for (const p of shown) {
-    if (!p.court || p.user.id === me) continue;
-    const set = friendsAt.get(p.court.id) ?? new Set<ID>();
+    if (p.user.id === me) continue;
+    // Checked in there, or placed exactly and standing on it (pinList's courtUnder: a rough spot never puts anyone at a court).
+    const at = p.court?.id ?? (p.rough ? undefined : standingOn(p.at, courts));
+    if (!at) continue;
+    const set = placedAt.get(at) ?? new Set<ID>();
     set.add(p.user.id);
-    friendsAt.set(p.court.id, set);
+    placedAt.set(at, set);
+    if (p.mutual) faceAt.set(at, [...(faceAt.get(at) ?? []), p]);
   }
   const hitsAt = new Map<string, string[]>();
   for (const h of hits) {
@@ -158,13 +206,16 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, now =
     if (!id || !today(h.hit.startsAt, now)) continue;
     hitsAt.set(id, [...(hitsAt.get(id) ?? []), h.hit.startsAt]);
   }
+  const byId = new Map(users.map((u) => [u.id, u] as const));
   const out = new Map<string, CourtGlow>();
+  const score = new Map<string, number>();
   for (const c of courts) {
     if (out.has(c.id)) continue;
     const row = courtNow[c.id];
-    const friends = new Set<ID>([...(row?.friendIds ?? []), ...(friendsAt.get(c.id) ?? [])]);
-    if (me) friends.delete(me);
-    const others = Math.max(row?.playing ?? 0, friends.size);
+    const friendIds = new Set<ID>(row?.friendIds ?? []);
+    if (me) friendIds.delete(me);
+    const placed = placedAt.get(c.id) ?? new Set<ID>();
+    const others = Math.max(row?.playing ?? 0, new Set<ID>([...friendIds, ...placed]).size);
     const you = !!row?.youHere || playingAt === c.id;
     const people = others + (you ? 1 : 0);
     const times = (hitsAt.get(c.id) ?? []).sort();
@@ -173,8 +224,14 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, now =
     const label = people
       ? you ? (others ? `You + ${others} here` : 'You’re here') : `${people} here`
       : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
-    out.set(c.id, { level, label, court: c });
+    // Faces: friends the map places here (most recently seen first), then friends only the server names here.
+    const seen = (faceAt.get(c.id) ?? []).slice().sort((a, b) => (Date.parse(b.seenAt ?? '') || 0) - (Date.parse(a.seenAt ?? '') || 0)).map((p) => p.user);
+    const extra = [...friendIds].filter((id) => !seen.some((u) => u.id === id)).map((id) => byId.get(id)).filter((u): u is User => !!u);
+    out.set(c.id, { level, label, court: c, people, you, friends: [...seen, ...extra], live: false });
+    score.set(c.id, level * 1000 + people * 10 + times.length);
   }
+  // The liveliest few move; the rest stay still (LIVE_MAX).
+  [...out.keys()].sort((a, b) => (score.get(b) ?? 0) - (score.get(a) ?? 0)).slice(0, LIVE_MAX).forEach((id) => { out.get(id)!.live = true; });
   return out;
 }
 
@@ -202,7 +259,7 @@ function nearestKey(courts: Court[]): string {
  */
 export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[], playingAt?: string | null): Map<string, CourtGlow> | null {
   const on = useLightUpCourts() && expanded;
-  const { courtNow, actions, currentUserId } = useApp();
+  const { courtNow, actions, currentUserId, users } = useApp();
   const pool = model.courts;
   const key = useMemo(() => (on ? nearestKey(pool) : ''), [on, pool]);
   const { loadCourtsNow } = actions;
@@ -214,11 +271,11 @@ export function useCourtGlow(model: MapModel, expanded: boolean, shown: Placed[]
     return () => clearInterval(timer);
   }, [key, loadCourtsNow]);
   return useMemo(
-    () => (on ? courtGlows({ courts: pool, courtNow, hits: model.hits, shown, me: currentUserId, playingAt }) : null),
-    [on, pool, courtNow, model.hits, shown, currentUserId, playingAt],
+    () => (on ? courtGlows({ courts: pool, courtNow, hits: model.hits, shown, me: currentUserId, playingAt, users }) : null),
+    [on, pool, courtNow, model.hits, shown, currentUserId, playingAt, users],
   );
 }
 
 /** One short key for a glow map, for a memo's list (the pins redraw only when a court's glow changes). */
 export const glowKey = (glow: Map<string, CourtGlow> | null): string =>
-  (glow ? [...glow].map(([id, g]) => `${id}:${g.level}:${g.label}`).join('|') : '');
+  (glow ? [...glow].map(([id, g]) => `${id}:${g.level}:${g.label}:${g.live ? 1 : 0}:${g.friends.map((u) => `${u.id}${u.avatarUrl ?? ''}`).join(',')}`).join('|') : '');

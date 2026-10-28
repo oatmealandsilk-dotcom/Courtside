@@ -40,7 +40,7 @@ export function useLocationToggle() {
   return { locationOn: locationEnabled, locating, toggle };
 }
 
-/** What a Light up button shows and does (MapTopBar, the Find Players card). */
+/** What the Up to hit button shows and does (MapTopBar, the Find Players card). */
 export interface CheckInControl {
   /** Lit up right now. */
   on: boolean;
@@ -48,7 +48,7 @@ export interface CheckInControl {
   busy: boolean;
   /** "till 10pm" (how long a light-up now would last, or how long yours still does). */
   span: string;
-  /** When yours ends, while you are lit up. */
+  /** When yours ends, while you are up to hit. */
   until: string | null;
   press: () => void;
 }
@@ -85,11 +85,11 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
     try {
       let at: { lat: number; lng: number } | null = null;
       const problem = await actions.checkInOnMap((fix) => { at = fix; });
-      if (problem) { showToast({ title: 'Couldn’t light you up', body: problem, icon: 'navigate-outline' }); return; }
-      // Standing at a court: it lights up too, from this same tap (Light up, admins first).
+      if (problem) { showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); return; }
+      // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const spot: { lat: number; lng: number } | null = at;
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
-      showToast({ title: litLine(litSpan()), body: court ? `${court} lights up too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);
