@@ -199,7 +199,7 @@ export default function Settings() {
         ] : []),
         ...(mapAdult ? [
           { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'Within 15 miles', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
-          { icon: 'location-outline' as const, label: 'Friends new to CourtSide', detail: 'When one first checks in', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
+          { icon: 'location-outline' as const, label: 'Friends new to CourtSide', detail: 'When one is first up to hit', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
         ] : []),
         { icon: 'heart-outline' as const, label: 'Courts you follow', toggle: { value: prefs.pushCourts, onChange: (v: boolean) => actions.setPref('pushCourts', v) } },
       ],
