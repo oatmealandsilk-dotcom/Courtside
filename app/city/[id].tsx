@@ -55,7 +55,7 @@ const MOCK_ID = 'mock-';
  * board. In order (owner, Oct 27):
  *
  *   1. The month's most watched clip there, big, playing muted, the city's
- *      name and its place ("3rd") over it ("maybe even show that first").
+ *      name over it ("maybe even show that first").
  *   2. Up to hit today, right under it, faces sideways ("should be easy to
  *      find not hidden at bottom"): your own button first in your city.
  *   3. Where it stands, in one short line ("a tiny bit too much words").
@@ -159,7 +159,7 @@ export default function CityPage() {
   return (
     <View style={styles.root}>
       <Screen bleedTop wash={false} padded={false} offsetY={offsetY}>
-        <Hero cityName={city.name} rank={ranked?.rank ?? null} reel={reel} author={reelAuthor} height={heroH} top={top} />
+        <Hero cityName={city.name} reel={reel} author={reelAuthor} height={heroH} top={top} />
 
         <View style={styles.body} onLayout={(e) => place('body', e.nativeEvent.layout.y)}>
           {/* 2. Up to hit today: right under the clip, so it is never hunted for. */}
@@ -262,9 +262,9 @@ export default function CityPage() {
 
 /**
  * 1. The month's most watched clip in the city, playing muted, with the
- * city's name and place over it. A tap opens the clip.
+ * city's name over it. A tap opens the clip.
  */
-function Hero({ cityName, rank, reel, author, height, top }: { cityName: string; rank: number | null; reel: (typeof TOP_REEL)[string] | null; author: User | null; height: number; top: number }) {
+function Hero({ cityName, reel, author, height, top }: { cityName: string; reel: (typeof TOP_REEL)[string] | null; author: User | null; height: number; top: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const shown = reel && author ? reel : null;
   const media = shown && REEL_MEDIA_BASE ? `${REEL_MEDIA_BASE}/cityboard-reel-${shown.media}` : null;
@@ -286,10 +286,8 @@ function Hero({ cityName, rank, reel, author, height, top }: { cityName: string;
             <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.heroKickerText}>Most watched in {BOARD_MONTH}</Text>
           </View>
         ) : null}
-        <View style={styles.heroNameLine}>
-          <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.heroName}>{cityName}</Text>
-          {rank ? <View style={styles.rankChip}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.rankChipText}>{ordinal(rank)}</Text></View> : null}
-        </View>
+        {/* The name alone: its place is said once, as "3rd of 15" under Up to hit (round 2 review: no "3rd" twice on one screen). */}
+        <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.heroName}>{cityName}</Text>
         {shown && author ? (
           <View style={styles.heroBy}>
             <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={22} />
@@ -383,11 +381,7 @@ const styleDefinitions = StyleSheet.create({
   heroWords: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.xl, gap: 6 },
   heroKicker: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   heroKickerText: { ...typography.small, ...font('600'), color: colors.onMedia, opacity: 0.92 },
-  heroNameLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  heroName: { ...font('700'), fontSize: 38, letterSpacing: -1.2, color: colors.onMedia, flexShrink: 1 },
-  // Its place, as a chip in the court's own colour: the one thing on the clip that is the app's.
-  rankChip: { backgroundColor: colors.brand, borderRadius: 999, paddingHorizontal: 11, height: 30, justifyContent: 'center', marginTop: 4 },
-  rankChipText: { ...font('700'), fontSize: 16, letterSpacing: -0.3, color: colors.brandInk, fontVariant: ['tabular-nums'] },
+  heroName: { ...font('700'), fontSize: 38, letterSpacing: -1.2, color: colors.onMedia },
   heroBy: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
   heroByText: { ...typography.small, ...font('500'), color: colors.onMedia, opacity: 0.92, flexShrink: 1 },
   muted: { position: 'absolute', right: spacing.lg, bottom: spacing.xl + 2, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },

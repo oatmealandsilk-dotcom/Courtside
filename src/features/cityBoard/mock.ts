@@ -42,7 +42,7 @@ export interface BoardCity {
   players: number;
   /** Where it stood on the board a week ago (for "▲2" beside it): the race this week, not last month's. */
   weekAgoRank: number;
-  /** Weeks in a row it has climbed (3 is a run: the hot marker). */
+  /** Weeks in a row it has climbed, this one included ("climbing 3 weeks running" beside a city on a run, from 2). */
   run?: number;
 }
 
@@ -51,10 +51,10 @@ const CITIES: BoardCity[] = [
   { id: 'new-york', name: 'New York', state: 'NY', hits: 512, players: 88, weekAgoRank: 1 },
   { id: 'austin', name: 'Austin', state: 'TX', hits: 473, players: 54, weekAgoRank: 3, run: 1 },
   { id: 'los-angeles', name: 'Los Angeles', state: 'CA', hits: 412, players: 71, weekAgoRank: 2 },
-  { id: 'chicago', name: 'Chicago', state: 'IL', hits: 288, players: 47, weekAgoRank: 4 },
-  { id: 'miami', name: 'Miami', state: 'FL', hits: 241, players: 35, weekAgoRank: 7, run: 2 },
-  { id: 'seattle', name: 'Seattle', state: 'WA', hits: 197, players: 33, weekAgoRank: 5 },
-  { id: 'denver', name: 'Denver', state: 'CO', hits: 164, players: 21, weekAgoRank: 6 },
+  { id: 'chicago', name: 'Chicago', state: 'IL', hits: 288, players: 47, weekAgoRank: 7, run: 2 },
+  { id: 'miami', name: 'Miami', state: 'FL', hits: 241, players: 35, weekAgoRank: 6, run: 1 },
+  { id: 'seattle', name: 'Seattle', state: 'WA', hits: 197, players: 33, weekAgoRank: 4 },
+  { id: 'denver', name: 'Denver', state: 'CO', hits: 164, players: 21, weekAgoRank: 5 },
   { id: 'raleigh', name: 'Raleigh', state: 'NC', hits: 96, players: 9, weekAgoRank: 11, run: 3 },
   { id: 'atlanta', name: 'Atlanta', state: 'GA', hits: 88, players: 15, weekAgoRank: 8 },
   { id: 'san-diego', name: 'San Diego', state: 'CA', hits: 71, players: 13, weekAgoRank: 9 },
@@ -131,7 +131,7 @@ export function nextTarget(board: RankedCity[], id: string): { city: RankedCity;
 export const MOMENTS: { who: string; passed: string; when: string }[] = [
   { who: 'raleigh', passed: 'atlanta', when: 'today' },
   { who: 'austin', passed: 'los-angeles', when: 'yesterday' },
-  { who: 'miami', passed: 'seattle', when: 'Sunday' },
+  { who: 'chicago', passed: 'seattle', when: 'Sunday' },
 ];
 
 /**

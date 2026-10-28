@@ -132,7 +132,8 @@ export default function CityBoard() {
       return per ? chaseWords : `${chaseWords} · you added ${MY_DEMO_HITS}`;
     }
     if (per) return `${c.hits} hits · ${c.players} players`;
-    return isHot(c) && c.run ? `${c.players} players · climbing ${c.run} weeks running` : `${c.players} players`;
+    // A city on a run says how long it has lasted (from 2 weeks: "1 weeks running" says nothing).
+    return isHot(c) && (c.run ?? 0) >= 2 ? `${c.players} players · climbing ${c.run} weeks running` : `${c.players} players`;
   };
 
   return (
