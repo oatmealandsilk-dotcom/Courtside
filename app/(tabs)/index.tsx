@@ -1706,17 +1706,25 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // code starts over), and only once it is two or more pages on: a single swipe to the next page
   // (its own pages already built) works exactly as before, with no extra redraw as the finger lifts.
   const reachFirst = useFeedReach();
-  const [reached, setReached] = useState<{ index: number; from: number; visit: number } | null>(null);
+  // Each change of the page on screen starts a new count: a reach said before it never counts
+  // again, so it is simply left as it is (no redraw to clear it as the next swipe lifts).
+  const landSeq = useRef({ active, n: 0 });
+  if (landSeq.current.active !== active) landSeq.current = { active, n: landSeq.current.n + 1 };
+  const [reached, setReached] = useState<{ index: number; at: number; visit: number } | null>(null);
   const onReach = useCallback((index: number) => {
     const from = activeRef.current;
-    if (index < from + 2) { setReached((prev) => (prev === null ? prev : null)); return; }
-    setReached((prev) => (prev && prev.index === index && prev.from === from && prev.visit === visit ? prev : { index, from, visit }));
+    const at = landSeq.current.n;
+    setReached((prev) => {
+      const live = prev !== null && prev.at === at && prev.visit === visit;
+      if (index < from + 2) return live ? null : prev;
+      return live && prev.index === index ? prev : { index, at, visit };
+    });
   }, [visit]);
-  const reachAhead = reachFirst && reached && reached.visit === visit && reached.from === active && reached.index >= active + 2 && reached.index < feed.length ? reached.index : null;
+  const reachAhead = reachFirst && reached && reached.visit === visit && reached.at === landSeq.current.n && reached.index >= active + 2 && reached.index < feed.length ? reached.index : null;
   const base = reachAhead ?? active;
   // Built while a swipe heads ahead: the page on screen (still the active one, its clip already
   // stopped as the swipe left it), the page headed for, the one before it (passed on the way in)
-  // and the next two, at most REACH_BUILT_MAX of them, so no more players are alive than before.
+  // and the one after it, REACH_BUILT_MAX of them, so no more players are alive than before.
   // The page behind the one on screen goes now rather than on landing.
   let reachBuilt: Set<number> | null = null;
   if (reachAhead !== null) {
@@ -1833,10 +1841,11 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (item.type === 'post' && item.post.kind !== 'clip') {
       const post = item.post;
       if (!post.imageUrl && !post.videoUrl) return skeletonWritten;
-      const uri = post.videoUrl ? (post.thumbnailUrl ?? post.imageUrl) : (post.imageUrl ?? post.thumbnailUrl);
+      // The same picture the built page shows first (a video's poster is its thumbnail only), so nothing swaps as it is built.
+      const uri = post.videoUrl ? post.thumbnailUrl : (post.imageUrl ?? post.thumbnailUrl);
       return covered && uri ? postBones(uri) : skeletonPost;
     }
-    const uri = item.type === 'post' ? (item.post.thumbnailUrl ?? item.post.imageUrl) : item.type === 'hit' ? (item.story.thumbnailUrl ?? item.story.imageUrl) : undefined;
+    const uri = item.type === 'post' ? (item.post.videoUrl ? item.post.thumbnailUrl : (item.post.thumbnailUrl ?? item.post.imageUrl)) : item.type === 'hit' ? (item.story.videoUrl ? item.story.thumbnailUrl : item.story.imageUrl) : undefined;
     if (!covered || !uri) return skeletonClip;
     const wide = item.type === 'post' && item.post.orientation === 'landscape';
     return (
