@@ -96,8 +96,8 @@ export function nowStatus(now: Pick<CourtRightNow, 'status' | 'statusAt'> | unde
 /**
  * Who is on court right now (checked in), as the server lets you see it:
  * people who follow each other with you by name, and anyone else only as a
- * count, and only when two or more adults are there. "Sam + 2 on court
- * now", "3 on court now": always "now", so it never reads like the
+ * count, and only when two or more adults are there. "Sam and 2 others on
+ * court now", "3 on court now": always "now", so it never reads like the
  * "who you follow plays here" line, which is from past posts and hits.
  * Nothing when nobody is.
  */
@@ -106,8 +106,12 @@ export function playingLine(now: CourtRightNow | undefined, users: User[]): stri
   const friends = now.friendIds.map((id) => users.find((u) => u.id === id)?.name.split(' ')[0]).filter((n): n is string => !!n);
   if (friends.length) {
     const others = Math.max(0, now.playing - friends.length);
-    const names = friends.length === 1 ? friends[0] : friends.length === 2 ? `${friends[0]} and ${friends[1]}` : `${friends[0]}, ${friends[1]} and ${friends.length - 2} more`;
-    return others ? `${names} + ${others} on court now` : `${names} on court now`;
+    // Never a plus (owner, Oct 28: "I don't like the regulars here and it says +4"): up to two friends by name
+    // (three when that is everyone), everyone else in words. "Sam, Marcus and 3 others on court now".
+    const named = friends.length === 3 && !others ? friends : friends.slice(0, 2);
+    const rest = friends.length - named.length + others;
+    const names = rest ? named.join(', ') : named.length === 1 ? named[0] : `${named.slice(0, -1).join(', ')} and ${named[named.length - 1]}`;
+    return rest ? `${names} and ${rest} ${rest === 1 ? 'other' : 'others'} on court now` : `${names} on court now`;
   }
   return now.playing >= 2 ? `${now.playing} on court now` : null;
 }

@@ -215,9 +215,10 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
   const friends = have.friends.filter((id) => DESIGN_FRIENDS.has(id)).map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
   const rest = have.total - (friends.length ? 1 : 0);
   // The first friend by name, the rest in words, never a plus (owner, Oct 28: "it says +4"): "Omar and 30 others have it".
-  const who = friends.length
-    ? (rest >= 2 ? `${friends[0].name.split(' ')[0]} and ${rest} others` : friends[0].name.split(' ')[0])
-    : have.total >= 2 ? `${have.total} players` : null;
+  // Only the name is strong, as on the court's card; the number keeps its "others" on the same line.
+  const first = friends[0]?.name.split(' ')[0];
+  const others = first && rest >= 2 ? ` and ${rest}\u00A0others` : '';
+  const who = first ? `${first}${others}` : have.total >= 2 ? `${have.total} players` : null;
   const verb = friends.length && rest < 2 ? 'has it' : 'have it';
   const now = designHereCount(name);
   return (
@@ -236,7 +237,7 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
         <View style={styles.haveRow}>
           {friends.length ? (
             <View style={styles.haveFaces}>
-              {/* One face, the friend the words name ("Omar + 30"): two faces beside one name read as a mistake. */}
+              {/* One face, the friend the words name ("Omar and 30 others"): two faces beside one name read as a mistake. */}
               {friends.slice(0, 1).map((u, i) => (
                 <View key={u.id} style={[styles.haveFace, i > 0 && { marginLeft: -6 }]}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={18} />
@@ -244,7 +245,7 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
               ))}
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cardSub, { flexShrink: 1 }]} numberOfLines={2}>{who ? <><Text style={styles.haveStrong}>{who}</Text> {verb}</> : 'Be the first to unlock it'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cardSub, { flexShrink: 1 }]} numberOfLines={2}>{first ? <><Text style={styles.haveStrong}>{first}</Text>{others} {verb}</> : who ? <><Text style={styles.haveStrong}>{who}</Text> {verb}</> : 'Be the first to unlock it'}</Text>
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cardSub, { marginTop: -2 }]} numberOfLines={1}>{courts} courts · public</Text>
       </View>

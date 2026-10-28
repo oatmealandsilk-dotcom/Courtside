@@ -77,9 +77,9 @@ function HereLine({ name }: { name: string }) {
       {friends.length ? <Faces people={friends.slice(0, 3)} size={24} /> : total ? <View style={styles.dot} /> : null}
       <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={2} accessibilityLabel={spoken(lead, tail, total, friends.length)} style={[styles.lineText, !total && styles.quiet]}>
         {friends.length ? (
-          <><Text style={styles.strong}>{lead}</Text>{tail} playing now</>
+          <><Text style={styles.strong}>{lead}</Text>{tail} playing{'\u00A0'}now</>
         ) : total ? (
-          <><Text style={styles.strong}>{total}</Text> playing now</>
+          <><Text style={styles.strong}>{total}</Text> playing{'\u00A0'}now</>
         ) : 'No one playing right now'}
       </Text>
     </View>
@@ -137,7 +137,7 @@ function HereRow({ name }: { name: string }) {
  * c, Two chips under the name. "5 playing now": friends' tiny faces in it,
  * a tap opens their names under it (closed by default, the calmest); with
  * no friend there, a green dot and nothing to open. Nobody: "No one playing
- * right now", plain. Beside it, "My court": the heart, with a word, so what
+ * right now", in plain words (no pill). Beside it, "My court": the heart, with a word, so what
  * it does is said rather than guessed.
  */
 function HereChips({ name, follow }: { name: string; follow?: CourtToFollow }) {
@@ -168,8 +168,9 @@ function HereChips({ name, follow }: { name: string; follow?: CourtToFollow }) {
             {friends.length ? <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={colors.textMuted} /> : null}
           </Pressable>
         ) : (
+          // Nobody: plain words, not a grey pill, so nothing here looks tappable that isn't.
           <View style={[styles.chip, styles.chipQuiet]}>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={[styles.chipText, styles.quiet]}>No one playing right now</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={[styles.lineText, styles.quiet]}>No one playing right now</Text>
           </View>
         )}
         {follow ? (
@@ -226,7 +227,7 @@ const styleDefinitions = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: spacing.lg },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: 11, paddingVertical: 4, borderRadius: 999 },
   chipLive: { backgroundColor: withAlpha(colors.open, 0.12) },
-  chipQuiet: { backgroundColor: colors.bgElevated },
+  chipQuiet: { paddingHorizontal: 0, marginRight: 4 },
   chipPlain: { borderWidth: 1, borderColor: colors.border },
   // On: the outline and the word in your colour, never a fill, so it can't be taken for the green "playing now" chip beside it.
   chipMine: { borderColor: withAlpha(colors.brand, 0.45) },

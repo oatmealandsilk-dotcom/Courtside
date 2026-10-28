@@ -136,7 +136,8 @@ export function hereWords(friends: User[], others: number) {
   const named = firsts.length === 3 && !others ? firsts : firsts.slice(0, 2);
   const rest = firsts.length - named.length + others;
   const lead = rest ? named.join(', ') : andList(named);
-  const tail = rest ? ` and ${rest} ${rest === 1 ? 'other' : 'others'}` : '';
+  // The number keeps its word on the same line ("3\u00A0others"), so big text never leaves "others" alone.
+  const tail = rest ? ` and ${rest}\u00A0${rest === 1 ? 'other' : 'others'}` : '';
   return { lead, tail, total: firsts.length + others };
 }
 
