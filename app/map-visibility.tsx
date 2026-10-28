@@ -26,11 +26,17 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  *
  * `mode=first`: the first time you tap Up to hit, the short version (Oct 28,
  * owner: "I don't like the at big who can see you on the map screen"): "Show
- * friends you're up to hit?", one line saying who sees you (only friends you
- * both follow, never strangers), when (only when you tap Up to hit) and that
- * it ends by itself. "Turn on for friends" saves the yes; then Apple's own
- * location prompt, then Up to hit. "Not now" (or closing it) saves nothing
- * and shares nothing; it asks again the next time you tap Up to hit.
+ * friends you're up to hit?", one line saying who sees where you are (only
+ * friends who follow you back, never strangers), when (only when you tap Up
+ * to hit) and that it ends by itself (at 10pm, or after 2 hours from 8pm).
+ * "Turn on for friends" saves the yes; then Apple's own location prompt,
+ * then Up to hit. "Not now" (or closing it) saves nothing and shares nothing;
+ * it asks again the next time you tap Up to hit. `from` says what asked
+ * (WhoSeesFrom): only Up to hit's ask names Up to hit and its time. I'm
+ * playing here, Show friends, a teen's Open to hit and the re-ask each end on
+ * their own clock, so theirs ask "Show friends where you are?" and say only
+ * when you choose to share, and that it ends by itself. A teen's line leaves
+ * out who (their notice below says it).
  * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
  * also takes any live check-in off the map.
  *
@@ -40,8 +46,10 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  */
 export default function MapVisibilitySheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const params = useLocalSearchParams<{ mode?: string }>();
+  const params = useLocalSearchParams<{ mode?: string; from?: string }>();
   const first = params.mode !== 'manage';
+  // Up to hit's own words (and Settings → Privacy, which explains Up to hit); any other ask, the general ones.
+  const upToHit = !first || params.from === 'uth';
   const { actions, mapVisibility, currentUser, teenMap } = useApp();
   const teen = onTeenMap(currentUser, teenMap);
   const yesNow = mapVisibility === 'mutuals' || mapVisibility === 'nearby';
@@ -53,6 +61,13 @@ export default function MapVisibilitySheet() {
   // without these heights a phone's sheet opened to its peek and left a wide empty gap above the buttons.
   const [contentH, setContentH] = useState(0);
   const [footH, setFootH] = useState(0);
+  // Big iPhone Text Size (a teen's notice too) can make the words taller than the sheet; they then scroll under
+  // the buttons, so the scroll bar shows and flashes once the sheet has opened, saying there is more (review, Oct 28).
+  const scroll = useRef<ScrollView>(null);
+  const sizes = useRef({ content: 0, view: 0, settled: false });
+  const [overflow, setOverflow] = useState(false);
+  const checkOverflow = () => { const z = sizes.current; if (z.settled) setOverflow(z.content > z.view + 1); };
+  useEffect(() => { if (overflow) scroll.current?.flashScrollIndicators(); }, [overflow]);
   // What the screen closes with: the answer once it is saved, else nothing.
   const answer = useRef<MapVisibility | null>(null);
   const close = () => setCloseSignal((n) => n + 1);
@@ -78,23 +93,33 @@ export default function MapVisibilitySheet() {
       peekFraction={first ? 0.8 : 0.7}
       fitContent
       contentHeight={contentH && footH ? contentH + footH : undefined}
+      // It rises once, straight to its words and buttons, never up to the peek and back down.
+      waitForFit
+      onSettled={() => { sizes.current.settled = true; checkOverflow(); }}
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
-      header={<SheetTitle title={first ? 'Show friends you’re up to hit?' : 'Who can see you on the map?'} titleSize={21} onClose={close} />}
+      header={<SheetTitle title={!first ? 'Who can see you on the map?' : upToHit ? 'Show friends you’re up to hit?' : 'Show friends where you are?'} titleSize={21} onClose={close} />}
     >
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
+      <ScrollView
+        ref={scroll}
+        style={styles.scroll}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={overflow}
+        onLayout={(e) => { sizes.current.view = e.nativeEvent.layout.height; checkOverflow(); }}
+        onContentSizeChange={(_, h) => { const r = Math.ceil(h); sizes.current.content = r; if (r !== contentH) setContentH(r); checkOverflow(); }}
+      >
         {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
         {first ? (
           <View style={styles.short}>
-            {/* Apple 5.1.2(i) / 5.1.1: who (only friends you both follow, never strangers), when (only on a tap), and that it ends by itself. */}
-            <Text style={styles.shortLine}>Only friends you both follow see you, never strangers, and only when you tap Up to hit. It ends by itself {endsWords()}.</Text>
+            {/* Apple 5.1.2(i) / 5.1.1: who (only friends who follow you back, never strangers), when (only on a tap), and that it ends by itself. */}
+            <Text style={styles.shortLine}>{shortLine(upToHit, teen)}</Text>
             <Text style={styles.shortSmall}>Change any time in Settings → Privacy.</Text>
           </View>
         ) : (
           <View style={styles.facts}>
-            {FACTS.map((f) => (
-              <Text key={f.text} style={styles.factText}>{f.text}</Text>
+            {facts(upToHit).map((f) => (
+              <Text key={f} style={styles.factText}>{f}</Text>
             ))}
           </View>
         )}
@@ -148,12 +173,31 @@ function endsWords(now: Date = new Date()): string {
   return now.getHours() >= 20 ? 'after 2 hours' : `at ${clock(checkInEnds(now))}`;
 }
 
-/** What a yes means, said plainly before it is given (Settings → Privacy). */
-const FACTS: { icon: keyof typeof Ionicons.glyphMap; text: string }[] = [
-  { icon: 'hand-left-outline', text: 'You show on the map only when you tap Up to hit. Never on your own.' },
-  { icon: 'people-outline', text: 'Only friends who follow each other with you see your pin. Strangers never see where you are.' },
-  { icon: 'time-outline', text: 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.' },
-];
+/**
+ * The first ask's one line. Up to hit names its own tap and time; any other
+ * ask (I'm playing here, Show friends, a teen's Open to hit, the re-ask) says
+ * only that you choose to share and it ends by itself, each on its own clock.
+ * A teen's line leaves out who: TEEN_NOTICE right under it says that.
+ */
+function shortLine(upToHit: boolean, teen: boolean): string {
+  if (teen) return upToHit ? `Only when you tap Up to hit, and it ends by itself ${endsWords()}.` : 'Only when you choose to share, and it ends by itself.';
+  return upToHit
+    ? `Only friends who follow you back see where you are, never strangers, and only when you tap Up to hit. It ends by itself ${endsWords()}.`
+    : 'Only friends who follow you back see where you are, never strangers, and only when you choose to share. It ends by itself.';
+}
+
+/**
+ * What a yes means, said plainly before it is given (Settings → Privacy, where
+ * it explains Up to hit: its tap and its 10pm). Anywhere else, the same promise
+ * without Up to hit's clock, since each of those ends on its own.
+ */
+function facts(upToHit: boolean): string[] {
+  return [
+    upToHit ? 'You show on the map only when you tap Up to hit. Never on your own.' : 'You show on the map only when you choose to share. Never on your own.',
+    'Only friends who follow each other with you see your pin. Strangers never see where you are.',
+    upToHit ? 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.' : 'It ends by itself, and you can turn it off any time.',
+  ];
+}
 
 /** Where the six faces round you sit, and which two follow you back. */
 const AROUND = [

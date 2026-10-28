@@ -152,7 +152,7 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     let first = false;
     if (!saidYes(mapVisibility)) {
       // Not now, or closed: nothing is shared, and it asks again next time.
-      const chose = await askWhoSeesYou('first');
+      const chose = await askWhoSeesYou('first', 'uth');
       // Said no for now: the re-ask (noOneReask) may come back to it, much later.
       if (!saidYes(chose)) { if (chose !== 'none') noteDeclined(currentUserId); return; }
       first = true;
@@ -239,7 +239,7 @@ export function useOpenToHitToggle() {
   const { actions, mapLive, mapVisibility, currentUser, teenMap } = useApp();
   const now = async (on: boolean, edit?: { until: string; miles: number | null }): Promise<boolean> => {
     if (on && mapLive === true && mapVisibility === null && onTeenMap(currentUser, teenMap)) {
-      const chose = await askWhoSeesYou('first');
+      const chose = await askWhoSeesYou('first', 'teenOpen');
       if (!chose) return false;
     }
     if (on && edit) actions.editOpenToHit(edit.until, edit.miles);
