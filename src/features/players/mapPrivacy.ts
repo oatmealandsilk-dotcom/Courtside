@@ -31,12 +31,12 @@ export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: strin
 ];
 
 /**
- * The yes on the first ask, "Show friends you're up to hit?" ("Show friends
- * where you are?" when anything else asked; Oct 28, the short version): it
+ * The yes on the first ask, "Let friends see you're up to hit?" ("Let friends
+ * see where you are?" when anything else asked; Oct 28, the small version): it
  * saves Friends ('mutuals'), the same answer as Settings → Privacy's
  * "Friends · people you both follow".
  */
-export const FIRST_YES = 'Turn on for friends';
+export const FIRST_YES = 'Turn on';
 
 /** What a teen is told the first time, before anything is shared (the owner's words). */
 export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Turn off on the map anytime to hide.';
