@@ -56,7 +56,7 @@ import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadro
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
-import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
+import { dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
@@ -670,10 +670,11 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
   if (locked === 'hidden') return 'On Only me, players are hidden';
-  if (filter === 'following') return 'Nobody you follow is sharing nearby';
+  if (filter === 'following') return 'Nobody you follow is checked in';
   if (filter === 'near') return nearTown ? `No players in ${nearTown} yet` : 'Add your city to see players';
-  if (filter !== 'all') return 'Nobody nearby matches that';
-  return courts.length ? `No one sharing yet · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No one sharing nearby yet';
+  if (filter !== 'all') return 'Nobody matches that';
+  // The map's people are friends who checked in, at any age (migration 189; Oct 27 audit wording).
+  return courts.length ? `No friends checked in · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends checked in yet';
 }
 
 /**
@@ -1167,7 +1168,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they check in.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
@@ -1332,9 +1333,10 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   const noteOn = useAnimatedStyle(() => ({ opacity: Math.max(0, lit.value * 2 - 1) }));
   // Who sees the ring follows Who can see you, the row under it: on Only me nobody else does, and
   // on Only people you follow back (always, for a teen) only those friends (map_players).
-  const ringNote = seenBy === 'none' || (teen && seenBy == null)
+  // The map is friends only, at any age, and only on a check-in (migration 189; Oct 27 audit #8): no yes, no one.
+  const ringNote = !saidYes(seenBy)
     ? 'Only you see your ring on the map.'
-    : teen || seenBy === 'mutuals' ? `Friends who follow you back see your green ring ${till}.` : `Players nearby see your green ring ${till}.`;
+    : `Friends who follow you back see your green ring ${till} while you’re checked in.`;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -1653,8 +1655,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
   // only your friends come back, so an empty map says how to see the
   // players here, never "Be the first player on the map".
   const hint = lock === 'location' ? 'Turn on Location to see players' : lock === 'hidden' ? 'On Only me, players nearby are hidden' : null;
-  // Players first; with none sharing yet, the courts still say the map is worth opening.
-  const line = count === 1 ? '1 player around' : count ? `${count} players around`
+  // Friends first (the only people on the map, migration 189); with none checked in, the courts still say the map is worth opening.
+  const line = count === 1 ? '1 friend around' : count ? `${count} friends around`
     : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
       : hint ?? 'No one here yet';
   return (
@@ -1672,7 +1674,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
             : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Be the first player on the map</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Check in so friends see you</Text> : null}
         </View>
       </View>
       {checkIn ? (
@@ -1707,7 +1709,7 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
     <View style={styles.cityless}>
       <View style={styles.citylessDisc}><Ionicons name="location-outline" size={20} color={colors.brand} /></View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the courts and players in your town.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />

@@ -730,7 +730,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <View style={styles.hitsHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
-              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
+              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None at courts near you yet.'}</Text>}
             </View>
             {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
                 the title. With nothing open and a public court close by, it starts the hit at that
@@ -739,7 +739,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 elsewhere is a photo or clip. */}
             {(() => {
               const court = !listedHits.length ? promptCourt : null;
-              const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
+              const who = hitsForFriends ? 'Friends who follow you' : 'Players';
               return (
                 <PostHitField
                   label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}

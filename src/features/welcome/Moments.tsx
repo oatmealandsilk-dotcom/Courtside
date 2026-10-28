@@ -5,8 +5,8 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { Avatar } from '@/components/ui';
-import { OpenRing } from '@/components/map/OpenRing';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { HitGlyph } from '@/components/HitGlyph';
 import { SessionCard } from '@/components/session/SessionCard';
 import { StreakFlame } from '@/components/StreakFlame';
 import type { SessionDetail } from '@/data/types';
@@ -24,7 +24,8 @@ export const MOMENT_W = 320;
 export const MOMENT_H = 400;
 
 export const MOMENTS = [
-  { headline: 'See who’s playing\nnear you.', spoken: 'A map of courts nearby, with players who are open to hit.' },
+  // Courts and the open hits posted at them, never strangers on a map (Apple 5.1.2(i); Oct 27 audit).
+  { headline: 'Find someone\nto hit with.', spoken: 'A map of courts nearby, with the open hits posted at them.' },
   { headline: 'Log every session.', spoken: 'A session card: 1 hour 24 minutes on court, with heart rate.' },
   { headline: 'Your tennis people,\nin one place.', spoken: 'A discussion with 14 answers, and friends on a streak.' },
 ] as const;
@@ -56,21 +57,22 @@ function useAfter(ms: number) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. The map: courts nearby, faces popping onto them, Sam open to hit.
+// 1. The map: courts nearby, open hits popping onto them, Sam's hit at 5pm.
+// Never a person's face on the map (Apple 5.1.2(i), Oct 27 audit): the map
+// shows strangers only courts and what was posted at them.
 // ---------------------------------------------------------------------------
 
-const PINS = [
-  { who: PEOPLE.maya, x: 62, y: 70, delay: 150 },
-  { who: PEOPLE.leo, x: 226, y: 46, delay: 330 },
-  { who: PEOPLE.sam, x: 196, y: 178, delay: 510, open: true },
-  { who: PEOPLE.priya, x: 70, y: 214, delay: 690 },
+const COURTS = [{ x: 140, y: 108 }, { x: 262, y: 132 }, { x: 34, y: 146 }, { x: 196, y: 178 }];
+/** Open hits, each at its court (a hit's pin is always a court). */
+const HITS = [
+  { x: 140, y: 108, delay: 150 },
+  { x: 34, y: 146, delay: 360 },
+  { x: 196, y: 178, delay: 570 },
 ];
-const COURTS = [{ x: 140, y: 108 }, { x: 262, y: 132 }, { x: 34, y: 146 }];
 
 function MapMoment() {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
-  const ringOn = useAfter(700);
   const road = colors.surface;
   return (
     <View style={styles.map}>
@@ -94,20 +96,19 @@ function MapMoment() {
       {/* You are here. */}
       <View style={[styles.youHalo, { left: 140 - 14, top: 244 - 14, backgroundColor: withAlpha(colors.info, 0.16) }]} />
       <View style={[styles.you, { left: 140 - 6, top: 244 - 6 }]} />
-      {PINS.map((p) => (
-        <Animated.View key={p.who.seed} entering={ZoomIn.delay(p.delay).springify().damping(13)} style={[styles.pin, { left: p.x - 22, top: p.y - 22 }]}>
-          <OpenRing open={!!p.open && ringOn} size={36}>
-            <Avatar name={p.who.name} seed={p.who.seed} size={36} />
-          </OpenRing>
+      {HITS.map((h) => (
+        <Animated.View key={`${h.x}-${h.y}`} entering={ZoomIn.delay(h.delay).springify().damping(13)} style={[styles.pin, { left: h.x - 4, top: h.y - 40 }]}>
+          <View style={styles.hitFlag}><HitGlyph size={18} color={colors.brandInk} rim={colors.brand} /></View>
         </Animated.View>
       ))}
+      {/* A hit's card, the way the app shows one: who posted it, when, and its court. */}
       <Animated.View entering={FadeInUp.delay(900).duration(450)} style={styles.chip}>
         <Avatar name={PEOPLE.sam.name} seed={PEOPLE.sam.seed} size={34} />
         <View style={styles.chipWords}>
-          <Text style={styles.chipName} numberOfLines={1} maxFontSizeMultiplier={1.2}>Sam <Text style={styles.chipSoft}>· open to hit till 7pm</Text></Text>
+          <Text style={styles.chipName} numberOfLines={1} maxFontSizeMultiplier={1.2}>Sam <Text style={styles.chipSoft}>· hit at 5pm</Text></Text>
           <View style={styles.chipMeta}>
             <View style={styles.openDot} />
-            <Text style={styles.chipSoft} numberOfLines={1} maxFontSizeMultiplier={1.2}>Riverside Park · 0.4 mi</Text>
+            <Text style={styles.chipSoft} numberOfLines={1} maxFontSizeMultiplier={1.2}>Riverside Park courts · 0.4 mi</Text>
           </View>
         </View>
       </Animated.View>
@@ -201,6 +202,8 @@ const styleDefinitions = StyleSheet.create({
   you: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: colors.info, borderWidth: 2, borderColor: colors.surface },
   youHalo: { position: 'absolute', width: 28, height: 28, borderRadius: 14 },
   pin: { position: 'absolute', width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // An open hit's flag, as on the map: the brand's fill, the hit mark on it.
+  hitFlag: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.brand, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: colors.surface },
   chip: {
     position: 'absolute', left: 14, right: 14, bottom: 14, flexDirection: 'row', alignItems: 'center', gap: 10,
     paddingVertical: 12, paddingHorizontal: 12, borderRadius: corner(20), backgroundColor: colors.surface, boxShadow: '0px 8px 24px rgba(42, 36, 24, 0.12)',

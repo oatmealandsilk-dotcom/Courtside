@@ -14,7 +14,7 @@ import { BrandWash } from '@/components/ui';
 import { KIND_LABEL } from '@/features/activity/format';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenShort, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
-import { seenByOnMap } from '@/features/players/mapPrivacy';
+import { seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { confirm } from '@/lib/confirm';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -94,10 +94,13 @@ export default function LiveSessionPage() {
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court: s.court, access: s.court ? courtFacts[s.court.id]?.access : undefined, locationOn: locationEnabled, seenBy });
   const seen = state === 'finished' ? { line: 'Finished · checked out', shared: false } : seenShort({ here, seenBy, why: plan.why });
-  // Not seen, but could be by the court sheet's rules (a check-in that did not go through, Location just turned on): one tap to try.
-  const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off');
+  // Not seen, but could be by the court sheet's rules: Show friends, a tap of its own each time (Start never
+  // checks in, Oct 27 audit #3). With no yes yet it asks "Who can see you on the map?" first ('ask-first').
+  const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off' || plan.why === 'ask-first');
   const tryCheckIn = async () => {
     if (asking) return;
+    // A yes first, or nothing at all (Apple 5.1.2(i), migration 191).
+    if (!(await yesFirst(mapVisibility))) return;
     setAsking(true);
     if (!locationEnabled) {
       // The check-in follows once Location is on (see checkInWhenOn above).

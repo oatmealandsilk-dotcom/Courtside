@@ -65,9 +65,11 @@ function HitRequestPage() {
  */
 function WhosIn({ hit }: { hit: HitRequest }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { users, currentUserId } = useApp();
+  const { users, currentUserId, blockedIds, blockedMeIds } = useApp();
   const author = users.find((u) => u.id === hit.authorId);
-  const joined = hit.joinedIds.map((uid) => users.find((u) => u.id === uid)).filter((u): u is NonNullable<typeof u> => !!u);
+  // Never someone blocked either way (Oct 27 audit #4; the server leaves them out too, migration 191): counted, not named.
+  const joined = hit.joinedIds.filter((uid) => !blockedIds.includes(uid) && !blockedMeIds.includes(uid))
+    .map((uid) => users.find((u) => u.id === uid)).filter((u): u is NonNullable<typeof u> => !!u);
   const total = joinedCount(hit);
   const unnamed = Math.max(0, total - joined.length);
   const left = Math.max(0, hit.spots - total);

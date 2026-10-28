@@ -63,7 +63,8 @@ export function PrivacyLine() {
 export function UnlockCard({ compact }: { compact?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const rows: { icon: React.ComponentProps<typeof Ionicons>['name']; text: string }[] = [
-    { icon: 'location-outline', text: compact ? 'Nearby players see you on the map' : 'Players nearby can find you on the map' },
+    // Never the map (Oct 27 audit #8): it is friends only, at any age. What 18 opens is being listed in your town.
+    { icon: 'location-outline', text: compact ? 'Players in your town can find you' : 'Players in your town can find you and join your hits' },
     { icon: 'chatbubble-ellipses-outline', text: compact ? 'Messages from any player' : "Players you don't follow yet can message you" },
   ];
   return (

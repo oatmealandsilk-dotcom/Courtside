@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
+import { confirm } from '@/lib/confirm';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 import { checkInSpan, liveCheckIn, untilWords } from '@/features/players/checkIn';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -57,7 +58,10 @@ export interface CheckInControl {
  * then it goes by itself. Tapped again: Check out, gone at once. The first
  * time, "Who can see you on the map?" comes first (yes, or Not now: then
  * nothing happens), then Apple's own prompt. `where` says which button the
- * one tip after the first check-in points at.
+ * one tip after the first check-in points at. In the full map ('map') the
+ * button is the round arrow, which also reads as "find me": after the first
+ * time a one-line question comes first (Oct 27 audit #11), so a tap meant to
+ * recentre never shows you to anyone.
  */
 export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   const { actions, mapVisibility, lastSeen, currentUserId } = useApp();
@@ -77,6 +81,17 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
       const chose = await askWhoSeesYou('first');
       if (!saidYes(chose)) return;
       first = true;
+    } else if (where === 'map') {
+      // The round arrow: "Check in?" first, every time (the first time, the question above was it).
+      const yes = await new Promise<boolean>((resolve) => confirm({
+        title: 'Check in?',
+        message: `Friends who follow you back see where you are ${checkInSpan()}.`,
+        confirmLabel: 'Check in',
+        cancelLabel: 'Not now',
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      }));
+      if (!yes) return;
     }
     setBusy(true);
     try {

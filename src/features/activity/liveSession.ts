@@ -5,7 +5,7 @@ import type { TennisFlags } from '@/features/activity/flags';
 import { sourceOn } from '@/features/activity/recent';
 import { isTennisActivity } from '@/features/activity/workouts';
 import { isMapCourtId } from '@/features/places/courtName';
-import { canCheckIn } from '@/features/players/mapPrivacy';
+import { canCheckIn, saidYes } from '@/features/players/mapPrivacy';
 import { localDay } from '@/features/practice/stats';
 
 /*
@@ -103,11 +103,13 @@ export function useLiveNow(ticking: boolean): number {
 }
 
 /**
- * Whether Start checks you in at the court, and if not, why, by the court
- * sheet's own rules (app/court-now, mapPrivacy.canCheckIn): only at a court
- * on the map anyone may play at, only someone known to be an adult, never
- * with Only me chosen, and only with Location on (the server checks you are
- * really there). Nothing new is decided here.
+ * Whether the session can show friends you are playing at its court ("Show
+ * friends" on its page; Start never does it by itself, Oct 27 audit #3), and
+ * if not, why, by the court sheet's own rules (app/court-now,
+ * mapPrivacy.canCheckIn): only at a court on the map anyone may play at, only
+ * someone known to be an adult, never with No one chosen, only with Location
+ * on (the server checks you are really there), and only after a yes to "Who
+ * can see you on the map?" ('ask-first': the tap asks it, migration 191).
  */
 export function checkInPlan({ me, court, access, locationOn, seenBy }: {
   me: User | null | undefined;
@@ -115,12 +117,13 @@ export function checkInPlan({ me, court, access, locationOn, seenBy }: {
   access?: CourtAccess;
   locationOn: boolean;
   seenBy: MapVisibility | null;
-}): { checkIn: boolean; why?: 'no-court' | 'not-on-map' | 'cannot' | 'only-me' | 'location-off' } {
+}): { checkIn: boolean; why?: 'no-court' | 'not-on-map' | 'cannot' | 'only-me' | 'location-off' | 'ask-first' } {
   if (!court) return { checkIn: false, why: 'no-court' };
   if (!isMapCourtId(court.id)) return { checkIn: false, why: 'not-on-map' };
   if (!canCheckIn(me, access)) return { checkIn: false, why: 'cannot' };
   if (seenBy === 'none') return { checkIn: false, why: 'only-me' };
   if (!locationOn) return { checkIn: false, why: 'location-off' };
+  if (!saidYes(seenBy)) return { checkIn: false, why: 'ask-first' };
   return { checkIn: true };
 }
 
@@ -146,6 +149,10 @@ export function seenLine({ here, seenBy, why, problem, starting = false }: {
     return { line: `Friends ${can} you’re playing here`, shared: true };
   }
   const only = starting ? 'Only you will see this session' : 'Only you can see this session';
+  // Start never shows you to anyone by itself (Oct 27 audit #3): its page has Show friends, a tap of its own.
+  if (starting && (why === undefined || why === 'ask-first') && !problem) {
+    return { line: only, shared: false, note: 'Once it starts, tap Show friends to let friends see you’re here.' };
+  }
   if (why === 'location-off') return { line: only, shared: false, note: 'Turn on Location to let friends see you’re here.' };
   if (why === 'only-me') return { line: only, shared: false, note: 'You chose No one on the map.' };
   if (problem) return { line: only, shared: false, note: problem };
