@@ -135,7 +135,8 @@ function SessionMoment() {
   return (
     <View style={stylesStatic.center}>
       <Animated.View entering={FadeInUp.duration(520).springify().damping(16)}>
-        <SessionCard session={SESSION} width={300} aspect={300 / 372} play={play} people={[]} showSource={false} eyebrow="PRACTICE · TODAY" />
+        {/* Its numbers wait at their starting point as the card rises, then count: never in full first, falling back to 0. */}
+        <SessionCard session={SESSION} width={300} aspect={300 / 372} play={play || 'wait'} people={[]} showSource={false} eyebrow="PRACTICE · TODAY" />
       </Animated.View>
     </View>
   );
