@@ -29,7 +29,7 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
-import { useBarLens } from '@/features/navigation/barLens';
+import { useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
@@ -126,6 +126,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const swipeFollow = useSwipeFollow();
   // The lens under the lit tab (features/navigation/barLens, admins first).
   const barLens = useBarLens();
+  // The new bar, after Instagram's and Strava's (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first). It always has the lens.
+  const barIg = useBarIg();
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -256,7 +258,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         onVeil={closeVeil}
         onFeedHold={onFeedHold}
         follow={swipeFollow}
-        lens={barLens}
+        lens={barLens || barIg}
+        newBar={barIg}
       />
     );
   }
