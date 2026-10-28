@@ -10,6 +10,7 @@ import { useMapLoad, type MapLoadStatus } from '@/components/map/useMapLoad';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
+import { SWOOP_JS, type SwoopAsk } from '@/components/map/swoop';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
 
@@ -33,6 +34,11 @@ export interface MapCanvasHandle {
   shoot: () => void;
   /** Whether this try's page has its map up (its style loaded), drawn or not. */
   isUp: () => boolean;
+  /**
+   * The check-in zoom (swoop.ts): the camera swoops down to a spot, once the page has its map up and
+   * has drawn where it starts (or very nearly). onSwooped is told when it has arrived (or was stopped part way).
+   */
+  swoop: (ask: Omit<SwoopAsk, 'up'>) => void;
   /** How long since this try's page last said anything (ms). */
   quiet: () => number;
 }
@@ -73,6 +79,8 @@ interface Props {
   farBelow?: number;
   /** The map crossed `farBelow`, either way (and once as it starts): told the moment it happens, not only when it comes to rest. */
   onFar?: (far: boolean) => void;
+  /** A swoop (handle.swoop) has come to rest: arrived, or stopped part way. */
+  onSwooped?: (arrived: boolean) => void;
   style?: StyleProp<ViewStyle>;
   /** On screen: off (a page over it, a hidden pager page, another tab), its load clocks wait (useMapLoad). */
   active?: boolean;
@@ -93,28 +101,32 @@ interface Props {
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, style, active = true }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, style, active = true }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
+  // The page's map is made and its style is in ('up'): a swoop can be handed to it from then, before it is 'ready'.
+  const styled = useRef(false);
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
-  useEffect(() => { ready.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus };
+  useEffect(() => { ready.current = false; styled.current = false; }, [load.attempt]);
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped };
   // A fresh page (a retry, or one the phone stopped) starts where the map is meant to be now, not where it first was.
   const centerNow = useRef(center);
   centerNow.current = center;
   const zoomNow = useRef(zoom);
   zoomNow.current = zoom;
   /** The page has gone (the phone stopped it, or lost its drawing): a fresh one, and the screen told. */
-  const lost = () => { ready.current = false; load.reboot(); latest.current.onLost?.(); };
+  const lost = () => { ready.current = false; styled.current = false; load.reboot(); latest.current.onLost?.(); };
   useEffect(() => { latest.current.onStatus?.(load.status); }, [load.status]);
   const send = (js: string) => { if (ready.current) web.current?.injectJavaScript(`${js};true;`); };
   // The page takes a moment to start. A move asked for before then (your
   // location arriving) is kept and made the instant it is ready; dropping
   // it left the map on the default city until it was opened again.
   const pendingMove = useRef<{ to: LatLng; zoom?: number; offsetY?: number; exact?: boolean } | null>(null);
+  // A swoop asked for before then (the full map just opened from the card): made the moment the map is up, after any move.
+  const pendingSwoop = useRef<string | null>(null);
 
   useImperativeHandle(ref, () => ({
     flyTo: (to, z, ms = 500, offsetY = 0, exact = false) => {
@@ -129,13 +141,26 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     shoot: () => send('window.__cs.shot()'),
     isUp: () => ready.current,
     quiet: () => load.quiet(),
+    swoop: (ask) => {
+      // The swoop is the move: one asked for before it (a fix landing) is let go.
+      pendingMove.current = null;
+      const js = `window.__cs.swoop(${JSON.stringify(ask)})`;
+      if (!styled.current) { pendingSwoop.current = js; return; }
+      web.current?.injectJavaScript(`${js};true;`);
+    },
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
   // Written out only when the pins change, not on every draw of the page around the map (Oct 10,
   // owner: "the buttons like the settings. msg notifications, etc respond too slow").
   const markerJson = useMemo(() => JSON.stringify({ items: markers, tpl }), [markers, tpl]);
   const markersNow = useRef(markerJson);
   markersNow.current = markerJson;
-  useEffect(() => { send(`window.__cs.set(${markerJson})`); }, [markerJson]);
+  // The full map's pins may go to the page once its style is in, before it is 'ready' (which waits for its streets): a
+  // check-in zoom lands your pin as the camera settles, not when the last street arrives. The page keeps them for its 'load'.
+  useEffect(() => {
+    const js = `window.__cs.set(${markerJson})`;
+    if (!ready.current && interactive && styled.current) web.current?.injectJavaScript(`${js};true;`);
+    else send(js);
+  }, [markerJson]); // eslint-disable-line react-hooks/exhaustive-deps
   // Reduce Motion, from the phone's own setting: the pins' pulse holds still and the ring only fades.
   const still = useReducedMotion();
   const stillNow = useRef(still);
@@ -161,7 +186,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
 <body><div id="m"></div><script>
-var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;
+var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 function start(){
@@ -189,19 +214,21 @@ map.on('style.load',function(){look(LOOK)});
 // (map.loaded() is false whenever tiles are loading, which used to skip the new colours and
 // left, say, Night's dark map under the light Paris page; Oct 2).
 map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
-map.on('load',function(){look(LOOK);try{engine.set(INIT)}catch(e){}post({type:'ready'})});
+map.on('load',function(){LOADED=true;look(LOOK);try{engine.set(INIT)}catch(e){}post({type:'ready'})});
 var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom();box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
 map.on('moveend',function(){var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
 // The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
 var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},box:${JSON.stringify(interactive ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 window.__cs={
-  set:function(p){engine.set(p)},
+  set:function(p){INIT=p;engine.set(p)},
   hold:function(on){engine.hold(on)},
   fly:function(lat,lng,z,ms,oy,exact){MOVES++;map.flyTo({center:[lng,lat],zoom:z==null?map.getZoom():exact?z:Math.max(map.getZoom(),z),duration:ms,offset:[0,oy||0]})},
   look:function(l){LOOK=l;document.body.style.background=(l.background&&l.background.fill)||'#F4EFE6';if(map.isStyleLoaded())look(l)},
   synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
   rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
+  // The check-in zoom (swoop.ts): one swoop at a time; the pins come in as it lands, if they had not yet.
+  swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok})});if(!fin)SWOOP=s},
   shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}}
 };
 }
@@ -232,12 +259,19 @@ ${ENGINE_JS}
         onContentProcessDidTerminate={lost}
         onRenderProcessGone={lost}
         onMessage={(e) => {
-          let msg: { type: string; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
+          let msg: { type: string; ok?: boolean; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
           if (msg.type === 'online') { load.online(); return; }
           if (msg.type === 'lost') { lost(); return; }
+          // The style is in: a swoop waiting for the page goes to it now (it starts once the map has drawn, or very nearly).
+          if (msg.type === 'up' && !styled.current) {
+            styled.current = true;
+            const swoop = pendingSwoop.current;
+            pendingSwoop.current = null;
+            if (swoop) web.current?.injectJavaScript(`${swoop};true;`);
+          }
           if (msg.type === 'shot') { if (!msg.blank && typeof msg.data === 'string' && msg.data.startsWith('data:image/')) latest.current.onShot?.(msg.data); return; }
           load.heard(msg.type === 'boot' || msg.type === 'progress' || msg.type === 'up' || msg.type === 'painted' ? msg.type : 'other');
           if (msg.type === 'ready') {
@@ -249,6 +283,10 @@ ${ENGINE_JS}
             const move = pendingMove.current;
             pendingMove.current = null;
             if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0,${Math.round(move.offsetY ?? 0)},${move.exact ? 'true' : 'false'})`);
+            styled.current = true;
+            const swoop = pendingSwoop.current;
+            pendingSwoop.current = null;
+            if (swoop) send(swoop);
             // All of it is on the page now: its first drawing may be reported.
             send('window.__cs.synced()');
           }
@@ -256,6 +294,7 @@ ${ENGINE_JS}
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
+          else if (msg.type === 'swooped') latest.current.onSwooped?.(!!msg.ok);
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
           else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {

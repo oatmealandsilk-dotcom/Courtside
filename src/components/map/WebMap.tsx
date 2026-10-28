@@ -16,6 +16,9 @@ import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
+import type { LatLng } from '@/features/players/positions';
+import { SWOOP_JS, type SwoopFn } from '@/components/map/swoop';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -55,6 +58,10 @@ const START_ZOOM = 11.5;
  * gather, split and cascade their pins the same way.
  */
 const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
+/** The check-in zoom's camera move: the very text the phone's page runs too (swoop.ts). */
+const runSwoop = new Function(`return ${SWOOP_JS}`)() as SwoopFn;
+/** A full map just opened for a swoop starts it once it has drawn, or this long at most (as the phone's page, from its style arriving). */
+const SWOOP_WAIT_MS = 800;
 /** When a map is up and has first drawn, fetching again any streets that failed: the very text the phone's page runs (engineLoader). */
 const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail' | 'tiles' | 'retry', why?: string) => void) => { stop: () => void };
 /** Close enough to read street names, when the map goes to someone. */
@@ -141,7 +148,17 @@ export function NearbyMap(props: NearbyMapProps) {
   // Since migration 98 you share to see: what keeps "Players nearby" from you
   // (Location off, or Only me), said by the players pill, their list and the still card, with the tap that changes it.
   // The Check in button on the card and the full map (migration 189): the only way your spot is shared.
-  const checkIn = useCheckIn(expanded ? 'map' : 'card');
+  // With the check-in zoom on (admins first, checkInZoom), once you are up the full map swoops down to you:
+  // from the card it opens first (the card's own tap, onExpand), only while the card is still in view (as on the phone).
+  const zoomOn = useCheckInZoom();
+  const swoopOnUp = (here: LatLng): boolean => {
+    if (expanded) { swoopTo(here, false); return false; }
+    if (!onExpand || !inViewNow()) return false;
+    swoopTo(here, true);
+    onExpand();
+    return true;
+  };
+  const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? swoopOnUp : undefined);
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
   const unlock = lock === 'hidden' ? () => { void askWhoSeesYou('manage'); } : onToggleLocation;
   // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
@@ -193,6 +210,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const hint = useRef<CardHint | null>(null);
   if (!expanded && !cardShown && !photoIn) hint.current = cardHint(me.id);
   const model = useMapModel(me, players, place.at, focusCourt, !expanded, focusHit, focusUser, focusSpot, place.locationOn, focusPlace, hint.current);
+  // The full map's side of the check-in zoom: your pin waits, and lands as the camera settles on you.
+  const swoop = useMapSwoop(expanded && zoomOn, !!model.mePos);
   // A fix held back while the card is seen (cardHold): what the card says comes from the place it shows, not the new fix,
   // so the card and the place it shows never disagree (its open hits, and the "You're early" line under it, wait too).
   const holding = !expanded && (place.locationOn !== !!locationOn || place.at?.lat !== at?.lat || place.at?.lng !== at?.lng);
@@ -280,6 +299,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // The card's pins as they are now, for a map made afresh to have them from its first frame.
   const pinsNow = useRef<{ items: ReturnType<typeof mapMarkers>; tpl: ReturnType<typeof clusterTemplates> } | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  // Whether this map has its first full drawing ('load'), when a swoop may start from it.
+  const mapUp = useRef(false);
   // Whether this map has said it drew once; and which showing of it a reveal on its way is for (a move before it
   // lands starts a new one, so a card is never shown on a place whose streets have not drawn yet).
   const paintedOnce = useRef(false);
@@ -350,6 +371,8 @@ export function NearbyMap(props: NearbyMapProps) {
       return undefined;
     }
     load.heard('boot');
+    mapUp.current = false;
+    instance.once('load', () => { mapUp.current = true; });
     // First of all, before anything else listens: when the map is up, when it has drawn
     // (the curtain over the start page may lift onto it, and the card fades in), or that it failed.
     const watch = watchPaint(instance, (what, why) => {
@@ -499,7 +522,8 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
+    // Up to hit finding you with the zoom on: the swoop is the move (one move, never this one first).
+    if (expanded && model.homeKnown && !swoop.busy && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   // Out of view once it has drawn (the only time a held move lands, cardHold), it is covered again and
@@ -595,8 +619,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const glow = useCourtGlow(model, expanded, shown, playing?.courtId);
   const glowNow = glowKey(glow);
   const markers = useMemo(
-    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow], // eslint-disable-line react-hooks/exhaustive-deps
+    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: swoop.meHold, land: swoop.land }),
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow, swoop.meHold, swoop.land], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -627,6 +651,25 @@ export function NearbyMap(props: NearbyMapProps) {
     const t = setTimeout(() => map.current?.flyTo({ center: [p.lng, p.lat], zoom: placeZoom(p, COURTS_MIN_ZOOM), duration: 700, offset: [0, -courtLift(host.current?.clientHeight ?? 800)] }), 90);
     return () => clearTimeout(t);
   }, [model.place]);
+
+  // You are up, with the zoom on: down to street level over you, once the map has drawn where it starts, and a beat
+  // after a new map's own settling (its jump back to the middle), so the swoop is not undone. The pins come in as it lands.
+  const swoopDone = useRef(swoop.done);
+  swoopDone.current = swoop.done;
+  useEffect(() => {
+    const m = map.current;
+    const run = swoop.run;
+    if (!expanded || !m || !run) return undefined;
+    let gone = false;
+    let going: { stop: () => void } | null = null;
+    const go = () => {
+      if (gone) return;
+      // Once the map has drawn where it starts (or very nearly: SwoopAsk's wait).
+      going = runSwoop(m, { ...swoopShape(), lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(); });
+    };
+    const t = setTimeout(go, 90);
+    return () => { gone = true; clearTimeout(t); going?.stop(); };
+  }, [swoop.run?.id, mapGen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Given up on: "Map didn't load", fading in over whatever the card shows (its picture stays under it);
   // after "Tap to try again" its words stay until it has faded off, so nothing goes in one frame.
@@ -720,7 +763,8 @@ export function NearbyMap(props: NearbyMapProps) {
           {zoomNote ? <CourtsZoomNote /> : null}
         </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
-        <MapLoadPill status={load.status} onRetry={load.restart} />
+        {/* The check-in zoom on its way down: the map is up, its streets come as it lands, so no "Loading map…" meanwhile. */}
+        <MapLoadPill status={swoop.busy && load.status === 'loading' ? 'painted' : load.status} onRetry={load.restart} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
       </View>

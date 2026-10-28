@@ -140,6 +140,11 @@ export interface CanvasMarker {
   up?: boolean;
   /** The colour of that ring: the theme's brand. */
   rc?: string;
+  /**
+   * Your pin, landed on purpose (the check-in zoom, checkInZoom: the camera has just come down on you):
+   * each new number lands it once (as `up` turning on does), even in the full map's first moments.
+   */
+  land?: number;
 }
 
 /** What the gathered pins look like, in the theme's colours (markers.ts clusterTemplates). */
@@ -164,6 +169,8 @@ export interface PinEngine {
   hold: (on: boolean) => void;
   /** The still card: while calm (from the start), new pins appear with no fade; off once the card has been shown. */
   calm: (on: boolean) => void;
+  /** The full map's first pins, now: without waiting for its first full drawing (the check-in zoom has come to rest). */
+  wake: () => void;
   destroy: () => void;
 }
 
@@ -234,6 +241,8 @@ return function(map,ml,o){
   // Your pin's Up to hit, as last drawn (null until the first drawing), and when that first drawing was: a change in the
   // moments after it is the map catching up with you, not a tap, so your pin never drops in then.
   var meUp=null,born=0,SETTLE_MS=1200;
+  // The last landing asked for on purpose (CanvasMarker.land), so each one lands your pin once.
+  var landTok=0;
   function still(){try{return document.body.classList.contains('cs-still')}catch(e){return false}}
   // The system's Reduce Motion, which the pins' own CSS already follows (markers.ts): your pin's landing then is the plain fade.
   function lessMotion(){try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)}catch(e){return false}}
@@ -530,9 +539,12 @@ return function(map,ml,o){
     var d=desired(),was=owner,st=still(),spot={},glides=[],fresh=[],back={};
     owner=d.own;
     // Your Up to hit, turned on or off since the last drawing (not in the map's first moments, not with Reduce Motion).
-    var upNow=!!(items.me&&items.me.up),arrive=false,depart=false,meMade=false;
+    var upNow=!!(items.me&&items.me.up),tok=(items.me&&items.me.land)||0,arrive=false,depart=false,meMade=false;
     if(meUp===null)born=now();
     else if(upNow!==meUp&&!st&&!lessMotion()&&now()-born>SETTLE_MS){arrive=upNow;depart=!upNow}
+    // Landed on purpose (the check-in zoom has come down on you): it lands, even in the map's first moments.
+    if(upNow&&tok&&tok!==landTok&&!st&&!lessMotion())arrive=true;
+    if(tok)landTok=tok;
     meUp=upNow;
     // The view, and a margin of half of it all round: only pins in there are made.
     var ct=map.getContainer(),W=ct.clientWidth||400,H=ct.clientHeight||700,mid={x:W/2,y:H/2};
@@ -662,6 +674,7 @@ return function(map,ml,o){
       if(ready&&lvl<0)lvl=levelNow();render(null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},
     calm:function(on){calm=!!on&&!!o.quiet},
+    wake:function(){if(!ready&&!dead)soon()},
     destroy:function(){dead=true;if(raf)cancelAnimationFrame(raf);if(cullT)clearTimeout(cullT);map.off('zoom',onZoom);map.off('click',onClick);map.off('move',onMove);map.off('moveend',onEnd);for(var id in ms){clearTimeout(ms[id].leaving);ms[id].m.remove()}ms={}}
   };
 };
