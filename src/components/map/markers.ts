@@ -68,7 +68,7 @@ export function agoShort(iso?: string): string {
  * How a lit court moves (litCourtPinHtml), only while it is one of the liveliest (cs-lit-run): the
  * tile's gradient flows (warm 8 s, lit 5 s, hot 3.2 s a loop), the ring's light goes round (7 s, 4.5 s,
  * 2.6 s a turn), a sheen flashes across the tile (lit and hot: once every 4.2 s, 2.8 s), the glow breathes
- * (3.2 s, 2.6 s, 1.8 s a breath) and a hot court sends a soft pulse out (2.2 s). Transform and opacity
+ * (3.2 s, 2.6 s, 1.8 s a breath) and a hot court sends a thin ring out (2.2 s). Transform and opacity
  * only, each on its own layer. Still with Reduce Motion, and for the rest.
  */
 export const LIT_CSS = `
@@ -92,7 +92,7 @@ export const LIT_CSS = `
 .cs-lit-run.cs-lit-3 .cs-lit-sheen{animation:cs-lit-sheen 2.8s cubic-bezier(.45,0,.25,1) infinite}
 @keyframes cs-lit-sheen{0%{transform:translateX(-140%);opacity:0}6%{opacity:1}38%{transform:translateX(230%);opacity:1}42%,100%{transform:translateX(230%);opacity:0}}
 .cs-lit-run.cs-lit-3 .cs-lit-wave{animation:cs-lit-wave 2.2s cubic-bezier(.2,.7,.3,1) infinite}
-@keyframes cs-lit-wave{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+@keyframes cs-lit-wave{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.6);opacity:0}}
 .cs-still .cs-lit-run .cs-lit-spin,.cs-still .cs-lit-run .cs-lit-flow,.cs-still .cs-lit-run .cs-lit-glow,.cs-still .cs-lit-run .cs-lit-sheen,.cs-still .cs-lit-run .cs-lit-wave{animation:none}
 @media (prefers-reduced-motion:reduce){.cs-lit-run .cs-lit-spin,.cs-lit-run .cs-lit-flow,.cs-lit-run .cs-lit-glow,.cs-lit-run .cs-lit-sheen,.cs-lit-run .cs-lit-wave{animation:none}}
 `;
@@ -437,7 +437,9 @@ function litColours(level: 1 | 2 | 3) {
   const light = mix(brand, '#ffffff', 0.62);
   const warm = level === 3 && brightness(colors.sun) > 0.35;
   const b = warm ? colors.sun : lightUp(brand, [0, 0.2, 0.3, 0.4][level]);
-  return { brand, light, a: brand, b, glow: b, ink: colors.brandInk };
+  // The tile's deeper colour is the brand already a little switched on, so no moment of the flow dims to a quiet court's green.
+  const a = lightUp(brand, [0, 0.06, 0.09, 0.12][level]);
+  return { brand, light, a, b, glow: b, ink: colors.brandInk };
 }
 
 /**
@@ -451,7 +453,7 @@ function litColours(level: 1 | 2 | 3) {
  * the page, a ring in the same colours with a bright light in it (a story ring: something on, tap it).
  * `live` (the liveliest few, lightUp's LIVE_MAX), it comes alive: the tile's gradient flows across it,
  * the ring's light travels round, a sheen flashes over the tile now and then, and a soft glow breathes
- * behind it; a hot court does all of it faster and sends a soft pulse out. Every moving part is a small
+ * behind it; a hot court does all of it faster and sends a thin ring out. Every moving part is a small
  * layer of its own moved only by transform and opacity (no blur filter, no gradient redrawn each frame),
  * so the page's compositor runs it off the main thread, in the browser and the phone's web view alike;
  * each court starts at its own point in the beat. Reduce Motion (cs-still, or the system's setting):
@@ -472,8 +474,9 @@ export function litCourtPinHtml(court: Court, { level, on, label, faces, others,
   const conic = level === 3
     ? `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 45deg,${k.brand} 100deg,${k.b} 160deg,${mix(k.b, '#ffffff', 0.5)} 205deg,${k.b} 250deg,${k.brand} 320deg,${k.brand} 360deg)`
     : `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 55deg,${k.brand} 120deg,${k.b} 240deg,${k.brand} 360deg)`;
-  // The tile's gradient, twice over on a strip twice as wide, so sliding it by half loops without a seam.
-  const flow = `linear-gradient(90deg,${k.a} 0%,${k.b} 25%,${k.a} 50%,${k.b} 75%,${k.a} 100%)`;
+  // The tile's gradient, four bands on a strip twice as wide, so sliding it by half loops without a seam; each band
+  // is about the tile's width, so a bright band is always crossing it (one twice as wide left the tile dark half the loop).
+  const flow = `linear-gradient(90deg,${k.a} 0%,${k.b} 12.5%,${k.a} 25%,${k.b} 37.5%,${k.a} 50%,${k.b} 62.5%,${k.a} 75%,${k.b} 87.5%,${k.a} 100%)`;
   const glow = `radial-gradient(closest-side,${withAlpha(k.glow, level === 1 ? 0.5 : 0.7)} 0%,${withAlpha(k.glow, level === 1 ? 0.3 : 0.42)} 48%,${withAlpha(k.brand, 0.14)} 74%,${withAlpha(k.brand, 0)} 100%)`;
   const reach = Math.round(size * (0.32 + level * 0.1));
   const delay = `animation-delay:-${beat(court.id)}ms`;
@@ -487,8 +490,8 @@ export function litCourtPinHtml(court: Court, { level, on, label, faces, others,
   return `<div class="cs-court cs-pin cs-live cs-lit cs-lit-${level}${live ? ' cs-lit-run' : ''}${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;cursor:pointer${closed ? ';opacity:.8' : ''}">`
     // The glow breathing behind.
     + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${glow};pointer-events:none;${delay}"></i>`
-    // A hot court's pulse, going out.
-    + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;border-radius:${r}px;background:${withAlpha(k.glow, 0.32)};pointer-events:none;${delay}"></i>` : '')
+    // A hot court's pulse, going out: a thin ring in the tile's shape (a filled one read as a pale box in a still).
+    + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:${r}px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;${delay}"></i>` : '')
     // The ring: a frame of the travelling gradient, the tile laid inside it past a gap of the page.
     + `<div class="cs-lit-frame" style="position:absolute;inset:0;border-radius:${r}px;overflow:hidden;isolation:isolate;-webkit-mask-image:-webkit-radial-gradient(white,black);box-shadow:${picked}0 4px 14px rgba(0,0,0,.3)">`
     + `<i class="cs-lit-spin" style="position:absolute;left:50%;top:50%;width:${spin}px;height:${spin}px;margin:-${spin / 2}px 0 0 -${spin / 2}px;background:${conic};${delay}"></i>`
