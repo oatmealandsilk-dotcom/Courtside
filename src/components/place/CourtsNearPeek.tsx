@@ -88,8 +88,11 @@ export interface PeekCardProps {
   posts?: string | null;
   /** Whether this card may draw its map now (on screen, and the opening over). */
   draw: boolean;
-  /** The card's width, where it is not Courts near you's (Most active courts on a city's page). */
-  width?: number;
+  /**
+   * The card takes its width from its row (Most active courts' cards, sized by flex), not Courts near you's:
+   * the map spans it, drawn at the width it is measured at.
+   */
+  fill?: boolean;
   /** The map's height, where it is not Courts near you's. */
   mapHeight?: number;
   /** A small plain chip first on the map's foot: a court's place among a city's most active ("#1"). */
@@ -103,9 +106,12 @@ export interface PeekCardProps {
 /** What a card shows. The card's frame (the press, its outline) is CourtsNear's, with peekFrame. */
 export function PeekCardBody(p: PeekCardProps) {
   const styles = useThemedStyles(styleDefinitions);
-  // Inside the card's 1 pt outline, as Courts near you's.
-  const mapW = p.width === undefined ? PEEK_W : p.width - 2;
+  // A filling card's map: as wide as the card inside its 1 pt outline, once measured (a picture is drawn for one size).
+  const [fillW, setFillW] = useState<number | null>(null);
+  const mapW = p.fill ? fillW : PEEK_W;
   const mapH = p.mapHeight ?? PEEK_H;
+  // Whether the court's real map is showing: only then its credit (over the stand-in it would credit a map not there).
+  const [real, setReal] = useState(false);
   const words = (
     <>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, p.big && styles.nameBig]} numberOfLines={2}>{p.name}</Text>
@@ -114,12 +120,15 @@ export function PeekCardBody(p: PeekCardProps) {
   );
   return (
     <>
-      <View style={[styles.peek, mapW !== PEEK_W || mapH !== PEEK_H ? { width: mapW, height: mapH } : null]}>
-        <CourtMapThumb lat={p.lat} lng={p.lng} width={mapW} height={mapH} zoom={ZOOM} draw={p.draw} />
+      <View style={[styles.peek, p.fill ? { width: '100%', height: mapH } : mapH !== PEEK_H ? { height: mapH } : null]}
+        onLayout={p.fill ? (e) => { const w = Math.round(e.nativeEvent.layout.width); setFillW((was) => (was === w ? was : w)); } : undefined}>
+        {/* Until a filling card is measured, the map's plain ground (a frame at most). */}
+        {mapW !== null ? <CourtMapThumb lat={p.lat} lng={p.lng} width={mapW} height={mapH} zoom={ZOOM} draw={p.draw} onShown={setReal} /> : null}
         <Pin />
         {/* The map's licence asks for its credit on the map: a tiny ⓘ in the corner that shows it on a tap (Oct 25, owner: "For open street map
-            can you just put a small dot instead of the full word"). Its own press: a tap on it shows the credit, never opens the court. */}
-        <MapCreditDot style={styles.credit} size={10} fontSize={6.5} />
+            can you just put a small dot instead of the full word"). Its own press: a tap on it shows the credit, never opens the court.
+            Only once the real map shows: the stand-in is no one's map. */}
+        {real ? <MapCreditDot style={styles.credit} size={10} fontSize={6.5} /> : null}
         {/* On the map's foot: the surface and what's on there, small light chips. Beside an open hit the
             surface is its dot alone, so the hit's time always reads whole. */}
         <View style={styles.chips} pointerEvents="none">

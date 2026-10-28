@@ -1,6 +1,6 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,7 +13,9 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
-import { PEEK_H, PeekCardBody } from '@/components/place/CourtsNearPeek';
+import { NOW_PAD, NowCardBody } from '@/components/place/CourtCardNow';
+import { usePeekLook } from '@/components/place/CourtsNear';
+import { PeekCardBody, useCourtPicturesGo } from '@/components/place/CourtsNearPeek';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
@@ -292,55 +294,76 @@ export default function CityPage() {
 
 /** The room between Most active courts' cards, across and down: Courts near you's. */
 const COURT_GAP = spacing.sm;
-/** The wide card's map: its share of the card's width, and never taller than this (a tablet, a browser). */
-const WIDE_MAP = 0.38;
-const WIDE_MAP_MAX = 180;
+/** The wide card's map's height: what it was on a phone before, now the same on a tablet or in a browser (never growing with the width). */
+const WIDE_MAP_H = 136;
 
 /**
- * Most active courts, design B: Courts near you's cards stacked. The most
- * visited is a wide card across the page with a bigger map and name; the
- * rest two to a row (an odd last one across the page, so no row has a gap).
- * Each card's place is a small chip on its map ("#1"; level counts share
- * one; none for a city's only court). The maps are only ever pictures kept
- * from before (draw off): this page never draws one, so the phone's hidden
- * map drawing stays on Find Players and in chats, and a court not drawn yet
- * shows the cards' own stand-in. A tap opens the court's page.
+ * Most active courts, design B: the very cards this person sees in Courts
+ * near you, stacked. Map peek's (the court's map on top, its name and visits
+ * under it) for whoever has map peek there (usePeekLook: admins, until
+ * PEEK_FOR_EVERYONE); everyone else the outlined card, so the two never
+ * differ. The most visited is a wide card across the page with a bigger map
+ * and name; the rest two to a row, an odd last one at the left at the same
+ * half width (never stretched). Two courts are one pair: two wide cards
+ * stacked would read as the list again. Each card's place is a small tag
+ * ("#1"; level counts share one; none for a city's only court). The cards
+ * take their widths from the page (flex), so nothing jumps once it is
+ * measured. A tap opens the court's page.
  */
 function ActiveCourtCards({ courts }: { courts: ActiveCourt[] }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { width: windowW } = useWindowDimensions();
-  // The cards' width is the page's, measured; until then a phone's (the page's margins off the screen's).
-  const [measured, setMeasured] = useState<number | null>(null);
-  const full = Math.floor(measured ?? windowW - 2 * spacing.lg);
-  const half = Math.floor((full - COURT_GAP) / 2);
-  const [first, ...rest] = courts;
+  const look = usePeekLook();
+  const draw = useCourtMapsGo();
+  const alone = courts.length === 1;
+  const first = courts.length === 2 ? null : courts[0] ?? null;
+  const rest = first ? courts.slice(1) : courts;
   const rows: ActiveCourt[][] = [];
   for (let i = 0; i < rest.length; i += 2) rows.push(rest.slice(i, i + 2));
-  const card = (c: ActiveCourt, width: number, wide: boolean, top = false) => {
+  const card = (c: ActiveCourt, wide: boolean) => {
     const place = placeAmong(courts, c);
+    // Its place only beside others: "#1" of one says nothing.
+    const tag = alone ? null : `#${place}`;
     return (
-      <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place)} onPress={() => openActiveCourt(c)}
-        style={({ pressed }) => [styles.courtCard, { width }, pressed && styles.courtPressed]}>
-        {/* A wide card stands alone in its row: its words take their own room. Two-up, both keep two lines' room, so the pair is one height. */}
-        <PeekCardBody name={c.name} lat={c.lat} lng={c.lng} meta={visitsWords(c.visits)} tag={courts.length > 1 ? `#${place}` : null} draw={false}
-          width={width} mapHeight={top ? Math.min(Math.round(full * WIDE_MAP), WIDE_MAP_MAX) : PEEK_H} fit={wide} big={top} />
+      <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place, alone)} onPress={() => openActiveCourt(c)}
+        style={({ pressed }) => [styles.courtCard, look === 'N' ? styles.courtCardMap : styles.courtCardNow, !wide && styles.courtHalf, pressed && styles.courtPressed]}>
+        {/* The wide card stands alone in its row: its words take their own room. Two-up, both keep two lines' room, so a pair is one height. */}
+        {look === 'N'
+          ? <PeekCardBody name={c.name} lat={c.lat} lng={c.lng} meta={visitsWords(c.visits)} tag={tag} draw={draw} fill mapHeight={wide ? WIDE_MAP_H : undefined} fit={wide} big={wide} />
+          : <NowCardBody name={c.name} meta={visitsWords(c.visits)} tag={tag} fit={wide} big={wide} />}
       </Pressable>
     );
   };
   return (
-    <View style={styles.courtCards} onLayout={(e) => setMeasured(e.nativeEvent.layout.width)}>
-      {first ? card(first, full, true, true) : null}
-      {rows.map((row) => (row.length === 2
-        ? <View key={row[0].courtId} style={styles.courtPair}>{row.map((c) => card(c, half, false))}</View>
-        : card(row[0], full, true)))}
+    <View style={styles.courtCards}>
+      {first ? card(first, true) : null}
+      {rows.map((row) => (
+        <View key={row[0].courtId} style={styles.courtPair}>
+          {row.map((c) => card(c, false))}
+          {/* An odd last card keeps its half: an empty half beside it. */}
+          {row.length === 1 ? <View style={styles.courtHalf} /> : null}
+        </View>
+      ))}
     </View>
   );
 }
 
+/**
+ * Whether Most active courts' map cards may draw a court's map not kept from
+ * before. In a browser, as Courts near you's (useCourtPicturesGo): while
+ * this page is on show and the app's opening is over, off screen, one map
+ * at a time. Never on a phone yet: there the drawing is a hidden web view
+ * (CourtMapSnapshots) this page does not mount until it has been seen on an
+ * iPhone, so a card shows a map kept from before, else its stand-in.
+ */
+function useCourtMapsGo(): boolean {
+  const go = useCourtPicturesGo();
+  return Platform.OS === 'web' && go;
+}
+
 /** A court's place among the city's most active: 1 + how many have more visits (level counts share a place). */
 const placeAmong = (courts: ActiveCourt[], c: ActiveCourt) => 1 + courts.filter((k) => k.visits > c.visits).length;
-/** What VoiceOver hears for a court's card. */
-const courtSaid = (c: ActiveCourt, place: number) => `${c.name}, ${visitsWords(c.visits)} this month, number ${place}. Open court`;
+/** What VoiceOver hears for a court's card: its place too, as its tag shows it (none for a city's only court). */
+const courtSaid = (c: ActiveCourt, place: number, alone: boolean) => `${c.name}, ${visitsWords(c.visits)} this month${alone ? '' : `, number ${place}`}. Open court`;
 const openActiveCourt = (c: ActiveCourt) => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }));
 
 /** Still coming: Up to hit's faces and Top players' rows as quiet shapes, so nothing jumps when they land. */
@@ -549,6 +572,10 @@ const styleDefinitions = StyleSheet.create({
   courtCards: { gap: COURT_GAP, paddingTop: spacing.xs },
   courtPair: { flexDirection: 'row', gap: COURT_GAP },
   courtCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  // Each look's room inside (CourtsNearPeek's peekFrame, CourtCardNow's nowFrame), the width the row's.
+  courtCardMap: { padding: 0 },
+  courtCardNow: { padding: NOW_PAD, gap: 4 },
+  courtHalf: { flex: 1, minWidth: 0 },
   courtPressed: { transform: [{ scale: PRESS_SHRINK }] },
   courtsEmpty: { ...typography.body, color: colors.textMuted, paddingTop: spacing.xs },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
