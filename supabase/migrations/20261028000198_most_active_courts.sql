@@ -16,8 +16,9 @@
 --   * A visit = one player at one court on one day, counted once however many
 --     things they did there that day: a session logged there (the board's
 --     rules: tennis, logged within 7 days, at most 2 a day), an open hit they
---     posted there (not cancelled, for a day that has passed), or "I'm
---     playing here" (a check-in).
+--     posted there for everyone to see (not cancelled, not friends- or
+--     group-only, for a day that has passed), or "I'm playing here" (a
+--     check-in).
 --   * Whose visits count: adults who may be named on city boards (a birthday
 --     on file saying 18+, "Show me on city boards" and activity status on,
 --     not suspended) with a PUBLIC account. Teens, anyone with no birthday on
@@ -31,10 +32,13 @@
 --   * Listed only with 3 or more DIFFERENT players and 2 or more different
 --     days this month (one group's one outing is not enough).
 --   * Frozen a week at a time, as Busiest courts: worked out once a week
---     (Monday 00:00 UTC) from whole weeks, logged before then. A number never
---     moves with a day, a session or one player, so it can never be lined up
---     with a Top players number that moved the same day. Once listed, a
---     court's numbers never go down that month (a player switching off,
+--     (Monday 00:00 UTC) from whole weeks, logged before then. And a court's
+--     number only ever goes up by a batch that 3 or more different players
+--     added to, on 2 or more days (review, Oct 28): visits logged since its
+--     last rise wait, week after week, until 3 different players are among
+--     them. So a rise can never be one player's week (a +1 the Monday after
+--     one Top player's count rose would otherwise point at them). Once listed,
+--     a court's numbers never go down that month (a player switching off,
 --     going private or deleting a session never shows as a drop).
 --   * "I'm playing here" is still kept for 2 days only (Privacy center): the
 --     day after one ends, it is added to that court's day as a number with no
@@ -92,16 +96,16 @@ begin
   if (to_regprocedure('private.city_board_court_place(public.courts)') is not null
       and (select md5(p.prosrc) from pg_proc p where p.oid = to_regprocedure('private.city_board_court_place(public.courts)')) <> 'd4c768e23cac2c9eb22d9cd596358e99')
      or (to_regprocedure('public.refresh_active_courts()') is not null
-      and (select md5(p.prosrc) from pg_proc p where p.oid = to_regprocedure('public.refresh_active_courts()')) <> '457480bd91a960c9c640a198bf4c34b7') then
+      and (select md5(p.prosrc) from pg_proc p where p.oid = to_regprocedure('public.refresh_active_courts()')) <> 'a5b0db12059871312a373ed5fc09ca34') then
     raise exception 'Migration 198 stopped before changing anything: a Most active courts function is already there and different. Ask Claude to look.';
   end if;
   -- The columns read here.
   if (select count(*) from information_schema.columns
        where table_schema = 'public'
          and ((table_name = 'court_visits' and column_name in ('user_id', 'court_id', 'at', 'day'))
-           or (table_name = 'hit_requests' and column_name in ('author_id', 'starts_at', 'place', 'cancelled', 'created_at'))
+           or (table_name = 'hit_requests' and column_name in ('author_id', 'starts_at', 'place', 'cancelled', 'created_at', 'audience'))
            or (table_name = 'practice_sessions' and column_name in ('user_id', 'day', 'kind', 'court_id', 'created_at'))
-           or (table_name = 'courts' and column_name in ('id', 'name', 'lat', 'lng', 'access')))) <> 19 then
+           or (table_name = 'courts' and column_name in ('id', 'name', 'lat', 'lng', 'access')))) <> 20 then
     raise exception 'Migration 198 stopped before changing anything: a table it reads is not as expected. Ask Claude to look.';
   end if;
   -- The age helper stays server-only (109).
@@ -128,8 +132,9 @@ create table if not exists public.city_board_active_courts (
   name text not null,
   lat double precision not null,
   lng double precision not null,
-  visits int not null,
-  players int not null,
+  visits int not null,              -- only ever goes up, by batches of 3+ different players
+  players int not null,             -- the most different players in one batch (order only, never shown)
+  released_at timestamptz not null, -- the Monday cut of its last rise: visits logged since then wait for the next batch
   primary key (month, place_key)
 );
 create index if not exists city_board_active_courts_city on public.city_board_active_courts (month, city_id, visits desc);
@@ -238,7 +243,7 @@ begin
                         where s.user_id = v.user_id and s.day = v_d and s.kind in ('practice', 'match', 'drills')
                           and private.city_board_court_place(c2) = x.k)
        and not exists (select 1 from public.hit_requests h join public.courts c3 on c3.id = h.place->>'id'
-                        where h.author_id = v.user_id and not h.cancelled
+                        where h.author_id = v.user_id and not h.cancelled and h.audience = 'everyone'
                           and h.starts_at >= (v_d - 2)::timestamp at time zone 'UTC' and h.starts_at < (v_d + 3)::timestamp at time zone 'UTC'
                           and private.local_at(h.author_id, h.starts_at)::date = v_d
                           and private.city_board_court_place(c3) = x.k)
@@ -249,7 +254,12 @@ begin
   end loop;
 
   -- 2. The list, once a week per month (the board's months: last month for
-  --    its first 3 days, this one, and tomorrow's).
+  --    its first 3 days, this one, and tomorrow's). Each visit belongs to the
+  --    week it was first logged in (a session: when it was logged; an open
+  --    hit: when its day had passed; a check-in: when its day was added up).
+  --    A court's batch is everything logged since its last rise and before
+  --    this Monday's cut; it is added only with 3+ different players on 2+
+  --    days, else it waits for next week's (never lost, never shown alone).
   v_months := array(select distinct date_trunc('month', x)::date from unnest(array[current_date - 3, current_date, current_date + 1]) as x order by 1);
   foreach v_m in array v_months loop
     continue when (select am.cut from public.city_board_active_months am where am.month = v_m) is not distinct from v_cut;
@@ -258,7 +268,7 @@ begin
 
     with acts as (
       -- Sessions logged at a court (the board's rules), logged before the cut.
-      select k.user_id, k.day, k.court_id
+      select k.user_id, k.day, k.court_id, k.created_at as logged
         from (
           select s.user_id, s.day, s.court_id, s.created_at,
                  row_number() over (partition by s.user_id, s.day order by s.created_at, s.id) as n
@@ -269,16 +279,17 @@ begin
              and s.day <= (s.created_at at time zone 'UTC')::date + 1
         ) k
        where k.n <= 2 and k.court_id is not null and k.created_at < v_cut
-      union
-      -- Open hits posted at a court, on the day they were for (the poster's own day), posted and passed before the cut.
-      select h.author_id, private.local_at(h.author_id, h.starts_at)::date, h.place->>'id'
+      union all
+      -- Open hits for everyone posted at a court, on the day they were for (the
+      -- poster's own day), posted and passed before the cut.
+      select h.author_id, private.local_at(h.author_id, h.starts_at)::date, h.place->>'id', greatest(h.created_at, h.starts_at)
         from public.hit_requests h
-       where not h.cancelled and nullif(h.place->>'id', '') is not null
+       where not h.cancelled and h.audience = 'everyone' and nullif(h.place->>'id', '') is not null
          and h.created_at < v_cut and h.starts_at < v_cut
          and h.starts_at >= (v_m - 2)::timestamp at time zone 'UTC' and h.starts_at < (v_end + 2)::timestamp at time zone 'UTC'
     ), placed as (
       -- Whole weeks of this month only; counted players only; listable courts only.
-      select distinct a.user_id, a.day, x.k, ct.id as court_id, ct.name, ct.lat, ct.lng
+      select a.user_id, a.day, x.k, ct.id as court_id, ct.name, ct.lat, ct.lng, a.logged
         from acts a
         join public.profiles p on p.id = a.user_id and p.suspended_at is null and not p.is_private
         join public.courts ct on ct.id = a.court_id
@@ -287,17 +298,25 @@ begin
          and x.k is not null
          and private.city_board_named(a.user_id)
     ), visits as (
-      -- One a player a day a court, whatever they did there.
-      select distinct pl.user_id, pl.day, pl.k from placed pl
-    ), per as (
+      -- One a player a day a court, whatever they did there, in the week it was first logged.
+      select pl.user_id, pl.day, pl.k, min(pl.logged) as logged from placed pl group by pl.user_id, pl.day, pl.k
+    ), batch as (
+      -- Since the court's last rise (all of them, before its first).
       select vi.k, count(*)::int as visits, count(distinct vi.user_id)::int as players, count(distinct vi.day)::int as days
-        from visits vi group by vi.k
+        from visits vi
+        left join public.city_board_active_courts t on t.month = v_m and t.place_key = vi.k
+       where vi.logged >= coalesce(t.released_at, '-infinity'::timestamptz)
+       group by vi.k
     ), checkins as (
+      -- "I'm playing here" numbers whose day was added up since the court's last rise.
       select x.k, sum(t.visits)::int as visits
         from public.city_board_checkin_tally t
+        join public.city_board_checkin_days cd on cd.day = t.day
         join public.courts ct on ct.id = t.court_id
         cross join lateral (select private.city_board_court_place(ct) as k) x
+        left join public.city_board_active_courts a on a.month = v_m and a.place_key = x.k
        where t.day >= v_m and t.day < v_end and t.day < v_cut_day and x.k is not null
+         and cd.closed_at < v_cut and cd.closed_at >= coalesce(a.released_at, '-infinity'::timestamptz)
        group by x.k
     ), entry as (
       -- The map entry a tap opens: the one with the most visits under that name.
@@ -306,16 +325,17 @@ begin
                 from placed pl group by pl.k, pl.court_id, pl.name, pl.lat, pl.lng) pl
        order by pl.k, pl.n desc, pl.court_id
     )
-    insert into public.city_board_active_courts as t (month, place_key, city_id, court_id, name, lat, lng, visits, players)
-    select v_m, pe.k, split_part(pe.k, '|', 1), e.court_id, btrim(e.name), e.lat, e.lng,
-           pe.visits + coalesce(ci.visits, 0), pe.players
-      from per pe
-      join entry e on e.k = pe.k
-      left join checkins ci on ci.k = pe.k
-     where pe.players >= v_rules.court_min_players and pe.days >= 2
+    insert into public.city_board_active_courts as t (month, place_key, city_id, court_id, name, lat, lng, visits, players, released_at)
+    select v_m, b.k, split_part(b.k, '|', 1), e.court_id, btrim(e.name), e.lat, e.lng,
+           b.visits + coalesce(ci.visits, 0), b.players, v_cut
+      from batch b
+      join entry e on e.k = b.k
+      left join checkins ci on ci.k = b.k
+     where b.players >= v_rules.court_min_players and b.days >= 2
     on conflict (month, place_key) do update
-      set visits = greatest(t.visits, excluded.visits),
+      set visits = t.visits + excluded.visits,
           players = greatest(t.players, excluded.players),
+          released_at = excluded.released_at,
           court_id = excluded.court_id, name = excluded.name, lat = excluded.lat, lng = excluded.lng;
 
     insert into public.city_board_active_months (month, cut, refreshed_at, took_ms)
@@ -625,7 +645,7 @@ begin
     end if;
   end loop;
   if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) <> 'e6c05cc304a90e64a76e2c5d1e65e0c7'
-     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_active_courts()'::regprocedure) <> '457480bd91a960c9c640a198bf4c34b7'
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_active_courts()'::regprocedure) <> 'a5b0db12059871312a373ed5fc09ca34'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'private.city_board_court_place(public.courts)'::regprocedure) <> 'd4c768e23cac2c9eb22d9cd596358e99'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) <> '259f5a95e81c26cf195f32a4b2425a48'
      or not (select p.prosecdef from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure)
