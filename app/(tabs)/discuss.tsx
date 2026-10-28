@@ -43,6 +43,7 @@ import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { MutualsInline, MutualsSheet } from '@/features/mutuals/MutualsCard';
 import { mutualsMock } from '@/features/mutuals/mutualsMock';
+import { FollowBackBanner, FollowBackMeet, FollowBackRow, MutualsEmptyCard, MutualsSheetCalm } from '@/features/mutuals/MutualsV2';
 import { CityBoardPreview } from '@/components/CityBoardPreview';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useCityFill } from '@/features/cityBoard/fill';
@@ -142,12 +143,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Design mock (?mutuals=a|b, demo build only): the rare "Add your friends" card. Shown every time
   // here so it can be looked at; the rule for how often it may come up is in mutualsMock.ts.
   const mutualsLook = previewSection ? null : mutualsMock();
-  const [mutualsOpen, setMutualsOpen] = useState(mutualsLook === 'b');
+  const mutualsSheet = mutualsLook === 'a' || mutualsLook === 'a1';
+  const [mutualsOpen, setMutualsOpen] = useState(!!mutualsLook && !mutualsSheet);
   useEffect(() => {
-    if (mutualsLook !== 'a') return;
+    if (!mutualsSheet) return;
     const t = setTimeout(() => setMutualsOpen(true), 1200);
     return () => clearTimeout(t);
-  }, [mutualsLook]);
+  }, [mutualsSheet]);
   const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && askedSection('/discuss')) || START_SECTION));
   const section = previewSection ? asSection(previewSection) : localSection;
   // A section asked for out of sight whose redraw is still on its way (background work, below):
@@ -738,7 +740,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
         {/* City boards (admins first): the month's board in the invite card's place, fading into Open to hit. */}
         {/* Design mock (?mutuals=b, demo build only): "Follow back to see each other on the map". */}
-        {!search && mutualsLook === 'b' && mutualsOpen ? <View style={{ marginTop: spacing.lg }}><MutualsInline onClose={() => setMutualsOpen(false)} /></View> : null}
+        {/* Round 2 (?mutuals=b1|b2|b2open|b3|a2): the same card in three new looks, and "Add your friends" as a card here. */}
+        {!search && mutualsLook && mutualsOpen && ['b', 'b1', 'b2', 'b2open', 'b3', 'a2'].includes(mutualsLook) ? (
+          <View style={{ marginTop: spacing.lg }}>
+            {mutualsLook === 'b' ? <MutualsInline onClose={() => setMutualsOpen(false)} />
+              : mutualsLook === 'b1' ? <FollowBackRow onClose={() => setMutualsOpen(false)} />
+              : mutualsLook === 'b3' ? <FollowBackMeet onClose={() => setMutualsOpen(false)} />
+              : mutualsLook === 'a2' ? <MutualsEmptyCard onClose={() => setMutualsOpen(false)} />
+              : <FollowBackBanner startOpen={mutualsLook === 'b2open'} onClose={() => setMutualsOpen(false)} />}
+          </View>
+        ) : null}
         {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
@@ -1054,6 +1065,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const column = isPhone ? undefined : LAYOUT.soloColumn;
   return (<>
     {mutualsLook === 'a' ? <MutualsSheet visible={mutualsOpen} onClose={() => setMutualsOpen(false)} /> : null}
+    {mutualsLook === 'a1' ? <MutualsSheetCalm visible={mutualsOpen} onClose={() => setMutualsOpen(false)} /> : null}
     <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :

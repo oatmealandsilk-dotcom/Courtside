@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
 import { isSupabaseConfigured } from '@/lib/supabase';
-import type { Notification } from '@/data/types';
+import type { Notification, User } from '@/data/types';
 
 /**
  * "Add your friends" (owner, Oct 28: "a card that pops up every now and then
@@ -14,11 +14,19 @@ import type { Notification } from '@/data/types';
  *   b      the rare card, look B: a small card on Find Players, under the map
  *   on     only the small lines where following back pays off (no card)
  *   empty  as `on`, with nobody up to hit on the full map (its empty state)
+ * Round 2 (Oct 28, owner: "the cards could be better"), in MutualsV2.tsx:
+ *   b1     the card as a row of person cards you swipe across
+ *   b2     the card as one line of faces that opens into the list
+ *   b2open the same, opened
+ *   b3     the card one person at a time, with the two pins joining
+ *   a1     "Add your friends", a calmer sheet with the drawing
+ *   a2     "Add your friends" as a card on Find Players (no friends on the map yet)
  * Every value also shows the small lines (a profile that follows you, the
  * follow row in Notifications, a city's Top players). Never on a phone, never
  * with the real database: nothing here is live, and nothing is saved anywhere.
  */
-export type MutualsMock = 'a' | 'b' | 'on' | 'empty';
+export type MutualsMock = 'a' | 'b' | 'on' | 'empty' | 'b1' | 'b2' | 'b2open' | 'b3' | 'a1' | 'a2';
+const LOOKS: readonly string[] = ['a', 'b', 'on', 'empty', 'b1', 'b2', 'b2open', 'b3', 'a1', 'a2'];
 
 const KEY = 'courtside-mutuals-mock';
 let chosen: MutualsMock | null | undefined;
@@ -27,7 +35,7 @@ export function mutualsMock(): MutualsMock | null {
   if (chosen !== undefined) return chosen;
   chosen = null;
   if (isSupabaseConfigured || Platform.OS !== 'web' || typeof window === 'undefined') return chosen;
-  const ok = (v: string | null): v is MutualsMock => v === 'a' || v === 'b' || v === 'on' || v === 'empty';
+  const ok = (v: string | null): v is MutualsMock => v !== null && LOOKS.includes(v);
   try {
     const asked = new URLSearchParams(window.location.search).get('mutuals');
     if (ok(asked)) { window.sessionStorage.setItem(KEY, asked); chosen = asked; }
@@ -45,6 +53,21 @@ export const MUTUAL_LINE = 'Follow back: you’ll see each other on the map and 
 export const MUTUAL_LINE_SHORT = 'See each other on the map and the leaderboard';
 /** Where a list only shows friends who follow each other (a teen's city board, their map). */
 export const MUTUALS_ONLY_LINE = 'Only mutuals see each other here';
+
+/**
+ * One thing you share with someone who follows you, for under their name on
+ * a card: a friend you both follow (Instagram's "Followed by"), or else their
+ * town. Never a court or a spot: someone you don't follow back is a stranger
+ * on the map (Apple 5.1.2(i)), so where they play stays theirs. The friends
+ * in common are the mock's own, written in; the real one would count them.
+ */
+const IN_COMMON: Record<string, string> = { 'u-rosa': 'Sam', 'u-noor': 'Marcus', 'u-theo': 'Omar' };
+export function sharedLine(u: User, me: User): string {
+  if (IN_COMMON[u.id]) return `Followed by ${IN_COMMON[u.id]}`;
+  const town = u.location.split(',')[0]?.trim();
+  if (!town) return 'On CourtSide';
+  return town === me.location.split(',')[0]?.trim() ? `Also in ${town}` : `In ${town}`;
+}
 
 /**
  * What following each other shows, in plain words: the card's rows. Each is
