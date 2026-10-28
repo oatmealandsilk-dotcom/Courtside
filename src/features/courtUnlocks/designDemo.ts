@@ -38,7 +38,8 @@ export interface DesignCourt {
 
 /** Alex's courts, newest first. Two are away from home (a trip, a tournament). */
 export const MY_COURTS: DesignCourt[] = [
-  { name: 'Juniper Community Park', surface: 'clay', since: 'Today', sessions: 1, isNew: true, lat: 34.0868, lng: -118.245 },
+  // The courts themselves sit a little south-east of the park's pin, in the open ground by Elysian Park Drive (the unlock pictures draw them there).
+  { name: 'Juniper Community Park', surface: 'clay', since: 'Today', sessions: 1, isNew: true, lat: 34.08644, lng: -118.24431 },
   { name: 'Marigold Park', surface: null, since: 'Oct 9', sessions: 2, lat: 34.034, lng: -118.26 },
   { name: 'Cypress Hollow Park', surface: 'hard', since: 'Sep 21', sessions: 6, lat: 34.0736, lng: -118.23 },
   { name: 'Alder Park', surface: 'hard', since: 'Sep 2', sessions: 31, crown: true, lat: 34.0604, lng: -118.254 },
@@ -116,6 +117,27 @@ export const HAVE_IT: Record<string, { friends: string[]; total: number }> = {
   'Bellwood Recreation Center': { friends: ['u-marcus'], total: 12 },
   'Larkspur Recreation Center': { friends: ['u-omar', 'u-sam'], total: 31 },
 };
+
+/*
+ * Round 3 (owner, Oct 28): "the court unlocked looks better, but im not the
+ * biggest fan of the badge on the bottom right. or the court icon on the top.
+ * show me a couple to pick from." Three ways to tell it, one shown at a time:
+ *   A  Traced: the court's own block of map close up, the courts drawn on it
+ *      in your colour at their real size, "6th court" in big type.
+ *   B  Card: the court comes as a collectible card that flips over.
+ *   C  Your map: the new court lights up, then the map pulls back to show
+ *      all your courts, the new one among them.
+ * The demo's pictures pick one with ?v=A, ?v=B or ?v=C; this is the rest.
+ */
+export type UnlockOption = 'A' | 'B' | 'C';
+export const COURT_UNLOCKED_OPTION: UnlockOption = 'A';
+export const unlockOption = (v?: string | string[]): UnlockOption => {
+  const one = Array.isArray(v) ? v[0] : v;
+  return one === 'A' || one === 'B' || one === 'C' ? one : COURT_UNLOCKED_OPTION;
+};
+
+/** The new court's facts, as the Court unlocked moment says them (made up). */
+export const NEW_COURT_FACTS = { surface: 'Clay', courts: 3, fromHome: '2.1 mi', day: 'Oct 27', city: 'Los Angeles' };
 
 /** Where the courts still to unlock are, for their map patches. */
 export const TO_UNLOCK_AT: Record<string, { lat: number; lng: number }> = {

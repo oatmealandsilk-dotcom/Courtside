@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CrownGlyph } from '@/components/place/CrownGlyph';
 import { KING, MY_COURTS } from '@/features/courtUnlocks/designDemo';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, typography, withAlpha, wordmarkFont } from '@/theme';
 import { corner } from '@/theme/look';
 
@@ -87,6 +87,23 @@ export function CardSwatch({ width = 30 }: { width?: number }) {
   return (
     <View style={[styles.card, { width, height: Math.round(width * 1.36), borderRadius: corner(Math.max(4, Math.round(width * 0.16))) }]}>
       <CourtGlyph size={Math.round(width * 0.5)} color={colors.cardFigure} />
+    </View>
+  );
+}
+
+/**
+ * Someone with no face shown (round 3): a player who is not your friend,
+ * counted at a court. A plain head and shoulders in the page's quiet
+ * colours: no picture, no letters, no name, the same for everyone.
+ */
+export function NoFace({ size = 22, ring }: { size?: number; ring?: string }) {
+  useTheme();
+  return (
+    <View style={{ width: size, height: size, borderRadius: size / 2, overflow: 'hidden', backgroundColor: colors.surfaceAlt, borderWidth: ring ? 1.5 : 0, borderColor: ring }}>
+      <Svg width={size} height={size} viewBox="0 0 24 24">
+        <Circle cx={12} cy={9.4} r={4.1} fill={withAlpha(colors.textFaint, 0.38)} />
+        <Path d="M3.6 23.4c0.9-4.6 4.3-7.4 8.4-7.4s7.5 2.8 8.4 7.4z" fill={withAlpha(colors.textFaint, 0.38)} />
+      </Svg>
     </View>
   );
 }
