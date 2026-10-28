@@ -102,7 +102,9 @@ const HANG_LIFT = 2;
  * DESIGN MOCK, round 4. The number on the right of a board row, and what it
  * counts (owner, Oct 28: "make sit more obvious the numbers on the right is
  * sessions"). By UNIT_LOOK:
- *   'a'  the session ball just before the number, about its digits' height;
+ *   'a'  the session ball just after the number, about its digits' height:
+ *        after, so every ball ends on the same line down the list (before
+ *        a number, they stepped in and out with its width: "512", "96");
  *   'b'  "sessions" (or "per player") in small type under the number;
  *   'c'  the number alone: the column's head says it once (ColumnHead).
  * The number keeps its own style (`style`) and stays where round 3 had it:
@@ -123,8 +125,8 @@ export function Count({ value, size, style, mine = false, per = false, hang = fa
     const minWidth = StyleSheet.flatten(style)?.minWidth;
     return (
       <View style={[styles.countA, { minWidth }]}>
-        <Ionicons name={SESSION_ICON} size={Math.round(size * 0.8)} color={mine ? colors.brand : colors.textMuted} style={{ marginTop: Math.round(size * 0.1) }} />
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={[style, styles.bare]}>{value}</Text>
+        <Ionicons name={SESSION_ICON} size={Math.round(size * 0.8)} color={mine ? colors.brand : colors.textMuted} style={{ marginTop: Math.round(size * 0.1) }} />
       </View>
     );
   }
@@ -132,7 +134,7 @@ export function Count({ value, size, style, mine = false, per = false, hang = fa
     return (
       <View style={[styles.countB, hang && { marginBottom: -(UNIT_LINE - UNIT_RISE) + HANG_LIFT * 2 }]}>
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={style}>{value}</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.unit, mine && styles.unitMine]}>{per ? 'per player' : Number(value) === 1 ? 'session' : 'sessions'}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.unit}>{per ? 'per player' : Number(value) === 1 ? 'session' : 'sessions'}</Text>
       </View>
     );
   }
@@ -207,8 +209,9 @@ const styleDefinitions = StyleSheet.create({
   countA: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginLeft: -6 },
   bare: { minWidth: 0 },
   countB: { alignItems: 'flex-end', marginLeft: -4 },
+  // The page's quiet ink on every row, your tinted one too: the brand on its own tint is under 4.5:1 for words this
+  // small on two courts (Melbourne 3.1:1, Paris 3.9:1); the quiet ink holds 5.4:1 or more on every court's tint.
   unit: { ...typography.caption, ...font('500'), letterSpacing: 0.1, lineHeight: UNIT_LINE, marginTop: -UNIT_RISE, color: colors.textMuted },
-  unitMine: { color: colors.brand },
   colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
   colIcon: { marginTop: 1 },
   colText: { ...typography.small, ...font('500'), color: colors.textMuted },

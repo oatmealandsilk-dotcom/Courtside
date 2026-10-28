@@ -60,7 +60,7 @@ export const MEDAL_LOOK: 'coin' | 'ink' = read('courtside-cityboard-medal') === 
  * the number on the right of every board row (Find Players, the full board,
  * a city's Top players and Busiest courts) says what it counts:
  *
- *   'a'  the app's session ball (Ionicons tennisball) right before each number
+ *   'a'  the app's session ball (Ionicons tennisball) right after each number
  *   'b'  the word under each number: "512" over "sessions" (the default)
  *   'c'  the ball and the word once, over the number column; numbers bare
  *
