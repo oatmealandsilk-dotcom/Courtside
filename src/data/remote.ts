@@ -4310,6 +4310,18 @@ export const remote = {
     return ((data ?? []) as { user_id: ID; joined_at: string }[]).map((r) => ({ userId: r.user_id, joinedAt: r.joined_at }));
   },
   /**
+   * Near me (migration 190, players_in_town): the players whose own profile
+   * town is yours, as the server decides who may be listed to you (friends
+   * who follow each other with you; anyone else only a known adult, to a
+   * known adult), most recently active first. Only ids: never a spot, a
+   * distance or an age. Null on a database without it, or a failed ask.
+   */
+  async fetchPlayersInTown(): Promise<ID[] | null> {
+    const { data, error } = await need().rpc('players_in_town');
+    if (error) { if (!missingFunction(error)) fail('players in town')(error); return null; }
+    return ((data ?? []) as { user_id: ID }[]).map((r) => r.user_id);
+  },
+  /**
    * Check in (migration 189): your spot, read once when you tapped Check in,
    * for friends who follow each other with you until `until` (the server
    * holds it to 15 minutes .. 16 hours from now). Resolves when it ends, or
