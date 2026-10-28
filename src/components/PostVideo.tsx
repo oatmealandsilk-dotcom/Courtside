@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useSoundMuted } from '@/features/feed/sound';
 import { Animated, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeOut, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTheme } from '@/theme/ThemeProvider';
@@ -27,6 +28,11 @@ const IDLE_MS = 2200;
 // A phone's browser is a phone: no hover, no click-to-play. Only a computer gets those.
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
 const SKIP_S = 5;
+/**
+ * How long a playing video may still be fetching before the loading disc shows over its cover, the
+ * same wait as a clip's (ClipPlayback). With no cover the disc shows at once, as before.
+ */
+const SPIN_AFTER_MS = 2200;
 
 function clock(seconds: number) {
   const s = Math.max(0, Math.floor(seconds));
@@ -56,6 +62,12 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
   // Sound is one switch for every clip; a clip posted without sound stays silent regardless.
   const [muted, setMuted] = useSoundMuted();
   const [ready, setReady] = useState(false);
+  // Its cover (the poster picture chosen when it was posted) stands in for it from the moment the
+  // page is built until its first frame is in, as a clip's does (Oct 28, owner: "Also rn scrolling
+  // fast on the feed I almost immediatly get hit with loading screen"). A player freed and built
+  // again fetches from nothing, so the cover comes back with it.
+  const [framed, setFramed] = useState(false);
+  useEffect(() => { setFramed(false); }, [uri]);
   const [full, setFull] = useState(false);
   // The tutorial never starts under a video opened full screen.
   useHoldTour(full);
@@ -96,6 +108,14 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
     return () => window.removeEventListener('keydown', onKey);
   }, [full]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { void stayUpright(); }, []);
+  // The loading disc only for a wait you would notice: while it is still on its cover, a couple of seconds first.
+  const waiting = !ready && active && !paused;
+  const [spin, setSpin] = useState(false);
+  useEffect(() => {
+    if (!waiting) { setSpin(false); return undefined; }
+    const t = setTimeout(() => setSpin(true), poster && !framed ? SPIN_AFTER_MS : 0);
+    return () => clearTimeout(t);
+  }, [waiting, poster, framed]);
   const [time, setTime] = useState({ at: 0, length: 0, fraction: 0 });
   const [shown, setShown] = useState(false);
   const fade = useRef(new Animated.Value(0)).current;
@@ -281,10 +301,15 @@ export function PostVideo({ uri, poster, active, preload = false, trimStart, tri
         {/* The page is told only "in" and, when the player is freed, "gone"; a stall mid-play is this player's own spinner. */}
         <ClipVideo ref={player} uri={uri} poster={poster} active={active && !ownCopy} muted={silent || muted || !active || ownCopy} paused={paused} fit="cover" trimStart={trimStart} trimEnd={trimEnd} speed={speed} volume={volume}
           onProgress={onProgress}
-          onReady={(ok) => { setReady(ok); if (ok) onReady?.(true); }} onGone={() => onReady?.(false)} onSize={onSize} />
+          onReady={(ok) => { setReady(ok); if (ok) { setFramed(true); onReady?.(true); } }} onGone={() => { setFramed(false); onReady?.(false); }} onSize={onSize} />
+        {!framed && poster ? (
+          <Reanimated.View key="poster" exiting={FadeOut.duration(160)} pointerEvents="none" style={StyleSheet.absoluteFill}>
+            <ExpoImage accessibilityIgnoresInvertColors source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+          </Reanimated.View>
+        ) : null}
       </View>
       <Pressable accessibilityRole="button" accessibilityLabel="Show video controls" onPress={(e) => tap(e.nativeEvent.locationX)} onLayout={(e) => { width.current = Math.max(1, e.nativeEvent.layout.width); }} style={[StyleSheet.absoluteFill, idleCursor]} />
-      {!ready && active && !paused ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
+      {spin && waiting ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       {controls}
       {paused ? bigButton : null}
       {skip ? <View pointerEvents="none" style={[styles.skip, skip.side === 'left' ? { left: 28 } : { right: 28 }]}><Ionicons name={skip.side === 'left' ? 'play-back' : 'play-forward'} size={18} color="white" /><Text style={styles.skipText}>{skip.side === 'left' ? '−' : '+'}{SKIP_S * skip.n}s</Text></View> : null}
