@@ -199,7 +199,12 @@ export function placeZoom(place: Pick<FoundPlace, 'kind' | 'reach'>, courtsFrom:
   return clamp(13.5 - Math.log2(Math.max(1, place.reach)), courtsFrom + 0.5, 13.5);
 }
 
-/** A place picked somewhere else (Find Players' search), on its way to the full map. */
+/** A city as a place for the map (a city board's "See Maui on the map"): its middle, reaching as far as a city does. */
+export const cityPlace = (id: string, title: string, sub: string, at: LatLng): FoundPlace => (
+  { id, title, sub, lat: at.lat, lng: at.lng, kind: 'area', reach: REACH.city }
+);
+
+/** A place picked somewhere else (Find Players' search, a city board's page), on its way to the full map. */
 let handed: FoundPlace | null = null;
 /** Hands a place to the full map, which reads it as it opens (app/map, only when opened with ?place=1). */
 export function handPlace(place: FoundPlace) { handed = place; }

@@ -520,6 +520,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const cityBoard = useCityBoard();
   // People you may know (admins first, PYMK_FOR_EVERYONE): null when off, resting or with nobody to show.
   const pymk = usePeopleYouMayKnow();
+  // With every board city listed (the ones not ranked at 0), there is always a list; with your town it leads it,
+  // even in a month with none ranked yet. With no town and none ranked, only an A to Z of zeros: "You're early" keeps its place.
   const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
   const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
   // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home

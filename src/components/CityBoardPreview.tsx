@@ -46,7 +46,10 @@ const IN_RUN = 5;
  * with nobody. Yours, not ranked yet, is among them, tinted, its number a
  * dash (you know you played there).
  * Movement this week sits beside each city; a city on a run gets the filled mark.
- * Find Players shows it only while there is something to show (CityBoardSlot).
+ * Find Players shows it while it is on its way, while any city is ranked, or
+ * (in a month with none ranked yet) while you have a town: your city at the
+ * top of the cities at 0. With no town and none ranked it is an A to Z of
+ * zeros that says nothing, so Find Players keeps its own card there.
  */
 export function CityBoardPreview() {
   const styles = useThemedStyles(styleDefinitions);
@@ -54,10 +57,12 @@ export function CityBoardPreview() {
   const ranked = useMemo(() => rankCities(cities, 'total'), [cities]);
   const me = board?.me ?? null;
   const homeId = me?.cityId ?? null;
-  // The ranked cities, then every other at 0, nearest to yours first (never by anything they did).
-  const rows = useMemo<Row[]>(() => (ranked.length ? [...ranked, ...zeroCities(new Set(ranked.map((c) => c.id)), homeId)] : []), [ranked, homeId]);
+  // The ranked cities, then every other at 0, nearest to yours first (never by anything they did). In a month
+  // with none ranked yet (the first days of one), every city at 0, yours first.
+  const ready = status === 'ready';
+  const rows = useMemo<Row[]>(() => (ready ? [...ranked, ...zeroCities(new Set(ranked.map((c) => c.id)), homeId)] : []), [ready, ranked, homeId]);
   const mine = ranked.find((c) => c.id === homeId) ?? null;
-  const unranked = !mine && me?.cityId && me.cityName ? { name: me.cityName, needed: me.playersNeeded ?? MIN_PLAYERS } : null;
+  const unranked = !mine && me?.cityId && me.cityName ? { name: cityLabel({ name: me.cityName, region: me.region ?? '' }), needed: me.playersNeeded ?? MIN_PLAYERS } : null;
   const noTown = status === 'ready' && !!me && !me.cityId;
   // Your city's row, ranked or (not yet) at 0.
   const home = homeId ? rows.find((c) => c.id === homeId) ?? null : null;
@@ -71,7 +76,7 @@ export function CityBoardPreview() {
   // One line of news under the title, the race's latest: about your city when there is one.
   const moment = useMemo(() => {
     if (!board) return null;
-    const name = (id: string) => board.cities.find((c) => c.id === id)?.name ?? null;
+    const name = (id: string) => { const c = board.cities.find((x) => x.id === id); return c ? cityLabel(c) : null; };
     const now = new Date();
     const lines = board.events.flatMap((e) => {
       const who = name(e.who);
@@ -86,7 +91,7 @@ export function CityBoardPreview() {
   const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
   const title = final ? `Cities in ${monthName(month)}` : 'Cities this month';
   const loading = status === 'loading';
-  const listed = ranked.length > 0;
+  const listed = rows.length > 0;
 
   // What VoiceOver hears for the card (one link): the line under the title, then the rows it shows, each with its unit ("512 sessions").
   const shown = [...top, ...(apart && home ? [home, ...(below ? [below] : [])] : [])];
@@ -210,7 +215,7 @@ function PreviewRow({ city, mine, line = false, target = null, final = false }: 
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{cityLabel(city)}</Text>
           {!zero ? <Movement moved={city.moved} long={mine} /> : null}
         </View>
-        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{!final ? `${target.gap} to pass ${target.city.name}` : target.gap === 1 ? `Level with ${target.city.name}` : `${target.gap - 1} behind ${target.city.name}`}</Text> : null}
+        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{!final ? `${target.gap} to pass ${cityLabel(target.city)}` : target.gap === 1 ? `Level with ${cityLabel(target.city)}` : `${target.gap - 1} behind ${cityLabel(target.city)}`}</Text> : null}
       </View>
       <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, zero && styles.valueZero, mine && styles.inkMine]}>{zero ? (mine ? '–' : '0') : city.sessions}</Text>
     </View>

@@ -1751,6 +1751,35 @@ const STEPS = [
     },
   },
   {
+    // A month with no city ranked yet (?board=none: the first days of a month; your city has too few players).
+    // Every city is still listed at 0 (owner, Oct 28: "Also add the other cities on the list. You can just put
+    // them at 0"): on the Find Players card yours leads them, and the whole board says "214 cities · 0 ranked".
+    name: 'city-board-none',
+    title: 'City boards: a month with none ranked still lists every city at 0',
+    async run(page) {
+      await page.goto('/sign-in?board=none');
+      const opened = await page.waitForAny([{ text: 'Find Players' }, { label: 'Log in' }], 45000);
+      if (opened.index === 1) {
+        try { await page.tap({ label: 'Log in' }, 5000); } catch { /* it went on to the app by itself */ }
+        const next = await page.waitForAny([{ text: /^Demo build — no accounts, no database/ }, { text: 'Find Players' }], 45000);
+        if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
+      }
+      await page.waitFor({ text: 'Find Players' }, 45000);
+      await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      // The card: your city first (a dash: not ranked yet), then the nearest at 0.
+      await page.waitFor({ label: /Not ranked, Los Angeles, your city\. Not ranked, [^.]+, 0 sessions\..* See all cities$/ }, 20000);
+      await page.reveal({ label: /See all cities$/ }, 20000);
+      await page.tap({ label: /See all cities$/ });
+      await page.waitFor({ text: /^\d+ cities · 0 ranked$/ }, 20000);
+      await page.waitFor({ label: /^Not ranked, Los Angeles, your city\. Needs / }, 20000);
+    },
+    expect: [{ text: /^\d+ cities · 0 ranked$/ }, { label: 'Rank, City, Sessions' }],
+    after: async (page) => {
+      // The full month again for anything after this.
+      await page.eval("sessionStorage.removeItem('courtside-demo-board')");
+    },
+  },
+  {
     // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).
     name: 'app-link',
     title: 'Website link straight to the iPhone app',

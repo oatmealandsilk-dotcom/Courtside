@@ -268,6 +268,12 @@ export function catalogCity(id: string): ZeroCity | null {
   return r ? { id: r[0], name: r[1], region: r[2], zero: true } : null;
 }
 
+/** Where a board city's "See … on the map" opens the map: the fixed, public spot of its main city, or null. */
+export function catalogSpot(id: string): { lat: number; lng: number } | null {
+  const r = BY_ID.get(id);
+  return r ? { lat: r[3], lng: r[4] } : null;
+}
+
 /**
  * The cities at 0 under the ranked ones: every board city the server did
  * not send a row for, nearest first to `fromId` (the board city on your

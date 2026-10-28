@@ -83,12 +83,13 @@ export default function CityBoard() {
   const { status, stale, month, board: data, cities, mySessions, countsHere, retry } = useCityBoard();
   const board = useMemo(() => rankCities(cities, mode), [cities, mode]);
   const homeId = data?.me.cityId ?? null;
-  // Every other city at 0, nearest to yours first: the same on both tabs (nothing they did can move them).
+  // Every other city at 0, nearest to yours first: the same on both tabs (nothing they did can move them). In a
+  // month with none ranked yet, every city (keyed by the ids, so a new count of yours does not sort them again).
   const rankedIds = useMemo(() => cities.map((c) => c.id).sort().join(','), [cities]);
-  const zeros = useMemo(() => (rankedIds ? zeroCities(new Set(rankedIds.split(',')), homeId) : []), [rankedIds, homeId]);
+  const zeros = useMemo(() => zeroCities(new Set(rankedIds ? rankedIds.split(',') : []), homeId), [rankedIds, homeId]);
   const mine = board.find((c) => c.id === homeId) ?? null;
   const at = mine ? board.indexOf(mine) : -1;
-  const unrankedHome = !mine && homeId && data?.me.cityName ? { name: data.me.cityName, needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
+  const unrankedHome = !mine && homeId && data?.me.cityName ? { name: cityLabel({ name: data.me.cityName, region: data.me.region ?? '' }), needed: data.me.playersNeeded ?? MIN_PLAYERS } : null;
   const per = mode === 'per';
   const target = mine ? nextTarget(board, mine.id, mode) : null;
   // Kept the same between draws, so the 200 rows at 0 are not drawn again when the tab or the page moves.
@@ -98,7 +99,7 @@ export default function CityBoard() {
   // The week's news: yours first, two lines at most.
   const moments = useMemo(() => {
     if (!data) return [];
-    const name = (id: string) => data.cities.find((c) => c.id === id)?.name ?? null;
+    const name = (id: string) => { const c = data.cities.find((x) => x.id === id); return c ? cityLabel(c) : null; };
     const now = new Date();
     const lines = data.events.flatMap((e, i) => {
       const who = name(e.who);
@@ -175,10 +176,10 @@ export default function CityBoard() {
   // Last month's final board (the 1st): how far behind it finished, not how many to pass.
   const behind = target ? target.city.value - mine!.value : 0;
   const chaseWords = !mine ? '' : target
-    ? (per ? behind < 0.05 : final && behind === 0) ? `Level with ${target.city.name}`
-      : final ? `${per ? behind.toFixed(1) : behind} behind ${target.city.name}`
-        : `${per ? target.gap.toFixed(1) : target.gap} to pass ${target.city.name}`
-    : board[1] ? `${per ? (mine.value - board[1].value).toFixed(1) : mine.sessions - board[1].sessions} clear of ${board[1].name}` : 'Only city ranked yet';
+    ? (per ? behind < 0.05 : final && behind === 0) ? `Level with ${cityLabel(target.city)}`
+      : final ? `${per ? behind.toFixed(1) : behind} behind ${cityLabel(target.city)}`
+        : `${per ? target.gap.toFixed(1) : target.gap} to pass ${cityLabel(target.city)}`
+    : board[1] ? `${per ? (mine.value - board[1].value).toFixed(1) : mine.sessions - board[1].sessions} clear of ${cityLabel(board[1])}` : 'Only city ranked yet';
   const valueOf = (c: RankedCity) => (per ? c.value.toFixed(1) : String(c.sessions));
   const subOf = (c: RankedCity) => {
     if (c.id === mine?.id) {
@@ -219,7 +220,8 @@ export default function CityBoard() {
 
         {/* The table's head: how many, and what it is ranked by (tap the other to re-rank); under it, what each
             column is. Pinned at the top while the long list scrolls under it. */}
-        {status === 'loading' || (status === 'ready' && board.length > 0) ? (<>
+        {/* Ready, there is always a table: in a month with none ranked yet, every city at 0 ("214 cities · 0 ranked"). */}
+        {status === 'loading' || status === 'ready' ? (<>
         {/* Measured again once the board lands (the news lines above it arrive with it). */}
         <PinnedHead key={`${status}-${mode}`} offsetY={offsetY} viewTop={viewTop} headTop={headTop} headH={headH}>
         <View style={styles.tableHead}>
@@ -260,7 +262,7 @@ export default function CityBoard() {
           ))}
         </View>
         {/* Every other city at 0, under the ranked ones. Outside the tab's list: switching tabs leaves them be. */}
-        {status === 'ready' && zeros.length ? <ZeroRows rows={zeros} homeId={homeId} needed={unrankedHome?.needed ?? null} afterMine={board[board.length - 1]?.id === mine?.id} onOpen={open} /> : null}
+        {status === 'ready' && zeros.length ? <ZeroRows rows={zeros} homeId={homeId} needed={unrankedHome?.needed ?? null} clearTop={!board.length || board[board.length - 1].id === mine?.id} onOpen={open} /> : null}
 
         </>) : null}
 
@@ -275,7 +277,7 @@ export default function CityBoard() {
           {!homeId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.unranked}>Pick your town from the search in Edit profile to join a city board.</Text> : null}
           {mine || unrankedHome ? (
             <View style={styles.climb}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {(mine ?? unrankedHome)!.name} climb</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {mine ? cityLabel(mine) : unrankedHome!.name} climb</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbBody}>Every session a player from here logs counts.</Text>
               <View style={styles.climbButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
             </View>
@@ -290,7 +292,7 @@ export default function CityBoard() {
           it. Scrolling down to it hands over in place; one tap takes you there. */}
       {mine ? (
         <Animated.View pointerEvents="box-none" style={[styles.dock, { height: barInset + DOCK_ROW_TOP }, youStyle]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.sessions)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${cityLabel(mine)}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.sessions)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
             <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} />
           </Pressable>
         </Animated.View>
@@ -395,13 +397,13 @@ const ZERO_BATCH = 50;
  * 0. Yours, not ranked yet, is among them, tinted, with what it needs and
  * a dash for its number (you know you played there). A tap opens the city.
  */
-const ZeroRows = React.memo(function ZeroRows({ rows, homeId, needed, afterMine, onOpen }: {
+const ZeroRows = React.memo(function ZeroRows({ rows, homeId, needed, clearTop, onOpen }: {
   rows: ZeroCity[];
   homeId: string | null;
   /** Your city, not ranked yet: how many more players it needs. */
   needed: number | null;
-  /** The last ranked row is yours (tinted): no line over the first row here. */
-  afterMine: boolean;
+  /** No line over the first row here: it opens the table (none ranked), or the last ranked row is yours (tinted). */
+  clearTop: boolean;
   onOpen: (id: string) => void;
 }) {
   const [count, setCount] = useState(() => Math.min(rows.length, ZERO_FIRST));
@@ -417,7 +419,7 @@ const ZeroRows = React.memo(function ZeroRows({ rows, homeId, needed, afterMine,
         const sub = mine ? (needed ? `Needs ${morePlayersWords(needed)} to be ranked` : 'Not ranked yet') : null;
         return (
           <Pressable key={c.id} accessibilityRole="link" accessibilityLabel={`Not ranked, ${cityLabel(c)}${mine ? `, your city. ${sub}` : ', 0 sessions'}`} onPress={() => onOpen(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-            <ZeroRow city={c} mine={mine} sub={sub} line={!mine && !(i === 0 ? afterMine : rows[i - 1].id === homeId)} />
+            <ZeroRow city={c} mine={mine} sub={sub} line={!mine && !(i === 0 ? clearTop : rows[i - 1].id === homeId)} />
           </Pressable>
         );
       })}
