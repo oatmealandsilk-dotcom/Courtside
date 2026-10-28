@@ -1056,6 +1056,8 @@ const STEPS = [
     title: 'Community: a search keeps the map card',
     async run(page) {
       const marked = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); if (!c) return false; c.dataset.smokeKept = '1'; return true; })()`);
+      // The step before scrolled down to Open hits: back up to the search box first.
+      await page.reveal({ label: 'Search players, courts or places' }, 20000);
       await page.tap({ label: 'Search players, courts or places' });
       await page.type('zz');
       await page.tap({ label: 'Cancel search' });
