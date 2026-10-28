@@ -51,3 +51,59 @@ export const SHAPE = SHAPE_FOOT[BAR_SHAPE];
 
 /** `height` is all the bar takes above the phone's bottom strip: its pill, and any lift under it. */
 export const BAR_METRICS = TAB_BAR_LOOK === 'B' ? { ...METRICS.B, height: SHAPE.height + SHAPE.lift } : METRICS.now;
+
+/**
+ * The new bar (Oct 28, owner: "Also the Liquid Glass tab the bottom Should look better look at Instagram
+ * and stravas"; then: "We just want our bar to look more like there's not exact replica. Also the animation
+ * is inportant for tab switching"). Admins first (barLens's BAR_IG_FOR_EVERYONE); everyone else keeps the
+ * quiet pill above, exactly as it is.
+ *
+ * Measured from his own iPhone screenshots of both bars (3 pixels a point, 402 points across):
+ *   Instagram  bar 59 high, 26 in from each side, its foot 23 above the screen's bottom edge; the lit tab's
+ *              capsule 49 high and 5 in all round, 76 wide (a fifth of the bar plus a little); icons about 21.
+ *   Strava     bar 62 high, 21 in, foot 21 up; capsule 54 high and 4 in all round, 77 wide; icons about 22,
+ *              bold words about 12, 5 under the icon.
+ *   Ours today 52 high, 16 in, foot 38 up; capsule 44 high, 4 in; icons about 18, words 10; a round + 34 wide.
+ *
+ * Ours, in their proportions but our own: a full capsule 60 high, 20 in from each side, its foot 22 above
+ * the bottom edge (12 into the phone's 34-point bottom strip, as theirs are); the capsule 4 in all round
+ * and as wide as a tab's fifth plus the bar's end room; icons 24 (about 21 of drawing, as theirs), our
+ * words at 11 under them. Its top (22 + 60 = 82 up) stays below today's (34 + BAR_METRICS.height = 90 up),
+ * so every page's bottom room, the live session's bar, a clip's words, the Feed's windows and the
+ * tutorial (all of which read the bar's height above) still clear it.
+ */
+export const NEW_BAR = {
+  height: 60,
+  /** How much of the phone's bottom strip the bar sits in: its foot is the strip less this (never under 12). */
+  sink: 12,
+  side: 20,
+  /** Room at the bar's round ends, inside it. */
+  pad: 9,
+  /** How far in the lit tab's capsule sits, all round. */
+  inset: 4,
+  icon: 24,
+  label: 11,
+  /** The round brand + (PLUS_LOOK 'round'), and its sign. */
+  plus: 40,
+  plusIcon: 24,
+  /** How far it tucks toward the edge while you scroll down (today's 12 would sit it on the home bar). */
+  tuck: 6,
+  /** How far the icons settle into the middle when the words go (half a word's line and its gap). */
+  settle: 7,
+  badgeLeft: 15,
+} as const;
+
+/** The new bar's foot above the screen's bottom edge, from the phone's bottom strip (`bottom`: the strip, or 12 where there is none). */
+export function newBarFoot(bottom: number): number {
+  return Math.max(bottom - NEW_BAR.sink, 12);
+}
+
+/**
+ * The new bar's +:
+ *   'icon'   a plain + in a ring in the row with the word "Create" under it, in the tabs' own colour, as
+ *            Strava's Record (lit in the brand's colour while the Create box is up);
+ *   'round'  today's round + in the brand's colour.
+ * Only this line changes it.
+ */
+export type PlusLook = 'icon' | 'round';
+export const PLUS_LOOK = 'icon' as PlusLook;
