@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,13 +9,13 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { DragSheet } from '@/components/DragSheet';
 import { Avatar } from '@/components/ui';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
-import type { MapVisibility } from '@/data/types';
+import type { MapVisibility, User } from '@/data/types';
 import { CONSENT_CHOICES, FIRST_YES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
 import { checkInEnds, clock } from '@/features/players/checkIn';
 import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape } from '@/theme';
+import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
 
 /**
  * "Who can see you on the map?" (migration 189, after Apple's 5.1.2(i)
@@ -24,19 +24,23 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  * day. Strangers never see where you are. No: nothing of yours is ever on
  * the map.
  *
- * `mode=first`: the first time you tap Up to hit, the short version (Oct 28,
- * owner: "I don't like the at big who can see you on the map screen"): "Show
- * friends you're up to hit?", one line saying who sees where you are (only
- * friends who follow you back, never strangers), when (only when you tap Up
- * to hit) and that it ends by itself (at 10pm, or after 2 hours from 8pm).
- * "Turn on for friends" saves the yes; then Apple's own location prompt,
- * then Up to hit. "Not now" (or closing it) saves nothing and shares nothing;
- * it asks again the next time you tap Up to hit. `from` says what asked
- * (WhoSeesFrom): only Up to hit's ask names Up to hit and its time. I'm
- * playing here, Show friends, a teen's Open to hit and the re-ask each end on
- * their own clock, so theirs ask "Show friends where you are?" and say only
- * when you choose to share, and that it ends by itself. A teen's line leaves
- * out who (their notice below says it).
+ * `mode=first`: the first time you tap Up to hit, design D, the small bottom
+ * card (Oct 28, owner: "Too many words, Too big / a whole sheet, We want to
+ * encourage them to turn it on"): a compact card floating at the foot of the
+ * dimmed screen, off the edges and round on every corner, as tall as its
+ * words (DragSheet `floating`, sliding up and away whole as the app's other
+ * sheets with slideOpen do). "Let friends see you're up to hit?", the faces of
+ * up to three friends who follow you back (real ones; none, no faces), and
+ * one line: only friends who follow you back, never strangers, and it ends by
+ * itself (at 10pm, or after 2 hours from 8pm). "Turn on" saves the yes; then
+ * Apple's own location prompt, then Up to hit. "Not now" (or a drag down, a
+ * tap outside, Escape, Android's Back) saves nothing and shares nothing; it asks again the
+ * next time you tap Up to hit. `from` says what asked (WhoSeesFrom): only Up
+ * to hit's ask names Up to hit and its time. I'm playing here, Show friends,
+ * a teen's Open to hit and the re-ask each end on their own clock, so theirs
+ * ask "Let friends see where you are?" and say only when you share, and that
+ * it ends by itself. A teen's line says their rule instead: under 18, only
+ * friends who follow you back, only your rough area.
  * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
  * also takes any live check-in off the map.
  *
@@ -44,16 +48,174 @@ import { colors, font, lift, radius, spacing, typography, withAlpha, buttonShape
  * their rule is unchanged: only friends who follow each other, only their
  * rough area, off until they say yes here (under 16s too, migration 119).
  */
-export default function MapVisibilitySheet() {
-  const styles = useThemedStyles(styleDefinitions);
+export default function MapVisibilityScreen() {
   const params = useLocalSearchParams<{ mode?: string; from?: string }>();
-  const first = params.mode !== 'manage';
-  // Up to hit's own words (and Settings → Privacy, which explains Up to hit); any other ask, the general ones.
-  const upToHit = !first || params.from === 'uth';
+  // Up to hit's own words; any other ask, the general ones.
+  return params.mode === 'manage' ? <ManageSheet /> : <FirstAsk upToHit={params.from === 'uth'} />;
+}
+
+/* ------------------------------------------------------------ the first ask */
+
+/** A tap this soon after the card comes up is the second half of a double tap on what asked, not a yes (as the app's "are you sure?" card). */
+const SETTLE_MS = 300;
+
+/**
+ * The first ask, design D: a small card floating at the foot of the dimmed
+ * screen (DragSheet `floating`), only as tall as its few words and two
+ * buttons. It rises once, straight to that height, and slides away whole.
+ */
+function FirstAsk({ upToHit }: { upToHit: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions, currentUser, teenMap } = useApp();
+  const teen = onTeenMap(currentUser, teenMap);
+  const faces = useFriendFaces();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [closeSignal, setCloseSignal] = useState(0);
+  // The card hugs its words and buttons: these heights size it.
+  const [contentH, setContentH] = useState(0);
+  const [footH, setFootH] = useState(0);
+  // Big iPhone Text Size can make the words taller than the card; they then scroll under
+  // the buttons, so the scroll bar shows and flashes once the card has opened, saying there is more.
+  const scroll = useRef<ScrollView>(null);
+  const sizes = useRef({ content: 0, view: 0, settled: false });
+  const [overflow, setOverflow] = useState(false);
+  const checkOverflow = () => { const z = sizes.current; if (z.settled) setOverflow(z.content > z.view + 1); };
+  useEffect(() => { if (overflow) scroll.current?.flashScrollIndicators(); }, [overflow]);
+  // What the screen closes with: the yes once it is saved, else nothing (Not now saves nothing).
+  const answer = useRef<MapVisibility | null>(null);
+  const openedAt = useRef(Date.now());
+  const close = () => setCloseSignal((n) => n + 1);
+  // However the screen goes (a phone's Back as well as Not now), whoever asked hears how it ended.
+  useEffect(() => () => { settleWhoSeesYou(answer.current); }, []);
+
+  const turnOn = async () => {
+    if (busy || answer.current) return;
+    // The second half of a double tap on what asked is not a yes.
+    if (Date.now() - openedAt.current < SETTLE_MS) return;
+    setError('');
+    setBusy(true);
+    const ok = await actions.setMapVisibility('mutuals');
+    setBusy(false);
+    if (!ok) { setError('Couldn’t save that. Try again.'); return; }
+    answer.current = 'mutuals';
+    close();
+  };
+
+  return (
+    <DragSheet
+      floating
+      peekFraction={0.8}
+      fitContent
+      contentHeight={contentH && footH ? contentH + footH : undefined}
+      // It rises once, straight to its words and buttons, never up to the peek and back down.
+      waitForFit
+      onSettled={() => { sizes.current.settled = true; checkOverflow(); }}
+      closeSignal={closeSignal}
+      onDismissed={() => { router.back(); settleWhoSeesYou(answer.current); }}
+      header={(
+        <View style={styles.askHead}>
+          {faces.length ? <Faces people={faces} ring={colors.bg} size={30} /> : null}
+          <Text accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} style={styles.askTitle}>{askTitle(upToHit)}</Text>
+        </View>
+      )}
+    >
+      <ScrollView
+        ref={scroll}
+        style={styles.scroll}
+        contentContainerStyle={styles.askBody}
+        showsVerticalScrollIndicator={overflow}
+        onLayout={(e) => { sizes.current.view = e.nativeEvent.layout.height; checkOverflow(); }}
+        onContentSizeChange={(_, h) => { const r = Math.ceil(h); sizes.current.content = r; if (r !== contentH) setContentH(r); checkOverflow(); }}
+      >
+        {/* Apple 5.1.2(i) / 5.1.1: who (only friends who follow you back, never strangers) and that it ends by itself. */}
+        <Text style={styles.askLine}>{askLine(upToHit, teen, ageUnknown(currentUser))}</Text>
+      </ScrollView>
+      <View style={styles.askFoot} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
+        {error ? <Text style={styles.error}>{error}</Text> : null}
+        <Submit label={FIRST_YES} busy={busy} busyLabel="Saving…" onPress={() => { void turnOn(); }} />
+        {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): quieter than Turn on, never hidden. */}
+        <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={4} onPress={close} style={({ pressed }) => [styles.notNow, pressed && { opacity: PRESS_DIM }]}>
+          <Text style={styles.notNowText}>Not now</Text>
+        </Pressable>
+      </View>
+    </DragSheet>
+  );
+}
+
+/** The first ask's question: Up to hit's own, or the general one for anything else that asked. */
+function askTitle(upToHit: boolean): string {
+  return upToHit ? 'Let friends see you’re up to hit?' : 'Let friends see where you are?';
+}
+
+/** When Up to hit tapped now ends by itself: "at 10pm", or "after 2 hours" from 8pm on (checkInEnds). */
+function endsWords(now: Date = new Date()): string {
+  return now.getHours() >= 20 ? 'after 2 hours' : `at ${clock(checkInEnds(now))}`;
+}
+
+/**
+ * The first ask's one line. Up to hit names its time; any other ask (I'm
+ * playing here, Show friends, a teen's Open to hit, the re-ask) says only that
+ * it is when you share and that it ends by itself, each on its own clock. A
+ * teen's line is their rule: only friends who follow you back, only the rough
+ * area (no birthday on file: the same rule, said why).
+ */
+function askLine(upToHit: boolean, teen: boolean, noBirthday: boolean): string {
+  const ends = upToHit ? `Ends by itself ${endsWords()}.` : 'Ends by itself.';
+  const when = upToHit ? '' : ', only when you share';
+  if (teen) return `${noBirthday ? 'No birthday on file, so only' : 'Under 18, only'} friends who follow you back see your rough area${when}. ${ends}`;
+  return `Only friends who follow you back, never strangers${when}. ${ends}`;
+}
+
+/**
+ * Up to three friends who follow you back: who a yes is for. Real ones only,
+ * from the people you follow; none known, no faces (never a stranger, never a
+ * made-up face).
+ */
+function useFriendFaces(): User[] {
+  const { users, currentUserId, followingIds, followEdges, blockedIds } = useApp();
+  return useMemo(() => {
+    if (!currentUserId) return [];
+    const followsMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
+    const blocked = new Set(blockedIds);
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const out: User[] = [];
+    for (const id of followingIds) {
+      if (out.length === 3) break;
+      if (id === currentUserId || blocked.has(id) || !followsMe.has(id)) continue;
+      const u = byId.get(id);
+      if (u && !u.suspended) out.push(u);
+    }
+    return out;
+  }, [users, currentUserId, followingIds, followEdges, blockedIds]);
+}
+
+/** A few small faces, each over the last, edged in the card's own colour. */
+function Faces({ people, ring, size }: { people: User[]; ring: string; size: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const names = people.map((u) => u.name.split(' ')[0]);
+  const said = names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}` : names[0];
+  return (
+    <View style={styles.faces} accessible accessibilityLabel={`${said} follow${names.length > 1 ? '' : 's'} you back`}>
+      {people.map((u, i) => (
+        <Avatar key={u.id} name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={size} style={[{ borderWidth: 2, borderColor: ring, borderRadius: size / 2 + 2 }, i > 0 && { marginLeft: -Math.round(size * 0.19) }]} />
+      ))}
+    </View>
+  );
+}
+
+/* --------------------------------------------------- Settings → Privacy */
+
+/**
+ * `mode=manage`, from Settings → Privacy: the two answers, saved as they are
+ * tapped. Unchanged from design B.
+ */
+function ManageSheet() {
+  const styles = useThemedStyles(styleDefinitions);
   const { actions, mapVisibility, currentUser, teenMap } = useApp();
   const teen = onTeenMap(currentUser, teenMap);
   const yesNow = mapVisibility === 'mutuals' || mapVisibility === 'nearby';
-  const [picked, setPicked] = useState<MapVisibility>(first || yesNow ? 'mutuals' : 'none');
+  const [picked, setPicked] = useState<MapVisibility>(yesNow ? 'mutuals' : 'none');
   const [busy, setBusy] = useState<MapVisibility | null>(null);
   const [error, setError] = useState('');
   const [closeSignal, setCloseSignal] = useState(0);
@@ -68,10 +230,10 @@ export default function MapVisibilitySheet() {
   const [overflow, setOverflow] = useState(false);
   const checkOverflow = () => { const z = sizes.current; if (z.settled) setOverflow(z.content > z.view + 1); };
   useEffect(() => { if (overflow) scroll.current?.flashScrollIndicators(); }, [overflow]);
-  // What the screen closes with: the answer once it is saved, else nothing.
+  // What the screen closes with: the answer once it is saved, else what it already was.
   const answer = useRef<MapVisibility | null>(null);
   const close = () => setCloseSignal((n) => n + 1);
-  const settled = () => answer.current ?? (first ? null : mapVisibility ?? null);
+  const settled = () => answer.current ?? mapVisibility ?? null;
   // However the screen goes (a phone's Back as well as Close), whoever asked hears how it ended.
   useEffect(() => () => { settleWhoSeesYou(settled()); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -79,18 +241,17 @@ export default function MapVisibilitySheet() {
     if (busy) return;
     setPicked(v);
     setError('');
-    if (!first && (v === 'mutuals' ? yesNow : mapVisibility === 'none')) { answer.current = v; return; }
+    if (v === 'mutuals' ? yesNow : mapVisibility === 'none') { answer.current = v; return; }
     setBusy(v);
     const ok = await actions.setMapVisibility(v);
     setBusy(null);
-    if (!ok) { setError('Couldn’t save that. Try again.'); setPicked(first || yesNow ? 'mutuals' : 'none'); return; }
+    if (!ok) { setError('Couldn’t save that. Try again.'); setPicked(yesNow ? 'mutuals' : 'none'); return; }
     answer.current = v;
-    if (first) close();
   };
 
   return (
     <DragSheet
-      peekFraction={first ? 0.8 : 0.7}
+      peekFraction={0.7}
       fitContent
       contentHeight={contentH && footH ? contentH + footH : undefined}
       // It rises once, straight to its words and buttons, never up to the peek and back down.
@@ -99,7 +260,7 @@ export default function MapVisibilitySheet() {
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
-      header={<SheetTitle title={!first ? 'Who can see you on the map?' : upToHit ? 'Show friends you’re up to hit?' : 'Show friends where you are?'} titleSize={21} onClose={close} />}
+      header={<SheetTitle title="Who can see you on the map?" titleSize={21} onClose={close} />}
     >
       <ScrollView
         ref={scroll}
@@ -110,19 +271,11 @@ export default function MapVisibilitySheet() {
         onContentSizeChange={(_, h) => { const r = Math.ceil(h); sizes.current.content = r; if (r !== contentH) setContentH(r); checkOverflow(); }}
       >
         {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
-        {first ? (
-          <View style={styles.short}>
-            {/* Apple 5.1.2(i) / 5.1.1: who (only friends who follow you back, never strangers), when (only on a tap), and that it ends by itself. */}
-            <Text style={styles.shortLine}>{shortLine(upToHit, teen)}</Text>
-            <Text style={styles.shortSmall}>Change any time in Settings → Privacy.</Text>
-          </View>
-        ) : (
-          <View style={styles.facts}>
-            {facts(upToHit).map((f) => (
-              <Text key={f} style={styles.factText}>{f}</Text>
-            ))}
-          </View>
-        )}
+        <View style={styles.facts}>
+          {FACTS.map((f) => (
+            <Text key={f} style={styles.factText}>{f}</Text>
+          ))}
+        </View>
         {teen ? (
           <View style={styles.notice} accessibilityRole="text">
             <Ionicons name="shield-checkmark-outline" size={18} color={colors.brand} />
@@ -134,70 +287,36 @@ export default function MapVisibilitySheet() {
             </View>
           </View>
         ) : null}
-        {first ? null : (
-          <View style={styles.choices} accessibilityRole="radiogroup">
-            {CONSENT_CHOICES.map((c) => {
-              const on = picked === c.value;
-              return (
-                <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on, busy: busy === c.value }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void save(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
-                  <View style={[styles.tile, on && styles.tileOn]}><Ionicons name={c.value === 'none' ? 'eye-off-outline' : 'swap-horizontal-outline'} size={19} color={on ? colors.bg : colors.textMuted} /></View>
-                  <View style={styles.words}>
-                    <Text style={styles.label}>{c.label}</Text>
-                    <Text style={styles.line}>{c.line}</Text>
-                  </View>
-                  <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
+        <View style={styles.choices} accessibilityRole="radiogroup">
+          {CONSENT_CHOICES.map((c) => {
+            const on = picked === c.value;
+            return (
+              <Pressable key={c.value} accessibilityRole="radio" accessibilityState={{ selected: on, busy: busy === c.value }} accessibilityLabel={`${c.label}. ${c.line}`} onPress={() => { void save(c.value); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.985 }] }]}>
+                <View style={[styles.tile, on && styles.tileOn]}><Ionicons name={c.value === 'none' ? 'eye-off-outline' : 'swap-horizontal-outline'} size={19} color={on ? colors.bg : colors.textMuted} /></View>
+                <View style={styles.words}>
+                  <Text style={styles.label}>{c.label}</Text>
+                  <Text style={styles.line}>{c.line}</Text>
+                </View>
+                <View style={[styles.radio, on && styles.radioOn]}>{on ? <View style={styles.radioDot} /> : null}</View>
+              </Pressable>
+            );
+          })}
+        </View>
       </ScrollView>
-      {/* The way forward sits under the list, never scrolled off a short phone. */}
-      <View style={[styles.footer, !first && styles.footerBare]} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
+      {/* Settings → Privacy has no buttons under its choices (a tap saves): only the sheet's own foot. */}
+      <View style={[styles.footer, styles.footerBare]} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
-        {first ? (
-          <>
-            <Submit label={FIRST_YES} busy={busy === 'mutuals'} busyLabel="Saving…" onPress={() => { void save('mutuals'); }} />
-            <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => [styles.off, pressed && { opacity: PRESS_DIM }]}>
-              <Text style={styles.offText}>Not now</Text>
-            </Pressable>
-          </>
-        ) : null}
       </View>
     </DragSheet>
   );
 }
 
-/** When Up to hit tapped now ends by itself: "at 10pm", or "after 2 hours" from 8pm on (checkInEnds). */
-function endsWords(now: Date = new Date()): string {
-  return now.getHours() >= 20 ? 'after 2 hours' : `at ${clock(checkInEnds(now))}`;
-}
-
-/**
- * The first ask's one line. Up to hit names its own tap and time; any other
- * ask (I'm playing here, Show friends, a teen's Open to hit, the re-ask) says
- * only that you choose to share and it ends by itself, each on its own clock.
- * A teen's line leaves out who: TEEN_NOTICE right under it says that.
- */
-function shortLine(upToHit: boolean, teen: boolean): string {
-  if (teen) return upToHit ? `Only when you tap Up to hit, and it ends by itself ${endsWords()}.` : 'Only when you choose to share, and it ends by itself.';
-  return upToHit
-    ? `Only friends who follow you back see where you are, never strangers, and only when you tap Up to hit. It ends by itself ${endsWords()}.`
-    : 'Only friends who follow you back see where you are, never strangers, and only when you choose to share. It ends by itself.';
-}
-
-/**
- * What a yes means, said plainly before it is given (Settings → Privacy, where
- * it explains Up to hit: its tap and its 10pm). Anywhere else, the same promise
- * without Up to hit's clock, since each of those ends on its own.
- */
-function facts(upToHit: boolean): string[] {
-  return [
-    upToHit ? 'You show on the map only when you tap Up to hit. Never on your own.' : 'You show on the map only when you choose to share. Never on your own.',
-    'Only friends who follow each other with you see your pin. Strangers never see where you are.',
-    upToHit ? 'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.' : 'It ends by itself, and you can turn it off any time.',
-  ];
-}
+/** What a yes means, said plainly before it is given (Settings → Privacy, where it explains Up to hit: its tap and its 10pm). */
+const FACTS = [
+  'You show on the map only when you tap Up to hit. Never on your own.',
+  'Only friends who follow each other with you see your pin. Strangers never see where you are.',
+  'It ends by itself at 10pm (after 2 hours, late in the day). Tap Turn off to hide at once.',
+];
 
 /** Where the six faces round you sit, and which two follow you back. */
 const AROUND = [
@@ -252,6 +371,16 @@ function Fade({ on, dim = 0, style, children }: { on: boolean; dim?: number; sty
 }
 
 const styleDefinitions = StyleSheet.create({
+  // The first ask: a small card at the foot (DragSheet floating). Its words sit in from the card's round edge.
+  askHead: { paddingHorizontal: spacing.lg + spacing.xs, gap: spacing.sm, alignItems: 'flex-start' },
+  askTitle: { ...typography.title, fontSize: 21, lineHeight: 26, letterSpacing: -0.6, color: colors.text },
+  askBody: { paddingHorizontal: spacing.lg + spacing.xs, paddingTop: spacing.xs },
+  askLine: { ...typography.body, lineHeight: 21, color: colors.textMuted },
+  askFoot: { paddingHorizontal: spacing.lg + spacing.xs, paddingTop: spacing.lg + 2, paddingBottom: spacing.sm, gap: 2 },
+  faces: { flexDirection: 'row', alignItems: 'center' },
+  notNow: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  notNowText: { ...typography.body, ...font('600'), color: colors.text, textAlign: 'center' },
+  // Settings → Privacy's sheet.
   scroll: { flexShrink: 1 },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, gap: spacing.md },
   // A clear step down from the words to the buttons.
@@ -267,10 +396,6 @@ const styleDefinitions = StyleSheet.create({
   youRing: { padding: 3, borderRadius: 30, backgroundColor: colors.surface, ...lift },
   eye: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   facts: { gap: spacing.md },
-  short: { gap: spacing.sm },
-  shortLine: { ...typography.body, color: colors.text, lineHeight: 22 },
-  shortSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
-  fact: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   factText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 21 },
   choices: { gap: spacing.sm },
   choice: { ...lift, flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1.5, borderColor: 'transparent' },
@@ -288,6 +413,4 @@ const styleDefinitions = StyleSheet.create({
   noticeText: { ...typography.bodyStrong, color: colors.text, lineHeight: 21 },
   noticeSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   error: { ...typography.small, color: colors.danger },
-  off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong },
-  offText: { ...typography.smallStrong, ...font('600'), color: colors.text },
 });

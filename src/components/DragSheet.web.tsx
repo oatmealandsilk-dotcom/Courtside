@@ -16,6 +16,8 @@ const OPEN_MS = 380;
 const SETTLE_MS = 220;
 /** slideOpen: how far past the screen's foot the card starts and leaves, so its shadow is never seen there (as the native twin). */
 const SLIDE_PAST = 48;
+/** floating: the card's gap to the screen's sides and foot (see the native twin). */
+const FLOAT_GAP = 10;
 /** Faster than this, in px per ms, and a drag counts as a flick regardless of distance. */
 const FLICK = 0.7;
 
@@ -85,6 +87,7 @@ export function DragSheet({
   handOverSignal = 0,
   plain = false,
   slideOpen = false,
+  floating = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -124,6 +127,8 @@ export function DragSheet({
   smoothOpen?: boolean;
   /** A phone's sheet slides up whole and back down, an iPhone's new-post sheet (see the native twin). The box, the side panel and the stage ignore it. */
   slideOpen?: boolean;
+  /** A phone's small card floating at the bottom, off the edges and round on every corner (see the native twin). The box, the side panel and the stage ignore it. */
+  floating?: boolean;
 }) {
   // On a computer a bottom sheet stretched across a wide window looks lost;
   // there it is a centred box instead, the way Instagram's dialogs are.
@@ -131,7 +136,7 @@ export function DragSheet({
   if (dialog && side && window.innerWidth >= SIDE_MIN_WINDOW) return <SidePanel header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} active={active} beforeClose={beforeClose}>{children}</SidePanel>;
   if (dialog) return <DialogBox header={header} onDismissed={onDismissed} closeSignal={closeSignal} fitContent={fitContent} onSettled={onSettled} active={active} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain}>{children}</DialogBox>;
   if (stage) return <StageSheet header={header} onDismissed={onDismissed} closeSignal={closeSignal} onSettled={onSettled} geo={stage} stageOverlay={stageOverlay} active={active}>{children}</StageSheet>;
-  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} waitForFit={waitForFit} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen}>{children}</Sheet>;
+  return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} waitForFit={waitForFit} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen} floating={floating}>{children}</Sheet>;
 }
 
 /** The latest beforeClose, and whether a close the person started may go ahead now. */
@@ -319,7 +324,8 @@ function Sheet({
   beforeClose,
   handOverSignal = 0,
   plain = false,
-  slideOpen = false,
+  slideOpen: slideOpenProp = false,
+  floating = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -334,11 +340,19 @@ function Sheet({
   handOverSignal?: number;
   plain?: boolean;
   slideOpen?: boolean;
+  floating?: boolean;
 }) {
+  // A floating card always slides up and away whole: grown from the foot, a card with round corners would unroll.
+  const slideOpen = slideOpenProp || floating;
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const mayClose = useMayClose(beforeClose);
   const insets = useSafeAreaInsets();
+  // floating: the card stands FLOAT_GAP off the foot, and its own words clear the home bar inside it.
+  const floatGap = floating ? FLOAT_GAP : 0;
+  const bodyPad = floating ? Math.max(0, insets.bottom - FLOAT_GAP) : insets.bottom;
+  // How far past its closed height it travels to be out of sight (slideOpen: past the foot, and past the gap).
+  const past = slideOpen ? SLIDE_PAST + floatGap : 0;
   const area = useRef<HTMLDivElement>(null);
   const head = useRef<HTMLDivElement>(null);
   // Fitted to a short sheet's contents once measured; a drag or the keyboard ends that.
@@ -382,7 +396,10 @@ function Sheet({
     }
     if (backdrop.current) {
       backdrop.current.style.transition = ms ? `opacity ${transition}` : 'none';
-      backdrop.current.style.opacity = String(Math.max(0, 1 - y / Math.max(1, geometry.current.fullHeight)));
+      // floating: the dim is full where it rests (as on a phone) and fades only as it is pulled down from there.
+      const { fullHeight, openOffset } = geometry.current;
+      const dim = floating ? 1 - (y - openOffset) / Math.max(1, fullHeight + past - openOffset) : 1 - y / Math.max(1, fullHeight);
+      backdrop.current.style.opacity = String(Math.min(1, Math.max(0, dim)));
     }
   };
 
@@ -392,17 +409,17 @@ function Sheet({
       const vh = area.current?.clientHeight || window.innerHeight;
       // A sliver of the page behind stays visible even fully open — the
       // depth cue Apple's own card sheets use instead of ever truly covering the screen.
-      const fullHeight = Math.max(1, vh - insets.top - 20);
+      const fullHeight = Math.max(1, vh - insets.top - 20 - floatGap);
       const peek = Math.min(fullHeight, Math.round(vh * peekFraction));
       const headH = head.current?.offsetHeight ?? 0;
-      const peekHeight = fit.current && headH ? Math.min(peek, Math.round(headH + fit.current + insets.bottom)) : peek;
+      const peekHeight = fit.current && headH ? Math.min(peek, Math.round(headH + fit.current + bodyPad)) : peek;
       geometry.current = { fullHeight, openOffset: fullHeight - peekHeight };
     };
     measureRef.current = measure;
     measure();
     takeHandOver();
     const from = arriving.current;
-    place(from ? Math.max(0, geometry.current.fullHeight - from) : geometry.current.fullHeight + (slideOpen ? SLIDE_PAST : 0), 0);
+    place(from ? Math.max(0, geometry.current.fullHeight - from) : geometry.current.fullHeight + past, 0);
     if (from) {
       // The browser settles that height (and the dim) now, so the glide below starts from it rather than from nothing.
       void sheet.current?.getBoundingClientRect();
@@ -417,7 +434,8 @@ function Sheet({
     window.addEventListener('resize', measure);
     // A phone's keyboard shrinks the visible area without a window resize; the sheet re-measures and keeps its box above it.
     const vv = window.visualViewport;
-    const onViewport = () => { measure(); touched.current = true; place(0, 160); };
+    // floating: no box to type in, so a change of the visible area (the browser's bars) only re-measures it where it rests.
+    const onViewport = () => { measure(); if (floating) { place(geometry.current.openOffset, 160); return; } touched.current = true; place(0, 160); };
     vv?.addEventListener('resize', onViewport);
     return () => { cancelAnimationFrame(frame); clearTimeout(late); clearTimeout(settled); window.removeEventListener('resize', measure); vv?.removeEventListener('resize', onViewport); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,11 +459,12 @@ function Sheet({
     if (leaving.current) return;
     leaving.current = true;
     touched.current = true;
-    place(geometry.current.fullHeight + (slideOpen ? SLIDE_PAST : 0), SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
+    place(geometry.current.fullHeight + past, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
   const outside = useBackdropPress(() => { if (mayClose()) close(); });
-  const openFull = () => place(0, SETTLE_MS);
+  // floating: never taller than its contents, so a fling up only settles it back.
+  const openFull = () => place(floating ? geometry.current.openOffset : 0, SETTLE_MS);
   const returnTo = (y: number) => place(y, SETTLE_MS);
   const closeCount = useRef(closeSignal);
   useEffect(() => {
@@ -492,7 +511,7 @@ function Sheet({
     d.velocity = (event.clientY - d.lastY) / Math.max(1, now - d.lastT);
     d.lastY = event.clientY;
     d.lastT = now;
-    place(Math.max(0, Math.min(geometry.current.fullHeight, d.originY + dy)), 0);
+    place(Math.max(floating ? geometry.current.openOffset : 0, Math.min(geometry.current.fullHeight, d.originY + dy)), 0);
   };
   const onPointerUp = (event: React.PointerEvent) => {
     const d = drag.current;
@@ -515,9 +534,11 @@ function Sheet({
       <div
         ref={sheet}
         style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0,
+          position: 'absolute', left: floatGap, right: floatGap, bottom: floatGap,
           backgroundColor: colors.bg,
-          borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24),
+          borderTopLeftRadius: corner(floating ? 28 : 24), borderTopRightRadius: corner(floating ? 28 : 24),
+          // floating: round on every corner, and a hairline edge so a dark court's card still reads as one.
+          ...(floating ? { borderBottomLeftRadius: corner(28), borderBottomRightRadius: corner(28), border: `0.5px solid ${colors.border}`, boxSizing: 'border-box' as const } : null),
           overflow: 'hidden',
           boxShadow: '0 -10px 28px rgba(0,0,0,0.28)',
           display: 'flex', flexDirection: 'column',
@@ -538,7 +559,7 @@ function Sheet({
           <div ref={headWords} style={{ display: 'flex', flexDirection: 'column' }}>{header}</div>
         </div>
         {/* Clear of a phone's home bar, the same as the app's own sheet. */}
-        <div ref={body} style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingBottom: insets.bottom }}>{children}</div>
+        <div ref={body} style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', paddingBottom: bodyPad }}>{children}</div>
       </div>
     </div>
   );

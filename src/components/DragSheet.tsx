@@ -30,6 +30,8 @@ const SLIDE_SPRING = { damping: 30, stiffness: 240, mass: 0.9, overshootClamping
 const SLIDE_PAST = 48;
 /** slideOpen, once it has risen: its resting place said as a plain style too (components/ui/restMotion). */
 const SLID_AT_REST = { transform: [{ translateY: 0 }] };
+/** floating: the card's gap to the screen's sides and foot (design D, Oct 28). */
+const FLOAT_GAP = 10;
 
 /**
  * The comments stage's own drag, for a list inside it that hands a pull down
@@ -241,6 +243,16 @@ export function DragSheet(props: {
    * A drag up from there still grows it to full. Opt-in; the stage ignores it.
    */
   slideOpen?: boolean;
+  /**
+   * A small card floating at the bottom instead of a sheet from edge to edge
+   * (Oct 28, design D of the first "Let friends see you're up to hit?",
+   * owner: "Too big / a whole sheet"): a gap at the sides and the foot, every
+   * corner round, as tall as its contents (contentHeight) and never grown
+   * taller by a drag up. It slides up and away whole, as slideOpen does; a
+   * drag down, a tap outside or Back still closes it. Opt-in; the stage
+   * ignores it.
+   */
+  floating?: boolean;
 }) {
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
@@ -262,7 +274,8 @@ function PlainSheet({
   handOverSignal = 0,
   plain = false,
   keyboardSync = false,
-  slideOpen = false,
+  slideOpen: slideOpenProp = false,
+  floating = false,
 }: {
   header: React.ReactNode;
   children: React.ReactNode;
@@ -278,17 +291,23 @@ function PlainSheet({
   plain?: boolean;
   keyboardSync?: boolean;
   slideOpen?: boolean;
+  floating?: boolean;
 }) {
+  // A floating card always slides up and away whole: grown from the foot, a card with round corners would unroll.
+  const slideOpen = slideOpenProp || floating;
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   // A sliver of the page behind stays visible even fully "open" — the depth
   // cue Apple's own card sheets use instead of ever truly covering the screen.
-  const fullHeight = Math.max(1, windowHeight - insets.top - 20);
+  // floating: the card stands FLOAT_GAP off the foot, and its own words clear the home bar inside it.
+  const floatGap = floating ? FLOAT_GAP : 0;
+  const bodyPad = floating ? Math.max(0, insets.bottom - FLOAT_GAP) : insets.bottom;
+  const fullHeight = Math.max(1, windowHeight - insets.top - 20 - floatGap);
   const peekHeight = Math.min(fullHeight, Math.round(windowHeight * peekFraction));
   // Fitted to a short sheet's contents once they are measured (contentHeight).
   const [headH, setHeadH] = useState(0);
-  const fitted = contentHeight && headH ? Math.min(peekHeight, Math.round(headH + contentHeight + insets.bottom)) : peekHeight;
+  const fitted = contentHeight && headH ? Math.min(peekHeight, Math.round(headH + contentHeight + bodyPad)) : peekHeight;
   const openOffset = fullHeight - fitted;
   // Once a finger (or the keyboard) has moved it, the sheet stays where it was put.
   const touched = useRef(false);
@@ -303,7 +322,7 @@ function PlainSheet({
   // contents come in (sheetHandOver).
   const [arriving] = useState(arrivingHeight);
   // slideOpen: where it starts and leaves to, a little past the screen's foot.
-  const gone = slideOpen ? fullHeight + SLIDE_PAST : fullHeight;
+  const gone = slideOpen ? fullHeight + SLIDE_PAST + floatGap : fullHeight;
   const translateY = useSharedValue(arriving ? Math.max(0, fullHeight - arriving) : gone);
   // slideOpen: the opening height's top edge (as translateY). Below it the card keeps that height
   // and slides; above it (a drag up, the keyboard) the card grows, as every sheet does.
@@ -407,7 +426,8 @@ function PlainSheet({
     backdropOpacity.value = withTiming(0, { duration: 210, easing: EASE });
   };
   const openFull = () => {
-    if (closing.value) return;
+    // floating: never taller than its contents (it has no box to type in, so a keyboard is not its own).
+    if (closing.value || floating) return;
     touched.current = true;
     translateY.value = withSpring(0, SPRING, landed);
     backdropOpacity.value = withTiming(1, { duration: 240, easing: EASE });
@@ -416,7 +436,7 @@ function PlainSheet({
     if (closing.value) return;
     touched.current = true;
     translateY.value = withSpring(origin, SPRING, landed);
-    backdropOpacity.value = withTiming(1 - origin / fullHeight, { duration: 220, easing: EASE });
+    backdropOpacity.value = withTiming(floating ? 1 : 1 - origin / fullHeight, { duration: 220, easing: EASE });
   };
   // A close the person started (a drag down, a tap outside): the page may say not yet.
   const latestBefore = useRef(beforeClose);
@@ -500,9 +520,11 @@ function PlainSheet({
     .onUpdate((e) => {
       'worklet';
       if (closing.value) return;
-      const next = Math.max(0, Math.min(fullHeight, startY.value + e.translationY));
+      // floating: never taller than its contents; a drag up stops where it rests.
+      const next = Math.max(floating ? restY.value : 0, Math.min(fullHeight, startY.value + e.translationY));
       translateY.value = next;
-      backdropOpacity.value = 1 - next / fullHeight;
+      // floating: the dim is full where it rests and fades only as it is pulled down from there.
+      backdropOpacity.value = floating ? 1 - (next - restY.value) / Math.max(1, gone - restY.value) : 1 - next / fullHeight;
     })
     .onEnd((e) => {
       'worklet';
@@ -511,7 +533,7 @@ function PlainSheet({
       const travelled = translateY.value - origin;
       if (e.velocityY > FLICK_PX_PER_S || (travelled > 0 && travelled > (fullHeight - origin) * 0.32)) {
         runOnJS(userDismiss)(origin);
-      } else if (e.velocityY < -FLICK_PX_PER_S || (travelled < 0 && Math.abs(travelled) > origin * 0.32)) {
+      } else if (!floating && (e.velocityY < -FLICK_PX_PER_S || (travelled < 0 && Math.abs(travelled) > origin * 0.32))) {
         runOnJS(openFull)();
       } else {
         runOnJS(returnTo)(origin);
@@ -524,7 +546,7 @@ function PlainSheet({
     return { height: Math.max(0, fullHeight - Math.min(translateY.value, rest)), transform: [{ translateY: Math.max(0, translateY.value - rest) }] };
   });
   // Clear of the home bar when the keyboard is down; on top of the keyboard when it is up.
-  const bodyStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboard.height.value, insets.bottom) }));
+  const bodyStyle = useAnimatedStyle(() => ({ paddingBottom: Math.max(keyboard.height.value, bodyPad) }));
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
   const contentStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
 
@@ -532,7 +554,7 @@ function PlainSheet({
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
       <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
-      <Animated.View style={[styles.sheet, sheetStyle, risen && SLID_AT_REST]}>
+      <Animated.View style={[styles.sheet, floating && styles.floating, sheetStyle, risen && SLID_AT_REST]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         {plain ? null : <Wash height={300} strength={0.85} />}
         <GestureDetector gesture={pan}>
@@ -868,6 +890,12 @@ const styleDefinitions = StyleSheet.create({
     borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24),
     overflow: 'hidden',
     shadowColor: '#000', shadowOpacity: 0.28, shadowRadius: 28, shadowOffset: { width: 0, height: -10 }, elevation: 16,
+  },
+  // A small card off the edges (floating): round on every corner, and a hairline edge so a dark court's card still reads as one.
+  floating: {
+    left: FLOAT_GAP, right: FLOAT_GAP, bottom: FLOAT_GAP,
+    borderTopLeftRadius: corner(28), borderTopRightRadius: corner(28), borderBottomLeftRadius: corner(28), borderBottomRightRadius: corner(28),
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
   },
   // On the stage the sheet sits on black, not on a dimmed page: a hairline
   // edge keeps the dark themes' sheets (Night, New York) reading as a card,
