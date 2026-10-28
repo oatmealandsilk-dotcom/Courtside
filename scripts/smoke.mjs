@@ -1725,11 +1725,20 @@ const STEPS = [
       await page.waitFor({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
       await page.reveal({ label: /See all cities$/ }, 20000);
       await page.tap({ label: /See all cities$/ });
-      await page.waitFor({ text: /^\d+ cities$/ }, 20000);
+      // Every city the boards know, the ones not ranked at 0 under the ranked ones (owner, Oct 28: "Also add the
+      // other cities on the list. You can just put them at 0"): "214 cities · 15 ranked".
+      await page.waitFor({ text: /^\d+ cities · \d+ ranked$/ }, 20000);
       await page.waitFor({ label: 'Rank, City, Sessions' });
+      // A city at 0 (nearest Los Angeles first: Riverside) opens its own quiet page, then back to the board.
+      await page.reveal({ label: 'Not ranked, Riverside, 0 sessions' }, 20000);
+      await page.tap({ label: 'Not ranked, Riverside, 0 sessions' });
+      await page.waitFor({ text: 'Not ranked yet' }, 20000);
+      await page.waitFor({ text: 'Visiting Riverside?' }, 20000);
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ label: 'Rank, City, Sessions' }, 20000);
       await page.reveal({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ }, 20000);
       await page.tap({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ });
-      await page.waitFor({ text: /^of \d+$/ }, 20000);
+      await page.waitFor({ text: /^of \d+ ranked$/ }, 20000);
       await page.reveal({ text: 'Top players' }, 20000);
       await page.waitFor({ label: 'Rank, Player, Sessions' }, 20000);
       // Most active courts, right under Top players (migration 198; owner, Oct 28: "Under here should be most active courts").

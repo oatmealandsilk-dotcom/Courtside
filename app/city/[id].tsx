@@ -15,7 +15,8 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
-import { isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
+import { MIN_PLAYERS, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
+import { catalogCity, cityLabel, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useBarInset } from '@/features/navigation/barInset';
 import { isOpenToHit, tillLabel } from '@/features/players/openToHit';
@@ -63,6 +64,10 @@ interface PlayerLine { user: User; sessions: number; rank: number; me: boolean }
  *   (Round 5: both lists carry a head row, Rank · Player · Sessions and
  *   Court · Visits, and their numbers stand bare.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
+ *
+ * A city at 0 on the board (no row this month: nobody played there, or too
+ * few players to rank, and nobody can tell which) opens a page of its own,
+ * the same for every one of them (ZeroCityPage).
  *
  * Who is shown is the server's call, for you (city_page): players by the
  * town on their profile, never where they are; adults who may be named (a
@@ -153,7 +158,12 @@ export default function CityPage() {
     [heroH, top],
   );
 
-  const name = city?.name ?? boardNow.board?.cities.find((c) => c.id === cityId)?.name ?? (boardNow.board?.me.cityId === cityId ? boardNow.board?.me.cityName : null) ?? 'City';
+  // A city at 0: one the boards know with no row this month, not yours. Known from the board already: its page at
+  // once, never the loading shapes of a page it will not have; the server's answer (no city) changes nothing.
+  const zero = cityId !== homeId ? catalogCity(cityId) : null;
+  const zeroKnown = !!zero && boardNow.status === 'ready' && !boardNow.cities.some((c) => c.id === cityId);
+  const name = city?.name ?? boardNow.board?.cities.find((c) => c.id === cityId)?.name ?? (boardNow.board?.me.cityId === cityId ? boardNow.board?.me.cityName : null) ?? zero?.name ?? 'City';
+  if (status !== 'off' && zero && !city && (zeroKnown || status === 'ready')) return <ZeroCityPage city={zero} />;
   if (status === 'off') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, each city’s players and courts will show here." action={{ label: 'Back', onPress: () => goBack() }} /></Screen>;
   if (status === 'error') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="cloud-offline-outline" title={`Couldn’t load ${name}`} body="Check your connection and try again." action={{ label: 'Try again', onPress: retry }} /></Screen>;
   if (status === 'loading') return <Screen title={name} compactTitle onBack={() => goBack()}><LoadingPage /></Screen>;
@@ -213,7 +223,8 @@ export default function CityPage() {
         {placeNow !== null ? (
           <View style={styles.rankLine}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rankBig}>{ordinal(placeNow)}</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {of}</Text>
+            {/* Ranked cities only: the board lists every city, the ones at 0 have no place. */}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {of} ranked</Text>
             <View style={styles.rankMove}><Movement moved={moved} long /></View>
           </View>
         ) : null}
@@ -293,6 +304,38 @@ export default function CityPage() {
         {body}
       </Screen>
       <TopBar name={city.name} top={top} heroH={heroH} offsetY={offsetY} />
+    </View>
+  );
+}
+
+/**
+ * A city at 0 (owner, Oct 28: "Also add the other cities on the list. You
+ * can just put them at 0"): one with no row on this month's board. The
+ * server sends nothing about it (city_page() opens a city that is not ranked
+ * only for its own players), so this page is the same for every one of them,
+ * whatever was played there: its name, "Not ranked yet" where a ranked
+ * city's place is (its row's dash, said in words), what ranks a city, and
+ * the way to its courts on the map. No players, no courts, no clip.
+ */
+function ZeroCityPage({ city }: { city: ZeroCity }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.root}>
+      <Screen title={cityLabel(city)} compactTitle padded={false} onBack={() => goBack()}>
+        <View style={[styles.body, styles.bodyPlain]}>
+          <View style={[styles.standing, styles.standingZero]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Not ranked yet</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zeroBody}>A city is ranked once {MIN_PLAYERS} players who call it home log sessions in the month.</Text>
+          </View>
+          <View style={styles.footer}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Visiting {city.name}?</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>See its courts and who is up to hit on the map.</Text>
+            <View style={styles.footButton}>
+              <Button label={`See ${city.name} on the map`} variant="secondary" onPress={() => router.push('/map')} full />
+            </View>
+          </View>
+        </View>
+      </Screen>
     </View>
   );
 }
@@ -475,6 +518,9 @@ const styleDefinitions = StyleSheet.create({
   rankBig: { ...font('700'), fontSize: 34, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
   rankOf: { ...typography.body, fontSize: 17, color: colors.textMuted },
   rankMove: { marginLeft: 4, alignSelf: 'center', marginTop: 4 },
+  // A city at 0: right under the title (no faces above it).
+  standingZero: { paddingTop: spacing.sm, gap: 4 },
+  zeroBody: { ...typography.body, color: colors.textMuted },
   standingLine: { ...typography.body, ...font('500'), color: colors.text },
   section: { paddingTop: spacing.xl, gap: 2 },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: spacing.sm },

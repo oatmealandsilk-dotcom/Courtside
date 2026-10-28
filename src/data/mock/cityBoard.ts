@@ -4,7 +4,9 @@
  * so api.ts can hand the screens exactly what city_board() and city_page()
  * send. No real player's data is in here; the numbers are made up.
  *
- * The cities are the server's own board ids (board_cities): the demo's
+ * Only the cities with sessions are here: every other board city shows at 0
+ * from the phone's own list (features/cityBoard/catalog.ts), in the demo as
+ * with the server. The cities are the server's own board ids (board_cities): the demo's
  * players in Pasadena, Glendale and Burbank count for Los Angeles, the way
  * the server folds a suburb into its metro.
  */
@@ -39,7 +41,8 @@ export const DEMO_BOARD_CITIES: DemoBoardCity[] = [
   { id: 'phoenix-az', name: 'Phoenix', region: 'AZ', sessions: 41, players: 8, weekAgoRank: 14, run: 1 },
   { id: 'nashville-tn', name: 'Nashville', region: 'TN', sessions: 37, players: 6, weekAgoRank: 13 },
   { id: 'portland-or', name: 'Portland', region: 'OR', sessions: 33, players: 7, weekAgoRank: 15 },
-  // Too few players to rank yet: never shown to anyone outside it.
+  // Too few players to rank yet: its numbers never shown to anyone outside it. On the board it is one of the cities
+  // at 0, exactly like one where nobody has played (the screens fill those from catalog.ts, as with the server).
   { id: 'durham-nc', name: 'Durham–Chapel Hill', region: 'NC', sessions: 14, players: 3, weekAgoRank: 0 },
 ];
 
