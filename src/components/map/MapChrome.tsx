@@ -640,11 +640,12 @@ function listTitle(items: Listed[], query: string, filter: MapFilter, courts: Co
   const q = query.trim();
   const n = items.length;
   // "you" is the map's own stand-in for a town not named yet: "near you".
-  const place = (filter === 'near' && nearTown) || cityName || 'you';
+  const place = ((filter === 'near' || filter === 'level') && nearTown) || cityName || 'you';
   if (!n) return !q && filter === 'all' && courts.length ? `${courts.length} ${courts.length === 1 ? 'court' : 'courts'} near ${place}` : `Players near ${place}`;
   const who = n === 1 ? '1 player' : `${n} players`;
   if (q) return `${who} matching “${q}”`;
   if (filter === 'following') return `${who} you follow`;
+  if (filter === 'level') return nearTown ? `${who} at your level in ${nearTown}` : `${who} at your level`;
   return `${who} near ${place}`;
 }
 
@@ -653,7 +654,8 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
   if (locked === 'hidden') return 'On Only me, players are hidden';
-  if (filter === 'following') return 'Nobody you follow is up to hit';
+  if (filter === 'following') return 'You don’t follow anyone yet';
+  if (filter === 'level') return nearTown ? `No one at your level in ${nearTown} yet` : 'Add your city to see players';
   if (filter === 'near') return nearTown ? `No players in ${nearTown} yet` : 'Add your city to see players';
   if (filter !== 'all') return 'Nobody matches that';
   // The map's people are friends who are up to hit, at any age (migration 189; Oct 27 audit wording; Oct 28 "Up to hit").
@@ -772,7 +774,9 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
     restored.current = true;
     if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
   };
-  // A friend's check-in flies the map to their pin; a Near me row (no pin) opens their profile.
+  // Following, My level and Near me mix friends up to hit with people listed by their town: the ones up to hit say so.
+  const upTag = filter === 'following' || filter === 'level' || filter === 'near';
+  // A friend's check-in flies the map to their pin; a town row (no pin) opens their profile.
   const open = (p: Listed) => (townOf(p) !== null ? (onProfile ?? onSelect)(p.user.id) : onSelect(p.user.id));
   const pick = (p: Listed) => { if (!stops.justDragged()) { haptics.tap(); open(p); } };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
@@ -831,7 +835,7 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
       onContentSizeChange={stops.onContentSizeChange}
     >
       {items.map((p, i) => (
-        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={townOf(p) !== null ? `${p.user.name}, ${townOf(p)}. Open profile` : `${p.user.name}, ${placedFar(p)}`} onPress={() => open(p)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
+        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={townOf(p) !== null ? `${[p.user.name, townOf(p)].filter(Boolean).join(', ')}. Open profile` : `${p.user.name}, ${placedFar(p)}${upTag ? ', up to hit' : ''}`} onPress={() => open(p)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
           {/* A hairline between rows, from the names across, the way a contacts list draws it. */}
           {i > 0 ? <View pointerEvents="none" style={styles.listRowRule} /> : null}
           <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
@@ -840,8 +844,8 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
               <LevelPill profile={p.user.profile} small />
             </View>
-            {/* A friend's check-in: how far and how long ago. A Near me row: only the town on their profile. */}
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            {/* A friend's check-in: how far and how long ago (on Following, My level and Near me, "Up to hit" first, as those lists hold people who are not). A town row: only the town on their profile. */}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[upTag && townOf(p) === null ? 'Up to hit' : null, townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -912,11 +916,14 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
-                : filter === 'following' ? 'Nobody you follow is up to hit.'
+                : filter === 'following' ? 'You don’t follow anyone yet.'
+                  : filter === 'level' ? (nearTown ? `No players at your level in ${nearTown} yet.` : 'Add your city to your profile to see the players at your level.')
                   : filter === 'near' ? (nearTown ? `No players in ${nearTown} yet.` : 'Add your city to your profile to see the players in your town.')
                   : filter !== 'all' ? 'Nobody matches that.'
                     // The map's people are friends who are up to hit, at any age (migration 189; the pill's own words, emptyLine).
                     : 'No friends up to hit yet. Tap a court to see what’s played there.'}
+              {/* Following and My level list people, not only who is up to hit: an empty one points to where to find some. */}
+              {!query.trim() && (filter === 'following' || (filter === 'level' && nearTown)) ? <Text accessibilityRole="link" onPress={() => { haptics.tap(); router.push('/search'); }} style={styles.findLink}>{'  ·  Find players'}</Text> : null}
             </Text>
           ) : (
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
@@ -1941,6 +1948,7 @@ const styleDefinitions = StyleSheet.create({
   listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  findLink: { ...font('600'), color: colors.brand },
   // The empty tray's nearest courts: one quiet line, then the courts side by side, each the search results' tile and words.
   emptyCourts: { paddingBottom: spacing.xs },
   emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 6, paddingHorizontal: spacing.lg },

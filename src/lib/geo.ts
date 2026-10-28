@@ -86,6 +86,37 @@ async function fromBrowser({ recentMs, quiet }: Ask): Promise<GeoResult> {
   });
 }
 
+/** The last place the device answered with this session, and when (only in memory, never kept or sent). */
+let lastFix: { lat: number; lng: number; at: number } | null = null;
+
 export function getPosition(ask: Ask = {}): Promise<GeoResult> {
-  return Platform.OS === 'web' ? fromBrowser(ask) : fromDevice(ask);
+  return (Platform.OS === 'web' ? fromBrowser(ask) : fromDevice(ask)).then((r) => {
+    if (r.ok) lastFix = { lat: r.lat, lng: r.lng, at: Date.now() };
+    return r;
+  });
+}
+
+/**
+ * Whether the device already lets the app know where it is, without asking anything (no prompt, ever).
+ * Unknown counts as no. Up to hit uses it to turn on at once for someone who has said yes before.
+ */
+export async function locationAllowed(): Promise<boolean> {
+  if (Platform.OS === 'web') return browserAllows();
+  try { return (await Location.getForegroundPermissionsAsync()).granted; } catch { return false; }
+}
+
+/**
+ * Where the device last said it was, if that is at most `maxMs` old: this session's own last answer, else (on a
+ * phone) the one the phone itself keeps. Never asks anything and never waits for a new reading; null otherwise.
+ */
+export async function recentPosition(maxMs: number): Promise<{ lat: number; lng: number } | null> {
+  if (lastFix && Date.now() - lastFix.at <= maxMs) return { lat: lastFix.lat, lng: lastFix.lng };
+  if (Platform.OS === 'web') return null;
+  try {
+    if (!(await Location.getForegroundPermissionsAsync()).granted) return null;
+    const last = await Location.getLastKnownPositionAsync({ maxAge: maxMs });
+    return last ? { lat: last.coords.latitude, lng: last.coords.longitude } : null;
+  } catch {
+    return null;
+  }
 }

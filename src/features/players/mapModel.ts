@@ -16,7 +16,8 @@ import { homeFor, homeIsKnown, isRoughSpot, positionFor, wideView, type LatLng, 
 import { useMyCity } from '@/features/players/useMyCity';
 import { townLabel, useTownPlayers, type TownPlayer } from '@/features/players/nearMe';
 import { useApp } from '@/store/AppContext';
-import { levelBadge } from '@/lib/badges';
+import { levelsClose } from '@/lib/badges';
+import { useFindable } from '@/features/people/findable';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { show as showToast } from '@/lib/toast';
 
@@ -114,7 +115,8 @@ const ringCourt = (r: CourtRing): Court => ({ id: r.courtId, name: r.name ?? 'Te
  */
 export function useMapModel(me: User, players: User[], fix?: LatLng | null, focus?: TaggedCourt | null, card = false, focusHit?: string | null, focusUser?: string | null, focusSpot?: LatLng | null, locationOn = false, focusPlace?: FoundPlace | null, cardHint?: { lat: number; lng: number; name: string } | null, opts?: { full?: boolean; seed?: Court[] | null }) {
   const full = card && !!opts?.full;
-  const { lastSeen, actions, hitRequests, users, followingIds, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
+  const { lastSeen, actions, hitRequests, users, followingIds, followEdges, currentUserId, blockedIds, mutedIds, courtRings, seeing } = useApp();
+  const { findable } = useFindable();
   // One stable function (it never changes), so asking for rings never repeats because something else did.
   const { loadCourtRings } = actions;
   // Your profile's city (and a typed town looked up by name, so nobody from a
@@ -249,7 +251,6 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
 
   const [filter, setFilter] = useState<MapFilter>('all');
   const [query, setQuery] = useState('');
-  const myBand = levelBadge(me.profile).tint;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
     const following = new Set(followingIds);
@@ -258,11 +259,11 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
       if (filter === 'open' && !isOpenToHit(p.user)) return false;
       if (filter === 'near' && p.miles > IN_TOWN_MILES) return false;
       if (filter === 'coaches' && !p.user.isCoach) return false;
-      if (filter === 'level' && levelBadge(p.user.profile).tint !== myBand) return false;
+      if (filter === 'level' && !levelsClose(me.profile, p.user.profile)) return false;
       if (q && !(p.user.name.toLowerCase().includes(q) || p.user.handle.toLowerCase().includes(q) || p.user.location.toLowerCase().includes(q))) return false;
       return true;
     });
-  }, [ranked, filter, query, myBand, followingIds]);
+  }, [ranked, filter, query, me.profile, followingIds]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = useMemo(() => ranked.find((p) => p.user.id === selectedId) ?? null, [ranked, selectedId]);
   const [selectedHitId, setSelectedHitId] = useState<string | null>(null);
@@ -399,21 +400,43 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const clearPlace = useCallback(() => setPlace(null), []);
   // The full map's players list (its "All N players" pill): the people around you. In a town where nobody
   // shares yet it never lists players 2,000 miles away as "around" it; it
-  // names the nearest courts instead. A search or Following lists everyone it finds.
+  // names the nearest courts instead. A search lists everyone it finds.
   // Near me (Oct 27, owner: "Near me should show people that have their location set in the area, like the
   // city"): the friends checked in nearby first, with how far (their pins, as before), then everyone the
   // server lists in your profile's town (nearMe, migration 190), most recently active first, by their town
   // only. Those are never pins: the map stays friends only (Apple 5.1.2(i)).
+  // Following and My level list people the same way (Oct 28, owner: "It's not people that want to hit. It's just
+  // people. So it should function like the near me tab"): whoever is up to hit first, on the map with how far, then
+  // the rest by their town only. Following: everyone you follow, friends who follow you back first. My level: Near
+  // me's own list (the same server rules: strangers only adults, and only to adults; teens only to friends), kept to
+  // players within half a level of yours.
   const townList = useTownPlayers(!card);
+  const followRows = useMemo<TownPlayer[]>(() => {
+    if (card || filter !== 'following') return [];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const followsMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
+    return followingIds
+      .flatMap((id) => {
+        const user = byId.get(id);
+        if (!findable(user)) return [];
+        // Their town as their own profile card already shows it to anyone (PlayerCard): never a spot, never a distance.
+        return [{ user, town: townLabel(user.location), mutual: followsMe.has(id) }];
+      })
+      .sort((a, b) => Number(b.mutual) - Number(a.mutual) || Number(isOpenToHit(b.user)) - Number(isOpenToHit(a.user)) || a.user.name.localeCompare(b.user.name))
+      .map(({ user, town }) => ({ user, town }));
+  }, [card, filter, users, followEdges, currentUserId, followingIds, findable]);
   const tray = useMemo<Listed[]>(() => {
     const around = query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES);
-    if (filter !== 'near') return around;
+    const people = filter === 'near' ? townList
+      : filter === 'level' ? townList.filter((t) => levelsClose(me.profile, t.user.profile))
+        : filter === 'following' ? followRows : null;
+    if (!people) return around;
     const q = query.trim().toLowerCase();
     const listed = new Set(around.map((p) => p.user.id));
-    const town = townList.filter((t) => !listed.has(t.user.id)
+    const rest = people.filter((t) => !listed.has(t.user.id)
       && (!q || t.user.name.toLowerCase().includes(q) || t.user.handle.toLowerCase().includes(q) || t.user.location.toLowerCase().includes(q)));
-    return [...around, ...town];
-  }, [shown, query, filter, townList]);
+    return [...around, ...rest];
+  }, [shown, query, filter, townList, followRows, me.profile]);
   /** The town Near me lists: the one on your profile ("Raleigh"), or none. */
   const nearTown = townLabel(me.location);
 

@@ -32,6 +32,14 @@ export function levelBadge(profile: PlayerProfile): LevelBadge {
 }
 
 /**
+ * Two players at about the same level: within `ntrp` NTRP of each other (half a level, the map's My level), measured
+ * on the one ladder levelBadge puts every scale on (UTR and ITF too), so players on different scales still compare.
+ */
+export function levelsClose(a: PlayerProfile, b: PlayerProfile, ntrp = 0.5): boolean {
+  return Math.abs(levelBadge(a).progress - levelBadge(b).progress) <= ntrp / (NTRP_MAX - NTRP_MIN) + 1e-9;
+}
+
+/**
  * Picks black or white text for a given background by its perceived
  * brightness. Fixed inks were the reason UTR and NTRP pills disappeared in
  * some themes — a dark ink baked in for a dark blue is invisible the moment
