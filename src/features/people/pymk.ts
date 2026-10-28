@@ -18,7 +18,7 @@ import type { ID } from '@/data/types';
  * already makes (src/features/people/suggestions.ts).
  * The same pattern as CITY_BOARD_FOR_EVERYONE and BAR_LENS_FOR_EVERYONE.
  */
-export const PYMK_FOR_EVERYONE = false;
+export const PYMK_FOR_EVERYONE = true;
 
 /** Whether this person sees People you may know. */
 export const pymkOn = (me?: { isAdmin?: boolean } | null): boolean => !!me && (PYMK_FOR_EVERYONE || !!me.isAdmin);

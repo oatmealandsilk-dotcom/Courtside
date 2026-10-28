@@ -20,7 +20,7 @@ import { useApp } from '@/store/AppContext';
  * database change, no new native code. In the web demo, ?admin=1 makes the demo's player an admin.
  * The same pattern as PRELOAD_MORE_FOR_EVERYONE.
  */
-export const FEED_REACH_FOR_EVERYONE = false;
+export const FEED_REACH_FOR_EVERYONE = true;
 
 /** Whether this person's Feed builds ahead of where a swipe is heading. */
 export function useFeedReach(): boolean {

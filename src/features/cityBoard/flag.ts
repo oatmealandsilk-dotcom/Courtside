@@ -16,7 +16,7 @@
  *   update public.server_settings set value = 'on' where key = 'flag:city-board';
  * The same pattern as BAR_LENS_FOR_EVERYONE and COURTS_GLOW_FOR_EVERYONE.
  */
-export const CITY_BOARD_FOR_EVERYONE = false;
+export const CITY_BOARD_FOR_EVERYONE = true;
 
 /** Whether this person sees city boards. */
 export const cityBoardOn = (me?: { isAdmin?: boolean } | null): boolean => !!me && (CITY_BOARD_FOR_EVERYONE || !!me.isAdmin);

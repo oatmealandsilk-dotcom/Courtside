@@ -64,7 +64,7 @@ import { useApp } from '@/store/AppContext';
  * over-the-air update: no database change, no new native code. In the web
  * demo, ?admin=1 makes the demo's player an admin.
  */
-export const LIGHT_UP_COURTS_FOR_EVERYONE = false;
+export const LIGHT_UP_COURTS_FOR_EVERYONE = true;
 
 /** Whether courts light up for this person: everyone once released, admins until then. */
 export const lightUpCourtsOn = (me: User | null | undefined): boolean => LIGHT_UP_COURTS_FOR_EVERYONE || !!me?.isAdmin;

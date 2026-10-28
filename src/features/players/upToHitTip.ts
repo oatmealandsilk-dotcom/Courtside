@@ -3,7 +3,6 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
 import type { User } from '@/data/types';
-import { checkInZoomOn } from '@/features/players/checkInZoom';
 
 /*
  * Up to hit's tip (Oct 28, owner: "tapping the map has a regular open but tapping the check-in has like the map
@@ -21,10 +20,11 @@ import { checkInZoomOn } from '@/features/players/checkInZoom';
  * Admins first, with the zoom it points at (CHECKIN_ZOOM_FOR_EVERYONE): for everyone by setting
  * UTH_TIP_FOR_EVERYONE to true too (an over-the-air update, nothing else).
  */
-export const UTH_TIP_FOR_EVERYONE = false;
+export const UTH_TIP_FOR_EVERYONE = true;
 
 /** Whether the tip may show for this person: the zoom is theirs, and the tip is out for them. */
-export const upToHitTipOn = (me: User | null | undefined): boolean => checkInZoomOn(me) && (UTH_TIP_FOR_EVERYONE || !!me?.isAdmin);
+// Oct 28 (owner: push Up to hit to everyone): the tip stands on its own, with or without the zoom.
+export const upToHitTipOn = (me: User | null | undefined): boolean => !!me && (UTH_TIP_FOR_EVERYONE || !!me.isAdmin);
 
 /** Which visits to Find Players the tip may come on (blocked on the 2nd by another tip, it tries once more). */
 export const TIP_VISITS: readonly [number, number] = [2, 3];
