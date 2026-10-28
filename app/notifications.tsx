@@ -25,6 +25,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import type { DetectedActivity, HitRequest, Notification, NotificationKind, Post, PostKind, User } from '@/data/types';
 import { hitSpot } from '@/features/hits/visible';
 import { isTennisActivity } from '@/features/activity/workouts';
+import { seenByLine, shownTo, unsureWaiting } from '@/features/activity/autoLogSharing';
 import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -296,11 +297,11 @@ function detectedWho(preview: string | undefined, sport: string | undefined): st
  * gives ("Run · 32 min · …"), so it is said once. Undefined while it is still
  * waiting, or not held here: the row reads as the alert did.
  */
-function activityNow(a: DetectedActivity | undefined, auto = false): { who: string; verb: string; opens: boolean } | undefined {
+function activityNow(a: DetectedActivity | undefined, auto = false, seen = 'Only you can see it'): { who: string; verb: string; opens: boolean } | undefined {
   if (!a) return undefined;
   const what = isTennisActivity(a) ? 'Tennis' : 'Activity';
-  // Logged for you by the server, privately (migration 185): the tap opens its post page.
-  if (a.status === 'logged' && auto) return { who: 'Tennis logged.', verb: 'Only you can see it. Tap to add the score or post it.', opens: true };
+  // Logged for you by the server (migration 185), seen by whoever you chose (migration 193): the tap opens its post page.
+  if (a.status === 'logged' && auto) return { who: 'Tennis logged.', verb: `${seen}. Tap to add the score or post it.`, opens: true };
   if (a.status === 'logged') return { who: `${what} logged.`, verb: 'Tap to post it.', opens: true };
   // The tracker only said "Sport" (Fitbit, migration 185).
   if (a.status === 'new' && a.unsure) return { who: 'Was this tennis?', verb: LESS_AI ? '' : 'Tap to log it.', opens: true };
@@ -318,10 +319,25 @@ function recapHours(preview: string | undefined | null): string | null {
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions, autoLogSharing } = useApp();
   // Tracker sessions the server logged for you (migration 185), by the tracker session's id.
   const autoLogged = useMemo(() => new Set(sessions.filter((x) => x.autoLogged && x.activityId).map((x) => x.activityId!)), [sessions]);
-  const nowOf = (a: DetectedActivity | undefined) => activityNow(a, !!a && autoLogged.has(a.id));
+  const nowOf = (a: DetectedActivity | undefined) => activityNow(a, !!a && autoLogged.has(a.id), a ? seenByLine(shownTo(autoLogSharing, a.source, currentUser)) : undefined);
+  // Fitbit's "Sport" sessions still asking "Was this tennis?" (migration 193): one tap logs them all.
+  const unsure = useMemo(() => unsureWaiting(detectedActivities.filter((a) => a.userId === currentUserId)), [detectedActivities, currentUserId]);
+  const [unsureBusy, setUnsureBusy] = useState(false);
+  const yesAll = async () => {
+    if (unsureBusy) return;
+    setUnsureBusy(true);
+    const r = await actions.confirmUnsureTennis();
+    setUnsureBusy(false);
+    if (!r) { showToast({ title: 'Couldn’t log them', body: 'Try again in a moment.', icon: 'alert-circle-outline' }); return; }
+    showToast({
+      title: r.logged === 1 ? 'Tennis logged' : `${r.logged} tennis sessions logged`,
+      body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'In Your sessions.',
+      icon: 'checkmark-circle-outline',
+    });
+  };
   // Each person and post by id, once: every row looks its people and its post up several times, and
   // searching the whole list each time was slow to open (Oct 10, owner: "the buttons like the settings.
   // msg notifications, etc respond too slow"). The first of any id wins, as searching found it.
@@ -612,6 +628,21 @@ export default function Notifications() {
           {/* 32 drawn, 44 to the finger. */}
           <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={welcomeStep.go} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
             <Text style={styles.acceptText}>{welcomeStep.label}</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {unsure.length && autoLogSharing !== undefined ? (
+        // Fitbit files tennis as "Sport" (migration 185); a yes logs every one waiting, and after two yeses
+        // its Sport sessions log themselves as tennis (migration 193; owner, Oct 27: "mutuals default auto log fitbit.").
+        // Only once the database has 193 (its settings row says so), so the button never says "Couldn't".
+        <View style={[styles.row, styles.rowUnread, styles.welcomeGap]}>
+          <View style={[styles.brandFace, styles.brandFaceOnTint]}><BrandMark size={24} /></View>
+          <View style={styles.body}>
+            <Text style={styles.who}>Was this tennis?</Text>
+            <Text style={styles.preview} numberOfLines={2}>{`${unsure.length === 1 ? '1 session' : `${unsure.length} sessions`} from your ${unsure.every((a) => a.source === 'fitbit') ? 'Fitbit' : 'tracker'}, filed as Sport.`}</Text>
+          </View>
+          <Pressable accessibilityRole="button" accessibilityLabel={unsure.length === 1 ? 'Yes, this was tennis' : `Yes, these ${unsure.length} were tennis`} accessibilityState={{ busy: unsureBusy }} disabled={unsureBusy} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={() => { void yesAll(); }} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
+            {unsureBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.acceptText}>{unsure.length === 1 ? 'Yes' : `Yes, all ${unsure.length}`}</Text>}
           </Pressable>
         </View>
       ) : null}

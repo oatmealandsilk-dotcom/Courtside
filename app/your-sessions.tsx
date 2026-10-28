@@ -25,7 +25,8 @@ import { canScore } from '@/features/activity/score';
 import { show as showToast } from '@/lib/toast';
 import { ATTACH_DAYS, pickSource, postOf, postedIndex, sourceOn, type SessionPick } from '@/features/activity/recent';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/features/activity/workouts';
+import { askWithSharing, formatDistance, isTennisActivity, workoutIcon, WORKOUTS_ASK } from '@/features/activity/workouts';
+import { consentLine, shownTo } from '@/features/activity/autoLogSharing';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { computeStats, localDay } from '@/features/practice/stats';
 import { lastWeekStart, showWeekCard, weekRange, weekRecap } from '@/features/recap/recap';
@@ -482,7 +483,9 @@ const offerKey = (me: string) => `courtside-workouts-offer:${me}`;
  */
 function WorkoutsOffer({ me, fill }: { me: string; fill: string }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions } = useApp();
+  const { actions, autoLogSharing, currentUser } = useApp();
+  // Who sees the tennis that logs itself, said before Continue (migration 193).
+  const seenBy = shownTo(autoLogSharing, null, currentUser);
   // Hidden until this phone has said whether it was put away, so it never flashes up and away.
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -497,12 +500,14 @@ function WorkoutsOffer({ me, fill }: { me: string; fill: string }) {
     void AsyncStorage.setItem(offerKey(me), '1').catch(() => undefined);
   };
   const turnOn = () => confirm({
-    ...WORKOUTS_ASK,
+    ...askWithSharing(WORKOUTS_ASK, consentLine(seenBy)),
     confirmLabel: 'Continue',
     onConfirm: async () => {
       setBusy(true);
       try {
         await actions.turnOnTennis('apple-health', { workouts: true });
+        // Told who sees the tennis that logs itself: a choice never made is saved as that (migration 193).
+        if (autoLogSharing === null) void actions.setAutoLogSharing(seenBy);
       } catch (err) {
         showToast({ title: 'Could not turn that on', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
       } finally {

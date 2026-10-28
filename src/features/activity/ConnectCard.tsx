@@ -63,7 +63,8 @@ export function ConnectCard() {
     if (both) { router.push('/health'); return; }
     setBusy(true);
     try {
-      await auto.connect(source);
+      // Its line says who sees the tennis that logs itself (migration 193): connecting is the yes to it.
+      await auto.connect(source, { told: true });
       showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' });
     } catch (err) {
       showToast({ title: 'Couldn’t connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
@@ -77,7 +78,7 @@ export function ConnectCard() {
         <Ionicons name="pulse-outline" size={20} color={colors.brand} />
         <View style={{ flex: 1 }}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Log your hits automatically</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : `Connect ${names} and every hit shows up ready to log.`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : `Connect ${names}: your tennis logs itself${auto.seenBy === 'private' ? ', for you only' : auto.seenBy === 'public' ? ' to your profile' : ', and friends who follow you back see it'}.`}</Text>
         </View>
       </Pressable>
       {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}

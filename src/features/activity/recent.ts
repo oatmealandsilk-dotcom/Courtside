@@ -40,7 +40,8 @@ export function postedIndex(posts: Post[], me: ID | null): Map<string, ID> {
   const index = new Map<string, ID>();
   if (!me) return index;
   for (const p of posts) {
-    if (p.authorId !== me || !p.session) continue;
+    // The server's own post of a session that logged itself (migration 193) is not you posting it.
+    if (p.authorId !== me || !p.session || p.autoLogged) continue;
     if (p.session.activityId) index.set(`a:${p.session.activityId}`, p.id);
     if (p.session.sessionId) index.set(`s:${p.session.sessionId}`, p.id);
   }

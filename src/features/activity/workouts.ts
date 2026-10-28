@@ -199,11 +199,19 @@ export function workoutLine(a: Pick<DetectedActivity, 'sport' | 'minutes' | 'dis
  */
 export const WORKOUTS_ASK = {
   title: 'Workouts from Apple Health',
-  message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page. Nothing is posted unless you choose to.',
+  // Followed by who sees the tennis that logs itself (askWithSharing, migration 193).
+  message: 'CourtSide reads your workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page.',
 } as const;
 
 /** The same for WHOOP (migration 135), to someone whose WHOOP so far brings in tennis only. WHOOP already shares workouts, so no sign-in follows. */
 export const WHOOP_WORKOUTS_ASK = {
   title: 'Workouts from WHOOP',
-  message: 'CourtSide reads your WHOOP workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them. The past week’s show up in Notifications. Nothing is posted unless you choose to.',
+  message: 'CourtSide reads your WHOOP workouts (tennis, runs, rides, the gym and more) and your heart rate during them, so you can log and post them. The past week’s show up in Notifications.',
 } as const;
+
+/**
+ * One of the asks above, then who will see the tennis that logs itself
+ * (features/activity/autoLogSharing consentLine, migration 193), and that
+ * nothing else is posted. Said before connecting, so connecting is the yes.
+ */
+export const askWithSharing = (ask: { title: string; message: string }, line: string) => ({ title: ask.title, message: `${ask.message} ${line} Nothing else is posted unless you choose to.` });

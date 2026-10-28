@@ -10,12 +10,13 @@ import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
+import { AUDIENCE_LABEL, friendsAtMost } from '@/features/activity/autoLogSharing';
 import { colors, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, autoLogSharing } = useApp();
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
     <Pressable key={label} accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -59,6 +60,8 @@ export default function PrivacyCentre() {
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
+        {/* Who sees the tennis your tracker logs for you (migration 193): Friends unless chosen. */}
+        {autoLogSharing !== undefined ? link('pulse-outline', 'Sessions that log themselves', AUDIENCE_LABEL[autoLogSharing === 'public' && friendsAtMost(currentUser) ? 'mutuals' : autoLogSharing ?? 'mutuals'], () => router.push('/auto-log-sharing')) : null}
       </View>
 
       {/* Flyby (migration 130): what "I'm playing here" leaves behind, said plainly. */}

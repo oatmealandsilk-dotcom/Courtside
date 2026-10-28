@@ -593,7 +593,17 @@ export interface Post {
   groupId?: ID;
   /** Taken down by an admin (migration 108). Only its author and admins still get it, and see it marked. */
   removed?: Removed;
+  /**
+   * Made by the server for a session that logged itself (migration 193): its
+   * card only, shown to the player's chosen audience (features/activity/
+   * autoLogSharing). It is not the player posting the session: posting it
+   * puts their own post in its place.
+   */
+  autoLogged?: boolean;
 }
+
+/** Who sees a session that logged itself (migration 193): friends who follow each other with you, whoever can see your posts, or only you. */
+export type AutoLogAudience = 'mutuals' | 'public' | 'private';
 
 /* --------------------------------- Groups -------------------------------- */
 

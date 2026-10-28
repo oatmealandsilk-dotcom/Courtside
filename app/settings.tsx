@@ -25,6 +25,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTracker } from '@/features/activity/flags';
 import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
+import { AUDIENCE_LABEL, friendsAtMost } from '@/features/activity/autoLogSharing';
 import { HitGlyph } from '@/components/HitGlyph';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { TextScale } from '@/theme/textScale';
@@ -53,7 +54,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, autoLogLive, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, autoLogLive, autoLogSharing, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Location here is this phone's own (courts near you): since migration 189 it never shares anything;
@@ -208,14 +209,21 @@ export default function Settings() {
       title: 'Your tennis',
       rows: [
         { icon: 'pulse-outline', label: 'Health and nutrition', onPress: () => router.push('/health') },
-        // Oct 24 (migration 185): your tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows.
+        // Oct 24 (migration 185): your tracker's tennis of 20+ minutes logs itself, so the streak always shows.
         // Here, not under Notifications, so a browser (which has no Notifications section) can switch it off too.
         ...(activityAlerts && autoLogLive ? [{
           icon: 'checkmark-done-outline' as const,
           label: 'Log tennis automatically',
-          // The hand-made look keeps the privacy fact and drops only the streak note.
-          detail: LESS_AI ? 'Private until you post it' : 'Private until you post it · keeps your streak',
+          // Who sees it is the row below once the database has it (migration 193); before that, only you.
+          detail: autoLogSharing === undefined ? (LESS_AI ? 'Private until you post it' : 'Private until you post it · keeps your streak') : (LESS_AI ? '20 minutes or more' : '20 minutes or more · keeps your streak'),
           toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
+        }] : []),
+        // Oct 27 (migration 193; owner: "mutuals can see, no private, its just mutual or public"): who sees them. Friends unless chosen.
+        ...(activityAlerts && autoLogLive && autoLogSharing !== undefined && prefs.autoLog ? [{
+          icon: 'people-outline' as const,
+          label: 'Who sees them',
+          value: AUDIENCE_LABEL[autoLogSharing === 'public' && friendsAtMost(currentUser) ? 'mutuals' : autoLogSharing ?? 'mutuals'],
+          onPress: () => router.push('/auto-log-sharing'),
         }] : []),
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Courts near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see courts near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },
         { icon: 'shield-half-outline', label: 'Permissions', onPress: () => router.push('/permissions') },

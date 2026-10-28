@@ -5,6 +5,8 @@ import { Platform } from 'react-native';
 import { appleHealthAvailable } from '@/features/health/appleHealth';
 import { useApp } from '@/store/AppContext';
 import { isDemo, isTracker, knownTennisFlags, tennisFlags, type TennisFlags } from './flags';
+import { shownTo } from './autoLogSharing';
+import type { AutoLogAudience } from '@/data/types';
 
 /*
  * "Log your tennis automatically" (owner, Oct 6): a friend who had worked
@@ -34,12 +36,18 @@ export interface AutoLog {
   whoop: boolean;
   /** Something already brings sessions in (Apple Health, WHOOP or a tracker): nothing to offer. */
   connected: boolean;
-  /** Connects a source with every workout (or tennis alone, where every workout is not switched on). Throws when it did not go through. */
-  connect: (source: AutoLogSource) => Promise<void>;
+  /**
+   * Connects a source with every workout (or tennis alone, where every workout is not switched on). Throws when it did not go through.
+   * `told`: the screen said who will see the tennis that logs itself (consentLine), so connecting is the player's yes to it
+   * (migration 193): a choice never made is saved as that, and Apple Health's sessions follow it.
+   */
+  connect: (source: AutoLogSource, opts?: { told?: boolean }) => Promise<void>;
+  /** Who will see the tennis that logs itself once connected, for the consent line: the choice made, else Friends. */
+  seenBy: AutoLogAudience;
 }
 
 export function useAutoLog(): AutoLog {
-  const { currentUserId, integrations, healthIsReal, actions } = useApp();
+  const { currentUserId, currentUser, integrations, healthIsReal, actions, autoLogSharing } = useApp();
   const [flags, setFlags] = useState<TennisFlags | null>(() => knownTennisFlags(currentUserId));
   useEffect(() => {
     let on = true;
@@ -52,11 +60,13 @@ export function useAutoLog(): AutoLog {
   const connected = integrations.some((i) => i.connected && !!i.readsWorkouts && (i.provider === 'apple-health' || i.provider === 'whoop' || isTracker(i.provider)));
   const workoutsApple = !!flags?.workoutsApple;
   const workoutsWhoop = !!flags?.workoutsWhoop;
-  const connect = useCallback(async (source: AutoLogSource) => {
+  const seenBy = shownTo(autoLogSharing, null, currentUser);
+  const connect = useCallback(async (source: AutoLogSource, opts?: { told?: boolean }) => {
     await actions.turnOnTennis(source, { workouts: source === 'apple-health' ? workoutsApple : workoutsWhoop });
-  }, [actions, workoutsApple, workoutsWhoop]);
+    if (opts?.told && autoLogSharing === null) void actions.setAutoLogSharing(seenBy);
+  }, [actions, workoutsApple, workoutsWhoop, autoLogSharing, seenBy]);
   // A real account's connections are known once its Health page data has loaded (healthIsReal); the demo's at once.
-  return { ready: !!flags && (demo || !!healthIsReal), known: !!flags, apple, whoop, connected, connect };
+  return { ready: !!flags && (demo || !!healthIsReal), known: !!flags, apple, whoop, connected, connect, seenBy };
 }
 
 /*

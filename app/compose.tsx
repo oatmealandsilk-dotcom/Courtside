@@ -75,6 +75,7 @@ import { goHome } from '@/lib/goBack';
 import { liveDay, liveHour, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
+import { seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -178,7 +179,7 @@ function ToLogSheet() {
 
 function Compose() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession, manualStatsReady } = useApp();
+  const { actions, posts, stories, currentUserId, currentUser, detectedCoords, lastSeen, locationEnabled, detectedActivities, sessions, sessionTags, users, hitRequests, blockedIds, feedGroups, feedGroupsOn, liveSession, manualStatsReady, autoLogSharing } = useApp();
 
   // The story rail opens this straight at the library with ?mode=story.
   const params = useLocalSearchParams<{ mode?: string; shot?: string; challenge?: string; courtId?: string; courtName?: string; lat?: string; lng?: string; activity?: string; session?: string; hit?: string; group?: string; trim?: string; live?: string }>();
@@ -205,7 +206,7 @@ function Compose() {
   const [liveTwins] = useState(() => (fromLive && currentUserId ? liveTracker(fromLive, detectedActivities, {
     me: currentUserId, flags: flagsOn,
     // Logged for you by the server and not posted (migration 185): still this live session's to post.
-    autoIds: new Set(sessions.filter((x) => x.autoLogged && x.activityId && !posts.some((p) => p.authorId === currentUserId && p.session?.sessionId === x.id)).map((x) => x.activityId!)),
+    autoIds: new Set(sessions.filter((x) => x.autoLogged && x.activityId && !posts.some((p) => p.authorId === currentUserId && !p.autoLogged && p.session?.sessionId === x.id)).map((x) => x.activityId!)),
   }) : {}));
   // The live session with no tracker copy waiting: logged from here by hand, with the clock's time.
   const liveOnly = !!fromLive && !liveTwins.waiting;
@@ -286,12 +287,13 @@ function Compose() {
     void actions.loadMySessionPosts().finally(() => { if (on) setPostsChecked(true); });
     return () => { on = false; };
   }, [!!opened]); // eslint-disable-line react-hooks/exhaustive-deps
-  const openedPosted = !!opened && posts.some((p) => p.authorId === currentUserId && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id));
+  // The server's own post of a session that logged itself (migration 193) is not this session posted.
+  const openedPosted = !!opened && posts.some((p) => p.authorId === currentUserId && !p.autoLogged && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id));
   // Already posted: the stats come off, and this can only be a plain post.
   useEffect(() => { if (openedPosted) setAttached(false); }, [openedPosted]);
   // Opened on a session that is already posted (an old notification, a second tap): show that post
   // rather than a blank composer (Oct 3, owner). Not after Share here, which posts it on purpose.
-  const postedId = openedPosted && opened ? posts.find((p) => p.authorId === currentUserId && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id))?.id : undefined;
+  const postedId = openedPosted && opened ? posts.find((p) => p.authorId === currentUserId && !p.autoLogged && (opened.type === 'tracker' ? p.session?.activityId === opened.activity.id : p.session?.sessionId === opened.session.id))?.id : undefined;
   useEffect(() => {
     if (!params.activity || !postedId || sent.current) return;
     showToast({ title: 'You already posted this session', icon: 'checkmark-circle-outline' });
@@ -559,6 +561,8 @@ function Compose() {
   // and the score can still change here; Keep private just closes; Not
   // tennis? Remove takes it away for good.
   const autoOpen = !!openedLog?.autoLogged && opened?.type === 'tracker' && isTennisActivity(opened.activity) && !openedPosted;
+  // Who sees it (migration 193): friends who follow you back unless you chose otherwise; Apple Health's only you until you choose.
+  const autoSeen = shownTo(autoLogSharing, opened?.type === 'tracker' ? opened.activity.source : null, currentUser);
   const autoKind = liveLog?.kind ?? openedLog?.kind ?? 'practice';
   const [autoError, setAutoError] = useState('');
   const changeAutoKind = (k: PracticeSession['kind'], result?: boolean) => {
@@ -960,11 +964,11 @@ function Compose() {
     if (!added) { slideAway(); return; }
     confirm({ title: 'Discard post?', confirmLabel: 'Discard', destructive: true, onConfirm: slideAway });
   };
-  // Keep private (logged for you already): closes, and a live session it came from is done with.
+  // Keep private, or Done when others see it (logged for you already): closes, and a live session it came from is done with.
   const keepPrivate = () => {
     const go = () => { liveLogged(); slideAway(); };
     if (!added) { go(); return; }
-    confirm({ title: 'Discard post?', message: 'The session stays in your log, private.', confirmLabel: 'Discard', destructive: true, onConfirm: go });
+    confirm({ title: 'Discard post?', message: autoSeen === 'private' ? 'The session stays in your log, private.' : `The session stays in your log. ${seenByLine(autoSeen)}.`, confirmLabel: 'Discard', destructive: true, onConfirm: go });
   };
   const hideIt = () => {
     // From Finish: the live session thrown away, asked first (a tracker's copy of it stays waiting, as it was).
@@ -1548,9 +1552,14 @@ function Compose() {
               </View>
             </View>
             {autoOpen ? (
-              // Logged for you (migration 185): only you see it until it is posted. What it was can still change.
+              // Logged for you (migration 185), seen by whoever the player chose (migration 193). What it was can still change.
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
-                <Text style={styles.autoNote}>Logged privately · only you see it</Text>
+                <Text style={styles.autoNote}>
+                  {`Logged for you · ${seenByLine(autoSeen)} `}
+                  {autoLogSharing !== undefined ? (
+                    <Text accessibilityRole="link" accessibilityLabel="Change who sees sessions that log themselves" onPress={() => router.push('/auto-log-sharing')} style={styles.autoNoteLink}>Change</Text>
+                  ) : null}
+                </Text>
                 {/* Tennis only: Practice or Match (not Fitness; a session that wasn't tennis is removed below). */}
                 <Chips value={autoKind} onChange={(k) => { if (k) changeAutoKind(k, k === 'match' ? liveLog?.won : undefined); }} options={autoKind === 'drills' ? WITH_DRILLS.slice(0, 3) : KINDS.slice(0, 2)} />
                 {autoKind === 'match' && !liveLog?.sets?.length ? (
@@ -1663,7 +1672,9 @@ function Compose() {
               onShare={submit}
               shareDisabled={!(opened || liveOnly) || !postsChecked}
               label="Post session"
-              quietLabel={autoOpen ? 'Keep private' : 'Save privately'}
+              quietLabel={autoOpen ? (autoSeen === 'private' ? 'Keep private' : 'Done') : 'Save privately'}
+              quietIcon={autoOpen && autoSeen !== 'private' ? 'checkmark' : undefined}
+              quietHint={autoOpen && autoSeen !== 'private' ? `${seenByLine(autoSeen)}, and it counts toward your streak` : undefined}
               streak={savedStreak ?? streakPreview}
             />
           )}
@@ -1967,6 +1978,7 @@ const styleDefinitions = StyleSheet.create({
   hideIt: { alignSelf: 'center', paddingVertical: spacing.lg },
   twiceNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.md },
   autoNote: { ...typography.small, color: colors.textMuted, marginBottom: spacing.sm },
+  autoNoteLink: { ...typography.smallStrong, color: colors.brand },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

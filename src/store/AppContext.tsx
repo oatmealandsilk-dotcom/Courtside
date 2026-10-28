@@ -44,7 +44,8 @@ import { estimatedMaxHr } from '@/features/activity/appleZones';
 import { checkForTennis, fillAppleZones, reportFromAlert, reportOf } from '@/features/activity/check';
 import { pickSource } from '@/features/activity/recent';
 import { isTennisActivity, workoutLine, workoutName } from '@/features/activity/workouts';
-import { detectedNote } from '@/features/activity/format';
+import { activityDay, detectedNote } from '@/features/activity/format';
+import { isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { FOLD_OVER, allTennis as allTennisFound, foundBursts, foundHref, foundLine, foundTitle } from '@/features/activity/found';
 import { mergePast, readOneWithHeartRate, readPastHealth, type PastWorkout } from '@/features/activity/pastWorkouts';
 import { loadHealthChoice, loggedNumbers, postShare, reshare, sameShare, shareWithZones } from '@/features/activity/healthShare';
@@ -129,6 +130,7 @@ import type {
   SessionTagRefusal,
   LastSeen,
   MapVisibility,
+  AutoLogAudience,
   HitRequest,
   ChatEvent,
   ChatPhoto,
@@ -366,6 +368,18 @@ function readDemoVisibility(): MapVisibility | null {
   }
 }
 
+/** The demo's answer to "Sessions that log themselves" (migration 193), kept in the browser; null until chosen. */
+const DEMO_AUTO_LOG_SHARING_KEY = 'courtside-demo-auto-log-sharing';
+function readDemoAutoLogSharing(): AutoLogAudience | null {
+  try {
+    if (Platform.OS !== 'web') return null;
+    const v = localStorage.getItem(DEMO_AUTO_LOG_SHARING_KEY);
+    return v === 'mutuals' || v === 'public' || v === 'private' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** The switches in Settings, kept with the account. */
 export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
@@ -500,6 +514,12 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   mapLive: boolean | null;
   /** Your answer to "Who can see you on the map?": null never chosen; undefined not known (or a database before 63). */
   mapVisibility: MapVisibility | null | undefined;
+  /**
+   * Who sees your sessions that log themselves (Settings, migration 193): null
+   * never chosen (Friends; Apple Health's only you until you choose);
+   * undefined not known, or a database before 193 (nothing to choose yet).
+   */
+  autoLogSharing: AutoLogAudience | null | undefined;
   /**
    * The map's teen rule (migration 78), for an account not known to be an
    * adult: 'off' until the database has it (on the map only adults, as
@@ -645,6 +665,7 @@ function signedOut(prev: AppState): AppState {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
     ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
+    autoLogSharing: isSupabaseConfigured ? undefined : prev.autoLogSharing,
     ...freshAccountSettings(),
   };
 }
@@ -654,6 +675,17 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   setLocationEnabled: (enabled: boolean) => Promise<string | null>;
   /** "Can friends see your check-ins?": takes effect at once ('none' also checks you out). Resolves false when it could not be saved. */
   setMapVisibility: (v: MapVisibility) => Promise<boolean>;
+  /**
+   * Settings → "Sessions that log themselves" (migration 193): who sees them,
+   * at once, the ones already logged too. Resolves false when it could not be saved.
+   */
+  setAutoLogSharing: (v: AutoLogAudience) => Promise<boolean>;
+  /**
+   * "Yes, these were tennis" (migration 193): every Fitbit "Was this tennis?"
+   * session waiting is logged in one go. How many, and whether Fitbit's Sport
+   * now logs itself; null when it could not be done.
+   */
+  confirmUnsureTennis: () => Promise<{ logged: number; learned: boolean } | null>;
   /**
    * Check in (migration 189): reads the phone's location once and shows your
    * pin to friends who follow each other with you until 10pm (2 hours after
@@ -2025,6 +2057,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       // The settings row carries map_visibility only once migration 63 has run: its key says the map's round 2 is live.
       mapVisibility: data.userState && data.userState.mapVisibility !== undefined ? data.userState.mapVisibility : prev.mapVisibility,
       mapLive: data.userState && data.userState.mapVisibility !== undefined ? true : prev.mapLive,
+      // The settings row carries auto_log_audience only once migration 193 has run.
+      autoLogSharing: data.userState && data.userState.autoLogSharing !== undefined ? data.userState.autoLogSharing : prev.autoLogSharing,
       // The settings row carries map_answered_at only once migration 78 has run.
       teenMap: data.userState?.teenMap ?? (data.userState ? 'off' : prev.teenMap),
       prefs: data.userState
@@ -2298,7 +2332,7 @@ const demoActivityToast: 'tennis' | 'workout' | null = (() => {
  * does. Your own numbers, for you only: the lock-screen push never carries
  * them (migration 58).
  */
-function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: number) {
+function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: number, seenBy?: (a: DetectedActivity) => string) {
   if (count > FOLD_OVER) {
     const ids = newestFirst.map((a) => a.id);
     const href = ids.length ? foundHref(ids) : '/workouts-found';
@@ -2327,11 +2361,12 @@ function activityToast(count: number, newestFirst: DetectedActivity[], holdMs?: 
   const a = newestFirst[0];
   if (!a) return;
   const href = `/compose?activity=${a.id}`;
-  // Logged for you by the server (migration 185): only you see it until you post it.
+  // Logged for you by the server (migration 185); who sees it is the player's setting (migration 193).
   if (a.status === 'logged' && isTennisActivity(a)) {
+    const seen = seenBy?.(a) ?? 'Only you can see it';
     showToast({
       title: 'Tennis logged',
-      body: [duration(a.minutes), 'only you can see it'].join(' · '),
+      body: [duration(a.minutes), seen.charAt(0).toLowerCase() + seen.slice(1)].join(' · '),
       glyph: 'session',
       href,
       action: { label: 'Post it', onPress: () => router.push(href as never) },
@@ -2405,6 +2440,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     lastSeenLoaded: false,
     mapLive: isSupabaseConfigured ? null : true,
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
+    autoLogSharing: isSupabaseConfigured ? undefined : readDemoAutoLogSharing(),
     teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
     pinnedQuestion: null,
@@ -3839,7 +3875,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       ...prev,
       sessions: prev.sessions.filter((x) => x.id !== id),
       // A tracker's post goes back to "Tennis"; one logged by hand keeps what it said (migration 65).
-      posts: me ? postsFollowLog(prev.posts, me, null, null, id) : prev.posts,
+      // The server's post of one that logged itself goes with it (migration 193).
+      posts: me ? postsFollowLog(gone?.autoLogged ? prev.posts.filter((p) => !isOwnAutoPostOf(p, me, gone.activityId, gone.id)) : prev.posts, me, null, null, id) : prev.posts,
       // A tracker session it was logged from is waiting to be logged again, as the database puts it back (migration 58).
       // One the server logged for you is hidden for good instead: taking it away means "not tennis" (migration 185).
       detectedActivities: prev.detectedActivities.map((a) => (a.sessionId === id && a.status === 'logged'
@@ -3861,6 +3898,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({
       ...prev,
       sessions: gone ? prev.sessions.filter((x) => x.id !== gone.id) : prev.sessions,
+      // The server's post of it goes too (migration 193).
+      posts: prev.posts.some((p) => isOwnAutoPostOf(p, me, activityId, gone?.id)) ? prev.posts.filter((p) => !isOwnAutoPostOf(p, me, activityId, gone?.id)) : prev.posts,
       detectedActivities: prev.detectedActivities.map((a) => (a.id === activityId && a.status !== 'withdrawn' ? { ...a, status: 'dismissed', sessionId: undefined } : a)),
       notifications: prev.notifications.filter((n) => !(n.kind === 'activity' && n.targetId === activityId)),
     }));
@@ -4080,6 +4119,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
     return ok;
   }, [loadLastSeen]);
+
+  /**
+   * Who sees your sessions that log themselves (migration 193). The server's
+   * read rule follows it at once, for the ones already logged too; your own
+   * posts of them here go on Only me (they come back with the next load).
+   */
+  const setAutoLogSharing = useCallback(async (v: AutoLogAudience): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    const was = stateRef.current.autoLogSharing;
+    haptics.tap();
+    setState((prev) => ({ ...prev, autoLogSharing: v }));
+    const hideOwn = () => { if (v === 'private' && me) setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => !(p.autoLogged && p.authorId === me)) })); };
+    if (!live(me)) {
+      // The demo keeps it in the browser, the way the server keeps it with the account.
+      try { if (Platform.OS === 'web') localStorage.setItem(DEMO_AUTO_LOG_SHARING_KEY, v); } catch {}
+      hideOwn();
+      return true;
+    }
+    const kept = await remote.setAutoLogSharing(v);
+    if (stateRef.current.currentUserId !== me) return kept !== null;
+    if (kept === null) { setState((prev) => ({ ...prev, autoLogSharing: was })); return false; }
+    // 'public' is kept as 'mutuals' for anyone not known to be an adult.
+    setState((prev) => ({ ...prev, autoLogSharing: kept }));
+    hideOwn();
+    return true;
+  }, []);
+
+  /** "Friends who follow you back can see it": the line under "Tennis logged" for a session from `a`, by your setting. */
+  const seenNow = useCallback((a: DetectedActivity) => {
+    const s = stateRef.current;
+    return seenByLine(shownTo(s.autoLogSharing, a.source, s.users.find((u) => u.id === s.currentUserId)));
+  }, []);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
   const checkInOnMap = useCallback(async (): Promise<string | null> => {
@@ -4871,9 +4942,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         imageUrls: input.videoUrl ? undefined : carouselFor(input.imageUrl, input.imageUrls),
         // Who accepted a tag on the session shows straight away; the server works it out again and keeps its own (migration 62).
         session: withOnNewPost(input.session, me, now.sessions, now.sessionTags, now.users),
-        // The server marks it too; this shows the tag before the round trip.
-        isFirst: !stateRef.current.posts.some((p) => p.authorId === me) || undefined,
+        // The server marks it too; this shows the tag before the round trip. A post the server made for
+        // a session that logged itself never counts (migration 193).
+        isFirst: !stateRef.current.posts.some((p) => p.authorId === me && !p.autoLogged) || undefined,
       };
+      // A session that logged itself, posted now: your post stands for it, and the server's post of it
+      // steps aside (the server hides it too, migration 193).
+      if (post.session && (post.session.activityId || post.session.sessionId)) {
+        const { activityId, sessionId } = post.session;
+        if (stateRef.current.posts.some((p) => isOwnAutoPostOf(p, me, activityId, sessionId))) {
+          setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => !isOwnAutoPostOf(p, me, activityId, sessionId)) }));
+        }
+      }
       const celebration = {
         userId: me, targetId: post.id, targetKind: 'post' as const, preview: snippet(post.body || (post.kind === 'clip' ? 'Clip' : 'Post')),
         title: post.kind === 'clip' ? 'Clip posted' : 'Posted',
@@ -5216,6 +5296,32 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!quiet && (stateRef.current.remoteLoaded || !stateRef.current.snapshotShown)) showToast({ title: 'Can’t refresh right now', body: 'Check your connection, then pull down to try again.', icon: 'cloud-offline-outline' });
     return false;
   }, [loadRemote, drawn, refreshSessionTags]);
+
+  /** "Yes, these were tennis" (migration 193): the server logs them; the sessions and their posts come back with a fresh load. */
+  const confirmUnsureTennis = useCallback(async (): Promise<{ logged: number; learned: boolean } | null> => {
+    const me = stateRef.current.currentUserId;
+    const waiting = stateRef.current.detectedActivities.filter((a) => a.userId === me && a.unsure && a.status === 'new');
+    if (!me || !waiting.length) return null;
+    haptics.commit();
+    if (!live(me)) {
+      // The demo: each one logged as practice here, as the server would.
+      const made = waiting.map((a, i): PracticeSession => ({ id: `${nextId('s')}-${i}`, userId: me, day: activityDay(a), minutes: a.minutes, kind: 'practice', activityId: a.id, autoLogged: true, createdAt: new Date().toISOString() }));
+      setState((prev) => ({
+        ...prev,
+        sessions: [...made, ...prev.sessions],
+        detectedActivities: prev.detectedActivities.map((a) => { const s = made.find((x) => x.activityId === a.id); return s ? { ...a, status: 'logged', sessionId: s.id } : a; }),
+      }));
+      return { logged: made.length, learned: made.length >= 2 };
+    }
+    try {
+      const r = await remote.logUnsureTennis();
+      if (r === 'missing') return null;
+      void refresh({ quiet: true });
+      return r;
+    } catch {
+      return null;
+    }
+  }, [refresh]);
 
   const addStory = useCallback(
     (input: NewStoryInput): ID => {
@@ -9198,7 +9304,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return fresh.length ? { ...prev, notifications: [...fresh, ...prev.notifications] } : prev;
     });
     if (!filed.length) return;
-    activityToast(new Set(filed).size, (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)));
+    activityToast(new Set(filed).size, (list ?? stateRef.current.detectedActivities).filter((x) => filed.includes(x.id)).sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)), undefined, seenNow);
   }, []);
   const checkForActivities = useCallback((force = false, tick = false) => checkWith(force, stateRef.current.integrations, tick), [checkWith]);
   // The demo's own "Tennis detected" or "Workout detected" (see demoActivityToast), once the app is up.
@@ -9209,7 +9315,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!a) return undefined;
     const t = setTimeout(() => {
       demoToastShown.current = true;
-      activityToast(1, [a], 12000);
+      activityToast(1, [a], 12000, seenNow);
     }, 2500);
     return () => clearTimeout(t);
   }, [state.ready, state.currentUserId, state.detectedActivities]);
@@ -9318,7 +9424,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return [...add].sort((x, y) => x.startedAt.localeCompare(y.startedAt))
         .reduce((acc, a) => withNotification(acc, { userId: me, actorId: me, kind: 'activity', targetId: a.id, targetKind: 'activity', preview: detectedNote(a) }, { toSelf: true }), next);
     });
-    activityToast(fresh.length, [...fresh].sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)));
+    activityToast(fresh.length, [...fresh].sort((x, y) => (x.startedAt < y.startedAt ? 1 : -1)), undefined, seenNow);
   }, []);
 
   const reportWorkoutsFromAlert = useCallback(async (ws: { id: string; startedAt: string; endedAt: string }[]): Promise<ID[]> => {
@@ -9492,6 +9598,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rejectCoachApplication,
       setLocationEnabled,
       setMapVisibility,
+      setAutoLogSharing,
+      confirmUnsureTennis,
       checkInOnMap,
       checkOutOfMap,
       loadNewOnCourtside,
@@ -9748,6 +9856,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       rejectCoachApplication,
       setLocationEnabled,
       setMapVisibility,
+      setAutoLogSharing,
+      confirmUnsureTennis,
       checkInOnMap,
       checkOutOfMap,
       loadNewOnCourtside,

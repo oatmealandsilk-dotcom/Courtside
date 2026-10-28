@@ -9,6 +9,7 @@ import { useSetupCount } from '@/features/onboarding/setupCount';
 import { StatusShade } from '@/components/StatusShade';
 import { Wash } from '@/components/Wash';
 import { useAutoLog, type AutoLogSource } from '@/features/activity/autoLog';
+import { consentLine } from '@/features/activity/autoLogSharing';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useGateSpace } from '@/lib/useGateSpace';
@@ -56,7 +57,8 @@ export default function AutoLog() {
     haptics.tap();
     setBusy(source);
     try {
-      await auto.connect(source);
+      // The card said who sees the tennis that logs itself (migration 193): connecting is the yes to it.
+      await auto.connect(source, { told: true });
       // The week's workouts are being read now; each one found lands in Notifications, ready to log.
       showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' });
       onward();
@@ -85,7 +87,7 @@ export default function AutoLog() {
                 <View style={styles.tile}><Ionicons name="pulse" size={20} color={colors.brand} /></View>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardTitle}>Your workouts, ready to log</Text>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardBody}>The last 7 days come in first. Only you see them until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardBody}>The last 7 days come in first. {consentLine(auto.seenBy)} Other workouts only you see until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
                 </View>
               </View>
             </View>
