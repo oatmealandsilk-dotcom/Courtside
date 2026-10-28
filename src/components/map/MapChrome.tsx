@@ -501,7 +501,7 @@ function CheckInWords({ control, size }: { control: CheckInControl; size: number
     <View pointerEvents="none" style={styles.checkInRow}>
       {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : 'Check in'}
+        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : DESIGN_UNLOCKS ? 'Light up' : 'Check in'}
       </Text>
     </View>
   );

@@ -321,9 +321,10 @@ function designCourtPinHtml(court: Court, on: boolean, live: string | undefined,
   const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 16px 6px ${colors.open}55,` : '';
   const tint = courtTone(court);
   const tone = closed ? colors.borderStrong : tint;
-  const fill = mine ? colors.brand : on ? tone : colors.bg;
-  const glyph = mine ? colors.brandInk : on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
-  const edge = on || mine ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
+  // Only your courts fill in: a court picked that is not yours grows, with a firmer outline, but stays plain.
+  const fill = mine ? colors.brand : colors.bg;
+  const glyph = mine ? colors.brandInk : closed ? colors.textMuted : tint;
+  const edge = mine ? `2px solid ${colors.bg}` : `${on ? 2.5 : 1.5}px solid ${tone}`;
   return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}${mine ? ' cs-mine' : ''}${soonHit ? ' cs-hit' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on || mine ? 7 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on || mine ? '.28' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph, mine ? 13 : 12)}${name}${hitDot()}</div>`;
 }
 
