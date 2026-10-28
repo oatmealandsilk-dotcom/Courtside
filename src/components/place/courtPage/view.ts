@@ -47,6 +47,11 @@ export interface CourtView {
   status: CourtPostsStatus;
   more: boolean;
   loadingOlder: boolean;
+  /**
+   * The clip the top of the page plays, behind the sheet, in place of the map:
+   * the most-watched of the clips listed here (topClip). Null: the map.
+   */
+  heroClip: Post | null;
   /** The post Watch all opens on (a clip with a picture first). */
   lead: Post | null;
   /** The people behind the posts, newest first, you aside. */

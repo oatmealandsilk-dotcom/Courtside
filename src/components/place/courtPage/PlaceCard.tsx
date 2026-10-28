@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -20,6 +20,7 @@ import type { CourtAccess } from '@/data/types';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { openCourtNow } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
+import { holdLightStatusBar } from '@/lib/statusBarStyle';
 import { useArrived } from '@/lib/useArrived';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { PULL_GAP } from '@/lib/pullRefresh';
@@ -29,6 +30,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, inkOn, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
+import { ClipHero } from './ClipHero';
 import { CourtActions, NowMark, PrimaryBar, useCourtNow } from './parts';
 import { ClipsSection, HitsSection, SaysSection } from './PlaceSections';
 import { courtPageLook } from './look';
@@ -72,6 +74,14 @@ const SHORT_SCREEN = 740;
 const HERO_BODY_SHORT = 104;
 /** How far the sheet rises over the map, its rounded top. */
 const SHEET_OVER = 24;
+/**
+ * With a clip at the top (Oct 28, owner: "the pull up is too high rn. We can show more of the clip on
+ * the background"): the sheet rests lower, its name starting a little past half way down the screen
+ * (a short phone, a little higher, so Start a session here still shows). A computer: a taller card.
+ */
+const CLIP_SHARE = 0.57;
+const CLIP_SHARE_SHORT = 0.52;
+const CLIP_WIDE = 360;
 /** The bar over the top: back, and the name once the sheet has gone up under it. */
 const BAR_H = 52;
 /** How close in the map is: the court's own block and the streets round it. */
@@ -89,9 +99,19 @@ export function PlaceCard({ view }: { view: CourtView }) {
   // The pull's strip above the page on a phone (Screen's own), so "the top" is where the page rests.
   const strip = Platform.OS !== 'web' && view.onRefresh ? PULL_GAP : 0;
   const top = isPhone ? insets.top : 0;
-  const heroH = Math.min(top + (short ? HERO_BODY_SHORT : HERO_BODY), HERO_MAX);
+  // The court's most-watched clip, when it has one, in place of the map; none, the map as before.
+  const clip = view.heroClip;
+  const heroH = clip
+    ? (isPhone ? Math.round(screenH * (short ? CLIP_SHARE_SHORT : CLIP_SHARE)) : CLIP_WIDE)
+    : Math.min(top + (short ? HERO_BODY_SHORT : HERO_BODY), HERO_MAX);
   // The bar turns solid, and the name shows in it, once the sheet's top has gone up under it.
   const solidAt = heroH - SHEET_OVER - (top + BAR_H) + 36;
+  // The sheet has gone up over the clip (the bar has turned solid): it holds still until the sheet comes down again.
+  const [covered, setCovered] = useState(false);
+  useAnimatedReaction(() => offsetY.value - strip > solidAt, (now, was) => { if (now !== was) runOnJS(setCovered)(now); }, [strip, solidAt]);
+  // Over a clip the status bar's words are light, as on the Feed; once the sheet covers it, the theme's own again.
+  const lightTop = !!clip && isPhone && !covered;
+  useFocusEffect(useCallback(() => (lightTop ? holdLightStatusBar() : undefined), [lightTop]));
   const meta = [view.area, view.distance, view.followers ? `${view.followers} ${view.followers === 1 ? 'follower' : 'followers'}` : null].filter(Boolean).join(' · ');
   const nameSize = view.name.length > 30 ? styles.nameLong : null;
   // The page (look.ts: 'final', or the one before it, 'now').
@@ -115,7 +135,15 @@ export function PlaceCard({ view }: { view: CourtView }) {
   return (
     <View style={styles.root}>
       <Screen bleedTop wash={false} padded={false} onRefresh={view.onRefresh} offsetY={offsetY}>
-        <PlaceHero lat={view.here.lat} lng={view.here.lng} top={top} height={heroH} name={view.name} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone} drawMap={arrived || !isPhone} />
+        {clip ? (
+          <ClipHero
+            post={clip} top={top} height={heroH} over={isPhone ? SHEET_OVER : 0} name={view.name}
+            by={view.users.find((u) => u.id === clip.authorId)?.name ?? 'a player'} covered={covered}
+            onOpen={() => view.onOpenReel(clip)} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone}
+          />
+        ) : (
+          <PlaceHero lat={view.here.lat} lng={view.here.lng} top={top} height={heroH} name={view.name} onOpenMap={view.onMap} offsetY={offsetY} strip={strip} rounded={!isPhone} drawMap={arrived || !isPhone} />
+        )}
         <View testID="court-sheet" style={[styles.sheet, !isPhone && styles.sheetWide]}>
           <View style={styles.gutter}>
             {look === 'final' ? <View style={styles.nameRow}>{nameText}<NameHeart view={view} /></View> : nameText}

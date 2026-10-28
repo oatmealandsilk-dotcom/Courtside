@@ -20,6 +20,24 @@ export const sameCourt = (tag: { id?: string; lat: number; lng: number }, place:
 export const isClip = (post: Post) => post.kind === 'clip' || !!post.videoUrl;
 
 /**
+ * The clip a court's page leads with (Oct 28, owner: "we should have most
+ * viral video on the top instead of the plain map"): of the posts the page
+ * already lists for you (so no one's post shows here that the Clips row would
+ * not show), the most-watched clip with a video to play; a tie, the newest.
+ * None (no clips, or photos only): null, and the page keeps its map.
+ */
+export function topClip(posts: Post[]): Post | null {
+  let best: Post | null = null;
+  for (const p of posts) {
+    if (!isClip(p) || !p.videoUrl) continue;
+    const views = p.views ?? 0;
+    const bestViews = best?.views ?? 0;
+    if (!best || views > bestViews || (views === bestViews && Date.parse(p.createdAt) > Date.parse(best.createdAt))) best = p;
+  }
+  return best;
+}
+
+/**
  * A court page's address back into a place: the name and spot it travels
  * with, or, for a bare link, the spot of a post already here tagged there.
  * "near" stands for a place with a spot and no court id.

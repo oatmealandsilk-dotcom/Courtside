@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
@@ -7,7 +7,7 @@ import { PlaceCard } from '@/components/place/courtPage/PlaceCard';
 import type { CourtView } from '@/components/place/courtPage/view';
 import { EmptyState, Screen } from '@/components/ui';
 import type { Post, User } from '@/data/types';
-import { isClip, parseCourtParams, sameCourt } from '@/features/places/court';
+import { isClip, parseCourtParams, sameCourt, topClip } from '@/features/places/court';
 import { areaOf } from '@/features/places/search';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
@@ -123,6 +123,14 @@ function CourtPage() {
   const ownHref = useMemo(() => ({ pathname: '/court/[id]' as const, params: Object.fromEntries(Object.entries({ id: params.id, name: params.name, lat: params.lat, lng: params.lng }).filter(([, v]) => v !== undefined)) }), [params.id, params.name, params.lat, params.lng]);
   useCourtOpen('page', place ? { id: noteId, lat: place.lat, lng: place.lng } : null, ownHref);
 
+  // The clip at the top (Oct 28, owner): the most-watched one here. Once chosen it stays for the visit
+  // while it is still listed, so a view counted elsewhere never swaps the video mid-play.
+  const heroId = useRef<string | null>(null);
+  const listed = court.posts;
+  const kept = heroId.current ? listed.find((p) => p.id === heroId.current && !!p.videoUrl) ?? null : null;
+  const heroClip = kept ?? topClip(listed);
+  heroId.current = heroClip?.id ?? null;
+
   // King of the Court asks again on a pull, with the rest of the page.
   const [kingTick, setKingTick] = useState(0);
   const refresh = useCallback(async () => {
@@ -197,6 +205,7 @@ function CourtPage() {
     more: court.more,
     loadingOlder: court.loadingOlder,
     lead,
+    heroClip,
     players,
     playedBy,
     lastPost,
