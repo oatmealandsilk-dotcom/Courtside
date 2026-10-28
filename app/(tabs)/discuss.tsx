@@ -42,6 +42,7 @@ import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
 import { CityBoardPreview } from '@/components/CityBoardPreview';
+import { PeopleYouMayKnow, usePeopleYouMayKnow } from '@/features/people/PeopleYouMayKnow';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { FollowPill } from '@/components/FollowPill';
@@ -510,6 +511,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // while there is a board to show (on its way, or your city on it or waiting for players). Off, not open
   // to you, or not loaded: the page is exactly as before.
   const cityBoard = useCityBoard();
+  // People you may know (admins first, PYMK_FOR_EVERYONE): null when off, resting or with nobody to show.
+  const pymk = usePeopleYouMayKnow();
   const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
   const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
   // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home
@@ -735,6 +738,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <UpToday me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
+        {/* People you may know (admins first, Oct 28): people who follow you to follow back, then people you may know.
+            People first: under Up to hit / "Most active in <city>", above the city board. */}
+        {!search && pymk ? <FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal> : null}
         {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
             People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
         {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}

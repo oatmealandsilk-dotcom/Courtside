@@ -35,6 +35,8 @@ interface Props {
    * profile, where full-size buttons wrap and weigh it down.
    */
   size?: 'md' | 'sm';
+  /** What a screen reader says, where the word alone is not enough ("Follow back Rosa Diaz"). Left out: the label. */
+  accessibilityLabel?: string;
 }
 
 export function Button({
@@ -47,6 +49,7 @@ export function Button({
   style,
   full = false,
   size = 'md',
+  accessibilityLabel,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const palette = paletteFor(variant);
@@ -60,7 +63,7 @@ export function Button({
       // A wide button travelling as far as a small icon looks wobbly.
       scaleTo={PRESS_SHRINK}
       hoverTo={1.04}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       hitSlop={size === 'sm' ? buttonShape.smallSlop : undefined}
       style={[
         styles.base,
