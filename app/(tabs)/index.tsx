@@ -50,6 +50,7 @@ import { wantsOn } from '@/lib/useOptimisticToggle';
 import { setFeedWarm, useCurtainDown } from '@/features/feed/warmup';
 import { PRIME_CLIPS, PRIME_LOOK, useClipPrimer, usePreloadMore, type PrimeTarget } from '@/features/feed/preloadMore';
 import { POSTERS_AHEAD, POSTERS_AHEAD_SLOW, usePostersAhead } from '@/features/feed/postersAhead';
+import { REACH_BUILT_MAX, useFeedReach } from '@/features/feed/feedReach';
 import { connectionIsQuick } from '@/lib/netSpeed';
 import { subscribeFeedRefresh } from '@/features/feed/feedBus';
 import { markFeedSwiped } from '@/features/feed/firstSwipe';
@@ -1695,8 +1696,33 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (host?.type === 'post') findHost.current = { visit, id: host.post.id };
   }
   const findHostId = !scope && findShown && findHost.current.visit === visit && roomy.has(findHost.current.id) ? findHost.current.id : null;
-  // Where the pages built and the covers drawn are counted from: the page on screen.
-  const base = active;
+  // Where the pages built and the covers drawn are counted from: the page on screen, or, building
+  // ahead (features/feed/feedReach, admins first), the page a swipe is heading for once that is
+  // further on (Oct 28, owner: "Also rn scrolling fast on the feed I almost immediatly get hit with
+  // loading screen"). The pager says it as the finger lifts (onReach), so a run of quick flicks
+  // builds each page it heads for in turn instead of reaching unbuilt pages and building several
+  // at once when it comes to rest. Playback never follows it: only `active` plays. A reach counts
+  // only while the page on screen is still the one it was said from (a refresh or a move made in
+  // code starts over), and only once it is two or more pages on: a single swipe to the next page
+  // (its own pages already built) works exactly as before, with no extra redraw as the finger lifts.
+  const reachFirst = useFeedReach();
+  const [reached, setReached] = useState<{ index: number; from: number; visit: number } | null>(null);
+  const onReach = useCallback((index: number) => {
+    const from = activeRef.current;
+    if (index < from + 2) { setReached((prev) => (prev === null ? prev : null)); return; }
+    setReached((prev) => (prev && prev.index === index && prev.from === from && prev.visit === visit ? prev : { index, from, visit }));
+  }, [visit]);
+  const reachAhead = reachFirst && reached && reached.visit === visit && reached.from === active && reached.index >= active + 2 && reached.index < feed.length ? reached.index : null;
+  const base = reachAhead ?? active;
+  // Built while a swipe heads ahead: the page on screen (still the active one, its clip already
+  // stopped as the swipe left it), the page headed for, the one before it (passed on the way in)
+  // and the next two, at most REACH_BUILT_MAX of them, so no more players are alive than before.
+  // The page behind the one on screen goes now rather than on landing.
+  let reachBuilt: Set<number> | null = null;
+  if (reachAhead !== null) {
+    reachBuilt = new Set<number>();
+    for (const i of [active, base, base - 1, base + 1, base + AHEAD]) if (i >= 0 && i < feed.length && reachBuilt.size < REACH_BUILT_MAX) reachBuilt.add(i);
+  }
   // Photos and clip covers are fetched outright; a page reports itself ready when its picture lands.
   // From the page on screen (or, building ahead, the page a swipe heads for: `base`, below) to the
   // last one built ahead, into expo-image's own cache, the one every page draws from (Oct 28: this
@@ -1784,6 +1810,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   }
   /** Whether the page at `index` is built: the window, plus a third page ahead that got its lookahead. */
   const inReach = (index: number) => {
+    if (reachBuilt) return reachBuilt.has(index);
     const ahead = index - active;
     if (ahead >= -WINDOW && ahead <= AHEAD) return true;
     const item = feed[index];
@@ -2056,7 +2083,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
             looks={followLive ? followLooks : undefined} startEarly={swipeFollow} onHead={swipeFollow ? headStore.set : undefined}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
@@ -2094,7 +2121,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               // On top of that, a page that got its lookahead (above) fetches too, like the others: the
               // third page ahead, and in a browser the second.
               const extra = ahead >= 2 && lookahead.current.has(keyOf(item));
-              const near = Platform.OS === 'web' ? ((ahead === 0 || ahead === 1) && (!warming || ahead === 0)) || extra : distance <= 1 || (ahead > 0 && ahead <= AHEAD) || extra;
+              // Building ahead (feedReach): the page a swipe heads for fetches too, and the next one (on a phone, the whole window round it).
+              const nearReach = reachAhead !== null && (Platform.OS === 'web' ? index === base || index === base + 1 : index >= base - WINDOW && index <= base + AHEAD);
+              const near = (Platform.OS === 'web' ? ((ahead === 0 || ahead === 1) && (!warming || ahead === 0)) || extra : distance <= 1 || (ahead > 0 && ahead <= AHEAD) || extra) || nearReach;
               const strip = index === suggestHost ? suggestStrip : null;
               // A session from a player near you, not followed yet: "Near you", with Follow.
               const nearUser = scope?.activities && item.type === 'post' && nearAuthors.has(item.post.authorId) && !followingIds.includes(item.post.authorId) ? usersById.get(item.post.authorId) : undefined;

@@ -60,7 +60,7 @@ function pageKey(child: React.ReactNode, index: number) {
 /** The ring round the logo in the Feed's corner. */
 export const CORNER_RING = 44;
 
-export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** A finger's swipe landed on a new page (never a jump made in code: back to the top, a restored place). */ onSwiped?: (index: number) => void; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left'; /** How far the Feed's top row is away (0 shown, 1 gone): the feed's own movement drives it, a hold or the first page brings it back (features/feed/topRowScroll). Given only to the feed on show. */ row?: SharedValue<number>; /** The swipe followed (features/feed/swipeFollow): each page's look (1 a picture, 0 written), and the look under a finger's swipe is shared frame by frame with the bar and the top row. Given only to the feed on show. */ looks?: SharedValue<number[]>; /** The swipe followed: the page a decided swipe heads for counts as the one on screen for its clip (pageLeaving's `heading`) from that moment. */ startEarly?: boolean; /** The swipe followed: told the page a decided swipe heads for, and null once it has landed or turned back. */ onHead?: (index: number | null) => void }>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row, looks, startEarly = false, onHead }, ref) {
+export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.ReactNode[]; onIndex: (index: number) => void; /** The page the scroll came to rest on. */ onSettled?: (index: number) => void; initialIndex?: number; /** A finger's swipe landed on a new page (never a jump made in code: back to the top, a restored place). */ onSwiped?: (index: number) => void; /** Pulling down past the first page fetches what is new. */ onRefresh?: () => Promise<void>; /** Shown in the gap the pull opens, beside the disc. */ pullHeader?: React.ReactNode; /** How far below the clock the pull row sits (clear of a band laid over the top). */ pullTop?: number; /** 'left': the logo and disc in the top-left corner, beside the Feed's words (Oct 4). */ pullAlign?: 'center' | 'left'; /** How far the Feed's top row is away (0 shown, 1 gone): the feed's own movement drives it, a hold or the first page brings it back (features/feed/topRowScroll). Given only to the feed on show. */ row?: SharedValue<number>; /** The swipe followed (features/feed/swipeFollow): each page's look (1 a picture, 0 written), and the look under a finger's swipe is shared frame by frame with the bar and the top row. Given only to the feed on show. */ looks?: SharedValue<number[]>; /** The swipe followed: the page a decided swipe heads for counts as the one on screen for its clip (pageLeaving's `heading`) from that moment. */ startEarly?: boolean; /** The swipe followed: told the page a decided swipe heads for, and null once it has landed or turned back. */ onHead?: (index: number | null) => void; /** Told the page the feed will rest on as soon as that is known: as a finger lifts (the page the swipe heads for), and again where it lands or a move made in code passes. Only when it changes. The Feed builds ahead of it (features/feed/feedReach). */ onReach?: (index: number) => void }>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row, looks, startEarly = false, onHead, onReach }, ref) {
   // Hears a theme change, so its own colours never lag the page's.
   useTheme();
   const [height, setHeight] = useState(0);
@@ -188,6 +188,17 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   const [leaving] = useState(makePageLeaving);
   const keys = useRef<string[]>([]);
   keys.current = children.map((child, index) => pageKey(child, index));
+  // Where the feed will rest, told once per change (onReach): the page a decided swipe heads for,
+  // as the finger lifts, then the page it lands on. A run of quick flicks says each page it heads
+  // for in turn, long before the feed comes to rest and the Feed's active page moves.
+  const reachSay = useRef(onReach);
+  reachSay.current = onReach;
+  const reachLast = useRef(initialIndex);
+  const reachTo = useCallback((index: number) => {
+    if (reachLast.current === index) return;
+    reachLast.current = index;
+    reachSay.current?.(index);
+  }, []);
   // The swipe followed (features/feed/swipeFollow): the page a decided swipe heads for, told to its
   // clip (pageLeaving's `heading`) and to the Feed's clock (onHead).
   const early = useRef({ startEarly, onHead });
@@ -203,10 +214,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // passes other pages on its way, each the page on show for a moment, so its last page starts as
   // it lands, as before.
   const headFor = useCallback((index: number, byFinger = true) => {
+    reachTo(index);
     const here = last.current;
     leaving.set(index !== here ? keys.current[here] ?? null : null);
     if (early.current.startEarly) setHeading(byFinger && index !== here ? keys.current[index] ?? null : null, index);
-  }, [leaving, setHeading]);
+  }, [leaving, setHeading, reachTo]);
   headForRef.current = headFor;
   // Landed on another page: the page left goes on counting as left until the Feed has drawn the
   // new page as the active one (the render this landing starts), never a moment before, or its
@@ -225,6 +237,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
   // swipe left (it turned round): its clip carries on at once. On another: the page left is let
   // go of once the Feed has drawn it (above), and so is the page headed for, if this is it.
   const landed = useCallback((index: number) => {
+    reachTo(index);
     const leftKey = leaving.get();
     let wait = false;
     if (leftKey !== null) {
@@ -235,7 +248,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, { children: React.R
     if (headKey !== null && headKey === keys.current[index]) { letGoAfterDraw.current.head = headKey; wait = true; }
     if (wait) drawn((n) => n + 1);
     changed(index);
-  }, [changed, leaving]);
+  }, [changed, leaving, reachTo]);
   // The page a swipe starts from: on an iPhone the scroller may only stop on
   // it or a neighbour (snapOffsets below), so a hard flick moves one page.
   const [around, setAround] = useState(initialIndex);

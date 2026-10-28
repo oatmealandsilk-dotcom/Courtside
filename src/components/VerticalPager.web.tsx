@@ -47,7 +47,9 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   startEarly?: boolean;
   /** The swipe followed: told the page a decided swipe heads for, and null once it has landed or turned back. */
   onHead?: (index: number | null) => void;
-}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row, looks, startEarly = false, onHead }, ref) {
+  /** Told the page the feed will rest on as soon as that is known: as a swipe is let go (the page it heads for), and again where it lands. Only when it changes. The Feed builds ahead of it (features/feed/feedReach). */
+  onReach?: (index: number) => void;
+}>(function VerticalPager({ children, onIndex, onSettled, onSwiped, initialIndex = 0, onRefresh, pullHeader, pullTop = 0, pullAlign = 'center', row, looks, startEarly = false, onHead, onReach }, ref) {
   // The scrollbar is part of the design too: reading the theme here is what
   // redraws it when the palette changes.
   useTheme();
@@ -117,6 +119,16 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const [leaving] = useState(makePageLeaving);
   const keys = useRef<string[]>([]);
   keys.current = children.map((child, index) => pageKey(child, index));
+  // Where the feed will rest, told once per change (onReach): the page a swipe heads for as it is
+  // let go, then the page it lands on (the phone's VerticalPager says the same).
+  const reachSay = useRef(onReach);
+  reachSay.current = onReach;
+  const reachLast = useRef(initialIndex);
+  const reachTo = (index: number) => {
+    if (reachLast.current === index) return;
+    reachLast.current = index;
+    reachSay.current?.(index);
+  };
   // The swipe followed (features/feed/swipeFollow): the page a decided swipe heads for, told to its
   // clip (pageLeaving's `heading`) and to the Feed's clock (onHead).
   const early = useRef({ startEarly, onHead });
@@ -131,6 +143,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   // swipe heads for starts in the same moment; a move made in code (back to the top) starts its
   // last page as it lands, as before.
   const headFor = (index: number, byUser: boolean) => {
+    reachTo(index);
     const here = reported.current;
     leaving.set(index !== here ? keys.current[here] ?? null : null);
     if (early.current.startEarly) setHeading(byUser && index !== here ? keys.current[index] ?? null : null, index);
@@ -175,6 +188,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const commit = (el: HTMLDivElement) => {
     if (!el.clientHeight) return;
     const index = Math.round(el.scrollTop / el.clientHeight);
+    reachTo(index);
     // Landed: the look at rest, exactly (followed).
     shareLook(el);
     if (looksRef.current) followHeld.value = 0;
