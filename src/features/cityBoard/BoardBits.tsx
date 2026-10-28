@@ -99,8 +99,9 @@ const HEAD_TRACK = 0.6;
  *   - "Rank" centred over the place column (the coins, and the numerals
  *     under them), as wide as the rows' (`rankWidth`, and `rankShift` where a
  *     row gives some of it back); left out for a list with no places (null);
- *   - `name` ("City", "Player", "Court") starting where the names start
- *     (`nameIndent`: what a row draws before its name, a face and its gap);
+ *   - `name` ("City", "Player", "Court") starting where the row's second
+ *     column starts: the names, or a player's face (the face and name are
+ *     one cell, the way a club table's "Club" sits over the crests);
  *   - `value` ("Sessions", "Per player") ending where the numbers end.
  * The app's section-label look (Pick a court's "Nearby", a profile's
  * eyebrows, the stats sheet's labels): small capitals, a little
@@ -110,7 +111,7 @@ const HEAD_TRACK = 0.6;
  * word off its column. VoiceOver hears it as a heading ("Rank, City,
  * Sessions"); each row still says its own unit ("512 sessions").
  */
-export function BoardHead({ name, value, valueSpoken = value, rankWidth = 32, rankShift = 0, nameIndent = 0, style }: {
+export function BoardHead({ name, value, valueSpoken = value, rankWidth = 32, rankShift = 0, style }: {
   name: string;
   value: string;
   /** What VoiceOver hears for `value`, where the word alone says less ("Per player": "Sessions per player"). */
@@ -119,7 +120,6 @@ export function BoardHead({ name, value, valueSpoken = value, rankWidth = 32, ra
   rankWidth?: number | null;
   /** A row's margin after its place column (the full board gives back 2 points). */
   rankShift?: number;
-  nameIndent?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -132,7 +132,7 @@ export function BoardHead({ name, value, valueSpoken = value, rankWidth = 32, ra
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.headText, styles.headRankText]}>Rank</Text>
         </View>
       ) : null}
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.headText, styles.headName, nameIndent ? { marginLeft: nameIndent } : null]}>{name}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.headText, styles.headName]}>{name}</Text>
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.headText, styles.headValue]}>{value}</Text>
     </View>
   );

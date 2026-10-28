@@ -33,7 +33,7 @@ import { corner } from '@/theme/look';
 /** Top players shown before your own row is pinned under them. */
 const TOP = 5;
 const PLAYER_H = 60;
-/** A player row's place column and face: the head's "Rank" is centred over the one, "Player" starts after the other. */
+/** A player row's place column (the head's "Rank" is centred over it) and face (the head's "Player" starts over it, as a club table's "Club" sits over the crests). */
 const RANK_W = 32;
 const FACE = 40;
 /** The room between the list and your own row under it. */
@@ -228,7 +228,7 @@ export default function CityPage() {
             <View style={styles.head}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
             </View>
-            <BoardHead name="Player" value="Sessions" rankWidth={RANK_W} nameIndent={FACE + spacing.md} style={styles.boardHead} />
+            <BoardHead name="Player" value="Sessions" rankWidth={RANK_W} style={styles.boardHead} />
             <View onLayout={(e) => place('list', e.nativeEvent.layout.y)}>
               {topPlayers.map((p, i) => (
                 <Rise key={p.user.id} at={i * PLAYER_H} height={PLAYER_H} listY={listY} offsetY={offsetY} seeH={seeH} clock={clock} reduced={reduced}>
