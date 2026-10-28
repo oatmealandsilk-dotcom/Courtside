@@ -127,10 +127,11 @@ export const HAVE_IT: Record<string, { friends: string[]; total: number }> = {
  *   B  Card: the court comes as a collectible card that flips over.
  *   C  Your map: the new court lights up, then the map pulls back to show
  *      all your courts, the new one among them.
- * The demo's pictures pick one with ?v=A, ?v=B or ?v=C; this is the rest.
+ * The demo's pictures pick one with ?v=A, ?v=B or ?v=C; this is the rest
+ * (owner, Oct 28: "C your map").
  */
 export type UnlockOption = 'A' | 'B' | 'C';
-export const COURT_UNLOCKED_OPTION: UnlockOption = 'A';
+export const COURT_UNLOCKED_OPTION: UnlockOption = 'C';
 export const unlockOption = (v?: string | string[]): UnlockOption => {
   const one = Array.isArray(v) ? v[0] : v;
   return one === 'A' || one === 'B' || one === 'C' ? one : COURT_UNLOCKED_OPTION;
