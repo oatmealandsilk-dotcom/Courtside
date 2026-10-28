@@ -62,6 +62,11 @@ export interface CheckInControl {
  * seen first, before the toast slides in over the top of the map (Oct 28, owner: "be more gratifying").
  */
 const TOAST_AFTER_MS = 450;
+/**
+ * And "Couldn't put you up to hit" waits out the button's shake (UpToHit, 280 ms): on the full map the toast
+ * comes down over the round arrow, which would hide the shake (the warning tap on the hand comes at once).
+ */
+const FAIL_TOAST_AFTER_MS = 280;
 
 /**
  * Check in (migration 189, Apple 5.1.2(i)): the only way your spot is ever
@@ -100,7 +105,12 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
       let at: { lat: number; lng: number } | null = null;
       const problem = await actions.checkInOnMap((fix) => { at = fix; });
       // It could not put you up: the button shakes once (UpToHit), the hand feels the same, and the toast says why.
-      if (problem) { setFailed((n) => n + 1); haptics.reject(); showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); return; }
+      if (problem) {
+        setFailed((n) => n + 1);
+        haptics.reject();
+        setTimeout(() => { if (turn.current === tap) showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); }, FAIL_TOAST_AFTER_MS);
+        return;
+      }
       const upAt = Date.now();
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const spot: { lat: number; lng: number } | null = at;

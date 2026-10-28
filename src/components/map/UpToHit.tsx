@@ -61,6 +61,12 @@ const BOUNCE_SETTLE = { damping: 12, stiffness: 320, mass: 0.7 };
 /** The band of light while it finds you: how wide, and one pass across. */
 const BAND = 44;
 const BAND_MS = 1000;
+/**
+ * How strong the band's middle is. A light page needs more of the brand to be seen at all (at 0.2 the
+ * Clean green was all but lost on the white pill, so a tap looked as if it did nothing while it found you).
+ */
+const BAND_LIGHT = 0.34;
+const BAND_DARK = 0.2;
 
 const APath = Animated.createAnimatedComponent(Path);
 
@@ -124,6 +130,7 @@ function Tick({ left, size, color }: { left: SharedValue<number>; size: number; 
  */
 function FindingBand({ width, radius }: { width: number; radius: number }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { dark } = useTheme();
   const reduce = useReducedMotion();
   const x = useSharedValue(0);
   useEffect(() => {
@@ -134,7 +141,7 @@ function FindingBand({ width, radius }: { width: number; radius: number }) {
   return (
     <Animated.View pointerEvents="none" exiting={FadeOut.duration(140)} style={[styles.bandBox, { borderRadius: radius }]}>
       <Animated.View style={[styles.band, run]}>
-        <LinearGradient colors={[clear, withAlpha(colors.brand, 0.2), clear]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
+        <LinearGradient colors={[clear, withAlpha(colors.brand, dark ? BAND_DARK : BAND_LIGHT), clear]} start={{ x: 0, y: 0.5 }} end={{ x: 1, y: 0.5 }} style={StyleSheet.absoluteFill} />
       </Animated.View>
     </Animated.View>
   );

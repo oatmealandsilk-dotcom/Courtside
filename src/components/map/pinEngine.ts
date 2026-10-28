@@ -235,6 +235,8 @@ return function(map,ml,o){
   // moments after it is the map catching up with you, not a tap, so your pin never drops in then.
   var meUp=null,born=0,SETTLE_MS=1200;
   function still(){try{return document.body.classList.contains('cs-still')}catch(e){return false}}
+  // The system's Reduce Motion, which the pins' own CSS already follows (markers.ts): your pin's landing then is the plain fade.
+  function lessMotion(){try{return !!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches)}catch(e){return false}}
   // Levels come every half step of zoom (lvl counts half steps: 23 is zoom 11.5), so a pin is never gathered for more than a little way past the point it needs.
   function levelNow(){return Math.max(ZMIN*2,Math.min(ZMAX*2,Math.floor(map.getZoom()*2+1e-6)))}
   function zoomOf(l){return l/2}
@@ -530,7 +532,7 @@ return function(map,ml,o){
     // Your Up to hit, turned on or off since the last drawing (not in the map's first moments, not with Reduce Motion).
     var upNow=!!(items.me&&items.me.up),arrive=false,depart=false,meMade=false;
     if(meUp===null)born=now();
-    else if(upNow!==meUp&&!st&&now()-born>SETTLE_MS){arrive=upNow;depart=!upNow}
+    else if(upNow!==meUp&&!st&&!lessMotion()&&now()-born>SETTLE_MS){arrive=upNow;depart=!upNow}
     meUp=upNow;
     // The view, and a margin of half of it all round: only pins in there are made.
     var ct=map.getContainer(),W=ct.clientWidth||400,H=ct.clientHeight||700,mid={x:W/2,y:H/2};
