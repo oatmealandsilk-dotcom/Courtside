@@ -197,9 +197,9 @@ const rowStyles = StyleSheet.create({
 function Faces({ people, size = 32 }: { people: User[]; size?: number }) {
   const styles = useThemedStyles(bannerStyles);
   return (
-    <View style={[styles.faces, { width: size + (Math.min(people.length, 3) - 1) * (size * 0.62) + 4, height: size + 4 }]}>
+    <View style={[styles.faces, { width: size + (Math.min(people.length, 3) - 1) * (size * 0.72) + 4, height: size + 4 }]}>
       {people.slice(0, 3).map((p, i) => (
-        <View key={p.id} style={[styles.face, { left: i * size * 0.62, zIndex: 3 - i, borderRadius: (size + 4) / 2 }]}>
+        <View key={p.id} style={[styles.face, { left: i * size * 0.72, zIndex: 3 - i, borderRadius: (size + 4) / 2 }]}>
           <Avatar uri={p.avatarUrl} name={p.name} seed={p.avatarSeed} size={size} />
         </View>
       ))}
@@ -226,10 +226,10 @@ export function FollowBackBanner({ onClose, startOpen = false }: { onClose: () =
   return (
     <View style={styles.card}>
       <Pressable accessibilityRole="button" accessibilityState={{ expanded: open }} onPress={() => setOpen((o) => !o)} style={({ pressed }) => [styles.top, pressed && { opacity: PRESS_DIM }]}>
-        <Faces people={people} size={28} />
+        <Faces people={people} size={26} />
         <View style={styles.words}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title} numberOfLines={2}>{allDone ? 'You follow each other now' : namesLine(people)}</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.line} numberOfLines={1}>{allDone ? 'You’ll see each other on the map' : 'Follow back to see them on the map'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.line} numberOfLines={1}>{allDone ? 'You’ll see each other on the map' : 'See each other on the map'}</Text>
         </View>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
       </Pressable>
@@ -315,14 +315,14 @@ export function FollowBackMeet({ onClose }: { onClose: () => void }) {
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title} numberOfLines={1}>{on ? `You and ${firstName(p)} follow each other` : `${p.name} follows you`}</Text>
           {people.length > 1 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.count}>{at + 1} of {people.length}</Text> : null}
         </View>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.line}>{on ? 'You’ll see each other on the map and the leaderboard.' : 'Follow back to see each other on the map and the leaderboard.'}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.line}>{on ? 'You’ll see each other on the map now.' : 'Follow back to see each other on the map.'}</Text>
         <View style={styles.buttons}>
           {on
             ? <View style={styles.grow}><Button label={last ? 'Done' : 'Next'} size="sm" onPress={next} full /></View>
             : (
               <>
                 <View style={styles.grow}><Button label="Follow back" size="sm" onPress={() => actions.toggleFollow(p.id)} full /></View>
-                <View style={styles.grow}><Button label={last ? 'Not now' : 'Skip'} variant="secondary" size="sm" onPress={next} full /></View>
+                <View style={styles.skip}><Button label={last ? 'Not now' : 'Skip'} variant="ghost" size="sm" onPress={next} full /></View>
               </>
             )}
         </View>
@@ -341,6 +341,7 @@ const meetCardStyles = StyleSheet.create({
   line: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   buttons: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   grow: { flex: 1 },
+  skip: { width: 92 },
 });
 
 // ---------------------------------------------------------------------------
