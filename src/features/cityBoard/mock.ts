@@ -40,29 +40,31 @@ export interface BoardCity {
   hits: number;
   /** Players who logged at least one this month. */
   players: number;
-  /** Where it finished last month (for "up 2"). */
-  lastRank: number;
+  /** Where it stood on the board a week ago (for "▲2" beside it): the race this week, not last month's. */
+  weekAgoRank: number;
+  /** Weeks in a row it has climbed (3 is a run: the hot marker). */
+  run?: number;
 }
 
 /** October's board, made up. A young app's numbers: hundreds, not thousands. */
 const CITIES: BoardCity[] = [
-  { id: 'new-york', name: 'New York', state: 'NY', hits: 512, players: 88, lastRank: 1 },
-  { id: 'austin', name: 'Austin', state: 'TX', hits: 473, players: 54, lastRank: 3 },
-  { id: 'los-angeles', name: 'Los Angeles', state: 'CA', hits: 412, players: 71, lastRank: 2 },
-  { id: 'chicago', name: 'Chicago', state: 'IL', hits: 288, players: 47, lastRank: 4 },
-  { id: 'miami', name: 'Miami', state: 'FL', hits: 241, players: 35, lastRank: 6 },
-  { id: 'seattle', name: 'Seattle', state: 'WA', hits: 197, players: 33, lastRank: 5 },
-  { id: 'denver', name: 'Denver', state: 'CO', hits: 164, players: 21, lastRank: 7 },
-  { id: 'raleigh', name: 'Raleigh', state: 'NC', hits: 96, players: 9, lastRank: 11 },
-  { id: 'atlanta', name: 'Atlanta', state: 'GA', hits: 88, players: 15, lastRank: 8 },
-  { id: 'san-diego', name: 'San Diego', state: 'CA', hits: 71, players: 13, lastRank: 9 },
-  { id: 'boston', name: 'Boston', state: 'MA', hits: 64, players: 12, lastRank: 10 },
-  { id: 'houston', name: 'Houston', state: 'TX', hits: 52, players: 10, lastRank: 12 },
-  { id: 'phoenix', name: 'Phoenix', state: 'AZ', hits: 41, players: 8, lastRank: 14 },
-  { id: 'nashville', name: 'Nashville', state: 'TN', hits: 37, players: 6, lastRank: 13 },
-  { id: 'portland', name: 'Portland', state: 'OR', hits: 33, players: 7, lastRank: 15 },
+  { id: 'new-york', name: 'New York', state: 'NY', hits: 512, players: 88, weekAgoRank: 1 },
+  { id: 'austin', name: 'Austin', state: 'TX', hits: 473, players: 54, weekAgoRank: 3, run: 1 },
+  { id: 'los-angeles', name: 'Los Angeles', state: 'CA', hits: 412, players: 71, weekAgoRank: 2 },
+  { id: 'chicago', name: 'Chicago', state: 'IL', hits: 288, players: 47, weekAgoRank: 4 },
+  { id: 'miami', name: 'Miami', state: 'FL', hits: 241, players: 35, weekAgoRank: 7, run: 2 },
+  { id: 'seattle', name: 'Seattle', state: 'WA', hits: 197, players: 33, weekAgoRank: 5 },
+  { id: 'denver', name: 'Denver', state: 'CO', hits: 164, players: 21, weekAgoRank: 6 },
+  { id: 'raleigh', name: 'Raleigh', state: 'NC', hits: 96, players: 9, weekAgoRank: 11, run: 3 },
+  { id: 'atlanta', name: 'Atlanta', state: 'GA', hits: 88, players: 15, weekAgoRank: 8 },
+  { id: 'san-diego', name: 'San Diego', state: 'CA', hits: 71, players: 13, weekAgoRank: 9 },
+  { id: 'boston', name: 'Boston', state: 'MA', hits: 64, players: 12, weekAgoRank: 10 },
+  { id: 'houston', name: 'Houston', state: 'TX', hits: 52, players: 10, weekAgoRank: 12 },
+  { id: 'phoenix', name: 'Phoenix', state: 'AZ', hits: 41, players: 8, weekAgoRank: 14, run: 1 },
+  { id: 'nashville', name: 'Nashville', state: 'TN', hits: 37, players: 6, weekAgoRank: 13 },
+  { id: 'portland', name: 'Portland', state: 'OR', hits: 33, players: 7, weekAgoRank: 15 },
   // Too few players to rank yet: shown only as "needs 2 more players".
-  { id: 'cary', name: 'Cary', state: 'NC', hits: 14, players: 3, lastRank: 0 },
+  { id: 'cary', name: 'Cary', state: 'NC', hits: 14, players: 3, weekAgoRank: 0 },
 ];
 
 /** Cities with fewer players than this are not ranked (a city of two would show two people's logs). */
@@ -70,7 +72,15 @@ export const MIN_PLAYERS = 5;
 
 export type BoardMode = 'total' | 'per';
 
+/** `moved`: places gained (+) or lost (-) since a week ago, on the hits board; 0 on the per-player one. */
 export interface RankedCity extends BoardCity { rank: number; value: number; moved: number }
+
+/**
+ * On a run: up 3 places or more this week. The one loud mark on the board
+ * (a filled "▲3"), so it means something when it shows: most weeks, one or
+ * two cities have it, never half the table.
+ */
+export const isHot = (c: Pick<RankedCity, 'moved'>) => c.moved >= 3;
 
 const perPlayer = (c: BoardCity) => Math.round((c.hits / c.players) * 10) / 10;
 
@@ -87,7 +97,7 @@ export function rankCities(mode: BoardMode): RankedCity[] {
   const out: RankedCity[] = [];
   sorted.forEach((c, i) => {
     const rank = i > 0 && sorted[i - 1].value === c.value ? out[i - 1].rank : i + 1;
-    out.push({ ...c, rank, moved: mode === 'total' ? c.lastRank - rank : 0 });
+    out.push({ ...c, rank, moved: mode === 'total' && c.weekAgoRank ? c.weekAgoRank - rank : 0 });
   });
   return out;
 }
@@ -99,6 +109,48 @@ export function neighbours(board: RankedCity[], id: string): { above: RankedCity
 }
 
 export const cityById = (id: string) => CITIES.find((c) => c.id === id) ?? null;
+
+/**
+ * The next city to catch, and by how many: "61 to pass Austin". By position
+ * (a city level with the one above it still has to pass it: 1 more). Null
+ * for the leader.
+ */
+export function nextTarget(board: RankedCity[], id: string): { city: RankedCity; gap: number; per: boolean } | null {
+  const i = board.findIndex((c) => c.id === id);
+  if (i <= 0) return null;
+  const above = board[i - 1];
+  const me = board[i];
+  const per = me.value !== me.hits;
+  const raw = above.value - me.value;
+  // Hits: one more than the gap passes them; per player, the gap itself (rounded up to a tenth).
+  const gap = per ? Math.max(0.1, Math.ceil(raw * 10) / 10) : raw + 1;
+  return { city: above, gap, per };
+}
+
+/** The week's moments on the board, newest first (made up): "Raleigh passed Atlanta · today". */
+export const MOMENTS: { who: string; passed: string; when: string }[] = [
+  { who: 'raleigh', passed: 'atlanta', when: 'today' },
+  { who: 'austin', passed: 'los-angeles', when: 'yesterday' },
+  { who: 'miami', passed: 'seattle', when: 'Sunday' },
+];
+
+/**
+ * The month's most watched clip from each city, for the top of its page
+ * (made up). Only a public clip by an adult is ever picked: never a teen's,
+ * whoever is looking, nor a private account's. `media` names the
+ * picture-only video the photographing script serves beside the build
+ * (cityboard-reel-a.mp4); without it the hero is the demo's court card.
+ */
+export const TOP_REEL: Record<string, { postId: string; authorId: string; views: number; media: 'a' | 'b' | 'c' }> = {
+  'los-angeles': { postId: 'p-sam-clip', authorId: 'u-sam', views: 2431, media: 'a' },
+  austin: { postId: 'p1', authorId: 'u-mira', views: 1874, media: 'b' },
+};
+
+/** Where the picture-only clips are served from (the photographing script sets it); null in every real build. */
+export const REEL_MEDIA_BASE: string | null = read('courtside-cityboard-media');
+
+/** "2.4k views", "612 views". */
+export const viewsWords = (n: number) => (n >= 1000 ? `${(Math.round(n / 100) / 10).toString()}k views` : `${n} views`);
 
 /** "Los Angeles, CA" or "Raleigh" → the board's id for it. */
 export const cityIdOf = (location: string | null | undefined): string | null => {

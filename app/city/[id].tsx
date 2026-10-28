@@ -1,25 +1,40 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { Easing, interpolate, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
+import { Glass } from '@/components/ui/Glass';
+import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
+import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
-import { DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MY_DEMO_HITS, cityById, neighbours, ordinal, rankCities } from '@/features/cityBoard/mock';
+import { Movement } from '@/features/cityBoard/BoardBits';
+import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, cityById, nextTarget, ordinal, rankCities, viewsWords } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
+import { useBarInset } from '@/features/navigation/barInset';
 import { notKnownAdult } from '@/features/players/age';
+import { isOpenToHit, tillLabel } from '@/features/players/openToHit';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { goBack } from '@/lib/goBack';
+import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import type { User } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
 /** Top players shown before your own row is pinned under them. */
 const TOP = 5;
+const PLAYER_H = 60;
+/** The room between the list and your own row under it. */
+const YOU_GAP = 14;
+const BAR_H = 52;
 /** Made-up "free today" times for the demo's players in another city (never a spot, never a distance). */
 const DEMO_FREE: Record<string, { id: string; till: string }[]> = {
   austin: [{ id: 'u-mira', till: 'till 7pm' }, { id: 'u-leo', till: 'till 6pm' }],
@@ -36,24 +51,25 @@ const DEMO_EXTRA: Record<string, { name: string; system: 'NTRP' | 'UTR'; rating:
 const MOCK_ID = 'mock-';
 
 /**
- * DESIGN MOCK (design/city-board). A city's page, opened from the board.
- * Short on purpose: three things, each one a reason to tap, in the same
- * order for every city, since it is opened from a leaderboard and the
- * leaderboard inside the city is what the owner asked for:
+ * DESIGN MOCK (design/city-board), round 2. A city's page, opened from the
+ * board. In order (owner, Oct 27):
  *
- *   Every city:   where it stands (and the gap), Top players this month, Busiest courts.
- *   Your city:    then the invite ("Help Los Angeles climb").
- *   Another city: then the traveller's part, "Visiting Austin?": who is free today there
- *                 (by town, never a spot; adults only, and never shown to a teen, whose
- *                 "free today" is friends only) and the map there.
+ *   1. The month's most watched clip there, big, playing muted, the city's
+ *      name and its place ("3rd") over it ("maybe even show that first").
+ *   2. Up to hit today, right under it, faces sideways ("should be easy to
+ *      find not hidden at bottom"): your own button first in your city.
+ *   3. Where it stands, in one short line ("a tiny bit too much words").
+ *   4. Top players, each row rising in as it scrolls into view, one by one
+ *      (on the animation thread); your own row under them, set apart by space
+ *      (no "⋮").
+ *   5. Busiest courts.
+ *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
- * Left out on purpose: clips and sessions logged there (the Feed has them,
- * and a list of who played where and when is a list of where people are),
- * charts, and any number about a single player beyond their hit count.
- *
- * Who is listed (the teen rule, Apple 13+): adults who share their stats;
- * a private account only to people who follow it; a teen only to friends
- * who follow each other with them, and never in Free today.
+ * Who is shown (Apple 13+): players by the city on their profile, never where
+ * they are. Adults who share their stats; a private account only to people
+ * who follow it; a teen only to friends who follow each other with them, and
+ * never in another city's Up to hit, nor to a teen looking at another city.
+ * The clip on top is only ever a public one by an adult.
  */
 export default function CityPage() {
   const styles = useThemedStyles(styleDefinitions);
@@ -61,11 +77,17 @@ export default function CityPage() {
   const city = cityById(String(id ?? ''));
   const homeId = useHomeCityId();
   const { users, currentUser, currentUserId, followingIds, blockedIds, lastSeen } = useApp();
-  // A teen sees friends only in anything about who is free (the rule UpToday keeps): no strangers' "free today".
   const viewerTeen = !currentUser || notKnownAdult(currentUser);
   const mine = !!city && city.id === homeId;
   const board = useMemo(() => rankCities('total'), []);
   const ranked = board.find((c) => c.id === city?.id) ?? null;
+  const insets = useSafeAreaInsets();
+  const { isPhone } = useResponsive();
+  const { height: windowH } = useWindowDimensions();
+  const barInset = useBarInset();
+  const reduced = useReducedMotion();
+  const top = isPhone ? insets.top : 0;
+  const heroH = Math.round(Math.min(Math.max(windowH * 0.58, 420), 560));
 
   // Who this viewer may see on a city's board.
   const listable = (u: User) => {
@@ -88,154 +110,329 @@ export default function CityPage() {
     return inCity.sort((a, b) => b.hits - a.hits).map((p, i) => ({ ...p, rank: i + 1 }));
   }, [city, users, currentUser, currentUserId, mine, followingIds, blockedIds, lastSeen, extras]); // eslint-disable-line react-hooks/exhaustive-deps
   const me = players.find((p) => p.me);
-  const top = players.slice(0, TOP);
+  const topPlayers = players.slice(0, TOP);
   const pinMe = me && me.rank > TOP ? me : null;
+  // The number to chase from below the list: the top 5's last place ("7 to reach the top 5"), never someone not shown.
+  const fifth = pinMe ? topPlayers[TOP - 1] ?? null : null;
 
-  const free = useMemo(() => (city && !mine && !viewerTeen ? (DEMO_FREE[city.id] ?? []).flatMap(({ id: uid, till }) => {
-    const u = users.find((x) => x.id === uid);
-    // Never a teen here, whoever is looking: their ring is for their friends.
-    return u && !notKnownAdult(u) && !blockedIds.includes(u.id) ? [{ user: u, till }] : [];
-  }).concat(extras.flatMap((x) => (x.free ? [{ user: x.user, till: x.free }] : []))) : []), [city, mine, viewerTeen, users, blockedIds, extras]);
+  // Up to hit today. Your city: you first (the button), then who here said so today. Another city: adults only, and never to a teen.
+  const upToday = useMemo(() => {
+    if (!city) return [];
+    if (mine) {
+      return users.filter((u) => u.id !== currentUserId && u.location.split(',')[0].trim() === city.name && isOpenToHit(u) && listable(u))
+        .map((u) => ({ user: u, till: tillLabel(u.openToHitUntil) ?? 'today' }));
+    }
+    if (viewerTeen) return [];
+    return (DEMO_FREE[city.id] ?? []).flatMap(({ id: uid, till }) => {
+      const u = users.find((x) => x.id === uid);
+      return u && !notKnownAdult(u) && !blockedIds.includes(u.id) ? [{ user: u, till }] : [];
+    }).concat(extras.flatMap((x) => (x.free ? [{ user: x.user, till: x.free }] : [])));
+  }, [city, mine, viewerTeen, users, currentUserId, blockedIds, extras, followingIds, lastSeen]); // eslint-disable-line react-hooks/exhaustive-deps
   const courts = city ? DEMO_BUSY_COURTS[city.id] ?? [] : [];
+
+  // The clip on top: the month's most watched there, by an adult, public.
+  const reel = city ? TOP_REEL[city.id] ?? null : null;
+  const reelAuthor = reel ? users.find((u) => u.id === reel.authorId && !notKnownAdult(u) && !u.isPrivate && !blockedIds.includes(u.id)) ?? null : null;
+
+  // ---- The scroll, read on the animation thread: the bar over the clip, and Top players rising in ----
+  const offsetY = useSharedValue(0);
+  const listY = useSharedValue(0);
+  const seeH = useSharedValue(windowH - barInset);
+  useEffect(() => { seeH.value = windowH - barInset; }, [seeH, windowH, barInset]);
+  const clock = useSharedValue(0);
+  // Where the list starts in the page: the sum of three layouts, used only once all three have come in
+  // (one alone, early, would start rows rising that are still below the screen).
+  const parts = useRef<{ body: number | null; section: number | null; list: number | null }>({ body: null, section: null, list: null });
+  const place = (key: keyof typeof parts.current, y: number) => {
+    parts.current[key] = y;
+    const { body, section, list } = parts.current;
+    if (body !== null && section !== null && list !== null) listY.value = body + section + list;
+  };
 
   if (!city) return <Screen title="City" compactTitle onBack={() => goBack()}><EmptyState icon="location-outline" title="No board for this city" body="It may not have enough players yet." /></Screen>;
 
-  const { above, below } = ranked ? neighbours(board, ranked.id) : { above: null, below: null };
-  const race = ranked ? [above ? (above.hits === ranked.hits ? `level with ${above.name}` : `${above.hits - ranked.hits} behind ${above.name}`) : null, below ? `${ranked.hits - below.hits} ahead of ${below.name}` : null].filter(Boolean).join(', ') : null;
-
-  const topPlayers = (
-    <View key="top" style={styles.section}>
-      <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>hits this month</Text>
-      </View>
-      {top.map((p, i) => <PlayerRow key={p.user.id} p={p} first={i === 0 || top[i - 1]?.me} onPress={() => { if (!p.user.id.startsWith(MOCK_ID)) openPlayer(p.user.id, currentUserId); }} />)}
-      {pinMe ? (
-        <>
-          <View style={styles.gap}><Text style={styles.gapDots}>⋮</Text></View>
-          <PlayerRow p={pinMe} first onPress={() => openPlayer(pinMe.user.id, currentUserId)} />
-        </>
-      ) : null}
-    </View>
-  );
-
-  const busy = courts.length ? (
-    <View key="courts" style={styles.section}>
-      <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Busiest courts</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>this month</Text>
-      </View>
-      {courts.map((c, i) => (
-        <View key={c.name} style={[styles.courtRow, i > 0 && styles.line]}>
-          <View style={styles.courtWords}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.name}>{c.name}</Text>
-            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sub}>{c.courts} courts</Text>
-          </View>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}><Text style={styles.valueNum}>{c.hits}</Text> hits</Text>
-        </View>
-      ))}
-    </View>
-  ) : null;
-
-  // Visiting: who is free there today, by town only, then the map. Faces, not a count, so the city reads as alive.
-  const freeFaces = free.length ? (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.faces} style={styles.facesScroll}>
-      {free.map(({ user, till }) => (
-        <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, free today in ${city.name}, ${till}. Open profile`} onPress={() => { if (!user.id.startsWith(MOCK_ID)) openPlayer(user.id, currentUserId); }} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
-          <OpenRing open size={52} halo="small"><Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} /></OpenRing>
-          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>{user.name.split(' ')[0]}</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}>{till}</Text>
-        </Pressable>
-      ))}
-    </ScrollView>
-  ) : null;
+  const target = ranked ? nextTarget(board, ranked.id) : null;
+  const standingLine = ranked
+    ? target ? `${target.gap} hits to pass ${target.city.name}` : board[1] ? `${ranked.hits - board[1].hits} hits clear of ${board[1].name}` : null
+    : `Needs ${MIN_PLAYERS - city.players} more players to be ranked`;
 
   return (
-    <Screen title={city.name} subtitle={mine ? `${city.state} · your city` : city.state} compactTitle onBack={() => goBack()}>
-      {/* Where it stands, in a line or two of words: no tiles, no chart. */}
-      <View style={styles.standing}>
-        {ranked ? (
-          <View style={styles.rankLine}>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rankBig}>{ordinal(ranked.rank)}</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {board.length} cities this month</Text>
+    <View style={styles.root}>
+      <Screen bleedTop wash={false} padded={false} offsetY={offsetY}>
+        <Hero cityName={city.name} rank={ranked?.rank ?? null} reel={reel} author={reelAuthor} height={heroH} top={top} />
+
+        <View style={styles.body} onLayout={(e) => place('body', e.nativeEvent.layout.y)}>
+          {/* 2. Up to hit today: right under the clip, so it is never hunted for. */}
+          {mine || upToday.length ? (
+            <View style={styles.upSection}>
+              <View style={styles.head}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Up to hit today</Text>
+                {upToday.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>{upToday.length} in {city.name}</Text> : null}
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.faces} style={styles.facesScroll}>
+                {mine && currentUser ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel="Up to hit: tell players here you are free today" onPress={() => router.push('/open-to-hit')} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
+                    <OpenRing open={isOpenToHit(currentUser)} hairline size={56} halo="small">
+                      <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={56} />
+                    </OpenRing>
+                    <View style={styles.plus}><Ionicons name="add" size={15} color={colors.brandInk} /></View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>Up to hit</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}> </Text>
+                  </Pressable>
+                ) : null}
+                {upToday.map(({ user, till }) => (
+                  <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, up to hit today, ${till}. Open profile`} onPress={() => { if (!user.id.startsWith(MOCK_ID)) openPlayer(user.id, currentUserId); }} style={({ pressed }) => [styles.face, pressed && { opacity: PRESS_DIM }]}>
+                    <OpenRing open size={56} halo="small"><Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={56} /></OpenRing>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceName}>{user.name.split(' ')[0]}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.faceMeta}>{till}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {/* 3. Where it stands: the place, and one short line. */}
+          <View style={styles.standing}>
+            {ranked ? (
+              <View style={styles.rankLine}>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rankBig}>{ordinal(ranked.rank)}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rankOf}>of {board.length}</Text>
+                <View style={styles.rankMove}><Movement moved={ranked.moved} long /></View>
+              </View>
+            ) : null}
+            {standingLine ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.standingLine}>{standingLine}</Text> : null}
           </View>
-        ) : <Text style={styles.rankOf}>Not ranked yet: {city.name} needs {MIN_PLAYERS - city.players} more players.</Text>}
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.facts}>
-          {city.hits} hits · {city.players} players{ranked && city.lastRank ? ` · ${ordinal(city.lastRank)} last month` : ''}
-        </Text>
-        {race ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.race}>{race.charAt(0).toUpperCase() + race.slice(1)}.</Text> : null}
-      </View>
 
-      {topPlayers}
-      {busy}
+          {/* 4. Top players: each row rises in as it comes into view, one after another. */}
+          <View style={styles.section} onLayout={(e) => place('section', e.nativeEvent.layout.y)}>
+            <View style={styles.head}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>hits in {BOARD_MONTH}</Text>
+            </View>
+            <View onLayout={(e) => place('list', e.nativeEvent.layout.y)}>
+              {topPlayers.map((p, i) => (
+                <Rise key={p.user.id} at={i * PLAYER_H} height={PLAYER_H} listY={listY} offsetY={offsetY} seeH={seeH} clock={clock} reduced={reduced}>
+                  <PlayerRow p={p} line={i > 0 && !topPlayers[i - 1]?.me && !p.me} onPress={() => { if (!p.user.id.startsWith(MOCK_ID)) openPlayer(p.user.id, currentUserId); }} />
+                </Rise>
+              ))}
+              {pinMe ? (
+                <Rise at={topPlayers.length * PLAYER_H + YOU_GAP} height={PLAYER_H} listY={listY} offsetY={offsetY} seeH={seeH} clock={clock} reduced={reduced} style={styles.youGap}>
+                  <PlayerRow p={pinMe} sub={fifth ? `${fifth.hits - pinMe.hits + 1} to reach the top ${TOP}` : null} onPress={() => openPlayer(pinMe.user.id, currentUserId)} />
+                </Rise>
+              ) : null}
+            </View>
+          </View>
 
-      <View style={styles.footer}>
-        {mine ? (
-          <>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Help {city.name} climb</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>Every hit logged by a player from here counts.</Text>
-            <View style={styles.footButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
-          </>
-        ) : (
-          <>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Visiting {city.name}?</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>{free.length ? `${free.length === 1 ? '1 player is' : `${free.length} players are`} free to hit there today.` : 'See its courts and open hits on the map.'}</Text>
-            {freeFaces}
-            <View style={styles.footButton}><Button label={`See ${city.name} on the map`} variant="secondary" onPress={() => router.push('/map')} full /></View>
-          </>
-        )}
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>Players are listed by the city on their profile, never where they are. Only players who share their stats are shown.</Text>
-      </View>
-    </Screen>
+          {/* 5. Busiest courts. */}
+          {courts.length ? (
+            <View style={styles.section}>
+              <View style={styles.head}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Busiest courts</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>hits in {BOARD_MONTH}</Text>
+              </View>
+              {courts.map((c, i) => (
+                <View key={c.name} style={[styles.courtRow, i > 0 && styles.line]}>
+                  <View style={styles.courtWords}>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.name}>{c.name}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sub}>{c.courts} courts</Text>
+                  </View>
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.hits}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {/* 6. Yours: help it climb. Another: the way there. */}
+          <View style={styles.footer}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>{mine ? `Help ${city.name} climb` : `Visiting ${city.name}?`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>{mine ? 'Every session a player from here logs counts.' : 'See its courts and who is up to hit on the map.'}</Text>
+            <View style={styles.footButton}>
+              {mine
+                ? <Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full />
+                : <Button label={`See ${city.name} on the map`} variant="secondary" onPress={() => router.push('/map')} full />}
+            </View>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>Players are listed by the city on their profile, never where they are.</Text>
+          </View>
+        </View>
+      </Screen>
+      <TopBar name={city.name} top={top} heroH={heroH} offsetY={offsetY} />
+    </View>
   );
 }
 
-function PlayerRow({ p, first, onPress }: { p: { user: User; hits: number; rank: number; me: boolean }; first?: boolean; onPress: () => void }) {
+/**
+ * 1. The month's most watched clip in the city, playing muted, with the
+ * city's name and place over it. A tap opens the clip.
+ */
+function Hero({ cityName, rank, reel, author, height, top }: { cityName: string; rank: number | null; reel: (typeof TOP_REEL)[string] | null; author: User | null; height: number; top: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const shown = reel && author ? reel : null;
+  const media = shown && REEL_MEDIA_BASE ? `${REEL_MEDIA_BASE}/cityboard-reel-${shown.media}` : null;
+  return (
+    <Pressable
+      accessibilityRole={shown ? 'link' : undefined}
+      accessibilityLabel={shown && author ? `Most watched clip in ${cityName} this month, by ${author.name}. Open clip` : undefined}
+      disabled={!shown}
+      onPress={() => { if (shown) router.push(`/post/${shown.postId}`); }}
+      style={[styles.hero, { height }]}
+    >
+      {media ? <ClipVideo uri={`${media}.mp4`} poster={`${media}.jpg`} active muted fit="cover" /> : <MediaPlaceholder label={shown ? 'Clip' : cityName} seed={cityName} fill />}
+      <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0.32)', 'rgba(0,0,0,0)']} style={[styles.heroTopShade, { height: top + 90 }]} />
+      <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.18)', 'rgba(0,0,0,0.66)']} locations={[0, 0.35, 1]} style={styles.heroShade} />
+      <View pointerEvents="none" style={styles.heroWords}>
+        {shown ? (
+          <View style={styles.heroKicker}>
+            <Ionicons name="play" size={11} color={colors.onMedia} />
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.heroKickerText}>Most watched in {BOARD_MONTH}</Text>
+          </View>
+        ) : null}
+        <View style={styles.heroNameLine}>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.heroName}>{cityName}</Text>
+          {rank ? <View style={styles.rankChip}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.rankChipText}>{ordinal(rank)}</Text></View> : null}
+        </View>
+        {shown && author ? (
+          <View style={styles.heroBy}>
+            <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={22} />
+            <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.heroByText}>{author.name} · {viewsWords(shown.views)}</Text>
+          </View>
+        ) : null}
+      </View>
+      {media ? <View pointerEvents="none" style={styles.muted}><Ionicons name="volume-mute" size={14} color={colors.onMedia} /></View> : null}
+    </Pressable>
+  );
+}
+
+/** Back over the clip; once the clip has gone up under it, the bar turns solid with the city's name. */
+function TopBar({ name, top, heroH, offsetY }: { name: string; top: number; heroH: number; offsetY: SharedValue<number> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const from = heroH - (top + BAR_H) - 40;
+  const ground = useAnimatedStyle(() => ({ opacity: interpolate(offsetY.value, [from, from + 40], [0, 1], 'clamp') }));
+  const title = useAnimatedStyle(() => {
+    const t = interpolate(offsetY.value, [from + 10, from + 50], [0, 1], 'clamp');
+    return { opacity: t, transform: [{ translateY: (1 - t) * 6 }] };
+  });
+  const dark = pageIsDark();
+  return (
+    <View pointerEvents="box-none" style={[styles.bar, { height: top + BAR_H }]}>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.barGround, ground]} />
+      <View pointerEvents="box-none" style={[styles.barRow, { marginTop: top }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={6} onPress={() => goBack()} style={({ pressed }) => [styles.back, pressed && { opacity: PRESS_DIM }]}>
+          <Glass radius={19} tint={dark ? colors.surfaceAlt : undefined} style={styles.backGlass}>
+            <Ionicons name="chevron-back" size={21} color={colors.text} style={styles.backGlyph} />
+          </Glass>
+        </Pressable>
+        <Animated.Text numberOfLines={1} style={[styles.barTitle, title]}>{name}</Animated.Text>
+        <View style={styles.barEnd} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * A row that rises into place the first time it scrolls into view (on the
+ * animation thread). Rows that come into view together still come one after
+ * another, 80 ms apart, so a fast scroll reads as a list arriving, not a
+ * block popping in.
+ */
+function Rise({ at, height, listY, offsetY, seeH, clock, reduced, style, children }: {
+  at: number; height: number; listY: SharedValue<number>; offsetY: SharedValue<number>; seeH: SharedValue<number>; clock: SharedValue<number>; reduced: boolean;
+  style?: object; children: React.ReactNode;
+}) {
+  const p = useSharedValue(reduced ? 1 : 0);
+  const started = useSharedValue(reduced);
+  useAnimatedReaction(
+    () => listY.value > 0 && offsetY.value + seeH.value > listY.value + at + height * 0.35,
+    (inView) => {
+      if (!inView || started.value) return;
+      started.value = true;
+      const now = Date.now();
+      const delay = Math.max(0, clock.value - now);
+      clock.value = now + delay + 80;
+      p.value = withDelay(delay, withTiming(1, { duration: 460, easing: Easing.out(Easing.cubic) }));
+    },
+    [at, height],
+  );
+  const rise = useAnimatedStyle(() => ({ opacity: p.value, transform: [{ translateY: (1 - p.value) * 28 }] }));
+  return <Animated.View style={[style, rise]}>{children}</Animated.View>;
+}
+
+function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; hits: number; rank: number; me: boolean }; line?: boolean; sub?: string | null; onPress: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(p.rank)}, ${p.me ? 'you' : p.user.name}, ${p.hits} hits`} onPress={onPress} style={({ pressed }) => [styles.playerRow, p.me ? styles.rowMine : !first && styles.line, pressed && { opacity: PRESS_DIM }]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.me && styles.mineInk]}>{p.rank}</Text>
-      <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={36} ring={p.user.isCoach} />
+    <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(p.rank)}, ${p.me ? 'you' : p.user.name}, ${p.hits} hits`} onPress={onPress} style={({ pressed }) => [styles.playerRow, p.me ? styles.rowMine : line && styles.line, pressed && { opacity: PRESS_DIM }]}>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.rank > 3 && styles.rankLow, p.me && styles.mineInk]}>{p.rank}</Text>
+      <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={40} ring={p.user.isCoach} />
       <View style={styles.playerWords}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, p.me && styles.mineName]}>{p.me ? 'You' : p.user.name}</Text>
-        <LevelPill profile={p.user.profile} small />
+        <View style={styles.playerNameLine}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, p.me && styles.mineName]}>{p.me ? 'You' : p.user.name}</Text>
+          <LevelPill profile={p.user.profile} small />
+        </View>
+        {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.subMine}>{sub}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.valueNum}>{p.hits}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, p.me && styles.mineInk]}>{p.hits}</Text>
     </Pressable>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
-  standing: { gap: 4, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  rankLine: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  rankBig: { ...typography.display, color: colors.text, fontVariant: ['tabular-nums'] },
-  rankOf: { ...typography.body, color: colors.textMuted },
-  facts: { ...typography.body, ...font('500'), color: colors.text },
-  race: { ...typography.small, color: colors.textMuted },
+  root: { flex: 1 },
+  // The clip: edge to edge on a phone, under the status bar.
+  hero: { width: '100%', overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  heroTopShade: { position: 'absolute', left: 0, right: 0, top: 0 },
+  heroShade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '62%' },
+  heroWords: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.xl, gap: 6 },
+  heroKicker: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  heroKickerText: { ...typography.small, ...font('600'), color: colors.onMedia, opacity: 0.92 },
+  heroNameLine: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  heroName: { ...font('700'), fontSize: 38, letterSpacing: -1.2, color: colors.onMedia, flexShrink: 1 },
+  // Its place, as a chip in the court's own colour: the one thing on the clip that is the app's.
+  rankChip: { backgroundColor: colors.brand, borderRadius: 999, paddingHorizontal: 11, height: 30, justifyContent: 'center', marginTop: 4 },
+  rankChipText: { ...font('700'), fontSize: 16, letterSpacing: -0.3, color: colors.brandInk, fontVariant: ['tabular-nums'] },
+  heroBy: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2 },
+  heroByText: { ...typography.small, ...font('500'), color: colors.onMedia, opacity: 0.92, flexShrink: 1 },
+  muted: { position: 'absolute', right: spacing.lg, bottom: spacing.xl + 2, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.35)', alignItems: 'center', justifyContent: 'center' },
+  bar: { position: 'absolute', left: 0, right: 0, top: 0 },
+  barGround: { backgroundColor: colors.bg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  barRow: { height: BAR_H, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, gap: 6 },
+  back: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  backGlass: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.12)' },
+  backGlyph: { marginLeft: -2 },
+  barTitle: { ...typography.heading, color: colors.text, flex: 1, textAlign: 'center' },
+  barEnd: { width: 44 },
+  body: { paddingHorizontal: spacing.lg },
+  upSection: { paddingTop: spacing.lg },
+  facesScroll: { marginHorizontal: -spacing.lg },
+  faces: { paddingHorizontal: spacing.lg - 8, gap: 4, paddingVertical: 4 },
+  face: { width: 80, alignItems: 'center', gap: 2 },
+  plus: { position: 'absolute', top: 48, left: 52, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.brand, borderWidth: 2, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  faceName: { ...typography.smallStrong, color: colors.text, marginTop: 4 },
+  faceMeta: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, ...font('500') },
+  standing: { paddingTop: spacing.xl, gap: 2 },
+  rankLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  rankBig: { ...font('700'), fontSize: 34, letterSpacing: -1.2, color: colors.text, fontVariant: ['tabular-nums'] },
+  rankOf: { ...typography.body, fontSize: 17, color: colors.textMuted },
+  rankMove: { marginLeft: 4, alignSelf: 'center', marginTop: 4 },
+  standingLine: { ...typography.body, ...font('500'), color: colors.text },
   section: { paddingTop: spacing.xl, gap: 2 },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: spacing.sm },
   sectionTitle: { ...typography.title, color: colors.text },
   headNote: { ...typography.small, color: colors.textMuted },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.md },
-  rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12) },
-  rank: { ...typography.smallStrong, color: colors.textFaint, width: 18, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: PLAYER_H, paddingHorizontal: spacing.md },
+  rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
+  youGap: { marginTop: YOU_GAP },
+  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, width: 26, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  rankLow: { color: colors.textFaint },
   mineInk: { color: colors.brand },
-  playerWords: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
+  playerWords: { flex: 1, minWidth: 0, gap: 1 },
+  playerNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  name: { ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   mineName: { ...font('600'), color: colors.brand },
   sub: { ...typography.small, color: colors.textFaint },
-  value: { ...typography.small, color: colors.textFaint },
-  valueNum: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  gap: { height: 24, justifyContent: 'center', paddingLeft: spacing.md },
-  gapDots: { ...typography.bodyStrong, color: colors.textFaint, width: 18, textAlign: 'right', lineHeight: 20 },
-  courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.md },
+  subMine: { ...typography.small, ...font('500'), color: colors.text },
+  value: { ...font('700'), fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
+  courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 58, paddingHorizontal: spacing.md },
   courtWords: { flex: 1, minWidth: 0, gap: 1 },
-  facesScroll: { alignSelf: 'stretch', marginHorizontal: -spacing.lg, marginTop: spacing.sm },
-  faces: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.lg - 6, gap: 2, paddingVertical: 8 },
-  face: { width: 86, alignItems: 'center', gap: 3 },
-  faceName: { ...typography.smallStrong, color: colors.text, marginTop: 2 },
-  faceMeta: { ...typography.caption, letterSpacing: 0, color: colors.textMuted, ...font('500') },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
   footHead: { ...typography.heading, color: colors.text, textAlign: 'center' },
   footBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },

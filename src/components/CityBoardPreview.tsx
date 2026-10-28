@@ -5,87 +5,92 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { DAYS_LEFT_LABEL, MIN_PLAYERS, cityById, neighbours, ordinal, rankCities, type RankedCity } from '@/features/cityBoard/mock';
+import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, rankCities, type RankedCity } from '@/features/cityBoard/mock';
+import { Movement } from '@/features/cityBoard/BoardBits';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
 /** One row's height: the fade is measured in rows. */
-export const ROW_H = 46;
+export const ROW_H = 48;
+/** Your city sits in the run of the top rows while it is this high; below it, it gets its own row under the top 3. */
+const IN_RUN = 5;
 
 /**
- * DESIGN MOCK (design/city-board). Find Players, under the map, in place of
- * "You're early in …": this month's city board, a few rows of it, fading
- * into the page before the next section, with "See all cities" on the fade.
- * Your city is the tinted row. The whole thing is one tap to the full board.
+ * DESIGN MOCK (design/city-board), round 2. Find Players, under the map, in
+ * place of "You're early in …": this month's city board, fading into the
+ * page, with "See all cities" on the fade. One tap opens the full board.
  *
- * Which rows: the top of the board down past yours when you are near the
- * top; otherwise the top two, a gap, and the rows either side of yours, so
- * the race you are actually in is what you see.
+ * Which rows (owner, Oct 27: "should it show your city amongst the top …
+ * or just have it show the correct leaderboard", and "not a big fan of these
+ * 5 .... 9"): always the true board, never your city faked into the top.
+ *   - Your city in the top 5: the top of the board, yours tinted in place.
+ *   - Lower: the top 3, then your city as its own row with its real place
+ *     and the one number that matters to you ("69 to pass Denver"), then the
+ *     city right behind you, fading. No dots: the space and the tint say
+ *     "and here is you", the way Strava pins your row under a segment's top.
+ * Movement this week sits beside each city; a city on a run gets the filled mark.
  */
 export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) {
   const styles = useThemedStyles(styleDefinitions);
   const board = useMemo(() => rankCities('total'), []);
-  const perBoard = useMemo(() => rankCities('per'), []);
   const mine = board.find((c) => c.id === homeCityId) ?? null;
   const unranked = !mine && homeCityId ? cityById(homeCityId) : null;
+  const at = mine ? board.indexOf(mine) : -1;
+  const apart = at >= IN_RUN;
+  const top = apart ? board.slice(0, 3) : board.slice(0, Math.max(5, at + 2));
+  const below = apart ? board[at + 1] ?? null : null;
+  const target = mine ? nextTarget(board, mine.id) : null;
 
-  type Item = RankedCity | 'gap';
-  const items: Item[] = useMemo(() => {
-    // By position on the board, not by place: level cities share a place.
-    const at = mine ? board.indexOf(mine) : -1;
-    if (at < 4) return board.slice(0, Math.max(5, at + 3));
-    return [...board.slice(0, 2), 'gap', ...board.slice(at - 1, at + 2)];
-  }, [board, mine]);
+  // One line of news under the title, the race's latest: about your city when there is one.
+  const moment = useMemo(() => {
+    const m = MOMENTS.find((x) => x.who === mine?.id || x.passed === mine?.id) ?? MOMENTS[0];
+    const who = cityById(m.who);
+    const passed = cityById(m.passed);
+    return who && passed ? { text: `${who.name} passed ${passed.name}`, when: m.when } : null;
+  }, [mine]);
 
-  // One line under the title: where your city stands, in words.
-  const line = (() => {
-    if (unranked) {
-      const short = MIN_PLAYERS - unranked.players;
-      return `${unranked.name} needs ${short} more ${short === 1 ? 'player' : 'players'} to make the board.`;
-    }
-    if (!mine) return 'Tennis logged this month, city by city.';
-    const per = perBoard.find((c) => c.id === mine.id);
-    if (per && per.rank <= 3 && per.rank < mine.rank) return `${mine.name} is ${ordinal(mine.rank)}, and ${ordinal(per.rank)} per player.`;
-    const { above, below } = neighbours(board, mine.id);
-    if (!above) return below ? `${mine.name} leads, ${mine.hits - below.hits} hits ahead of ${below.name}.` : `${mine.name} leads.`;
-    if (above.hits === mine.hits) return `${mine.name} is ${ordinal(mine.rank)}, level with ${above.name}.`;
-    return `${mine.name} is ${ordinal(mine.rank)}, ${above.hits - mine.hits} hits behind ${above.name}.`;
-  })();
+  // The last row dissolves into the page; never your own.
+  const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
 
-  // The last rows fade into the page; "See all cities" sits under them. Never into your own row:
-  // with only one row after yours, only that one fades.
-  const mineAt = mine ? items.indexOf(mine) : -1;
-  const after = mineAt >= 0 ? items.length - 1 - mineAt : 2;
-  const fadeRows = Math.min(1.7, Math.max(1, after));
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`Cities this month. ${line} See all cities`}
+      accessibilityLabel={`Cities this month.${mine ? ` ${mine.name} is ${mine.rank}.` : ''} See all cities`}
       onPress={() => router.push('/city-board')}
       style={({ pressed }) => [styles.wrap, pressed && { opacity: PRESS_DIM }]}
     >
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Cities this month</Text>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.month}>{DAYS_LEFT_LABEL}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.left}>{DAYS_LEFT_LABEL}</Text>
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.line, unranked && styles.lineTight]}>{line}</Text>
-      {/* Not on the board yet: the one ask that gets it there, with the words that ask for it, so the
-          faded rows and "See all cities" still run straight into the next section (the owner's fade). */}
+      {unranked ? (
+        <View style={styles.newsRow}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.news}>{unranked.name} needs {MIN_PLAYERS - unranked.players} more players to make the board.</Text>
+        </View>
+      ) : moment ? (
+        <View style={styles.newsRow}>
+          <Ionicons name="caret-up" size={11} color={colors.success} />
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.news}>{moment.text}<Text style={styles.when}> · {moment.when}</Text></Text>
+        </View>
+      ) : null}
       {unranked ? (
         <Pressable accessibilityRole="link" accessibilityLabel={`Invite a hitting partner to put ${unranked.name} on the board`} hitSlop={6} onPress={() => router.push('/invite')} style={({ pressed }) => [styles.invite, pressed && { opacity: PRESS_DIM }]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
         </Pressable>
       ) : null}
       <View style={styles.rows}>
-        {items.map((c, i) => (c === 'gap'
-          ? <View key="gap" style={styles.gap}><Text style={styles.gapDots}>⋮</Text></View>
-          : <BoardRow key={c.id} city={c} mine={c.id === mine?.id} first={i === 0 || items[i - 1] === 'gap' || items[i - 1] === mine || c.id === mine?.id} />))}
-        <Fade height={ROW_H * fadeRows} />
+        {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} />)}
+        {apart && mine ? (
+          <View style={styles.yours}>
+            <PreviewRow city={mine} mine target={target} />
+            {below ? <PreviewRow city={below} mine={false} /> : null}
+          </View>
+        ) : null}
+        {fadeRows > 0 ? <Fade height={ROW_H * fadeRows} /> : null}
       </View>
-      {/* Under the faded rows, pulled up into the last of them: "towards the bottom it says, tap to see more". */}
-      <View style={styles.more}>
+      <View style={[styles.more, fadeRows === 0 && styles.moreClear]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>See all cities</Text>
         <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
       </View>
@@ -93,20 +98,21 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
   );
 }
 
-/** A city's row: its place, its name, its hits. Yours is tinted, nothing else about it shouts. */
-export function BoardRow({ city, mine, first, unit = 'hits', value, sub }: { city: RankedCity; mine: boolean; first?: boolean; unit?: string; value?: string; sub?: string | null }) {
+/** A city's row here: place, name, this week's movement, hits. Yours is tinted, with the number to chase under its name. */
+function PreviewRow({ city, mine, line = false, target = null }: { city: RankedCity; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget> }) {
   const styles = useThemedStyles(styleDefinitions);
+  const podium = city.rank <= 3;
   return (
-    <View style={[styles.row, mine ? styles.rowMine : !first && styles.rowLine]}>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, mine && styles.rankMine]}>{city.rank}</Text>
+    <View style={[styles.row, mine ? styles.rowMine : line && styles.rowLine]}>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, !podium && styles.rankLow, mine && styles.inkMine]}>{city.rank}</Text>
       <View style={styles.nameCol}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{city.name}</Text>
-        {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.sub}>{sub}</Text> : null}
+        <View style={styles.nameLine}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, mine && styles.nameMine]}>{city.name}</Text>
+          <Movement moved={city.moved} long={mine} />
+        </View>
+        {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{target.gap} to pass {target.city.name}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>
-        <Text style={[styles.valueNum, mine && styles.nameMine]}>{value ?? city.hits}</Text>
-        {unit ? <Text style={styles.valueUnit}> {unit}</Text> : null}
-      </Text>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.hits}</Text>
     </View>
   );
 }
@@ -133,32 +139,31 @@ function Fade({ height }: { height: number }) {
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: 2 },
-  // The section head, as "Open to hit" below it: the title, and a quiet word on the right.
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
   title: { ...typography.title, color: colors.text },
-  month: { ...typography.small, color: colors.textMuted },
-  line: { ...typography.small, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
+  left: { ...typography.small, ...font('600'), color: colors.text },
+  newsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm, minHeight: 20 },
+  news: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
+  when: { color: colors.textFaint },
   rows: {},
   row: { flexDirection: 'row', alignItems: 'center', minHeight: ROW_H, paddingHorizontal: spacing.md, gap: spacing.md },
   rowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  // Yours: the quiet green tint the app uses behind a chosen thing, not a box with a border.
-  rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12) },
-  rank: { ...typography.smallStrong, color: colors.textFaint, width: 18, textAlign: 'right', fontVariant: ['tabular-nums'] },
-  rankMine: { color: colors.brand },
+  rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(12), minHeight: 58 },
+  // Big, heavy, tabular: the place is the first thing read, as on a standings table.
+  rank: { ...font('700'), fontSize: 22, letterSpacing: -0.6, color: colors.text, width: 26, textAlign: 'right', fontVariant: ['tabular-nums'] },
+  rankLow: { color: colors.textFaint },
+  inkMine: { color: colors.brand },
   nameCol: { flex: 1, minWidth: 0, gap: 1 },
-  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
   nameMine: { ...font('600'), color: colors.brand },
-  sub: { ...typography.small, color: colors.textFaint },
-  value: { ...typography.small, color: colors.textFaint },
-  valueNum: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  valueUnit: { ...typography.small, color: colors.textFaint },
-  gap: { height: 24, justifyContent: 'center', paddingLeft: spacing.md },
-  gapDots: { ...typography.bodyStrong, color: colors.textFaint, width: 18, textAlign: 'right', lineHeight: 20 },
-  // On the fade, at the very bottom: what the owner asked for ("towards the bottom it says, tap to see more").
-  more: { marginTop: -18, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },
+  target: { ...typography.small, ...font('500'), color: colors.text },
+  value: { ...font('700'), fontSize: 16, color: colors.text, fontVariant: ['tabular-nums'] },
+  // Your row, under the top 3: set apart by space alone (no dots), the city behind you fading under it.
+  yours: { marginTop: spacing.md },
+  more: { marginTop: -16, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 32 },
+  moreClear: { marginTop: spacing.xs },
   moreText: { ...typography.smallStrong, color: colors.textMuted },
-  lineTight: { marginBottom: 0 },
-  // Under the line, left, as on the full board: a word, not a second button.
   invite: { alignSelf: 'flex-start', minHeight: 36, justifyContent: 'center', marginBottom: spacing.xs },
   inviteText: { ...typography.smallStrong, color: colors.brand },
 });
