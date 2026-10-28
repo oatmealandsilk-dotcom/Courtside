@@ -239,7 +239,7 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => {
     const run = swoop.run;
     // A full map just opened starts once its page has drawn where it is, or 0.7 s after its style is in at most.
-    if (run) canvas.current?.swoop({ ...swoopShape(), lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
+    if (run) canvas.current?.swoop({ ...swoopShape(), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
   }, [swoop.run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = expanded ? model.shown : cardPlayers;
@@ -448,7 +448,8 @@ export function NearbyMap(props: NearbyMapProps) {
       onMove={(c, zoom, bounds) => { if (!expanded) return; model.loadRings(c, zoom); if (model.courtsOn) void model.loadCourts(c, zoom); model.loadPlayersIn(bounds); }}
       farBelow={COURTS_MIN_ZOOM}
       onFar={expanded ? setFar : undefined}
-      onSwooped={expanded ? swoop.done : undefined}
+      // Only with the zoom on: the page's word is for this swoop alone, and the map is exactly as before without it.
+      onSwooped={expanded && zoomOn ? (_arrived, id) => swoop.done(id) : undefined}
     />
   );
 

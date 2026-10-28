@@ -53,7 +53,7 @@ export const SWOOPS: Record<SwoopKind, SwoopShape> = {
  * `up`: the map has had its first full drawing already (open a while); otherwise the swoop starts once
  * it has, or `wait` ms from now at most.
  */
-export interface SwoopAsk extends SwoopShape { lat: number; lng: number; zoom: number; still: boolean; up: boolean; wait: number }
+export interface SwoopAsk extends SwoopShape { lat: number; lng: number; zoom: number; still: boolean; up: boolean; wait: number; /** Which swoop (checkInZoom's SwoopTo.id), said back as it ends. */ id: number }
 
 /** Runs a swoop on a map: `SWOOP_FN(map, ask, done)`; `done(true)` once it has arrived, `done(false)` if it was stopped part way. */
 export type SwoopFn = (map: unknown, ask: SwoopAsk, done: (arrived: boolean) => void) => { stop: () => void };
@@ -114,7 +114,8 @@ return function(map,o,done){
     map.on('moveend',onEnd)}
   // A map just opened starts once it has drawn where it is (its first full drawing, 'load'), or after o.wait at most: a
   // slow street far off the way down is not worth waiting for, as the streets close in are about to be fetched anyway.
-  if(o.up)begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
+  // Reduce Motion has no move to start from, so it goes there at once: the first streets drawn are yours, not the town's.
+  if(o.up||o.still||less())begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
   return {stop:function(){if(over)return;if(started){try{map.stop()}catch(e){}}end(false)}};
 };
 })()`;

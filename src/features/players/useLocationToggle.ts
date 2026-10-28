@@ -7,7 +7,7 @@ import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type Ti
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
 import { useOpenClock } from '@/features/players/useOpenClock';
-import { swoopFinding, swoopFound } from '@/features/players/checkInZoom';
+import { afterLanding, swoopAsks, swoopFinding, swoopFound } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 
 /**
@@ -126,14 +126,23 @@ export function useCheckIn(where: TipSpot = 'card', onUp?: (at: LatLng) => boole
       const upAt = Date.now();
       const spot: { lat: number; lng: number } | null = at;
       // The check-in zoom: the full map swoops down to you (opening first, from the card).
+      const asks = swoopAsks();
       const opened = spot && turn.current === tap ? upRef.current?.(spot) ?? false : false;
+      // A swoop set off: the toast and the one tip wait for your pin to land, so nothing slides in over the top mid-swoop.
+      // Listened for now, before the court below is looked up: a short swoop can land first.
+      const landing = swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null;
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
       const say = () => { if (turn.current === tap) showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' }); };
+      const tip = () => { if (first) void showHideTip(opened ? 'map' : where); };
+      if (landing) {
+        void landing.then(() => { setTimeout(say, TOAST_AFTER_MS); tip(); });
+        return;
+      }
       const wait = TOAST_AFTER_MS - (Date.now() - upAt);
       if (wait > 0) setTimeout(say, wait);
       else say();
-      if (first) void showHideTip(opened ? 'map' : where);
+      tip();
     } finally {
       if (zooming) swoopFound();
       setBusy(false);

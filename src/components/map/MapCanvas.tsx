@@ -79,8 +79,11 @@ interface Props {
   farBelow?: number;
   /** The map crossed `farBelow`, either way (and once as it starts): told the moment it happens, not only when it comes to rest. */
   onFar?: (far: boolean) => void;
-  /** A swoop (handle.swoop) has come to rest: arrived, or stopped part way. */
-  onSwooped?: (arrived: boolean) => void;
+  /**
+   * A swoop (handle.swoop) has come to rest: arrived, or stopped part way; `id` is the one asked for (SwoopAsk.id).
+   * Given only with the check-in zoom on: it also lets the full map's pins reach the page before it is 'ready'.
+   */
+  onSwooped?: (arrived: boolean, id: number) => void;
   style?: StyleProp<ViewStyle>;
   /** On screen: off (a page over it, a hidden pager page, another tab), its load clocks wait (useMapLoad). */
   active?: boolean;
@@ -126,7 +129,13 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // it left the map on the default city until it was opened again.
   const pendingMove = useRef<{ to: LatLng; zoom?: number; offsetY?: number; exact?: boolean } | null>(null);
   // A swoop asked for before then (the full map just opened from the card): made the moment the map is up, after any move.
-  const pendingSwoop = useRef<string | null>(null);
+  // Kept only as long as the swoop's own wait (checkInZoom's 9 s stand-in): a page that comes up later (a retry) never swoops by surprise.
+  const pendingSwoop = useRef<{ js: string; at: number } | null>(null);
+  const takeSwoop = (): string | null => {
+    const p = pendingSwoop.current;
+    pendingSwoop.current = null;
+    return p && Date.now() - p.at < 9000 ? p.js : null;
+  };
 
   useImperativeHandle(ref, () => ({
     flyTo: (to, z, ms = 500, offsetY = 0, exact = false) => {
@@ -145,7 +154,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       // The swoop is the move: one asked for before it (a fix landing) is let go.
       pendingMove.current = null;
       const js = `window.__cs.swoop(${JSON.stringify(ask)})`;
-      if (!styled.current) { pendingSwoop.current = js; return; }
+      if (!styled.current) { pendingSwoop.current = { js, at: Date.now() }; return; }
       web.current?.injectJavaScript(`${js};true;`);
     },
   }), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -158,7 +167,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // check-in zoom lands your pin as the camera settles, not when the last street arrives. The page keeps them for its 'load'.
   useEffect(() => {
     const js = `window.__cs.set(${markerJson})`;
-    if (!ready.current && interactive && styled.current) web.current?.injectJavaScript(`${js};true;`);
+    if (!ready.current && interactive && styled.current && latest.current.onSwooped) web.current?.injectJavaScript(`${js};true;`);
     else send(js);
   }, [markerJson]); // eslint-disable-line react-hooks/exhaustive-deps
   // Reduce Motion, from the phone's own setting: the pins' pulse holds still and the ring only fades.
@@ -228,7 +237,7 @@ window.__cs={
   synced:function(){if(SYNCED)return;SYNCED=true;W.kick()},
   rearm:function(){try{engine.calm(true)}catch(e){}map.once('idle',settle)},
   // The check-in zoom (swoop.ts): one swoop at a time; the pins come in as it lands, if they had not yet.
-  swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok})});if(!fin)SWOOP=s},
+  swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok,sw:a.id})});if(!fin)SWOOP=s},
   shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}}
 };
 }
@@ -259,7 +268,7 @@ ${ENGINE_JS}
         onContentProcessDidTerminate={lost}
         onRenderProcessGone={lost}
         onMessage={(e) => {
-          let msg: { type: string; ok?: boolean; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
+          let msg: { type: string; ok?: boolean; sw?: number; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
@@ -268,8 +277,7 @@ ${ENGINE_JS}
           // The style is in: a swoop waiting for the page goes to it now (it starts once the map has drawn, or very nearly).
           if (msg.type === 'up' && !styled.current) {
             styled.current = true;
-            const swoop = pendingSwoop.current;
-            pendingSwoop.current = null;
+            const swoop = takeSwoop();
             if (swoop) web.current?.injectJavaScript(`${swoop};true;`);
           }
           if (msg.type === 'shot') { if (!msg.blank && typeof msg.data === 'string' && msg.data.startsWith('data:image/')) latest.current.onShot?.(msg.data); return; }
@@ -284,8 +292,7 @@ ${ENGINE_JS}
             pendingMove.current = null;
             if (move) send(`window.__cs.fly(${move.to.lat},${move.to.lng},${move.zoom ?? 'null'},0,${Math.round(move.offsetY ?? 0)},${move.exact ? 'true' : 'false'})`);
             styled.current = true;
-            const swoop = pendingSwoop.current;
-            pendingSwoop.current = null;
+            const swoop = takeSwoop();
             if (swoop) send(swoop);
             // All of it is on the page now: its first drawing may be reported.
             send('window.__cs.synced()');
@@ -294,7 +301,7 @@ ${ENGINE_JS}
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
-          else if (msg.type === 'swooped') latest.current.onSwooped?.(!!msg.ok);
+          else if (msg.type === 'swooped' && typeof msg.sw === 'number') latest.current.onSwooped?.(!!msg.ok, msg.sw);
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
           else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {

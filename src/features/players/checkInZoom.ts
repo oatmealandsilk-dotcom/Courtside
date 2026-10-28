@@ -89,6 +89,28 @@ export function swoopFinding() { findingSince = Date.now(); emit(); }
 export function swoopFound() { if (!findingSince) return; findingSince = 0; emit(); }
 /** You are up: the full map (open now, or about to be: `fresh`) swoops down to `to`. */
 export function swoopTo(to: LatLng, fresh: boolean) { findingSince = 0; asked = { id: ++askIds, to, fresh, at: Date.now() }; emit(); }
+/** How many swoops have been asked for so far: a tap reads it before and after, to know whether it set one off. */
+export const swoopAsks = (): number => askIds;
+
+/* ------------------------------------------------------- after it lands */
+
+/** What waits for your pin to land (the "Up to hit" toast and the one tip), so nothing slides in over the top mid-swoop. */
+let landWaiters: Array<() => void> = [];
+/** Your pin has landed (or the swoop was given up on): whatever waited goes now. */
+function landed() { const w = landWaiters; landWaiters = []; w.forEach((fn) => fn()); }
+/** `fn` once the swoop just asked for has landed your pin, or after `maxMs` at the latest (a full map that never took it). */
+export function afterLanding(fn: () => void, maxMs = 10000) {
+  let fired = false;
+  const go = () => {
+    if (fired) return;
+    fired = true;
+    clearTimeout(t);
+    landWaiters = landWaiters.filter((w) => w !== go);
+    fn();
+  };
+  const t = setTimeout(go, maxMs);
+  landWaiters.push(go);
+}
 
 /** The swoop waiting to be made, if it is still fresh. */
 function peekAsk(): SwoopTo | null {
@@ -110,8 +132,11 @@ export interface MapSwoop {
   land: number;
   /** Whether a check-in is finding you or the camera is on its way: the map stays where it is meanwhile (no move of its own to your new spot). */
   busy: boolean;
-  /** The camera has come down on you (or was stopped): your pin lands. */
-  done: () => void;
+  /**
+   * The camera has come down on you (or was stopped): your pin lands. `id`: the swoop that ended; a word
+   * from an older one (stopped by a newer one, or late after the 9 s stand-in) is let go. Once per swoop.
+   */
+  done: (id?: number) => void;
 }
 
 /**
@@ -130,14 +155,26 @@ export function useMapSwoop(on: boolean, pinNow: boolean): MapSwoop {
     const a = takeAsk();
     if (a) setRun(a);
   }, [on, v]);
-  const done = useCallback(() => { setRun(null); setLand(Date.now()); }, []);
+  // The swoop on its way, as the page and the timer below see it (so each lands your pin once, and only its own).
+  const runNow = useRef(run);
+  runNow.current = run;
+  const done = useCallback((id?: number) => {
+    const r = runNow.current;
+    if (!r || (id !== undefined && id !== r.id)) return;
+    runNow.current = null;
+    setRun(null);
+    setLand(Date.now());
+    landed();
+  }, []);
   // Never left waiting: a swoop that has not said it arrived (a page the phone stopped, a map that never drew) lands your pin anyway.
   const runId = run?.id;
   useEffect(() => {
     if (runId === undefined) return undefined;
-    const t = setTimeout(done, 9000);
+    const t = setTimeout(() => done(runId), 9000);
     return () => clearTimeout(t);
   }, [runId, done]);
+  // Left part way (Back mid-swoop): the toast that waited for the landing comes now.
+  useEffect(() => () => { if (runNow.current) landed(); }, []);
   const finding = on && findingSince > 0 && Date.now() - findingSince < FINDING_MAX_MS;
   const busy = finding || (on && !!run);
   // Whether your pin was on the map as the wait began (it stays so until it lands).

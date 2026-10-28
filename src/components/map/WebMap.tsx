@@ -665,7 +665,8 @@ export function NearbyMap(props: NearbyMapProps) {
     const go = () => {
       if (gone) return;
       // Once the map has drawn where it starts (or very nearly: SwoopAsk's wait).
-      going = runSwoop(m, { ...swoopShape(), lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(); });
+      // Ending, it lands your pin for this swoop only: one stopped by a newer one (the cleanup below) never lands the newer one's early.
+      going = runSwoop(m, { ...swoopShape(), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(run.id); });
     };
     const t = setTimeout(go, 90);
     return () => { gone = true; clearTimeout(t); going?.stop(); };
