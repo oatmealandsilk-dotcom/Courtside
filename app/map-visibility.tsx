@@ -45,6 +45,10 @@ export default function MapVisibilitySheet() {
   const [busy, setBusy] = useState<MapVisibility | null>(null);
   const [error, setError] = useState('');
   const [closeSignal, setCloseSignal] = useState(0);
+  // The sheet hugs its words and buttons (Oct 28, owner: "I don't like the at big who can see you on the map screen"):
+  // without these heights a phone's sheet opened to its peek and left a wide empty gap above the buttons.
+  const [contentH, setContentH] = useState(0);
+  const [footH, setFootH] = useState(0);
   // What the screen closes with: the answer once it is saved, else nothing.
   const answer = useRef<MapVisibility | null>(null);
   const close = () => setCloseSignal((n) => n + 1);
@@ -69,12 +73,13 @@ export default function MapVisibilitySheet() {
     <DragSheet
       peekFraction={first ? 0.8 : 0.7}
       fitContent
+      contentHeight={contentH && footH ? contentH + footH : undefined}
       closeSignal={closeSignal}
       onDismissed={() => { router.back(); settleWhoSeesYou(settled()); }}
       // A touch smaller than other sheets' titles, so the question stays on one line on a phone.
       header={<SheetTitle title="Who can see you on the map?" titleSize={21} line={first ? 'You can change this any time in Settings → Privacy.' : undefined} onClose={close} />}
     >
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.body} showsVerticalScrollIndicator={false} onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {/* Plain words, no drawing and no icon bullets (Oct 27, owner: "make who can see you on the map look more aesthetic less ai"). */}
         <View style={styles.facts}>
           {FACTS.map((f) => (
@@ -111,7 +116,7 @@ export default function MapVisibilitySheet() {
         )}
       </ScrollView>
       {/* The way forward sits under the list, never scrolled off a short phone. */}
-      <View style={styles.footer}>
+      <View style={styles.footer} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {first ? (
           <>
@@ -187,8 +192,9 @@ function Fade({ on, dim = 0, style, children }: { on: boolean; dim?: number; sty
 
 const styleDefinitions = StyleSheet.create({
   scroll: { flexShrink: 1 },
-  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.sm, gap: spacing.md },
-  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.xs, paddingBottom: spacing.xl, gap: spacing.md },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, gap: spacing.md },
+  // A clear step down from the words to the buttons.
+  footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
   art: { height: ART, alignItems: 'center', justifyContent: 'center' },
   // Your patch of map: a soft round of the brand's dim, edged like a map's area.
   patch: { position: 'absolute', width: ART + 40, height: ART - 8, borderRadius: (ART + 40) / 2, backgroundColor: withAlpha(colors.brand, 0.07), borderWidth: 1, borderColor: withAlpha(colors.brand, 0.18), borderStyle: 'dashed' },
@@ -197,7 +203,7 @@ const styleDefinitions = StyleSheet.create({
   youWrap: { alignItems: 'center', justifyContent: 'center' },
   youRing: { padding: 3, borderRadius: 30, backgroundColor: colors.surface, ...lift },
   eye: { position: 'absolute', right: -2, bottom: -2, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.text, borderWidth: 2, borderColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
-  facts: { gap: spacing.sm },
+  facts: { gap: spacing.md },
   fact: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   factText: { ...typography.body, color: colors.text, flex: 1, lineHeight: 21 },
   choices: { gap: spacing.sm },
@@ -216,6 +222,6 @@ const styleDefinitions = StyleSheet.create({
   noticeText: { ...typography.bodyStrong, color: colors.text, lineHeight: 21 },
   noticeSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   error: { ...typography.small, color: colors.danger },
-  off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, marginTop: spacing.xs },
+  off: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong },
   offText: { ...typography.smallStrong, ...font('600'), color: colors.text },
 });
