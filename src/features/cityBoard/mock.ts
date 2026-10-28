@@ -54,6 +54,27 @@ export const MOCK_UP_COUNT: number | null = (() => {
  */
 export const MEDAL_LOOK: 'coin' | 'ink' = read('courtside-cityboard-medal') === 'ink' ? 'ink' : 'coin';
 
+/**
+ * Round 4 (Oct 28). Owner: "something on the leaderboard that make sit more
+ * obvious the numbers on the right is sessions. Maybe an icon or smth". How
+ * the number on the right of every board row (Find Players, the full board,
+ * a city's Top players and Busiest courts) says what it counts:
+ *
+ *   'a'  the app's session ball (Ionicons tennisball) right before each number
+ *   'b'  the word under each number: "512" over "sessions" (the default)
+ *   'c'  the ball and the word once, over the number column; numbers bare
+ *
+ *   localStorage['courtside-cityboard-unit'] = 'a'
+ */
+export type UnitLook = 'a' | 'b' | 'c';
+export const UNIT_LOOK: UnitLook = (() => {
+  const v = read('courtside-cityboard-unit');
+  return v === 'a' || v === 'b' || v === 'c' ? v : 'b';
+})();
+
+/** "512 sessions", "1 session": what VoiceOver hears for a board's number. */
+export const sessionsWords = (n: number | string) => `${n} ${Number(n) === 1 ? 'session' : 'sessions'}`;
+
 export interface BoardCity {
   id: string;
   name: string;
@@ -294,7 +315,7 @@ export interface PlayLine { lines: [string, string]; spoken: string }
  *     Two at once: the stronger one.
  *   - No clear habit: when they last played ("Played yesterday", "Played Saturday"),
  *     never a time or a place.
- *   - Nothing logged in a week: their hits this month.
+ *   - Nothing logged in a week: their sessions this month.
  *
  * "Usually", the owner's own word (Oct 28: "it says like usually active under
  * their name"), and never a bare "Plays evenings": under "Up to hit today"
@@ -315,5 +336,5 @@ export function playLine(log: PlayLog | undefined, hits: number, now: Date = new
   }
   const day = !log ? null : log.lastDaysAgo === 0 ? 'today' : log.lastDaysAgo === 1 ? 'yesterday' : log.lastDaysAgo < 7 ? WEEKDAYS[(now.getDay() - log.lastDaysAgo + 7) % 7] : null;
   if (day) return { lines: ['Played', day], spoken: `played ${day === 'today' || day === 'yesterday' ? day : `on ${day}`}` };
-  return { lines: [`${hits} hits`, 'this month'], spoken: `${hits} hits this month` };
+  return { lines: [sessionsWords(hits), 'this month'], spoken: `${sessionsWords(hits)} this month` };
 }

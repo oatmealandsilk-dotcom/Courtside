@@ -13,9 +13,9 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
-import { FillDivider, FilledFace, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { ColumnHead, Count, FillDivider, FilledFace, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
-import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MOCK_UP_COUNT, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, cityById, nextTarget, ordinal, rankCities, viewsWords } from '@/features/cityBoard/mock';
+import { BOARD_MONTH, DEMO_BUSY_COURTS, DEMO_PLAYER_HITS, MIN_PLAYERS, MOCK_UP_COUNT, MY_DEMO_HITS, REEL_MEDIA_BASE, TOP_REEL, UNIT_LOOK, cityById, nextTarget, ordinal, rankCities, sessionsWords, viewsWords } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
 import { notKnownAdult } from '@/features/players/age';
@@ -64,6 +64,8 @@ const MOCK_ID = 'mock-';
  *      (on the animation thread); your own row under them, set apart by space
  *      (no "⋮").
  *   5. Busiest courts.
+ *   (Round 4: every number on the right says it counts sessions, by
+ *   UNIT_LOOK: the ball by it, "sessions" under it, or once over the column.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
  * Who is shown (Apple 13+): players by the city on their profile, never where
@@ -160,7 +162,7 @@ export default function CityPage() {
 
   const target = ranked ? nextTarget(board, ranked.id) : null;
   const standingLine = ranked
-    ? target ? `${target.gap} hits to pass ${target.city.name}` : board[1] ? `${ranked.hits - board[1].hits} hits clear of ${board[1].name}` : null
+    ? target ? `${sessionsWords(target.gap)} to pass ${target.city.name}` : board[1] ? `${sessionsWords(ranked.hits - board[1].hits)} clear of ${board[1].name}` : null
     : `Needs ${MIN_PLAYERS - city.players} more players to be ranked`;
 
   return (
@@ -220,7 +222,7 @@ export default function CityPage() {
           <View style={styles.section} onLayout={(e) => place('section', e.nativeEvent.layout.y)}>
             <View style={styles.head}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Top players</Text>
-              <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>hits in {BOARD_MONTH}</Text>
+              <MonthNote />
             </View>
             <View onLayout={(e) => place('list', e.nativeEvent.layout.y)}>
               {topPlayers.map((p, i) => (
@@ -241,15 +243,15 @@ export default function CityPage() {
             <View style={styles.section}>
               <View style={styles.head}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Busiest courts</Text>
-                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>hits in {BOARD_MONTH}</Text>
+                <MonthNote />
               </View>
               {courts.map((c, i) => (
-                <View key={c.name} style={[styles.courtRow, i > 0 && styles.line]}>
+                <View key={c.name} accessible accessibilityLabel={`${c.name}, ${c.courts} courts, ${sessionsWords(c.hits)} this month`} style={[styles.courtRow, i > 0 && styles.line]}>
                   <View style={styles.courtWords}>
                     <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.name}>{c.name}</Text>
                     <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sub}>{c.courts} courts</Text>
                   </View>
-                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.hits}</Text>
+                  <Count value={String(c.hits)} size={17} style={styles.value} />
                 </View>
               ))}
             </View>
@@ -367,10 +369,21 @@ function Rise({ at, height, listY, offsetY, seeH, clock, reduced, style, childre
   return <Animated.View style={[style, rise]}>{children}</Animated.View>;
 }
 
+/**
+ * The note on the right of Top players' and Busiest courts' heads: "sessions
+ * in October"; in look 'c' (round 4), the ball and the words, ending right
+ * over the numbers (the rows' own inset), the one place they are named.
+ */
+function MonthNote() {
+  const styles = useThemedStyles(styleDefinitions);
+  if (UNIT_LOOK === 'c') return <ColumnHead label={`Sessions in ${BOARD_MONTH}`} inset={spacing.md} style={styles.colHead} />;
+  return <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headNote}>sessions in {BOARD_MONTH}</Text>;
+}
+
 function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; hits: number; rank: number; me: boolean }; line?: boolean; sub?: string | null; onPress: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(p.rank)}, ${p.me ? 'you' : p.user.name}, ${p.hits} hits`} onPress={onPress} style={({ pressed }) => [styles.playerRow, p.me ? styles.rowMine : line && styles.line, pressed && { opacity: PRESS_DIM }]}>
+    <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(p.rank)}, ${p.me ? 'you' : p.user.name}, ${sessionsWords(p.hits)}`} onPress={onPress} style={({ pressed }) => [styles.playerRow, p.me ? styles.rowMine : line && styles.line, pressed && { opacity: PRESS_DIM }]}>
       {/* 1st to 3rd on a coin of their metal (round 3). */}
       <View style={styles.rankCol}>
         {hasCoin(p.rank)
@@ -385,7 +398,7 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: { user: User; 
         </View>
         {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.subMine}>{sub}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, p.me && styles.mineInk]}>{p.hits}</Text>
+      <Count value={String(p.hits)} size={17} mine={p.me} hang={!sub} style={[styles.value, p.me && styles.mineInk]} />
     </Pressable>
   );
 }
@@ -430,6 +443,7 @@ const styleDefinitions = StyleSheet.create({
   sectionTitle: { ...typography.title, color: colors.text },
   upTitle: { flexShrink: 1 },
   headNote: { ...typography.small, color: colors.textMuted },
+  colHead: { alignSelf: 'flex-end', paddingBottom: 2 },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: PLAYER_H, paddingHorizontal: spacing.md },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },

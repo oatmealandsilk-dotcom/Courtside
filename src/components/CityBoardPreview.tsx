@@ -5,8 +5,8 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
-import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, rankCities, type RankedCity } from '@/features/cityBoard/mock';
-import { Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { DAYS_LEFT_LABEL, MIN_PLAYERS, MOMENTS, cityById, nextTarget, ordinal, rankCities, sessionsWords, type RankedCity } from '@/features/cityBoard/mock';
+import { ColumnHead, Count, Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -54,10 +54,14 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
   // The last row dissolves into the page; never your own.
   const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
 
+  // What VoiceOver hears for the card (one link): the rows it shows, each with its unit ("512 sessions").
+  const shown = [...top, ...(apart && mine ? [mine, ...(below ? [below] : [])] : [])];
+  const spokenRows = shown.map((c) => `${ordinal(c.rank)}, ${c.name}${c.id === mine?.id ? ', your city' : ''}, ${sessionsWords(c.hits)}`).join('. ');
+
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`Cities this month.${mine ? ` ${mine.name} is ${mine.rank}.` : ''} See all cities`}
+      accessibilityLabel={`Cities this month, by tennis sessions logged.${spokenRows ? ` ${spokenRows}.` : ''} See all cities`}
       onPress={() => router.push('/city-board')}
       style={({ pressed }) => [styles.wrap, pressed && { opacity: PRESS_DIM }]}
     >
@@ -80,6 +84,8 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inviteText}>Invite a hitting partner</Text>
         </Pressable>
       ) : null}
+      {/* Look 'c' (round 4): what the numbers count, once, over them. */}
+      <ColumnHead label="Sessions" inset={spacing.md} style={styles.colHead} />
       <View style={styles.rows}>
         {top.map((c, i) => <PreviewRow key={c.id} city={c} mine={c.id === mine?.id} line={i > 0 && top[i - 1].id !== mine?.id && c.id !== mine?.id} target={c.id === mine?.id ? target : null} />)}
         {apart && mine ? (
@@ -98,7 +104,7 @@ export function CityBoardPreview({ homeCityId }: { homeCityId: string | null }) 
   );
 }
 
-/** A city's row here: place, name, this week's movement, hits. Yours is tinted, with the number to chase under its name. */
+/** A city's row here: place, name, this week's movement, sessions logged. Yours is tinted, with the number to chase under its name. */
 function PreviewRow({ city, mine, line = false, target = null }: { city: RankedCity; mine: boolean; line?: boolean; target?: ReturnType<typeof nextTarget> }) {
   const styles = useThemedStyles(styleDefinitions);
   const podium = city.rank <= 3;
@@ -117,7 +123,7 @@ function PreviewRow({ city, mine, line = false, target = null }: { city: RankedC
         </View>
         {mine && target ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.target}>{target.gap} to pass {target.city.name}</Text> : null}
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, mine && styles.inkMine]}>{city.hits}</Text>
+      <Count value={String(city.hits)} size={16} mine={mine} hang={!(mine && target)} style={[styles.value, mine && styles.inkMine]} />
     </View>
   );
 }
@@ -148,6 +154,8 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   left: { ...typography.small, ...font('600'), color: colors.text },
   newsRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: spacing.sm, minHeight: 20 },
+  // Look 'c': the column's head tucks under the news line, just over the first row.
+  colHead: { marginTop: -spacing.xs, marginBottom: 2 },
   news: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   when: { color: colors.textFaint },
   rows: {},

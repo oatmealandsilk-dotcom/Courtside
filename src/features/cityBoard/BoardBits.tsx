@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useId } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
@@ -9,7 +9,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import type { FillFace } from './fill';
-import { MEDAL_LOOK, isHot } from './mock';
+import { MEDAL_LOOK, UNIT_LOOK, isHot } from './mock';
 
 /** 1st, 2nd and 3rd: each one's metal, as [ink, coin], read from the live theme as it draws. */
 const metalOf = (rank: number): [string, string] | null =>
@@ -85,6 +85,77 @@ export function FilledFace({ face, size, width, top = 2, onPress }: { face: Fill
   );
 }
 
+/**
+ * The app's own ball for a logged tennis session (Ionicons' tennisball, as on
+ * the session chooser and "Log your first session"), in its filled form: at
+ * a number's size the outline one reads as a "no entry" sign.
+ */
+export const SESSION_ICON = 'tennisball' as const;
+
+/** The unit's line under a number in look 'b': its height, so a one-line row can let it hang below. */
+const UNIT_LINE = 13;
+const UNIT_RISE = 1;
+/** How far a hanging unit lifts the number from the name's line, so the word clears the row's edge. */
+const HANG_LIFT = 2;
+
+/**
+ * DESIGN MOCK, round 4. The number on the right of a board row, and what it
+ * counts (owner, Oct 28: "make sit more obvious the numbers on the right is
+ * sessions"). By UNIT_LOOK:
+ *   'a'  the session ball just before the number, about its digits' height;
+ *   'b'  "sessions" (or "per player") in small type under the number;
+ *   'c'  the number alone: the column's head says it once (ColumnHead).
+ * The number keeps its own style (`style`) and stays where round 3 had it:
+ *   - in 'b', a row of one line (`hang`) lets the word hang under the number,
+ *     which stays level with the name; a row of two lines centres the pair,
+ *     the number level with the name, the word with the line under it;
+ *   - the ball and the word take their room from the gap before the number
+ *     (6 and 4 points), so a long line beside it ("47 players · climbing 2
+ *     weeks running") is not cut where round 3 showed it whole.
+ * `size` is the number's font size. Never grows with the phone's Text Size (a
+ * count, TextScale.CHROME), so the names keep their room. The row around it
+ * carries what VoiceOver hears ("512 sessions"); this only draws.
+ */
+export function Count({ value, size, style, mine = false, per = false, hang = false }: { value: string; size: number; style: StyleProp<TextStyle>; mine?: boolean; per?: boolean; hang?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  if (UNIT_LOOK === 'a') {
+    // The column keeps the number's own minimum width; the ball sits against the number, not in a column of its own.
+    const minWidth = StyleSheet.flatten(style)?.minWidth;
+    return (
+      <View style={[styles.countA, { minWidth }]}>
+        <Ionicons name={SESSION_ICON} size={Math.round(size * 0.8)} color={mine ? colors.brand : colors.textMuted} style={{ marginTop: Math.round(size * 0.1) }} />
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[style, styles.bare]}>{value}</Text>
+      </View>
+    );
+  }
+  if (UNIT_LOOK === 'b') {
+    return (
+      <View style={[styles.countB, hang && { marginBottom: -(UNIT_LINE - UNIT_RISE) + HANG_LIFT * 2 }]}>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={style}>{value}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.unit, mine && styles.unitMine]}>{per ? 'per player' : Number(value) === 1 ? 'session' : 'sessions'}</Text>
+      </View>
+    );
+  }
+  return <Text maxFontSizeMultiplier={TextScale.CHROME} style={style}>{value}</Text>;
+}
+
+/**
+ * DESIGN MOCK, round 4, look 'c': the number column's head, once per list,
+ * right over the numbers ("[ball] Sessions"). Null in the other looks.
+ * `inset`: how far the numbers sit in from the list's edge, so the words end
+ * where the numbers do.
+ */
+export function ColumnHead({ label, inset, style }: { label: string; inset: number; style?: StyleProp<ViewStyle> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  if (UNIT_LOOK !== 'c') return null;
+  return (
+    <View style={[styles.colHead, { paddingRight: inset }, style]}>
+      <Ionicons name={SESSION_ICON} size={13} color={colors.textMuted} style={styles.colIcon} />
+      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.colText}>{label}</Text>
+    </View>
+  );
+}
+
 /** Between the ringed faces and the filled ones: a short hairline, the height of a face. */
 export function FillDivider({ size }: { size: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -132,4 +203,13 @@ const styleDefinitions = StyleSheet.create({
   fillName: { ...typography.smallStrong, color: colors.text, marginTop: 2 },
   fillLine: { ...typography.caption, ...font('500'), letterSpacing: 0, color: colors.textMuted, textAlign: 'center' },
   divider: { width: StyleSheet.hairlineWidth, backgroundColor: colors.borderStrong, marginHorizontal: 6, alignSelf: 'flex-start' },
+  // Round 4: what the number counts.
+  countA: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 3, marginLeft: -6 },
+  bare: { minWidth: 0 },
+  countB: { alignItems: 'flex-end', marginLeft: -4 },
+  unit: { ...typography.caption, ...font('500'), letterSpacing: 0.1, lineHeight: UNIT_LINE, marginTop: -UNIT_RISE, color: colors.textMuted },
+  unitMine: { color: colors.brand },
+  colHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 4 },
+  colIcon: { marginTop: 1 },
+  colText: { ...typography.small, ...font('500'), color: colors.textMuted },
 });

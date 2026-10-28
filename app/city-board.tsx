@@ -6,8 +6,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { Easing, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Button, Screen } from '@/components/ui';
-import { Medal, Movement, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
-import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, cityById, isHot, nextTarget, ordinal, rankCities, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
+import { Count, Medal, Movement, SESSION_ICON, hasCoin, medalInk } from '@/features/cityBoard/BoardBits';
+import { BOARD_MONTH, MIN_PLAYERS, MOMENTS, MY_DEMO_HITS, RESETS_ON, UNIT_LOOK, cityById, isHot, nextTarget, ordinal, rankCities, sessionsWords, type BoardMode, type RankedCity } from '@/features/cityBoard/mock';
 import { useHomeCityId } from '@/features/cityBoard/useHomeCity';
 import { useBarInset } from '@/features/navigation/barInset';
 import { goBack } from '@/lib/goBack';
@@ -41,8 +41,12 @@ const rowHeight = (i: number) => (i < 3 ? PODIUM_H : ROW_H);
  *     it will scroll down to where your city is at");
  *   - while your row is off screen, it rides along the bottom (in place of
  *     the old "5 ⋮ 9" gap), one tap back to it;
- *   - Hits / Per player as the value column's own heading, the way a stats
- *     table is sorted, not a segmented switch;
+ *   - Sessions / Per player as the value column's own heading, the way a
+ *     stats table is sorted, not a segmented switch (round 4: "Sessions",
+ *     the app's own word for a logged one, where it said "Hits");
+ *   - what the number counts, by UNIT_LOOK (round 4, owner: "make sit more
+ *     obvious the numbers on the right is sessions"): the ball by each
+ *     number, "sessions" under it, or the ball on the Sessions heading;
  *   - the week's moments on top ("Raleigh passed Atlanta · today").
  * Starts again on the 1st.
  */
@@ -131,7 +135,7 @@ export default function CityBoard() {
     if (c.id === mine?.id) {
       return per ? chaseWords : `${chaseWords} · you added ${MY_DEMO_HITS}`;
     }
-    if (per) return `${c.hits} hits · ${c.players} players`;
+    if (per) return `${sessionsWords(c.hits)} · ${c.players} players`;
     // A city on a run says how long it has lasted (from 2 weeks: "1 weeks running" says nothing).
     return isHot(c) && (c.run ?? 0) >= 2 ? `${c.players} players · climbing ${c.run} weeks running` : `${c.players} players`;
   };
@@ -163,11 +167,15 @@ export default function CityBoard() {
         <View style={styles.tableHead}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.headCount}>{board.length} cities</Text>
           <View style={styles.sorts} accessibilityRole="tablist" accessibilityLabel="Rank cities by">
-            {([['total', 'Hits'], ['per', 'Per player']] as const).map(([value, label]) => {
+            {([['total', 'Sessions'], ['per', 'Per player']] as const).map(([value, label]) => {
               const on = mode === value;
               return (
-                <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: on }} hitSlop={8} onPress={() => setMode(value)} style={styles.sort}>
-                  <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sortText, on && styles.sortOn]}>{label}</Text>
+                <Pressable key={value} accessibilityRole="tab" accessibilityLabel={value === 'per' ? 'Sessions per player' : 'Sessions'} accessibilityState={{ selected: on }} hitSlop={8} onPress={() => setMode(value)} style={styles.sort}>
+                  {/* Look 'c' (round 4): the Sessions heading wears the ball, once, over the numbers. */}
+                  <View style={styles.sortLabel}>
+                    {UNIT_LOOK === 'c' && value === 'total' ? <Ionicons name={SESSION_ICON} size={13} color={on ? colors.text : colors.textFaint} style={styles.sortIcon} /> : null}
+                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sortText, on && styles.sortOn]}>{label}</Text>
+                  </View>
                   <View style={[styles.sortBar, on && styles.sortBarOn]} />
                 </Pressable>
               );
@@ -179,8 +187,8 @@ export default function CityBoard() {
           {board.map((c, i) => (
             <React.Fragment key={c.id}>
               {i === 3 ? <View style={styles.cut}><View style={styles.cutLine} /></View> : null}
-              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${valueOf(c)} ${per ? 'hits per player' : 'hits'}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-                <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} />
+              <Pressable accessibilityRole="link" accessibilityLabel={`${ordinal(c.rank)}, ${c.name}, ${per ? `${valueOf(c)} sessions per player` : sessionsWords(c.hits)}`} onPress={() => open(c.id)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+                <TableRow city={c} mine={c.id === mine?.id} podium={i < 3} line={i !== 0 && i !== 3 && board[i - 1].id !== mine?.id && c.id !== mine?.id} value={valueOf(c)} sub={subOf(c)} showMove={!per} per={per} />
               </Pressable>
             </React.Fragment>
           ))}
@@ -199,7 +207,7 @@ export default function CityBoard() {
               <View style={styles.climbButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>Hits are tennis sessions logged by players who call the city home. A city needs {MIN_PLAYERS} players to be ranked.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged this month by players who call it home. A city needs {MIN_PLAYERS} players to be ranked.</Text>
         </View>
       </Screen>
 
@@ -208,8 +216,8 @@ export default function CityBoard() {
           it. Scrolling down to it hands over in place; one tap takes you there. */}
       {mine ? (
         <Animated.View pointerEvents="box-none" style={[styles.dock, { height: barInset + DOCK_ROW_TOP }, youStyle]}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-            <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} />
+          <Pressable accessibilityRole="button" accessibilityLabel={`${mine.name}, ${ordinal(mine.rank)}, ${per ? `${valueOf(mine)} sessions per player` : sessionsWords(mine.hits)}. Show on the board`} onPress={() => scrollToMine(!reduced)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+            <TableRow city={mine} mine podium={false} line={false} value={valueOf(mine)} sub={subOf(mine)} showMove={!per} per={per} />
           </Pressable>
         </Animated.View>
       ) : null}
@@ -217,7 +225,7 @@ export default function CityBoard() {
   );
 }
 
-function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean }) {
+function TableRow({ city, mine, podium, line, value, sub, showMove, per }: { city: RankedCity; mine: boolean; podium: boolean; line: boolean; value: string; sub: string; showMove: boolean; per: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={[styles.row, { height: podium ? PODIUM_H : ROW_H }, mine ? styles.rowMine : line && styles.rowLine]}>
@@ -235,7 +243,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: Ra
         </View>
         <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.sub, mine && styles.subMine]}>{sub}</Text>
       </View>
-      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, podium && styles.valuePodium, mine && styles.valueMine]}>{value}</Text>
+      <Count value={value} size={podium ? 19 : 17} mine={mine} per={per} style={[styles.value, podium && styles.valuePodium, mine && styles.valueMine]} />
     </View>
   );
 }
@@ -250,6 +258,8 @@ const styleDefinitions = StyleSheet.create({
   headCount: { ...typography.small, color: colors.textFaint, paddingBottom: 10 },
   sorts: { flexDirection: 'row', gap: spacing.lg },
   sort: { alignItems: 'center', paddingTop: 8, minHeight: 40, justifyContent: 'flex-end' },
+  sortLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  sortIcon: { marginBottom: 6 },
   sortText: { ...typography.small, ...font('500'), color: colors.textFaint, paddingBottom: 7 },
   sortOn: { ...font('700'), color: colors.text },
   sortBar: { height: 2.5, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent', marginBottom: -1.5 },
