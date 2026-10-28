@@ -376,7 +376,7 @@ function TableRow({ city, mine, podium, line, value, sub, showMove }: { city: Ra
           By place, not by row: two cities level on 2nd both wear silver. Yours keeps its metal; its name says it is yours. */}
       <View style={styles.rankCol}>
         {hasCoin(city.rank)
-          ? <Medal rank={city.rank} size={RANK_W} fontSize={21} />
+          ? <Medal rank={city.rank} size={RANK_W} fontSize={21} markSize={30} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, podium ? styles.rankPodium : styles.rankLow, mine && styles.rankMine]}>{city.rank}</Text>}
       </View>
       <View style={styles.nameCol}>
@@ -406,7 +406,7 @@ const styleDefinitions = StyleSheet.create({
   sortBar: { height: 2.5, alignSelf: 'stretch', borderRadius: 2, backgroundColor: 'transparent', marginBottom: -1.5 },
   sortBarOn: { backgroundColor: colors.brand },
   // The head row: under the tabs' line, close over the first row (whose coin has room of its own above it).
-  boardHead: { paddingTop: 10, paddingBottom: 7 },
+  boardHead: { paddingTop: spacing.md },
   list: {},
   // Behind the pinned head only: the page's colour, out over the 16-point gutters, so nothing passing under shows;
   // a hairline along its foot as wide as the rows' (the tabs' line above is the same width), where the list goes under.

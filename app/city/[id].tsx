@@ -411,7 +411,7 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: PlayerLine; li
       {/* 1st to 3rd on a coin of their metal (round 3). */}
       <View style={styles.rankCol}>
         {hasCoin(p.rank)
-          ? <Medal rank={p.rank} size={RANK_W} fontSize={16} />
+          ? <Medal rank={p.rank} size={RANK_W} fontSize={16} markSize={22} />
           : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.rank, p.rank > 3 && styles.rankLow, p.me && styles.mineInk]}>{p.rank}</Text>}
       </View>
       <Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} />
@@ -475,8 +475,9 @@ const styleDefinitions = StyleSheet.create({
   sectionTitle: { ...typography.title, color: colors.text },
   upTitle: { flexShrink: 1 },
   headNote: { ...typography.small, color: colors.textMuted },
-  // The lists' head row: under the section's title, a little room before the first row (and off your tinted one).
-  boardHead: { marginTop: -2, paddingBottom: 6 },
+  // The lists' head row (owner, Oct 28: "like the headers. And then the table chart"): clear of the section's title,
+  // the table's top, a little room under its hairline before the first row (and off your tinted one).
+  boardHead: { marginTop: spacing.sm, marginBottom: spacing.xs },
   line: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   playerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, height: PLAYER_H, paddingHorizontal: spacing.md },
   rowMine: { backgroundColor: colors.brandDim, borderRadius: corner(14) },
