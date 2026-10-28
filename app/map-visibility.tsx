@@ -128,7 +128,7 @@ export default function MapVisibilitySheet() {
         )}
       </ScrollView>
       {/* The way forward sits under the list, never scrolled off a short phone. */}
-      <View style={styles.footer} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
+      <View style={[styles.footer, !first && styles.footerBare]} onLayout={(e) => { const h = Math.ceil(e.nativeEvent.layout.height); if (h !== footH) setFootH(h); }}>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {first ? (
           <>
@@ -212,6 +212,8 @@ const styleDefinitions = StyleSheet.create({
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, gap: spacing.md },
   // A clear step down from the words to the buttons.
   footer: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
+  // Settings → Privacy has no buttons under its choices (a tap saves): only the sheet's own foot.
+  footerBare: { paddingTop: 0 },
   art: { height: ART, alignItems: 'center', justifyContent: 'center' },
   // Your patch of map: a soft round of the brand's dim, edged like a map's area.
   patch: { position: 'absolute', width: ART + 40, height: ART - 8, borderRadius: (ART + 40) / 2, backgroundColor: withAlpha(colors.brand, 0.07), borderWidth: 1, borderColor: withAlpha(colors.brand, 0.18), borderStyle: 'dashed' },
