@@ -5,7 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
-import { useGrowLabels } from '@/features/players/mapGrow';
+import { useGrowAway, useGrowLabels } from '@/features/players/mapGrow';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
@@ -584,6 +584,19 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
         <Ionicons name={open ? 'close-circle-outline' : 'information-circle-outline'} size={13} color={colors.textFaint} />
       </Pressable>
     </View>
+  );
+}
+
+/**
+ * The Find Players card's credit (bottom right). With the check-in zoom's grow (mapGrow) it slips down out of the card at
+ * its own size as the page pushes in, like the weather opposite it.
+ */
+export function CardCredit() {
+  const away = useGrowAway('bottom');
+  return (
+    <Animated.View ref={away.ref} collapsable={false} pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10, zIndex: 20 }, away.style]}>
+      <MapCredit align="right" />
+    </Animated.View>
   );
 }
 
@@ -1590,6 +1603,8 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  */
 export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const labelsOut = useGrowLabels();
+  // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
+  const weatherAway = useGrowAway('bottom');
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   const edge = labelEdge(themes[theme].bg);
@@ -1635,10 +1650,10 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
         </>
       ) : null}
       {weather ? (
-        <View pointerEvents="none" style={styles.previewWeather}>
+        <Animated.View ref={weatherAway.ref} collapsable={false} pointerEvents="none" style={[styles.previewWeather, weatherAway.style]}>
           <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
-        </View>
+        </Animated.View>
       ) : null}
       {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
     </>

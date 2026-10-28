@@ -10,6 +10,7 @@ import { MapGlass } from '@/components/map/MapGlass';
 import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { LIGHT_UP, litLine } from '@/features/places/lightUp';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
+import { useGrowAway } from '@/features/players/mapGrow';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { TextScale, colors, font, typography, withAlpha } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -184,25 +185,30 @@ export function UpToHitPill({ control }: { control: CheckInControl }) {
   // Not measured yet and already on (the card drawn while you are up): the plain row says the longer words, so the
   // very first frame is already the right width.
   const baseWords = control.on && !onW ? greenWords : LIGHT_UP;
+  // The check-in zoom's grow (mapGrow): once its moment has played, it slips up out of the card at its own size as the
+  // page pushes in (a picture of it on the phone, so this view is the one photographed).
+  const away = useGrowAway('top');
   return (
-    <Animated.View style={[styles.pillSpot, m.moved]}>
-      <Pressable accessibilityRole="button" accessibilityState={{ busy: control.busy }} accessibilityLabel={checkInLabel(control)} hitSlop={6} onPress={control.press} style={({ pressed }) => (pressed ? PRESSED : null)}>
-        <Animated.View key={k} style={[styles.pill, edge, w.style]}>
-          {control.busy && !control.on ? <FindingBand width={want || offW || 100} radius={15} /> : null}
-          <View pointerEvents="none" style={[styles.pillRow, offW ? { width: offW } : null]}>
-            <Ionicons name="navigate-outline" size={14} color={colors.text} />
-            <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.pillWord}>{baseWords}</Text>
-          </View>
-          {/* The green, under its own copy of the words in the colour on green: it comes in from the left. */}
-          <Animated.View pointerEvents="none" style={[styles.pillGreen, sweep]}>
-            <BrandWash radius={15} />
-            <View style={[styles.pillRow, styles.pillRowOver, onW ? { width: onW } : null]}>
-              <Tick left={m.tick} size={15} color={colors.brandInk} />
-              <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.pillWord, styles.pillWordOn]}>{greenWords}</Text>
+    <Animated.View ref={away.ref} collapsable={false} style={[styles.pillSpot, away.style]}>
+      <Animated.View style={m.moved}>
+        <Pressable accessibilityRole="button" accessibilityState={{ busy: control.busy }} accessibilityLabel={checkInLabel(control)} hitSlop={6} onPress={control.press} style={({ pressed }) => (pressed ? PRESSED : null)}>
+          <Animated.View key={k} style={[styles.pill, edge, w.style]}>
+            {control.busy && !control.on ? <FindingBand width={want || offW || 100} radius={15} /> : null}
+            <View pointerEvents="none" style={[styles.pillRow, offW ? { width: offW } : null]}>
+              <Ionicons name="navigate-outline" size={14} color={colors.text} />
+              <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.pillWord}>{baseWords}</Text>
             </View>
+            {/* The green, under its own copy of the words in the colour on green: it comes in from the left. */}
+            <Animated.View pointerEvents="none" style={[styles.pillGreen, sweep]}>
+              <BrandWash radius={15} />
+              <View style={[styles.pillRow, styles.pillRowOver, onW ? { width: onW } : null]}>
+                <Tick left={m.tick} size={15} color={colors.brandInk} />
+                <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.pillWord, styles.pillWordOn]}>{greenWords}</Text>
+              </View>
+            </Animated.View>
           </Animated.View>
-        </Animated.View>
-      </Pressable>
+        </Pressable>
+      </Animated.View>
       {/* Unseen copies of both, free of the pill, to say how wide each wants to be (a point to spare, so a fraction never trails off). */}
       <View style={styles.measure} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden>
         <View style={styles.pillRow} onLayout={(e) => setOffW(Math.ceil(e.nativeEvent.layout.width) + 1)}>

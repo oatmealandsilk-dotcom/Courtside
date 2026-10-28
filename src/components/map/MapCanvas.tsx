@@ -8,7 +8,7 @@ import { ENGINE_JS, PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { engineInjection, warmMapEngine } from '@/components/map/engineCopy';
 import { useMapLoad, type MapLoadStatus } from '@/components/map/useMapLoad';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, GROW_CLEAR_CSS, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
 import { SWOOP_JS, type SwoopAsk } from '@/components/map/swoop';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
@@ -41,6 +41,8 @@ export interface MapCanvasHandle {
   swoop: (ask: Omit<SwoopAsk, 'up'>) => void;
   /** How long since this try's page last said anything (ms). */
   quiet: () => number;
+  /** The check-in zoom's grow (mapGrow): the still card's pins step aside (a quick fade), or come back at once. */
+  clearPins: (clear: boolean) => void;
 }
 
 interface Props {
@@ -148,6 +150,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
       send(`window.__cs.fly(${to.lat},${to.lng},${z},0,0,true);window.__cs.rearm()`);
     },
     shoot: () => send('window.__cs.shot()'),
+    clearPins: (clear) => send(`document.getElementById('m').classList.toggle('cs-clear',${clear ? 'true' : 'false'})`),
     isUp: () => ready.current,
     quiet: () => load.quiet(),
     swoop: (ask) => {
@@ -193,7 +196,7 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // says when the map is up and when it has drawn (and fetches again any streets
   // that failed on the way), so the card can show its loading look till then.
   const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
-<style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}</style></head>
+<style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}${GROW_CLEAR_CSS}</style></head>
 <body><div id="m"></div><script>
 var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});

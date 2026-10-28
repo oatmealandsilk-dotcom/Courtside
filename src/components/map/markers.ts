@@ -192,6 +192,13 @@ export const MAP_PIN_CSS = `
 @media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-move.cs-spring{animation:none;transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}}
 ${LIT_CSS}`;
 
+/**
+ * The check-in zoom (mapGrow): as the Community card grows into the full map, its pins step aside with its words, a quick
+ * fade on the marker itself (MapLibre may set its opacity inline, hence !important), so the push-in is into the map alone.
+ * Kept out of MAP_PIN_CSS, which keys the card's saved pictures (cardShot).
+ */
+export const GROW_CLEAR_CSS = '.cs-clear .maplibregl-marker{opacity:0!important;transition:opacity .14s cubic-bezier(.25,.46,.45,.94)!important;pointer-events:none!important}';
+
 /** The zoom at which court names show, and below which the court marks shrink. */
 export const CLOSE_ZOOM_NAMES = 14.3;
 export const FAR_ZOOM = 11.8;
