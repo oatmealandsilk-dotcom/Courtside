@@ -111,8 +111,8 @@ export function DragSheet({
   stage?: StageGeo | null;
   /** Drawn on the stage above the sheet, over its tap-to-close area (the small rail). */
   stageOverlay?: React.ReactNode;
-  /** Asked before a drag down, a click outside or Escape closes it: false keeps it open (see the native twin). Never for closeSignal. */
-  beforeClose?: () => boolean;
+  /** Asked before a drag down, a click outside or Escape closes it, told which (SheetCloseHow): false keeps it open (see the native twin). Never for closeSignal. */
+  beforeClose?: (how: SheetCloseHow) => boolean;
   /** Bump to hand over to the next page's sheet instead of sliding away (see the native twin and sheetHandOver). */
   handOverSignal?: number;
   /** No warm glow behind the header (the Send to sheet only; see the native twin). The side panel and the stage ignore it. */
@@ -139,11 +139,14 @@ export function DragSheet({
   return <Sheet header={header} onDismissed={onDismissed} peekFraction={peekFraction} closeSignal={closeSignal} onSettled={onSettled} active={active} contentHeight={contentHeight} waitForFit={waitForFit} beforeClose={beforeClose} handOverSignal={handOverSignal} plain={plain} slideOpen={slideOpen} floating={floating}>{children}</Sheet>;
 }
 
-/** The latest beforeClose, and whether a close the person started may go ahead now. */
-function useMayClose(beforeClose?: () => boolean) {
+/** What is closing a sheet, as beforeClose hears it (see the native twin; a browser has no Back of its own). */
+export type SheetCloseHow = 'drag' | 'outside' | 'back' | 'escape';
+
+/** The latest beforeClose, and whether a close the person started (`how`) may go ahead now. */
+function useMayClose(beforeClose?: (how: SheetCloseHow) => boolean) {
   const latest = useRef(beforeClose);
   latest.current = beforeClose;
-  return () => !latest.current || latest.current();
+  return (how: SheetCloseHow) => !latest.current || latest.current(how);
 }
 
 /**
@@ -177,7 +180,7 @@ const SIDE_GAP = 12;
  * keeps playing. Home hears the panel's width and slides the clip left to
  * sit beside it. A click anywhere outside the panel, or Escape, closes it.
  */
-function SidePanel({ header, children, onDismissed, closeSignal, onSettled, active, beforeClose }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; onSettled?: () => void; active: boolean; beforeClose?: () => boolean }) {
+function SidePanel({ header, children, onDismissed, closeSignal, onSettled, active, beforeClose }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; onSettled?: () => void; active: boolean; beforeClose?: (how: SheetCloseHow) => boolean }) {
   useTheme();
   const mayClose = useMayClose(beforeClose);
   const panel = useRef<HTMLDivElement>(null);
@@ -189,7 +192,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
     return () => { clearTimeout(settled); setSidePanel(0); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  useEscape(() => { if (mayClose()) close(); }, { enabled: active });
+  useEscape(() => { if (mayClose('escape')) close(); }, { enabled: active });
   const close = () => {
     if (done.current) return;
     done.current = true;
@@ -197,7 +200,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
     const out = panel.current?.animate([{ opacity: 1, transform: 'translateX(0)' }, { opacity: 0, transform: 'translateX(28px)' }], { duration: 180, easing: 'ease-in', fill: 'forwards' });
     if (out) out.onfinish = () => onDismissed(); else onDismissed();
   };
-  const outside = useBackdropPress(() => { if (mayClose()) close(); });
+  const outside = useBackdropPress(() => { if (mayClose('outside')) close(); });
   const closeCount = useRef(closeSignal);
   useEffect(() => {
     if (closeSignal === closeCount.current) return;
@@ -232,7 +235,7 @@ function SidePanel({ header, children, onDismissed, closeSignal, onSettled, acti
 }
 
 /** The centred box a sheet becomes on a computer: fades and settles in, dims and blurs what is behind. */
-function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose, handOverSignal = 0, plain = false }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: () => boolean; handOverSignal?: number; plain?: boolean }) {
+function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onSettled, active, beforeClose, handOverSignal = 0, plain = false }: { header: React.ReactNode; children: React.ReactNode; onDismissed: () => void; closeSignal: number; fitContent: boolean; onSettled?: () => void; active: boolean; beforeClose?: (how: SheetCloseHow) => boolean; handOverSignal?: number; plain?: boolean }) {
   useTheme();
   const mayClose = useMayClose(beforeClose);
   const box = useRef<HTMLDivElement>(null);
@@ -267,7 +270,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     window.setTimeout(leave, HAND_LEAVE_MS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handOverSignal]);
-  useEscape(() => { if (mayClose()) close(); }, { enabled: active });
+  useEscape(() => { if (mayClose('escape')) close(); }, { enabled: active });
   const close = () => {
     if (done.current) return;
     done.current = true;
@@ -275,7 +278,7 @@ function DialogBox({ header, children, onDismissed, closeSignal, fitContent, onS
     const out = backdrop.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 160, easing: 'ease-in', fill: 'forwards' });
     if (out) out.onfinish = () => onDismissed(); else onDismissed();
   };
-  const outside = useBackdropPress(() => { if (mayClose()) close(); });
+  const outside = useBackdropPress(() => { if (mayClose('outside')) close(); });
   const closeCount = useRef(closeSignal);
   useEffect(() => {
     if (closeSignal === closeCount.current) return;
@@ -336,7 +339,7 @@ function Sheet({
   active: boolean;
   contentHeight?: number;
   waitForFit?: boolean;
-  beforeClose?: () => boolean;
+  beforeClose?: (how: SheetCloseHow) => boolean;
   handOverSignal?: number;
   plain?: boolean;
   slideOpen?: boolean;
@@ -462,7 +465,7 @@ function Sheet({
     place(geometry.current.fullHeight + past, SETTLE_MS, 'cubic-bezier(.4,0,1,1)');
     window.setTimeout(finish, SETTLE_MS + 20);
   };
-  const outside = useBackdropPress(() => { if (mayClose()) close(); });
+  const outside = useBackdropPress(() => { if (mayClose('outside')) close(); });
   // floating: never taller than its contents, so a fling up only settles it back.
   const openFull = () => place(floating ? geometry.current.openOffset : 0, SETTLE_MS);
   const returnTo = (y: number) => place(y, SETTLE_MS);
@@ -473,7 +476,7 @@ function Sheet({
     close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [closeSignal]);
-  useEscape(() => { if (!dismissed.current && mayClose()) close(); }, { notWhileTyping: true, enabled: active });
+  useEscape(() => { if (!dismissed.current && mayClose('escape')) close(); }, { notWhileTyping: true, enabled: active });
   // Handed over to the next page's sheet: it stays where it is, its contents fade, and the next opens at this height.
   const handCount = useRef(handOverSignal);
   useEffect(() => {
@@ -522,7 +525,7 @@ function Sheet({
     const travelled = current.current - d.originY;
     // Velocity only counts if the finger was still moving when it lifted.
     const velocity = performance.now() - d.lastT < 120 ? d.velocity : 0;
-    if (velocity > FLICK || (travelled > 0 && travelled > (fullHeight - d.originY) * 0.32)) { if (mayClose()) close(); else returnTo(d.originY); }
+    if (velocity > FLICK || (travelled > 0 && travelled > (fullHeight - d.originY) * 0.32)) { if (mayClose('drag')) close(); else returnTo(d.originY); }
     else if (velocity < -FLICK || (travelled < 0 && Math.abs(travelled) > d.originY * 0.32)) openFull();
     else returnTo(d.originY);
   };
