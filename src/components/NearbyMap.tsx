@@ -3,8 +3,8 @@ import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, PixelRatio, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Image as PhotoImage } from 'expo-image';
-import { captureRef } from 'react-native-view-shot';
-import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import { captureRef, releaseCapture } from 'react-native-view-shot';
+import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -29,6 +29,7 @@ import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/fea
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
+import { CHROME_AFTER_MS, CHROME_MS, GROW_MS, GROW_SWOOP_MS, LABELS_OUT_MS, REVEAL_AT, REVEAL_MAX_MS, REVEAL_MS, creptZoom, endGrow, growHost, growPlan, holdGrow, labelsOut, setGrowPlan, startGrow, useGrowPicture, type Rect } from '@/features/players/mapGrow';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -114,8 +115,41 @@ export function NearbyMap(props: NearbyMapProps) {
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
     if (!onExpand || !seen) return false;
     swoopTo(here, true);
+    // On the Community tab the card grows into the full map (mapGrow); anything in the way of a picture of the page, the plain way in.
+    if (props.grow && !still && !keepNone && !cardCaptureBroken() && growHost()) {
+      void growOpen().then((ok) => { if (!ok) onExpand(); });
+      return true;
+    }
     onExpand();
     return true;
+  };
+  /**
+   * The grow, from the card: a picture of the Community page as it is (the card's map in it), held in memory so the full
+   * map's very first frame is that picture; then the full map opens over it with no slide (app/_layout's map options) and
+   * pushes the picture in while it loads underneath. False (nothing opened) if the page or the card could not be measured
+   * or photographed: the caller then opens the full map the plain way.
+   */
+  const growOpen = async (): Promise<boolean> => {
+    const page = growHost();
+    const card = spot.ref.current;
+    if (!page || !card) return false;
+    const rect = (v: View) => new Promise<Rect>((done) => v.measureInWindow((x, y, w, h) => done({ x, y, w, h })));
+    try {
+      const [pageAt, cardAt] = await Promise.all([rect(page), rect(card)]);
+      if (!(cardAt.w > 0 && cardAt.h > 0 && pageAt.w > 0 && pageAt.h > 0)) return false;
+      // The card's words step aside first (so the push-in is into the map, not into its city's name), then the picture.
+      labelsOut();
+      await new Promise((done) => setTimeout(done, LABELS_OUT_MS + 20));
+      const raw = await captureRef(page, { format: 'jpg', quality: 0.92, result: 'tmpfile' });
+      const shot = raw.startsWith('file:') ? raw : `file://${raw}`;
+      await PhotoImage.prefetch(shot, 'memory');
+      setGrowPlan(growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, shot, center: view.center, zoom: view.zoom }));
+      router.push({ pathname: '/map', params: { grow: '1' } });
+      return true;
+    } catch {
+      endGrow();
+      return false;
+    }
   };
   const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? swoopOnUp : undefined);
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
@@ -180,7 +214,9 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit || model.place) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit, model.place]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // Opened by the card growing into it (mapGrow): exactly where the grown card shows, so the hand-over cannot be seen.
+  const growFrom = expanded ? props.growFrom ?? null : null;
+  const view = growFrom ? { center: growFrom.center, zoom: growFrom.zoom } : expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
   const cardCenter = model.city ?? start.center;
@@ -236,11 +272,73 @@ export function NearbyMap(props: NearbyMapProps) {
   // set in the clear above its list of courts, the way a court sits above its card.
   useEffect(() => { if (model.place) canvas.current?.flyTo(model.place, placeZoom(model.place, COURTS_MIN_ZOOM), 700, -courtLift(windowH), true); }, [model.place]); // eslint-disable-line react-hooks/exhaustive-deps
   // You are up, with the zoom on: down to street level over you (made by the page once its map is up: MapCanvas).
+  // A full map just opened starts once its page has drawn where it is, or 0.7 s after its style is in at most.
+  // Opened by the card growing into it: the swoop waits for the grown card to hand over (below), then is shorter.
+  const swoopRun = useRef(swoop.run);
+  swoopRun.current = swoop.run;
+  const startSwoop = (ms?: number) => {
+    const run = swoopRun.current;
+    if (!run) return;
+    const shape = swoopShape();
+    canvas.current?.swoop({ ...shape, ms: ms ?? shape.ms, id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
+  };
+  const growing = useRef(!!growFrom);
+  useEffect(() => { if (!growing.current) startSwoop(); }, [swoop.run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The grow's hand-over (mapGrow), on the full map it opened: the picture of the Community page pushes in over the map
+  // while it loads; once the push-in is most of the way and the map has drawn, the picture dissolves as the camera dives
+  // on (one move), and the map's buttons slide in (never fade: they are glass) as it comes in to land.
+  const [growShot, setGrowShot] = useState<string | null>(growFrom?.shot ?? null);
+  const [growStart, setGrowStart] = useState(0);
+  const [growDue, setGrowDue] = useState(false);
+  const [growLate, setGrowLate] = useState(false);
+  const growPicture = useGrowPicture();
+  const shotIn = useSharedValue(1);
+  const shotFade = useAnimatedStyle(() => ({ opacity: shotIn.value }));
+  const chromeIn = useSharedValue(growFrom ? 0 : 1);
+  const topAway = -(insets.top + 150);
+  const bottomAway = insets.bottom + 170;
+  const topSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * topAway }] }));
+  const bottomSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * bottomAway }] }));
+  // The push-in starts once the picture is on screen (it is the page as it was, so nothing changes until it moves).
+  const growBegun = useRef(false);
+  const beginGrow = () => {
+    if (!growing.current || growBegun.current) return;
+    growBegun.current = true;
+    startGrow(still);
+    setGrowStart(Date.now());
+  };
+  // A picture that never shows: the push-in starts anyway (the map then takes over as soon as it has drawn).
+  useEffect(() => { if (!growFrom) return undefined; const t = setTimeout(beginGrow, 450); return () => clearTimeout(t); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    const run = swoop.run;
-    // A full map just opened starts once its page has drawn where it is, or 0.7 s after its style is in at most.
-    if (run) canvas.current?.swoop({ ...swoopShape(), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, wait: 700 });
-  }, [swoop.run?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!growStart) return undefined;
+    const due = setTimeout(() => setGrowDue(true), GROW_MS * REVEAL_AT);
+    const late = setTimeout(() => setGrowLate(true), REVEAL_MAX_MS);
+    return () => { clearTimeout(due); clearTimeout(late); };
+  }, [growStart]);
+  const growDone = () => {
+    endGrow();
+    // The picture was only ever for this: gone from the phone now.
+    if (growFrom?.shot) { try { releaseCapture(growFrom.shot); } catch { /* a temporary file either way */ } }
+    setGrowShot(null);
+    props.onGrown?.();
+  };
+  useEffect(() => {
+    if (!growFrom || !growing.current || !growDue || (mapStatus === 'loading' && !growLate)) return;
+    growing.current = false;
+    // Crept on past the push-in's end while the map drew: its camera comes that much closer too, then dives on.
+    const dz = creptZoom(growFrom, holdGrow());
+    if (dz > 0.005) canvas.current?.flyTo(growFrom.center, growFrom.zoom + dz, 0, 0, true);
+    startSwoop(GROW_SWOOP_MS);
+    shotIn.value = withTiming(0, { duration: REVEAL_MS, easing: Easing.out(Easing.quad) }, (done) => { if (done) runOnJS(growDone)(); });
+    chromeIn.value = withDelay(CHROME_AFTER_MS, withTiming(1, { duration: CHROME_MS, easing: Easing.out(Easing.cubic) }));
+  }, [growDue, growLate, mapStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Left part way (Back mid-grow): the page under it is back as it was, and the picture gone from the phone.
+  useEffect(() => () => {
+    if (!growing.current) return;
+    endGrow();
+    if (growFrom?.shot) { try { releaseCapture(growFrom.shot); } catch { /* a temporary file either way */ } }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = expanded ? model.shown : cardPlayers;
   const selectedId = model.selected?.user.id ?? null;
@@ -557,7 +655,15 @@ export function NearbyMap(props: NearbyMapProps) {
   return (
     <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {mapView}
-      <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
+      {/* Opened by the card growing into it: the picture of the Community page, pushing in over the map, then dissolving into it. */}
+      {growShot && growFrom ? (
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, shotFade]}>
+          <Reanimated.View style={[{ position: 'absolute', left: growFrom.page.x, top: growFrom.page.y, width: growFrom.page.w, height: growFrom.page.h }, growPicture]}>
+            <PhotoImage source={{ uri: growShot }} contentFit="fill" transition={0} cachePolicy="memory" style={StyleSheet.absoluteFill} onLoad={() => requestAnimationFrame(beginGrow)} onError={beginGrow} />
+          </Reanimated.View>
+        </Reanimated.View>
+      ) : null}
+      <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? checkIn : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
@@ -572,8 +678,8 @@ export function NearbyMap(props: NearbyMapProps) {
         <MapLoadPill status={swoop.busy && mapStatus === 'loading' ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
-      </View>
-      <View pointerEvents="box-none" style={styles.bottom}>
+      </Reanimated.View>
+      <Reanimated.View pointerEvents="box-none" style={[styles.bottom, growFrom ? bottomSlide : null]}>
         {/* What is up along the bottom (a card, or nothing) glides in and out, the map's buttons riding on top of it: CardStage. */}
         <CardStage
           cardKey={stageKey}
@@ -599,7 +705,7 @@ export function NearbyMap(props: NearbyMapProps) {
             <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null)}
         </CardStage>
-      </View>
+      </Reanimated.View>
     </View>
   );
 }

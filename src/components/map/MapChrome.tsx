@@ -5,6 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
+import { useGrowLabels } from '@/features/players/mapGrow';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
@@ -1588,6 +1589,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
 export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+  const labelsOut = useGrowLabels();
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   const edge = labelEdge(themes[theme].bg);
@@ -1611,7 +1613,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           wears a thin edge of the map's ground colour, the way a map's own
           labels do, so it reads over roads and pins with nothing behind it
           (Oct 25, owner: "I don't like this big glare here", of the haze that was). */}
-      <View pointerEvents="none" style={styles.cityMark}>
+      {/* The check-in zoom's grow (mapGrow): the words step out of the way as the card grows into the full map (words only, no glass). */}
+      <Animated.View pointerEvents="none" style={[styles.cityMark, labelsOut]}>
         <View style={styles.cityGlow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cityName, edge]} numberOfLines={1}>{cityName}</Text>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn, edge]}>{line}</Text>
@@ -1621,7 +1624,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
               : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Be the first player on the map</Text> : null}
         </View>
-      </View>
+      </Animated.View>
       {checkIn ? (
         <>
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>

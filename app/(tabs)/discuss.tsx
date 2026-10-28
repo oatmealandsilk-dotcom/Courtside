@@ -23,6 +23,7 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { useGrowHost, useGrowHostStyle } from '@/features/players/mapGrow';
 import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { UpToday, useUpToday } from '@/components/UpToday';
@@ -252,6 +253,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     playersRef.current?.scrollTo({ y: pageTop, animated: true });
   };
   const location = useLocationToggle();
+  // The check-in zoom (mapGrow): this page is what pushes in toward the map card as it grows into the full map.
+  // A picture of it on the phone (taken from this view); in a browser the page itself moves, by a transform only.
+  const growRef = useRef<View | null>(null);
+  useGrowHost(growRef);
+  const growStyle = useGrowHostStyle();
   // Check in (migration 189), for the Open to hit row's note: your ring is on the map only for friends, and only once you check in.
   const checkIn = useCheckIn();
   // (No ask on opening any more, migration 189: "Who can see you on the map?" comes only when you tap Check in.)
@@ -687,7 +693,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
           // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
-          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -989,6 +995,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
   const column = isPhone ? undefined : LAYOUT.soloColumn;
   return (
+    <Reanimated.View style={[styles.growHost, growStyle]}>
+    <View ref={growRef} collapsable={false} style={styles.growHost}>
     <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :
@@ -1045,6 +1053,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
     </Screen>
+    </View>
+    </Reanimated.View>
   );
 }
 
@@ -1092,6 +1102,8 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
 }
 
 const styleDefinitions = StyleSheet.create({
+  // The page, as one view the check-in zoom can photograph (phone) or push in (browser).
+  growHost: { flex: 1 },
   hits: { gap: spacing.md },
   courtsPair: { gap: 16 },
   hitsHead: { gap: 3, paddingTop: spacing.sm },

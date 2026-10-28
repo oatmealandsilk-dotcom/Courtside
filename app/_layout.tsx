@@ -5,6 +5,7 @@ import '@/lib/usedBefore';
 import '@/lib/textScale';
 import '@/lib/launchSplash';
 import React, { useEffect } from 'react';
+import { mapScreenOptions } from '@/features/players/mapGrow';
 import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
 import { Pressable, Text, View } from 'react-native';
 import { Stack, type ErrorBoundaryProps } from 'expo-router';
@@ -121,6 +122,8 @@ function RootStack() {
       <Stack.Screen name="index" options={{ animation: 'fade' }} />
       <Stack.Screen name="(auth)" options={{ animation: 'fade' }} />
       <Stack.Screen name="(tabs)" options={{ animation: 'none' }} />
+      {/* The full map: slides in as any page, except when the Community card grows into it (the check-in zoom, mapGrow). */}
+      <Stack.Screen name="map" options={({ route }) => mapScreenOptions(route.params)} />
       {/* Edit Profile always slides away to the right, however you leave it (Oct 5, owner: it sometimes just vanished
           when a tab was tapped, and slid when Back or Save was used). */}
       <Stack.Screen name="edit-profile" options={{ animation: 'slide_from_right' }} />
