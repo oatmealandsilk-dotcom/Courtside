@@ -108,7 +108,7 @@ function MapMoment() {
           <Text style={styles.chipName} numberOfLines={1} maxFontSizeMultiplier={1.2}>Sam <Text style={styles.chipSoft}>· hit at 5pm</Text></Text>
           <View style={styles.chipMeta}>
             <View style={styles.openDot} />
-            <Text style={styles.chipSoft} numberOfLines={1} maxFontSizeMultiplier={1.2}>Riverside Park courts · 0.4 mi</Text>
+            <Text style={styles.chipSoft} numberOfLines={1} maxFontSizeMultiplier={1.2}>Riverside Park courts</Text>
           </View>
         </View>
       </Animated.View>
