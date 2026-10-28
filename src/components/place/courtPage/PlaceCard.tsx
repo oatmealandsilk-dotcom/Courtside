@@ -65,13 +65,8 @@ import { surfaceAdjective, surfaceKind, surfaceLabel, type SurfaceKind } from '@
  * top.
  */
 
-/** How much of the map shows under the status bar, before the sheet rises over it. */
-const HERO_BODY = 150;
-/** The map's whole height, status bar and all, at most: the posts' head then shows above the fold. */
-const HERO_MAX = 200;
-/** A short phone (an iPhone SE, 667pt): a shorter map and a tighter top, so Posts and Watch all still show above the tab bar. */
+/** A short phone (an iPhone SE, 667pt): a shorter top and a tighter bar, so Start a session here still shows. */
 const SHORT_SCREEN = 740;
-const HERO_BODY_SHORT = 104;
 /** How far the sheet rises over the map, its rounded top. */
 const SHEET_OVER = 24;
 /**
@@ -99,11 +94,11 @@ export function PlaceCard({ view }: { view: CourtView }) {
   // The pull's strip above the page on a phone (Screen's own), so "the top" is where the page rests.
   const strip = Platform.OS !== 'web' && view.onRefresh ? PULL_GAP : 0;
   const top = isPhone ? insets.top : 0;
-  // The court's most-watched clip, when it has one, in place of the map; none, the map as before.
+  // The court's most-watched clip, when it has one, in place of the map; none, the map, at the same size.
   const clip = view.heroClip;
-  const heroH = clip
-    ? (isPhone ? Math.round(screenH * (short ? CLIP_SHARE_SHORT : CLIP_SHARE)) : CLIP_WIDE)
-    : Math.min(top + (short ? HERO_BODY_SHORT : HERO_BODY), HERO_MAX);
+  // The map takes the same room as a clip would (Oct 28, owner: "For court without a clip, it should be
+  // similar size to with a clip. Map at top bigger"), so every court page opens with the sheet at the same place.
+  const heroH = isPhone ? Math.round(screenH * (short ? CLIP_SHARE_SHORT : CLIP_SHARE)) : CLIP_WIDE;
   // The bar turns solid, and the name shows in it, once the sheet's top has gone up under it.
   const solidAt = heroH - SHEET_OVER - (top + BAR_H) + 36;
   // The sheet has gone up over the clip (the bar has turned solid): it holds still until the sheet comes down again.
