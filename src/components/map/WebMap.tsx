@@ -872,7 +872,7 @@ export function NearbyMap(props: NearbyMapProps) {
           {/* A still card: the tap goes to the full map, not to the tiles. */}
           <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends up to hit" onPress={openTap} disabled={!onExpand} style={StyleSheet.absoluteFill} />
           <GrowAwayContext.Provider value={growsHere}>
-            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} />
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} chip={fullCard} />
             <CardCredit />
           </GrowAwayContext.Provider>
         </View>

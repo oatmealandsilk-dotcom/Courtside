@@ -755,7 +755,7 @@ export function NearbyMap(props: NearbyMapProps) {
             </Reanimated.View>
           ) : null}
           <GrowAwayContext.Provider value={growsHere}>
-            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} />
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} chip={fullCard} />
             <CardCredit />
           </GrowAwayContext.Provider>
         </View>

@@ -1626,7 +1626,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false }: { /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, chip = false }: { /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const labelsOut = useGrowLabels();
   // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
   const weatherAway = useGrowAway('bottom');
@@ -1646,8 +1646,33 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
   const line = count === 1 ? '1 friend around' : count ? `${count} friends around`
     : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
       : hint ?? 'No one here yet';
+  // The card that draws the full map's pins (fullCard): its middle is all courts, faces and "4 here" labels, so the
+  // words sit in one small chip beside the weather, sized like it, and slip out with it as the zoom starts (Oct 28,
+  // owner: "no shit animations, not ui that looks bad"). Never near Up to hit's tip, which hangs from the top right.
+  const chipBits = chip ? [
+    count ? `${count} ${count === 1 ? 'friend' : 'friends'}` : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'}` : null,
+    hitCount ? `${hitCount} ${hitCount === 1 ? 'hit' : 'hits'}` : null,
+  ].filter(Boolean) as string[] : [];
+  const weatherChip = weather ? (
+    <View style={styles.previewChip}>
+      <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+    </View>
+  ) : null;
   return (
     <>
+      {chip ? (
+        <Animated.View pointerEvents="none" style={[styles.previewChips, weatherAway]}>
+          {weatherChip}
+          <View style={[styles.previewChip, styles.cityChip]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.cityChipText}>
+              {cityName}
+              {chipBits.length ? <Text style={(count > 0 || placeCount > 0) ? styles.cityChipOn : styles.cityChipMuted}>{`  ·  ${chipBits.join(' · ')}`}</Text> : null}
+            </Text>
+          </View>
+        </Animated.View>
+      ) : null}
+      {chip ? null : <>
       {/* The city's name is the top layer, so a player's ring or a court never
           sits over the words however busy the middle of town gets. Each word
           wears a thin edge of the map's ground colour, the way a map's own
@@ -1665,6 +1690,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
               : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
       </Animated.View>
+      </>}
       {checkIn ? (
         <>
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
@@ -1675,11 +1701,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
         </>
       ) : null}
-      {weather ? (
-        <Animated.View pointerEvents="none" style={[styles.previewWeather, weatherAway]}>
-          <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
-        </Animated.View>
+      {weatherChip && !chip ? (
+        <Animated.View pointerEvents="none" style={[styles.previewWeather, weatherAway]}>{weatherChip}</Animated.View>
       ) : null}
       {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
     </>
@@ -2048,5 +2071,12 @@ const styleDefinitions = StyleSheet.create({
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
-  previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  previewWeather: { position: 'absolute', left: 12, bottom: 12 },
+  previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  // The full-pins card: weather and the city chip side by side along the foot (the credit keeps the corner on the right).
+  previewChips: { position: 'absolute', left: 12, right: 36, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cityChip: { flexShrink: 1 },
+  cityChipText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  cityChipOn: { color: colors.brand },
+  cityChipMuted: { color: colors.textMuted },
 });
