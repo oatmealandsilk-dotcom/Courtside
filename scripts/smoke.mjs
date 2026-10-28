@@ -1039,12 +1039,15 @@ const STEPS = [
       } else {
         throw new Error('the map card says "Map didn’t load", though the map server answered');
       }
-      // Oct 28: with People you may know and the city board for everyone, Open hits sits further down: scroll to it.
+      // Oct 28: with People you may know and the city board for everyone, Open hits sits further down: check what is
+      // on screen first (Open to hit, the card's Up to hit), then scroll to Open hits.
+      await page.waitFor({ text: 'Open to hit' }, 20000);
+      await page.waitFor({ label: /^Up to hit\. Friends who follow you back see you / }, 20000);
       await page.reveal({ text: 'Open hits' }, 20000);
     },
     // Open hits sits further down since the map card grew to 400 (Oct 25): on the page, maybe below the bar.
     // Up to hit (was Check in, then Light up; migration 189, Apple 5.1.2(i)): the card's own button; never shared on its own.
-    expect: [{ text: 'Open to hit', any: true }, { text: 'Open hits' }, { label: /^Up to hit\. Friends who follow you back see you /, any: true }],
+    expect: [{ text: 'Open hits' }],
   },
   {
     // Oct 22, owner: "The map blips in". A search hides the map card rather than taking it down, so
