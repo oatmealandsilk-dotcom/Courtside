@@ -58,7 +58,7 @@ export default function CourtNowSheet() {
   const checkInHere = canCheckIn(currentUser, access);
   // Who sees you here follows who can see you on the map, once you have said (migration 63).
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
-  const hereNote = !locationEnabled ? 'Turn on Location to check in.'
+  const hereNote = !locationEnabled ? 'Turn on Location first.'
     : seenBy === 'none' ? 'You chose No one on the map, so no one sees you here.'
       // Since migration 189: names only to friends; anyone else only a count, never a face.
       : 'For 2 hours. Friends who follow you back see your name; others only see a count, once 2 or more are here.';

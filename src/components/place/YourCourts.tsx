@@ -69,7 +69,7 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
             <SwipePressable
               key={c.courtId}
               accessibilityRole="link"
-              accessibilityLabel={[name, here ? 'you’re checked in here' : null, news.posts, news.hit ? `hit ${news.hit}` : null, news.now, quiet ? 'nothing new this week' : null].filter(Boolean).join(', ')}
+              accessibilityLabel={[name, here ? 'you’re here' : null, news.posts, news.hit ? `hit ${news.hit}` : null, news.now, quiet ? 'nothing new this week' : null].filter(Boolean).join(', ')}
               onPress={() => openCourt({ id: c.courtId, name, lat: c.lat, lng: c.lng })}
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
             >

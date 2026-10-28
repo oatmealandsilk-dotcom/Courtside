@@ -3,7 +3,8 @@ import type { MapVisibility } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
-import { checkInSpan, liveCheckIn, untilWords } from '@/features/players/checkIn';
+import { liveCheckIn } from '@/features/players/checkIn';
+import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
 import { useOpenClock } from '@/features/players/useOpenClock';
 
 /**
@@ -39,14 +40,16 @@ export function useLocationToggle() {
   return { locationOn: locationEnabled, locating, toggle };
 }
 
-/** What a Check in button shows and does (MapTopBar, the Find Players card). */
+/** What a Light up button shows and does (MapTopBar, the Find Players card). */
 export interface CheckInControl {
-  /** Checked in right now. */
+  /** Lit up right now. */
   on: boolean;
   /** Asking the phone where it is, or the server. */
   busy: boolean;
-  /** "until 10pm" (how long a check-in now would last, or how long yours still does). */
+  /** "till 10pm" (how long a light-up now would last, or how long yours still does). */
   span: string;
+  /** When yours ends, while you are lit up. */
+  until: string | null;
   press: () => void;
 }
 
@@ -60,7 +63,7 @@ export interface CheckInControl {
  * one tip after the first check-in points at.
  */
 export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
-  const { actions, mapVisibility, lastSeen, currentUserId } = useApp();
+  const { actions, mapVisibility, lastSeen, currentUserId, currentUser, courtFacts } = useApp();
   const [busy, setBusy] = useState(false);
   const mine = currentUserId ? lastSeen[currentUserId]?.until : undefined;
   // Looks again the moment your check-in ends, so the button says Check in again by itself.
@@ -80,9 +83,13 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
     }
     setBusy(true);
     try {
-      const problem = await actions.checkInOnMap();
-      if (problem) { showToast({ title: 'Not checked in', body: problem, icon: 'navigate-outline' }); return; }
-      showToast({ title: `Checked in ${checkInSpan()}`, body: 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
+      let at: { lat: number; lng: number } | null = null;
+      const problem = await actions.checkInOnMap((fix) => { at = fix; });
+      if (problem) { showToast({ title: 'Couldn’t light you up', body: problem, icon: 'navigate-outline' }); return; }
+      // Standing at a court: it lights up too, from this same tap (Light up, admins first).
+      const spot: { lat: number; lng: number } | null = at;
+      const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
+      showToast({ title: litLine(litSpan()), body: court ? `${court} lights up too. Friends who follow you back see you.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
       if (first) void showHideTip(where);
     } finally {
       setBusy(false);
@@ -92,7 +99,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   ref.current = pressNow;
   const press = useCallback(() => { void ref.current(); }, []);
 
-  return { on: !!until, busy, span: until ? untilWords(until) : checkInSpan(), press };
+  return { on: !!until, busy, span: until ? litTill(until) : litSpan(), until, press };
 }
 
 /**

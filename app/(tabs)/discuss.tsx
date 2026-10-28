@@ -817,7 +817,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Friends checked in within 30 miles</Text>}
+              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Friends lit up within 30 miles</Text>}
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>

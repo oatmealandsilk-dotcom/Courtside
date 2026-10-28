@@ -128,9 +128,9 @@ export default function OpenToHitSheet() {
     if (!checkIn.on) {
       showToast({
         title: 'You’re open to hit',
-        body: 'Friends see it on the map once you check in.',
+        body: 'Friends see it on the map once you light up.',
         icon: 'navigate-outline',
-        action: { label: 'Check in', onPress: checkIn.press },
+        action: { label: 'Light up', onPress: checkIn.press },
       });
     }
     close();

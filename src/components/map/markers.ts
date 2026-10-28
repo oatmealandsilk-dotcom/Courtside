@@ -3,7 +3,7 @@ import { hitShort } from '@/features/hits/format';
 import { isClosedCourt, type Court } from '@/features/players/courts';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { initials } from '@/lib/format';
-import { colors, surfaceColorFor } from '@/theme';
+import { colors, surfaceColorFor, withAlpha } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
 
@@ -274,24 +274,54 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * same glow with no words, under your own pin when you are playing there
  * (your pin's tag says it, Oct 6).
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, lit: 0 | 1 | 2 | 3 | 'plain' = 0): string {
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
   const closed = isClosedCourt(court);
   const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
   const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
-  const glowing = !!live || glowOnly;
+  // 'plain' (courts lighting up): the words beside it with no glow at all (an open hit on another day).
+  const glowing = (!!live || glowOnly) && lit !== 'plain';
+  // Lit (Light up, features/places/lightUp): the brand colour's dot before the count, as its halo is.
+  const dot = lit ? colors.brand : colors.open;
   const name = live
-    ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.open}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
+    ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${dot}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
     : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
-  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
+  const glow = lit && lit !== 'plain' ? litHalo(lit) : glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
   const tint = courtTone(court);
   const tone = closed ? colors.borderStrong : tint;
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
   return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}</div>`;
+}
+
+/**
+ * A court lit up by what is on there right now (Light up, Oct 27, owner: "what if courts light up when
+ * people check in there"; features/places/lightUp): a thin ring of the brand round a gap of the page,
+ * and a soft halo in the same colour, a little wider and stronger each level (1 warm, 2 lit, 3 hot), so
+ * even a warm court reads as lit beside one only played on this week (whose ring has no glow). Still: no
+ * pulse, no animation (a calm glow), on light and dark maps alike.
+ */
+function litHalo(level: 1 | 2 | 3): string {
+  const ring = [0, 1.5, 2, 2.5][level];
+  const blur = [0, 10, 15, 21][level];
+  const spread = [0, 3, 5, 8][level];
+  const alpha = [0, 0.42, 0.5, 0.58][level];
+  return `0 0 0 2px ${colors.bg},0 0 0 ${2 + ring}px ${withAlpha(colors.brand, 0.92)},0 0 ${blur}px ${spread}px ${withAlpha(colors.brand, alpha)},`;
+}
+
+/**
+ * A lit court on the still card in Find Players (Light up): the card's small court badge with the same
+ * still halo as on the full map. Only lit courts show on the card (the card shows no courts otherwise,
+ * Oct 3), and without their counts: that far out a town's courts sit a few points apart, round its name
+ * in the middle, so words there only pile up (the full map, a tap away, says "4 here"). Never a name,
+ * never a tap of its own (the card is the button).
+ */
+export function litCourtDotHtml(court: Court, level: 1 | 2 | 3): string {
+  const tone = colors.court;
+  return `<div style="width:18px;height:18px;border-radius:5px;background:${colors.bg};border:1.5px solid ${tone};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${litHalo(level)}0 1px 4px rgba(0,0,0,.18);pointer-events:none">${courtGlyph(tone, 10)}</div>`;
 }
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */

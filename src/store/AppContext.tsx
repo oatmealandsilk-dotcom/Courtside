@@ -658,8 +658,10 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * Check in (migration 189): reads the phone's location once and shows your
    * pin to friends who follow each other with you until 10pm (2 hours after
    * 8pm). Never called on its own. Resolves with a message to show, or null.
+   * `onFix` hears where the phone was found, once it went through (Light up
+   * at a court lights the court up too, features/places/lightUp).
    */
-  checkInOnMap: () => Promise<string | null>;
+  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void) => Promise<string | null>;
   /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
@@ -4082,9 +4084,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [loadLastSeen]);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
-  const checkInOnMap = useCallback(async (): Promise<string | null> => {
+  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
-    if (!me) return 'Sign in to check in.';
+    if (!me) return 'Sign in to light up.';
     const fix = await getPosition();
     if (!fix.ok) {
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
@@ -4103,17 +4105,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) {
       haptics.commit();
       placeMine(ends);
+      onFix?.({ lat: fix.lat, lng: fix.lng });
       return null;
     }
     const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
     if ('error' in got) {
-      return got.error === 'ask_first' ? 'Say yes to friends seeing your check-ins first.'
-        : got.error === 'missing' ? 'Check in isn’t available yet. Update the app and try again.'
+      return got.error === 'ask_first' ? 'Say yes to friends seeing you light up first.'
+        : got.error === 'missing' ? 'Light up isn’t available yet. Update the app and try again.'
           : 'That didn’t go through. Try again.';
     }
     haptics.commit();
     placeMine(got.until);
     void loadLastSeen();
+    onFix?.({ lat: fix.lat, lng: fix.lng });
     return null;
   }, [loadLastSeen]);
 
@@ -4136,7 +4140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     spotGen.current += 1;
     if (!(await remote.checkOutOfMap().catch(() => false))) {
-      showToast({ title: 'Couldn’t check you out yet', body: 'Friends may still see your pin. Try again.', icon: 'cloud-offline-outline' });
+      showToast({ title: 'Couldn’t turn it off yet', body: 'Friends may still see your pin. Try again.', icon: 'cloud-offline-outline' });
       return;
     }
     void loadLastSeen();

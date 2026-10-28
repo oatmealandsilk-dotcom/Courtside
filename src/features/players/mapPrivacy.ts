@@ -26,12 +26,12 @@ import { notKnownAdult } from '@/features/players/age';
  * Friends: the server treats it so.)
  */
 export const CONSENT_CHOICES: { value: MapVisibility; label: string; line: string }[] = [
-  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Check in, until 10pm.' },
+  { value: 'mutuals', label: 'Friends · people you both follow', line: 'Only when you tap Light up, till 10pm.' },
   { value: 'none', label: 'No one', line: 'You never show on the map.' },
 ];
 
 /** What a teen is told the first time, before anything is shared (the owner's words). */
-export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Check out on the map anytime to hide.';
+export const TEEN_NOTICE = 'Only friends who follow you back can see where you are. Tap Turn off on the map anytime to hide.';
 
 /** Whether friends may see your check-ins: a yes ('mutuals', or 'nearby' from before migration 189). */
 export const saidYes = (v: MapVisibility | null | undefined) => v === 'mutuals' || v === 'nearby';
@@ -148,7 +148,7 @@ export type TipSpot = 'card' | 'map';
 const TIP_KEY = 'courtside-hide-tip';
 let tipAt: TipSpot | null = null;
 /** What the tip says: how to hide again. */
-let tipText = 'Tap here any time to check out.';
+let tipText = 'Tap here any time to turn it off.';
 let tipSeen: boolean | null = null;
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
@@ -173,7 +173,7 @@ function markSeen() {
 export async function showHideTip(where: TipSpot) {
   if (await readSeen()) return;
   markSeen();
-  tipText = 'Tap here any time to check out.';
+  tipText = 'Tap here any time to turn it off.';
   tipAt = where;
   emit();
 }

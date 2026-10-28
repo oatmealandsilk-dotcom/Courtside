@@ -93,7 +93,7 @@ export default function LiveSessionPage() {
   const here = !!s.court && !!courtNow[s.court.id]?.youHere && locationEnabled && state !== 'finished';
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court: s.court, access: s.court ? courtFacts[s.court.id]?.access : undefined, locationOn: locationEnabled, seenBy });
-  const seen = state === 'finished' ? { line: 'Finished · checked out', shared: false } : seenShort({ here, seenBy, why: plan.why });
+  const seen = state === 'finished' ? { line: 'Finished · no longer shown', shared: false } : seenShort({ here, seenBy, why: plan.why });
   // Not seen, but could be by the court sheet's rules (a check-in that did not go through, Location just turned on): one tap to try.
   const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off');
   const tryCheckIn = async () => {

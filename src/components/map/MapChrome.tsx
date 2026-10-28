@@ -58,6 +58,7 @@ import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
 import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
+import { LIGHT_UP, litShort } from '@/features/places/lightUp';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -485,12 +486,13 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-/** What a Check in button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `Checked in, friends see you ${c.span}. Check out` : `Check in. Friends who follow you back see you ${c.span}`);
+/** What a Light up button says to a screen reader: what a tap does, and for how long. */
+const checkInLabel = (c: CheckInControl) => (c.on ? `You’re lit up, friends see you ${c.span}. Turn off` : `Light up. Friends who follow you back see you ${c.span}`);
 
 /**
- * The Check in button's own words (migration 189): "Check in", or while you
- * are checked in, how long for ("Until 10pm"; a tap checks you out).
+ * The Light up button's own words (Oct 27, owner: "Light up"; migration 189):
+ * "Light up", or while you are lit up, short and calm, till when ("Lit · 10pm";
+ * a tap turns it off).
  */
 function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -499,7 +501,7 @@ function CheckInWords({ control, size }: { control: CheckInControl; size: number
     <View pointerEvents="none" style={styles.checkInRow}>
       {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : 'Check in'}
+        {control.on && control.until ? litShort(control.until) : LIGHT_UP}
       </Text>
     </View>
   );

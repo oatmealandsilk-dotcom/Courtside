@@ -57,10 +57,15 @@ export const DEMO_FACTS: Record<string, CourtFacts> = {
 };
 export const demoFactsFor = (courtId: string): CourtFacts => DEMO_FACTS[courtId] ?? blankFacts(courtId);
 
-/** Right now: Alder Park is free and three adults are playing (Sam among them); Cypress Hollow has a wait. */
+/**
+ * Right now: Alder Park is free and three adults are playing (Sam among them); Cypress Hollow has a
+ * wait, two playing; Juniper is busy, four playing (strangers: only a count, never who). So the map's
+ * lit courts (Light up, ?admin=1) show lit and hot; lighting up at a quiet park warms it.
+ */
 export const DEMO_NOW: Record<string, CourtRightNow> = {
   [park(1).id]: { courtId: park(1).id, status: 'free', statusAt: minutesAgo(20), playing: 3, friendIds: ['u-sam'], youHere: false },
-  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 0, friendIds: [], youHere: false },
+  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
+  [park(5).id]: { courtId: park(5).id, playing: 4, friendIds: [], youHere: false },
 };
 export const demoNowFor = (courtId: string): CourtRightNow => DEMO_NOW[courtId] ?? { courtId, playing: 0, friendIds: [], youHere: false };
 

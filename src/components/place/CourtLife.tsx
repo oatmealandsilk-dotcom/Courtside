@@ -88,9 +88,9 @@ export function NowTags({ courtId, name, access }: { courtId: string; name: stri
 export function HereTag({ onCheckOut, small = false }: { onCheckOut: () => void; small?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="You’re checked in here. Check out" hitSlop={6} onPress={onCheckOut} style={({ pressed }) => [styles.tag, styles.tagLink, small && styles.tagSmall, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel="You’re here. Hide" hitSlop={6} onPress={onCheckOut} style={({ pressed }) => [styles.tag, styles.tagLink, small && styles.tagSmall, pressed && styles.pressed]}>
       {small ? null : <View style={styles.liveDot} />}
-      <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Check out' : 'You’re here · Check out'}</Text>
+      <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Hide' : 'You’re here · Hide'}</Text>
     </Pressable>
   );
 }
