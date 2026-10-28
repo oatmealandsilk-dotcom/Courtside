@@ -67,16 +67,25 @@ export function agoShort(iso?: string): string {
 /**
  * How a lit court moves (litCourtPinHtml), only while it is one of the liveliest (cs-lit-run). Every look:
  * the glow breathes (warm 3.2 s, lit 2.6 s, hot 1.8 s a breath) and a hot court sends a thin ring out in its
- * own shape (2 s). A: a bright sweep crosses the court (4.4 s, 3.4 s, 2.4 s) and its floodlights shimmer,
- * each on its own beat. B: the ring's light goes round (5.5 s, 3.6 s, 2.2 s a turn). C: the card floats up
- * and down over its spot, its shadow on the ground shrinking as it rises (2.6 s, hot 1.8 s), a sweep crosses
- * it, and a pulse goes out on the ground (3.2 s, 2.4 s, 1.7 s). Transform and opacity only, each on its own
- * layer. Still with Reduce Motion, and for the rest.
+ * own shape (2 s). A: the light on the court drifts through it as a slow, soft gradient of its own colours
+ * (LIT_FLOW: drift, breathe or wave; see litFlowLayer), never a flash. B: the ring's light goes round (5.5 s,
+ * 3.6 s, 2.2 s a turn). C: the card floats up and down over its spot, its shadow on the ground shrinking as it
+ * rises (2.6 s, hot 1.8 s), a sweep crosses it, and a pulse goes out on the ground (3.2 s, 2.4 s, 1.7 s).
+ * Transform and opacity only, each on its own layer, so the compositor runs them off the main thread; every
+ * loop ends exactly where it starts. Still with Reduce Motion, and for the rest.
+ *
+ * A's flows (Oct 28, owner: "the flash, should be more of a gradient change then a actual flash. It should
+ * feel more like a loading screen"):
+ *  drift: a wide gradient (light, the brand, a touch deeper, and back) slides slowly across the court on a
+ *     diagonal, at one even pace with no end to it (8 s, 6.5 s, 5 s a turn).
+ *  breathe: the whole court eases from its lit gradient to a deeper one and back (4.6 s, 3.9 s, 3.2 s a way).
+ *  wave: one wide, soft band of the court's lighter colour glides across, then a calm stretch (4.2 s, 3.8 s,
+ *     3.4 s a pass).
  */
 export const LIT_CSS = `
 .cs-lit-glow{transform:scale(1);opacity:.92}
 .cs-lit-sheen{transform:translateX(-110%);opacity:0}
-.cs-lit-wave,.cs-lit-ground{opacity:0}
+.cs-lit-wave,.cs-lit-ground,.cs-lit-tide{opacity:0}
 .cs-far .cs-lit{scale:.84}
 .cs-lit-run .cs-lit-glow{animation:cs-lit-breathe 2.6s ease-in-out infinite alternate}
 .cs-lit-run.cs-lit-1 .cs-lit-glow{animation-duration:3.2s}
@@ -86,8 +95,17 @@ export const LIT_CSS = `
 .cs-lit-run.cs-lit-2 .cs-lit-sheen{animation-duration:3.4s}
 .cs-lit-run.cs-lit-3 .cs-lit-sheen{animation-duration:2.4s}
 @keyframes cs-lit-sheen{0%{transform:translateX(-110%);opacity:0}8%{opacity:1}46%{transform:translateX(330%);opacity:1}50%,100%{transform:translateX(330%);opacity:0}}
-.cs-lit-run .cs-lit-lamp{animation:cs-lit-lamp 1.5s ease-in-out infinite alternate}
-@keyframes cs-lit-lamp{0%{transform:scale(.78);opacity:.6}100%{transform:scale(1.14);opacity:1}}
+.cs-lit-run .cs-lit-drift{animation:cs-lit-slide 6.5s linear infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-drift{animation-duration:8s}
+.cs-lit-run.cs-lit-3 .cs-lit-drift{animation-duration:5s}
+.cs-lit-run .cs-lit-band{animation:cs-lit-slide 3.8s linear infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-band{animation-duration:4.2s}
+.cs-lit-run.cs-lit-3 .cs-lit-band{animation-duration:3.4s}
+@keyframes cs-lit-slide{0%{transform:translateX(-50%)}100%{transform:translateX(0)}}
+.cs-lit-run .cs-lit-tide{animation:cs-lit-tide 3.9s cubic-bezier(.45,0,.55,1) infinite alternate}
+.cs-lit-run.cs-lit-1 .cs-lit-tide{animation-duration:4.6s}
+.cs-lit-run.cs-lit-3 .cs-lit-tide{animation-duration:3.2s}
+@keyframes cs-lit-tide{0%{opacity:0}100%{opacity:1}}
 .cs-lit-run .cs-lit-spin{animation:cs-lit-spin 3.6s linear infinite}
 .cs-lit-run.cs-lit-1 .cs-lit-spin{animation-duration:5.5s}
 .cs-lit-run.cs-lit-3 .cs-lit-spin{animation-duration:2.2s}
@@ -365,9 +383,9 @@ function brightness(hex: string): number {
 /**
  * Which look a lit court wears (Oct 28, owner: "the new larger map thing is better. but give me a couple
  * to pick from, the current isnt the best"). Three, each big and moving (litCourtPinHtml):
- *  A, floodlit court: the court itself from above with its floodlights on: lamps glowing at its corners,
- *     pools of their light on it, a bright sweep across it now and then; more lamps and a faster sweep as
- *     it gets busier.
+ *  A, floodlit court: the court itself from above with its floodlights on, the glow of them round it, its
+ *     light drifting through it as a slow, soft gradient of its own colours (LIT_FLOW; round 5, Oct 28: no
+ *     lamps at its corners and no flash), a little livelier as it gets busier.
  *  B, story ring: a round badge in a thick ring of the theme's colours whose light travels round it, the way
  *     a story ring moves; who is there sits on its bottom edge, like a live badge.
  *  C, raised pin: the court on a card floating over its spot, its shadow and a pulse on the ground under it;
@@ -394,6 +412,34 @@ export function litLook(): LitLook {
     // No storage here: LIT_LOOK.
   }
   return lookNow;
+}
+
+/**
+ * How the light moves on a floodlit court (A) (Oct 28, owner, of round 3's floodlit court: "Our current is
+ * better except for 2 things get rid of the dots silver in corner, but also the flash, should be more of a
+ * gradient change then a actual flash. It should feel more like a loading screen"): drift, breathe or wave
+ * (LIT_CSS, litFlowLayer). The app wears LIT_FLOW; in the web demo (no database) a picture can switch it:
+ * ?flow=breathe once, or localStorage "courtside-lit-flow".
+ */
+export type LitFlow = 'drift' | 'breathe' | 'wave';
+export const LIT_FLOW: LitFlow = 'drift';
+const FLOW_KEY = 'courtside-lit-flow';
+const isFlow = (v: unknown): v is LitFlow => v === 'drift' || v === 'breathe' || v === 'wave';
+let flowNow: LitFlow | null = null;
+/** The flow floodlit courts wear here: LIT_FLOW, or in the web demo the one a picture asked for. */
+export function litFlow(): LitFlow {
+  if (flowNow) return flowNow;
+  flowNow = LIT_FLOW;
+  if (process.env.EXPO_PUBLIC_SUPABASE_URL) return flowNow;
+  try {
+    const asked = typeof window !== 'undefined' && typeof window.location?.search === 'string' ? new URLSearchParams(window.location.search).get('flow') : null;
+    if (isFlow(asked)) localStorage.setItem(FLOW_KEY, asked);
+    const kept = typeof localStorage !== 'undefined' ? localStorage.getItem(FLOW_KEY) : null;
+    if (isFlow(kept)) flowNow = kept;
+  } catch {
+    // No storage here: LIT_FLOW.
+  }
+  return flowNow;
 }
 
 /**
@@ -486,11 +532,8 @@ function courtFromAbove(w: number, h: number, ink: string): string {
     + `</g><line x1="${f(x0 - 3)}" y1="${f(net)}" x2="${f(x1 + 3)}" y2="${f(net)}" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/></svg>`;
 }
 
-/**
- * A colour "switched on": the same hue, brighter and a touch richer (`up`: how much lighter, 0 to 1 of
- * the way), the way a lamp brightens a colour rather than washing it out to pastel as white would.
- */
-function lightUp(hex: string, up: number): string {
+/** A `#RRGGBB` colour with its lightness and saturation remade by `to` (same hue); anything else as it is. */
+function reshade(hex: string, to: (l: number, s: number) => [number, number]): string {
   const h = hex.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(h)) return hex;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -502,14 +545,23 @@ function lightUp(hex: string, up: number): string {
   let hue = 0;
   if (d) hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
   hue = (hue * 60 + 360) % 360;
-  const l2 = Math.min(0.72, l + (1 - l) * up);
-  const s2 = Math.min(0.85, s + 0.12);
+  const [l2, s2] = to(l, s);
   const c = (1 - Math.abs(2 * l2 - 1)) * s2;
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
   const m = l2 - c / 2;
   const [r1, g1, b1] = hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
   return `#${[r1, g1, b1].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
+
+/**
+ * A colour "switched on": the same hue, brighter and a touch richer (`up`: how much lighter, 0 to 1 of
+ * the way, at most `cap`), the way a lamp brightens a colour rather than washing it out to pastel as white would.
+ */
+const lightUp = (hex: string, up: number, cap = 0.72): string =>
+  reshade(hex, (l, s) => [Math.min(cap, l + (1 - l) * up), Math.min(0.85, s + 0.12)]);
+
+/** The same hue a little deeper (`by`: how much of its lightness goes), as a court's light falls away from it. */
+const deepen = (hex: string, by: number): string => reshade(hex, (l, s) => [l * (1 - by), s]);
 
 /**
  * A lit court's colours, from the theme, by level: the tile's two (the brand flowing into B), the ring's
@@ -539,7 +591,7 @@ function litWords(court: Court, label: string | undefined, gap: number, k: Retur
   return `<span class="cs-court-tag cs-lit-tag" style="position:absolute;left:50%;top:calc(100% + ${gap}px);transform:translateX(-50%);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 9px 3px 7px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 2px 6px rgba(0,0,0,.18);${FONT};font-weight:700"><i style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:4px;vertical-align:0;background:linear-gradient(135deg,${k.a},${k.b})"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(label)}</span>`;
 }
 
-/** A bright band swept across a lit surface now and then (A, C), on a strip laid across it at an angle. */
+/** A bright band swept across a lit surface now and then (C), on a strip laid across it at an angle. */
 const litSweep = (delay: number) =>
   `<div style="position:absolute;left:-40%;top:-40%;width:180%;height:180%;transform:rotate(24deg);pointer-events:none;z-index:3"><i class="cs-lit-sheen" style="position:absolute;left:0;top:0;bottom:0;width:30%;background:linear-gradient(90deg,${withAlpha('#ffffff', 0)} 0%,${withAlpha('#ffffff', 0.5)} 50%,${withAlpha('#ffffff', 0)} 100%);animation-delay:-${delay}ms"></i></div>`;
 
@@ -577,12 +629,72 @@ const litClass = (look: LitLook, { level, live, on }: LitPin) =>
 /** Picked: a ring of the page and of the ink round it. */
 const litPicked = (on: boolean) => (on ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.text},` : '');
 
+/** `n` + 1 colour stops across `period` px, coloured `at(v)` as v eases 1 → 0 → 1 (a cosine), so nothing in it has an edge. */
+function softStops(period: number, at: (v: number) => string, n = 16): string {
+  const out: string[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    out.push(`${at((1 + Math.cos(2 * Math.PI * t)) / 2)} ${(t * period).toFixed(2)}px`);
+  }
+  return out.join(',');
+}
+
+/** The diagonal a floodlit court's light travels along: down and across, from its top left. */
+const FLOW_ANGLE = 40;
+
+/**
+ * The light on a floodlit court (A), laid over its surface (`iw` × `ih`, inside the rim) in the court's own
+ * colours only, never white: `light` (the brand switched on, New York's orange on a hot court), the brand,
+ * and `deep`, the brand a touch deeper. Busier courts: a little more between light and deep, a little faster.
+ *  drift (LIT_FLOW): a strip of a gradient that repeats every `period` (a touch more than the court's
+ *     diagonal, so nearly a whole turn of it is always on the court and the court as a whole never brightens
+ *     or dims: only the light moves), twice as long as one, laid on FLOW_ANGLE and slid by exactly one
+ *     period a turn at an even pace (cs-lit-slide), so a turn ends where it starts.
+ *  breathe: a deeper gradient over the court's own, easing in and out (cs-lit-tide).
+ *  wave: the same strip as drift, clear but for one wide soft band of the lighter colour in each period.
+ * At rest (Reduce Motion, and lit courts that are not among the liveliest) each shows where its turn starts:
+ * drift light at the top left easing deeper below, breathe and wave the court's own gradient alone.
+ */
+function litFlowLayer(flow: LitFlow, iw: number, ih: number, level: 1 | 2 | 3, k: ReturnType<typeof litColours>, delay: number): string {
+  const light = k.b;
+  const mid = k.a;
+  // A touch deeper than the brand switched on, more so the busier: on a dark theme's bright brand (New York's
+  // yellow) a deeper gold, where the brand's own darker step would hardly show.
+  const low = deepen(k.brand, 0.2);
+  const deep = mix(k.a, low, [0, 0.35, 0.45, 0.55][level]);
+  if (flow === 'breathe') {
+    const deeper = mix(deep, low, 0.5);
+    return `<i class="cs-lit-tide" style="position:absolute;inset:0;z-index:1;background:linear-gradient(170deg,${mid} 0%,${deep} 52%,${deeper} 100%);pointer-events:none;animation-delay:-${delay}ms"></i>`;
+  }
+  const across = Math.ceil(Math.hypot(iw, ih)) + 2;
+  const wave = flow === 'wave';
+  const period = Math.ceil(across * (wave ? 1.6 : 1.05));
+  // Drift: light → the brand → deep and back. Wave: clear, then from 62% of the way one band of light, eased.
+  const stops = wave
+    ? bandStops(period, lightUp(k.b, 0.35, 0.84), [0, 0.4, 0.5, 0.6][level])
+    : softStops(period, (v) => (v >= 0.5 ? mix(mid, light, (v - 0.5) * 2) : mix(deep, mid, v * 2)));
+  return `<div style="position:absolute;z-index:1;left:${((iw - across) / 2).toFixed(1)}px;top:${((ih - across) / 2).toFixed(1)}px;width:${across}px;height:${across}px;transform:rotate(${FLOW_ANGLE}deg);pointer-events:none">`
+    + `<i class="${wave ? 'cs-lit-band' : 'cs-lit-drift'}" style="position:absolute;left:0;top:0;width:${period * 2}px;height:${across}px;background:repeating-linear-gradient(90deg,${stops});animation-delay:-${delay}ms"></i></div>`;
+}
+
+/** Wave's stops across `period` px: clear to 62% of the way, then one band of `color` easing up to `peak` and away. */
+function bandStops(period: number, color: string, peak: number, from = 0.62, n = 12): string {
+  const out = [`${withAlpha(color, 0)} 0px`, `${withAlpha(color, 0)} ${(from * period).toFixed(2)}px`];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const a = peak * Math.sin(Math.PI * t) ** 2;
+    out.push(`${withAlpha(color, Number(a.toFixed(3)))} ${((from + (1 - from) * t) * period).toFixed(2)}px`);
+  }
+  return out.join(',');
+}
+
 /**
  * A, floodlit court: the court itself from above, standing up (40 / 46 / 52 px across, 1.42 times as tall),
- * in the brand switched on with its lines in the brand's ink, framed by the page like a court's surround. Its
- * floodlights are on: a lamp glowing at its corners (two when warm, all four when lit and hot), pools of their
- * light on the court, the glow round it. Moving, the lamps shimmer, a bright sweep crosses the court, and a
- * hot court sends a ring out. Who is there sits on its top right corner.
+ * in the brand switched on with its lines in the brand's ink, framed by the page like a court's surround, the
+ * glow of its lights round it. Moving, its light drifts through it as a slow, soft gradient of its own colours
+ * (litFlowLayer; Oct 28, owner: "get rid of the dots silver in corner, but also the flash, should be more of a
+ * gradient change then a actual flash"), and a hot court sends a ring out. Who is there sits on its top right
+ * corner.
  */
 function litFloodlit(court: Court, pin: LitPin): string {
   const { level, on, label, faces, others } = pin;
@@ -593,11 +705,6 @@ function litFloodlit(court: Court, pin: LitPin): string {
   const rim = 3;
   const closed = isClosedCourt(court);
   const delay = beat(court.id);
-  const lamp = mix(k.b, '#ffffff', 0.72);
-  const corners: [number, number][] = level === 1 ? [[0, 0], [1, 1]] : [[0, 0], [1, 0], [0, 1], [1, 1]];
-  // Each lamp's pool of light on the court, from its corner; the lamp itself stands just outside the corner.
-  const pools = corners.map(([x, y]) => `radial-gradient(circle at ${x * 100}% ${y * 100}%,${withAlpha(lamp, 0.42)} 0%,${withAlpha(lamp, 0)} ${level === 3 ? 46 : 40}%)`).join(',');
-  const lamps = corners.map(([x, y], i) => `<i class="cs-lit-lamp" style="position:absolute;z-index:3;left:${x * w + (x ? 1 : -1)}px;top:${y * h + (y ? 1 : -1)}px;width:22px;height:22px;margin:-11px 0 0 -11px;border-radius:999px;background:radial-gradient(circle,#ffffff 0%,#ffffff 17%,${lamp} 28%,${withAlpha(lamp, 0.5)} 46%,${withAlpha(lamp, 0)} 70%);pointer-events:none;animation-delay:-${delay + i * 530}ms"></i>`).join('');
   const reach = Math.round(w * (0.3 + level * 0.1));
   const px = WHO_PX[level];
   const who = whoRow(faces, others, px, 'pill');
@@ -606,11 +713,9 @@ function litFloodlit(court: Court, pin: LitPin): string {
     + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:${r}px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;animation-delay:-${delay}ms"></i>` : '')
     + `<div style="position:absolute;inset:0;border-radius:${r}px;background:${colors.bg};box-shadow:${litPicked(on)}0 4px 14px rgba(0,0,0,.3)">`
     + `<div style="position:absolute;inset:${rim}px;border-radius:${r - rim}px;${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
-    + `<i style="position:absolute;inset:0;background:${pools};pointer-events:none"></i>`
+    + litFlowLayer(litFlow(), w - rim * 2, h - rim * 2, level, k, delay)
     + courtFromAbove(w - rim * 2, h - rim * 2, withAlpha(k.ink, closed ? 0.7 : 0.92))
-    + litSweep(delay)
     + `</div></div>`
-    + lamps
     + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:calc(100% - ${Math.round(px * 0.8)}px);top:-${Math.round(px * 0.45)}px;display:flex;align-items:center;pointer-events:none">${who}</div>` : '')
     + litWords(court, label, 8, k)
     + hitDot()

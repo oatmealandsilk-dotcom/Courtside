@@ -37,7 +37,11 @@ import { useApp } from '@/store/AppContext';
  *    a soft glow breathing behind; hot courts move fastest (markers.ts
  *    litCourtPinHtml). Oct 28 (owner: "give me a couple to pick
  *    from"): three looks, A floodlit court, B story ring, C raised pin
- *    (markers.ts LIT_LOOK). Who is there shows on it, in place of their own
+ *    (markers.ts LIT_LOOK). Round 5 (owner, of A: "get rid of the dots
+ *    silver in corner, but also the flash, should be more of a gradient
+ *    change then a actual flash. It should feel more like a loading
+ *    screen"): no lamps, and its light drifts through it as a slow, soft
+ *    gradient of its own colours (markers.ts LIT_FLOW). Who is there shows on it, in place of their own
  *    pins beside it (pinList): one or two people, their circles and no
  *    number; three or more, two circles then "+5" ("anything more, should
  *    show the icon and then +x never just person emoji with the number").
