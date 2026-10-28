@@ -1,17 +1,21 @@
+import { PRESS_DIM } from '@/theme/press';
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
+import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { CourtMapThumb } from '@/components/map/CourtMapThumb';
 import { CrownGlyph } from '@/components/place/CrownGlyph';
-import { Box, Row, SectionHead } from '@/components/tennis/ProfileParts';
+import { Box, SectionHead } from '@/components/tennis/ProfileParts';
 import { Avatar, Screen } from '@/components/ui';
+import type { User } from '@/data/types';
 import { Bar, BadgeDisc, CardSwatch, CourtTile, WeekDots } from '@/features/courtUnlocks/DesignParts';
-import { BADGES, BADGE_EARNED, KING, MY_COURTS, NEXT_CARD, TO_UNLOCK, WEEKS, WEEKS_IN_A_ROW } from '@/features/courtUnlocks/designDemo';
+import { BADGES, BADGE_EARNED, DESIGN_REGULARS, HAVE_IT, KING, MY_COURTS, NEXT_CARD, TO_UNLOCK, TO_UNLOCK_AT, WEEKS, WEEKS_IN_A_ROW, courtNumber, type DesignCourt } from '@/features/courtUnlocks/designDemo';
 import { goBack } from '@/lib/goBack';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, lift, spacing, typography, withAlpha } from '@/theme';
 import { corner } from '@/theme/look';
 import { TextScale } from '@/theme/textScale';
 
@@ -28,6 +32,9 @@ export default function YourCourts() {
   const count = MY_COURTS.length;
   const nextBadge = BADGES.find((b) => b > count) ?? 50;
   const slots = Array.from({ length: nextBadge }, (_, i) => i < count);
+  // Two cards a row on the page's 16-point gutters.
+  const { width } = useWindowDimensions();
+  const cardW = Math.floor((Math.min(width, 640) - spacing.lg * 2 - GRID_GAP) / 2);
   return (
     <Screen title="Your courts" compactTitle onBack={() => goBack('/profile')}>
       <View style={styles.page}>
@@ -118,42 +125,20 @@ export default function YourCourts() {
           </View>
         </View>
 
-        {/* The courts, newest first. */}
+        {/* Round 2 (owner: the second screen "could use some work"): the courts as a collection, newest first,
+            each its own block of map stamped with its number; then the ones near you still to unlock, dimmed, with who has them. */}
         <View>
-          <SectionHead title="Courts" link={{ label: 'Map', accessibilityLabel: 'See your courts on the map', onPress: () => router.push('/map') }} />
-          <Box>
-            {MY_COURTS.map((c, i) => (
-              <Row
-                key={c.name}
-                first={i === 0}
-                lead={(
-                  <View>
-                    <CourtTile size={36} unlocked />
-                    {c.crown ? <View style={styles.tileCrown}><CrownGlyph size={13} color={colors.sun} /></View> : null}
-                  </View>
-                )}
-                title={(
-                  <View style={styles.nameRow}>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtName} numberOfLines={1}>{c.name}</Text>
-                    {c.isNew ? <View style={styles.newTag}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.newText}>New</Text></View> : null}
-                  </View>
-                )}
-                sub={`${c.town ? `${c.town} · ` : ''}${c.since === 'Today' ? 'Unlocked today' : `Since ${c.since}`} · ${c.sessions} ${c.sessions === 1 ? 'session' : 'sessions'}`}
-                chevron
-                onPress={() => {}}
-              />
-            ))}
-          </Box>
+          <SectionHead title={`Your ${count} courts`} link={{ label: 'Map', accessibilityLabel: 'See your courts on the map', onPress: () => router.push('/map') }} />
+          <View style={styles.grid}>
+            {MY_COURTS.map((c) => <CourtCard key={c.name} court={c} width={cardW} />)}
+          </View>
         </View>
 
-        {/* Public courts nearby, still to unlock. */}
         <View>
-          <SectionHead title="Near you to unlock" line="Log a hit or a session at one to add it." />
-          <Box>
-            {TO_UNLOCK.map((c, i) => (
-              <Row key={c.name} first={i === 0} lead={<CourtTile size={36} unlocked={false} />} title={c.name} sub={`${c.miles} · ${c.courts} courts`} chevron onPress={() => {}} />
-            ))}
-          </Box>
+          <SectionHead title="Still to unlock near you" line="Log a hit or a session at one to stamp it." />
+          <View style={styles.grid}>
+            {TO_UNLOCK.map((c) => <LockedCard key={c.name} name={c.name} miles={c.miles} courts={c.courts} width={cardW} />)}
+          </View>
         </View>
 
         <View style={styles.fine}>
@@ -162,6 +147,103 @@ export default function YourCourts() {
         </View>
       </View>
     </Screen>
+  );
+}
+
+const MAP_H = 112;
+const GRID_GAP = 10;
+
+/**
+ * One of your courts in the collection: its own block of map with its mark
+ * in your colour, its number (No. 6, the order you unlocked them in) and,
+ * when it has one, New or your crown; under it the name and how much you
+ * play there.
+ */
+function CourtCard({ court, width }: { court: DesignCourt; width: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const n = courtNumber(court.name);
+  const sub = [`${court.sessions} ${court.sessions === 1 ? 'session' : 'sessions'}`, court.since === 'Today' ? 'today' : `since ${court.since}`].join(' · ');
+  const now = DESIGN_REGULARS[court.name]?.hereNow ?? 0;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${court.name}, court number ${n}. ${sub}`} onPress={() => {}} style={({ pressed }) => [styles.card, { width }, pressed && { opacity: PRESS_DIM }]}>
+      <View style={[styles.cardMap, { width, height: MAP_H }]}>
+        <CourtMapThumb lat={court.lat} lng={court.lng} width={width} height={MAP_H} zoom={14.6} />
+        <View pointerEvents="none" style={styles.cardMarkWrap}>
+          <View style={styles.cardMark}><CourtGlyph size={15} color={colors.brandInk} /></View>
+        </View>
+        <View style={styles.cardNo}><Text maxFontSizeMultiplier={1.1} style={styles.cardNoText}>No. {n}</Text></View>
+        {court.isNew ? (
+          <View style={[styles.cardFlag, styles.cardFlagNew]}><Text maxFontSizeMultiplier={1.1} style={styles.cardFlagNewText}>New</Text></View>
+        ) : court.crown ? (
+          <View style={styles.cardFlag}><CrownGlyph size={12} color={colors.sun} /><Text maxFontSizeMultiplier={1.1} style={styles.cardFlagText}>King · {KING.month.slice(0, 3)}</Text></View>
+        ) : null}
+        {/* Away from home: the city, like a stamp from a trip. People there now: a number, never who. */}
+        {court.town ? (
+          <View style={styles.cardFoot}><Ionicons name="airplane" size={10} color={colors.text} /><Text maxFontSizeMultiplier={1.1} style={styles.cardFlagText}>{court.town}</Text></View>
+        ) : now ? <LiveCount n={now} /> : null}
+      </View>
+      <View style={styles.cardWords}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtTitle} numberOfLines={2}>{court.name}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSub} numberOfLines={1}>{sub}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** "● 3 here now" at a card's foot: how many are at the court now, a number only. */
+function LiveCount({ n }: { n: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.cardFoot}>
+      <View style={styles.liveDot} />
+      <Text maxFontSizeMultiplier={1.1} style={[styles.cardFlagText, { color: colors.open }]}>{n} here now</Text>
+    </View>
+  );
+}
+
+/**
+ * A public court near you still to unlock: the map shows through, dimmed,
+ * the mark only an outline with a lock; how far, and who already has it
+ * (friends by name, everyone else a number).
+ */
+function LockedCard({ name, miles, courts, width }: { name: string; miles: string; courts: number; width: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { users } = useApp();
+  const at = TO_UNLOCK_AT[name];
+  const have = HAVE_IT[name] ?? { friends: [], total: 0 };
+  const friends = have.friends.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
+  const others = Math.max(0, have.total - friends.length);
+  // The first friend by name, the rest a number: "Omar + 30 have it".
+  const who = friends.length ? `${friends[0].name.split(' ')[0]} + ${have.total - 1}` : `${have.total} players`;
+  const now = DESIGN_REGULARS[name]?.hereNow ?? 0;
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${name}, not unlocked yet. ${miles}. ${who} have it`} onPress={() => {}} style={({ pressed }) => [styles.card, styles.cardLocked, { width }, pressed && { opacity: PRESS_DIM }]}>
+      <View style={[styles.cardMap, { width, height: MAP_H }]}>
+        {at ? <CourtMapThumb lat={at.lat} lng={at.lng} width={width} height={MAP_H} zoom={14.6} /> : null}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: withAlpha(colors.bg, 0.55) }]} />
+        <View pointerEvents="none" style={styles.cardMarkWrap}>
+          <View style={styles.cardMarkLocked}><Ionicons name="lock-closed" size={14} color={colors.textMuted} /></View>
+        </View>
+        <View style={styles.cardNo}><Text maxFontSizeMultiplier={1.1} style={styles.cardNoText}>{miles}</Text></View>
+        {now ? <LiveCount n={now} /> : null}
+      </View>
+      <View style={styles.cardWords}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtTitle} numberOfLines={2}>{name}</Text>
+        <View style={styles.haveRow}>
+          {friends.length ? (
+            <View style={styles.haveFaces}>
+              {friends.slice(0, 2).map((u, i) => (
+                <View key={u.id} style={[styles.haveFace, i > 0 && { marginLeft: -6 }]}>
+                  <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={18} />
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardSub} numberOfLines={1}><Text style={styles.haveStrong}>{who}</Text> have it</Text>
+        </View>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cardSub, { marginTop: -2 }]} numberOfLines={1}>{courts} courts · public</Text>
+      </View>
+    </Pressable>
   );
 }
 
@@ -201,11 +283,29 @@ const styleDefinitions = StyleSheet.create({
   tileSub: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted },
   cardRow: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 33 },
   cardName: { ...typography.bodyStrong, color: colors.text, flex: 1 },
-  nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  courtName: { ...font('500'), fontSize: 16, color: colors.text, flexShrink: 1 },
-  newTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: corner(6), backgroundColor: colors.brandDim },
-  newText: { ...typography.caption, color: colors.brand },
-  tileCrown: { position: 'absolute', top: -8, right: -8, width: 22, height: 22, borderRadius: 11, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // The collection (round 2).
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
+  card: { ...lift, borderRadius: corner(18), backgroundColor: colors.surface, overflow: 'hidden' },
+  cardLocked: { backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed', boxShadow: 'none', elevation: 0 },
+  cardMap: { overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  cardMarkWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' },
+  cardMark: { width: 34, height: 34, borderRadius: corner(10), backgroundColor: colors.brand, borderWidth: 3, borderColor: colors.bg, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 4px 10px rgba(0, 0, 0, 0.25)' },
+  cardMarkLocked: { width: 34, height: 34, borderRadius: corner(10), backgroundColor: colors.bg, borderWidth: 1.5, borderColor: colors.borderStrong, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  cardNo: { position: 'absolute', top: 8, right: 8, paddingHorizontal: 7, height: 20, borderRadius: 10, backgroundColor: colors.bg, justifyContent: 'center' },
+  cardNoText: { ...font('700'), fontSize: 11, color: colors.text, fontVariant: ['tabular-nums'] },
+  cardFlag: { position: 'absolute', top: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, height: 20, borderRadius: 10, backgroundColor: colors.bg },
+  cardFlagText: { ...font('700'), fontSize: 11, color: colors.text },
+  cardFoot: { position: 'absolute', bottom: 8, left: 8, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 7, height: 20, borderRadius: 10, backgroundColor: colors.bg },
+  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.open },
+  cardFlagNew: { backgroundColor: colors.brand },
+  cardFlagNewText: { ...font('700'), fontSize: 11, color: colors.brandInk },
+  cardWords: { paddingHorizontal: 12, paddingTop: 10, paddingBottom: 12, gap: 4 },
+  courtTitle: { ...font('600'), fontSize: 15, lineHeight: 19, letterSpacing: -0.2, color: colors.text },
+  cardSub: { ...typography.small, fontSize: 12, color: colors.textMuted },
+  haveRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  haveFaces: { flexDirection: 'row' },
+  haveFace: { borderRadius: 11, borderWidth: 1.5, borderColor: colors.bgElevated },
+  haveStrong: { ...font('600'), color: colors.text },
   fine: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: -spacing.md },
   fineText: { ...typography.small, color: colors.textFaint, flexShrink: 1 },
 });

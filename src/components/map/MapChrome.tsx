@@ -64,7 +64,7 @@ import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { DESIGN_UNLOCKS } from '@/features/courtUnlocks/designDemo';
-import { UnlockLine } from '@/features/courtUnlocks/DesignParts';
+import { RegularsBar } from '@/features/courtUnlocks/RegularsBar';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -501,7 +501,7 @@ function CheckInWords({ control, size }: { control: CheckInControl; size: number
     <View pointerEvents="none" style={styles.checkInRow}>
       {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
       <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : DESIGN_UNLOCKS ? 'Light up' : 'Check in'}
+        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : DESIGN_UNLOCKS ? 'Up to hit' : 'Check in'}
       </Text>
     </View>
   );
@@ -1444,15 +1444,20 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
       </View>
       <GHScrollView style={{ maxHeight: middleMax, flexGrow: 0 }} contentContainerStyle={styles.courtMiddle} showsVerticalScrollIndicator={false} bounces={false}>
-      {DESIGN_UNLOCKS ? <View style={styles.courtBlock}><UnlockLine name={court.name} closed={closed} /></View> : null}
-      {showTags ? (
-        <View style={styles.courtTags}>
-          <AccessTag access={access} bookUrl={bookUrl} />
-          {extras ? <NowTags courtId={court.id} name={court.name} access={access} /> : null}
-        </View>
-      ) : null}
-      {extras ? <View style={styles.courtBlock}><CourtFactsLine courtId={court.id} name={court.name} note={false} lines={1} /></View> : null}
-      {extras ? <View style={styles.courtBlock}><RegularsRow court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng }} closed={closed} /></View> : null}
+      {/* DESIGN BRANCH (court unlocks, round 2): "Regulars here" right under the name, and nothing else between it and Played here
+          (owner, Oct 27: "make it a bar above played here, below alder park. and get rid of everything in between"). Never at someone's home. */}
+      {DESIGN_UNLOCKS ? (access === 'private' ? null : <RegularsBar court={{ name: court.name }} />) : (
+        <>
+          {showTags ? (
+            <View style={styles.courtTags}>
+              <AccessTag access={access} bookUrl={bookUrl} />
+              {extras ? <NowTags courtId={court.id} name={court.name} access={access} /> : null}
+            </View>
+          ) : null}
+          {extras ? <View style={styles.courtBlock}><CourtFactsLine courtId={court.id} name={court.name} note={false} lines={1} /></View> : null}
+          {extras ? <View style={styles.courtBlock}><RegularsRow court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng }} closed={closed} /></View> : null}
+        </>
+      )}
       {here.length ? (
         <View style={styles.posted}>
           <View style={styles.postedHead}>

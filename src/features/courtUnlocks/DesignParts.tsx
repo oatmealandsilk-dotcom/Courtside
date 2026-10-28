@@ -1,13 +1,13 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle } from 'react-native-svg';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import Svg, { Circle, Defs, Path, Text as SvgText, TextPath } from 'react-native-svg';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { CrownGlyph } from '@/components/place/CrownGlyph';
 import { KING, MY_COURTS } from '@/features/courtUnlocks/designDemo';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, typography, withAlpha } from '@/theme';
+import { colors, font, typography, withAlpha, wordmarkFont } from '@/theme';
 import { corner } from '@/theme/look';
 
 /*
@@ -87,6 +87,62 @@ export function CardSwatch({ width = 30 }: { width?: number }) {
   return (
     <View style={[styles.card, { width, height: Math.round(width * 1.36), borderRadius: corner(Math.max(4, Math.round(width * 0.16))) }]}>
       <CourtGlyph size={Math.round(width * 0.5)} color={colors.cardFigure} />
+    </View>
+  );
+}
+
+/** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st. */
+export const ordinal = (n: number) => {
+  const tens = n % 100;
+  const end = tens >= 11 && tens <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th';
+  return `${n}${end}`;
+};
+
+/**
+ * The court's stamp (round 2): a round postmark in your colour, the way a
+ * passport is stamped at a border. The court's name and the day run round
+ * the ring; "6th court" sits in the middle. Drawn, not a picture, so it
+ * takes every court's colour.
+ */
+export function UnlockStamp({ nth, top, bottom, size = 112 }: { nth: number; top: string; bottom: string; size?: number }) {
+  const id = React.useId().replace(/:/g, '');
+  const c = size / 2;
+  const outer = c - 6;
+  const inner = c - 25;
+  const mid = (outer + inner) / 2;
+  const cap = 6;
+  // Points on the ring at an angle (degrees, clockwise from 3 o'clock).
+  const at = (r: number, deg: number) => [c + r * Math.cos((deg * Math.PI) / 180), c + r * Math.sin((deg * Math.PI) / 180)].map((v) => v.toFixed(2)).join(',');
+  // The name over the top (left to right, clockwise), the day along the bottom (left to right, so it reads upright).
+  const rTop = mid - cap / 2;
+  const rBottom = mid + cap / 2;
+  const topPath = `M ${at(rTop, 158)} A ${rTop},${rTop} 0 1,1 ${at(rTop, 22)}`;
+  const bottomPath = `M ${at(rBottom, 150)} A ${rBottom},${rBottom} 0 0,0 ${at(rBottom, 30)}`;
+  const ink = colors.brand;
+  const family = Platform.OS === 'web' ? '-apple-system, BlinkMacSystemFont, system-ui, sans-serif' : undefined;
+  const dot = (deg: number) => { const [x, y] = at(mid, deg).split(',').map(Number); return <Circle key={deg} cx={x} cy={y} r={1.6} fill={ink} />; };
+  return (
+    <View style={{ width: size, height: size }}>
+      <Svg width={size} height={size}>
+        <Defs>
+          <Path id={`top${id}`} d={topPath} />
+          <Path id={`bottom${id}`} d={bottomPath} />
+        </Defs>
+        <Circle cx={c} cy={c} r={c - 2} fill={withAlpha(colors.bg, 0.94)} stroke={ink} strokeWidth={2.5} />
+        <Circle cx={c} cy={c} r={outer} fill="none" stroke={ink} strokeWidth={0.8} />
+        <Circle cx={c} cy={c} r={inner} fill="none" stroke={ink} strokeWidth={0.8} />
+        <SvgText fill={ink} fontSize={8.2} fontWeight="700" letterSpacing={0.9} fontFamily={family} textAnchor="middle">
+          <TextPath href={`#top${id}`} startOffset="50%">{top.toUpperCase()}</TextPath>
+        </SvgText>
+        <SvgText fill={ink} fontSize={8.2} fontWeight="700" letterSpacing={1.4} fontFamily={family} textAnchor="middle">
+          <TextPath href={`#bottom${id}`} startOffset="50%">{bottom.toUpperCase()}</TextPath>
+        </SvgText>
+        {[162, 18].map(dot)}
+      </Svg>
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+        <Text maxFontSizeMultiplier={1} style={{ ...wordmarkFont('900'), fontSize: size * 0.27, lineHeight: size * 0.3, letterSpacing: -1, color: ink }}>{ordinal(nth)}</Text>
+        <Text maxFontSizeMultiplier={1} style={{ ...font('700'), fontSize: size * 0.085, letterSpacing: 1.6, color: ink, marginTop: -1 }}>COURT</Text>
+      </View>
     </View>
   );
 }

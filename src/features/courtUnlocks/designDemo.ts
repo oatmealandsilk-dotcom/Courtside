@@ -66,6 +66,66 @@ export const KING = { court: 'Alder Park', hits: 9, month: 'October', next: 6 };
 /** The next profile card (cards come out after launch; days played this month). */
 export const NEXT_CARD = { name: 'Full colour', have: 5, need: 8 };
 
+/*
+ * Round 2 (owner, Oct 27): "Regulars here" on a court's card, the louder
+ * Court unlocked, and Your courts as a collection. Still made-up data.
+ */
+
+/** The demo player's friends (they follow each other): the only people the card may show as at a court now. */
+export const DESIGN_FRIENDS = new Set(['u-sam', 'u-marcus', 'u-omar']);
+
+/**
+ * "Regulars here": people who chose to mark a court as one of theirs,
+ * friends first. Ella is a teen and not a friend, so she is counted but
+ * never shown. `hereNow` is a number only; a friend here now is named
+ * (`friendsHere`), a stranger never is.
+ */
+export const DESIGN_REGULARS: Record<string, { ids: string[]; hereNow: number; friendsHere: string[] }> = {
+  'Alder Park': { ids: ['u-sam', 'u-marcus', 'u-omar', 'u-priya', 'u-noor', 'u-lena', 'u-ella', 'u-theo', 'u-bea', 'u-jonah', 'u-ivy', 'u-diego'], hereNow: 3, friendsHere: ['u-sam'] },
+  'Cypress Hollow Park': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-noor', 'u-omar', 'u-ivy', 'u-jonah'], hereNow: 1, friendsHere: [] },
+  'Juniper Community Park': { ids: ['u-sam', 'u-theo', 'u-bea', 'u-diego'], hereNow: 0, friendsHere: [] },
+  'Marigold Park': { ids: ['u-lena', 'u-priya', 'u-kai'], hereNow: 0, friendsHere: [] },
+  'Bellwood Recreation Center': { ids: ['u-marcus', 'u-rosa', 'u-kai', 'u-theo', 'u-ivy'], hereNow: 2, friendsHere: ['u-marcus'] },
+  'Larkspur Recreation Center': { ids: ['u-omar', 'u-bea', 'u-jonah'], hereNow: 0, friendsHere: [] },
+};
+
+/** Courts you marked as one of yours in this visit (Add yourself). */
+const regularAt = new Set<string>();
+const regularListeners = new Set<() => void>();
+export const isDesignRegular = (court: string) => regularAt.has(court);
+export function setDesignRegular(court: string, on: boolean) {
+  if (on) regularAt.add(court); else regularAt.delete(court);
+  regularListeners.forEach((l) => l());
+}
+export function subscribeDesignRegular(l: () => void) {
+  regularListeners.add(l);
+  return () => { regularListeners.delete(l); };
+}
+
+/**
+ * How many players have each court unlocked, and the friends among them
+ * (names only of friends; everyone else is a number).
+ */
+export const HAVE_IT: Record<string, { friends: string[]; total: number }> = {
+  'Juniper Community Park': { friends: ['u-sam', 'u-marcus'], total: 42 },
+  'Marigold Park': { friends: ['u-omar'], total: 17 },
+  'Cypress Hollow Park': { friends: ['u-marcus', 'u-omar'], total: 64 },
+  'Alder Park': { friends: ['u-sam', 'u-marcus', 'u-omar'], total: 118 },
+  'Pullen Park': { friends: [], total: 23 },
+  'Harbor View Courts': { friends: [], total: 9 },
+  'Bellwood Recreation Center': { friends: ['u-marcus'], total: 12 },
+  'Larkspur Recreation Center': { friends: ['u-omar', 'u-sam'], total: 31 },
+};
+
+/** Where the courts still to unlock are, for their map patches. */
+export const TO_UNLOCK_AT: Record<string, { lat: number; lng: number }> = {
+  'Bellwood Recreation Center': { lat: 34.0406, lng: -118.221 },
+  'Larkspur Recreation Center': { lat: 34.0186, lng: -118.233 },
+};
+
+/** The order each court was unlocked in (No. 1 the first): newest first in MY_COURTS. */
+export const courtNumber = (name: string) => MY_COURTS.length - MY_COURTS.findIndex((c) => c.name === name);
+
 /** In the demo build only: the screenshot script moves around the app without reloading it (a reload signs the demo out). */
 export function useDesignNavHook() {
   useEffect(() => {

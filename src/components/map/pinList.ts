@@ -97,7 +97,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const yours = playing?.courtId === c.id;
     // DESIGN BRANCH (court unlocks): only people there now light a court ("Lit up · 3"); a hit coming up is a dot.
     const designLit = DESIGN_UNLOCKS && c.name === LIT_COURT ? Math.max(n, 3) : 0;
-    const tag = DESIGN_UNLOCKS ? (designLit ? `Lit up · ${designLit}` : undefined)
+    const tag = DESIGN_UNLOCKS ? (designLit ? `${designLit} here` : undefined)
       : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
     const soonHit = DESIGN_UNLOCKS && !designLit && !!hit;
     // Your pin standing on it already says so: the court only glows under it, no words beside.
