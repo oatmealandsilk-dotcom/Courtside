@@ -11,7 +11,7 @@ import { CourtMapSnapshots, CourtMapThumb } from '@/components/map/CourtMapThumb
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { Avatar, Button } from '@/components/ui';
 import type { User } from '@/data/types';
-import { CourtTile, UnlockStamp } from '@/features/courtUnlocks/DesignParts';
+import { CourtTile, UnlockStamp, ordinal } from '@/features/courtUnlocks/DesignParts';
 import { HAVE_IT, MY_COURTS, TO_UNLOCK } from '@/features/courtUnlocks/designDemo';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -49,6 +49,12 @@ export default function CourtUnlocked() {
   const have = HAVE_IT[court.name] ?? { friends: [], total: 0 };
   const friends = have.friends.map((id) => users.find((u) => u.id === id)).filter((u): u is User => !!u);
   const others = Math.max(0, have.total - friends.length);
+  // Round 3 review: the FOMO is in who beat you to it, and which friend already has the next one.
+  const firstNames = friends.map((u) => u.name.split(' ')[0]);
+  const beatYou = firstNames.length > 1 ? `${firstNames.slice(0, -1).join(', ')} and ${firstNames[firstNames.length - 1]}` : firstNames[0];
+  const next = TO_UNLOCK[0];
+  const nextFriendId = HAVE_IT[next.name]?.friends[0];
+  const nextFriend = nextFriendId ? users.find((u) => u.id === nextFriendId)?.name.split(' ')[0] : undefined;
 
   // One settle, one stamp: nothing loops.
   const settle = useSharedValue(still ? 1 : 0);
@@ -113,7 +119,7 @@ export default function CourtUnlocked() {
 
         <View style={styles.rows}>
           {/* Who else has it: friends by name, everyone else a number. */}
-          <Pressable accessibilityRole="button" accessibilityLabel={`${friends.map((u) => u.name.split(' ')[0]).join(', ')} and ${others} other players have this court`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`You're the ${ordinal(have.total + 1)} player here.${beatYou ? ` ${beatYou} got here first.` : ''}`} onPress={() => {}} style={({ pressed }) => [styles.row, pressed && { opacity: PRESS_DIM }]}>
             <View style={styles.faces}>
               {friends.slice(0, 2).map((u, i) => (
                 <View key={u.id} style={[styles.face, i > 0 && styles.faceOver]}>
@@ -125,8 +131,8 @@ export default function CourtUnlocked() {
               </View>
             </View>
             <View style={styles.rowWords}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>{friends.map((u) => u.name.split(' ')[0]).join(', ')} + {others} players</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>have this court too</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle} numberOfLines={1}>You’re the {ordinal(have.total + 1)} player here</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{beatYou ? `${beatYou} got here first` : `${have.total} players got here first`}</Text>
             </View>
           </Pressable>
           {/* What's next: the public courts near you still to unlock. */}
@@ -137,7 +143,7 @@ export default function CourtUnlocked() {
             </View>
             <View style={styles.rowWords}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>{TO_UNLOCK.length} more to unlock near you</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{TO_UNLOCK[0].name} · {TO_UNLOCK[0].miles}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub} numberOfLines={1}>{nextFriend ? `${nextFriend} has ${next.name.split(' ')[0]} · ${next.miles}` : `${next.name} · ${next.miles}`}</Text>
             </View>
             <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
           </Pressable>
@@ -164,7 +170,7 @@ const styleDefinitions = StyleSheet.create({
   stamp: { position: 'absolute', right: 14 },
   close: { position: 'absolute', right: 14, width: 38, height: 38, borderRadius: 19, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.18)' },
   body: { width: '100%', maxWidth: 560, flex: 1, paddingHorizontal: spacing.lg + 4 },
-  over: { ...font('700'), fontSize: 12, letterSpacing: 1.8, textTransform: 'uppercase', color: colors.brand },
+  over: { ...font('600'), fontSize: 16, color: colors.brand },
   name: { ...font('700'), fontSize: 40, lineHeight: 42, letterSpacing: -1.5, color: colors.text, marginTop: 6 },
   meta: { ...typography.small, color: colors.textMuted, marginTop: 10 },
   rows: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

@@ -232,7 +232,8 @@ function LockedCard({ name, miles, courts, width }: { name: string; miles: strin
         <View style={styles.haveRow}>
           {friends.length ? (
             <View style={styles.haveFaces}>
-              {friends.slice(0, 2).map((u, i) => (
+              {/* One face, the friend the words name ("Omar + 30"): two faces beside one name read as a mistake. */}
+              {friends.slice(0, 1).map((u, i) => (
                 <View key={u.id} style={[styles.haveFace, i > 0 && { marginLeft: -6 }]}>
                   <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={18} />
                 </View>
