@@ -39,7 +39,12 @@ import { useApp } from '@/store/AppContext';
 export const CHECKIN_ZOOM_FOR_EVERYONE = false;
 
 /** Whether Up to hit zooms you in for this person: everyone once released, admins until then. */
-export const checkInZoomOn = (me: User | null | undefined): boolean => CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin;
+// Off on phones for now (Oct 28, owner on his iPhone: "It swipes to the side. Lags a bit then zooms in.
+// Terrible." / "It should never look anything different from the video I approved"): the phone path is
+// being rebuilt; the web demo keeps it for admins.
+export const ZOOM_ON_PHONES = false;
+export const checkInZoomOn = (me: User | null | undefined): boolean =>
+  (Platform.OS === 'web' || ZOOM_ON_PHONES) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
 
 /** The same, for a screen. */
 export function useCheckInZoom(): boolean {
