@@ -173,9 +173,9 @@ export default function Settings() {
         }] : []),
         // Mondays at 8am your time (migration 130): last week on court. Off, it still lands in Notifications.
         { icon: 'stats-chart-outline' as const, label: 'Weekly recap', detail: 'Mondays at 8am: your week on court', toggle: { value: prefs.pushRecap, onChange: (v: boolean) => actions.setPref('pushRecap', v) } },
-        // "Sam just joined CourtSide near you" (migration 146): only adults hear it (the server's rule), and
+        // "Sam just joined CourtSide in Raleigh" (migration 146; its words since 191): only adults hear it (the server's rule), and
         // the switch shows once the database has it. Off, it still lands in Notifications.
-        ...(mapAdult && joinAlertsLive ? [{ icon: 'person-add-outline' as const, label: 'Players joining near you', detail: 'Someone new in your town', toggle: { value: prefs.pushJoined, onChange: (v: boolean) => actions.setPref('pushJoined', v) } }] : []),
+        ...(mapAdult && joinAlertsLive ? [{ icon: 'person-add-outline' as const, label: 'New players in your town', detail: 'Someone new who lists your town', toggle: { value: prefs.pushJoined, onChange: (v: boolean) => actions.setPref('pushJoined', v) } }] : []),
         // Sweep R6 (Oct 20): when a Discussions question has waited with no answer, up to 3 people who answered that topic before (or coaches, for technique and gear) are told, at most one a day (migration 170). Shown once the database has it.
         ...(questionAlertsLive ? [{ icon: 'help-circle-outline' as const, label: 'Questions you could answer', detail: 'Unanswered threads on topics you know', toggle: { value: prefs.pushQuestions, onChange: (v: boolean) => actions.setPref('pushQuestions', v) } }] : []),
         // Sweep R10 (Oct 20): one reminder about 20 hours after a hit invite you have not answered, while the hit still has a spot (migration 171). Shown once the database has it.
@@ -199,7 +199,7 @@ export default function Settings() {
         ] : []),
         ...(mapAdult ? [
           { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'Within 15 miles', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },
-          { icon: 'location-outline' as const, label: 'New players nearby', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
+          { icon: 'location-outline' as const, label: 'Friends new to CourtSide', detail: 'When one is first up to hit', toggle: { value: prefs.pushMapPlayers, onChange: (v: boolean) => actions.setPref('pushMapPlayers', v) } },
         ] : []),
         { icon: 'heart-outline' as const, label: 'Courts you follow', toggle: { value: prefs.pushCourts, onChange: (v: boolean) => actions.setPref('pushCourts', v) } },
       ],

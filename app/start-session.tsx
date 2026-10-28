@@ -179,7 +179,9 @@ export default function StartSession() {
   /* ------------------------------ Who sees ------------------------------ */
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court, access, locationOn: locationEnabled, seenBy });
-  const seen = seenLine({ here: plan.checkIn, seenBy, why: plan.why, starting: true });
+  // Start never shows you to anyone (Oct 27 audit #3, Apple 5.1.2(i)): only you see the session until
+  // you tap Show friends on its page, each time, after a yes to "Who can see you on the map?".
+  const seen = seenLine({ here: false, seenBy, why: plan.why, starting: true });
 
   // Start, the moment it is tapped: the clock starts now (the session's start is this tap), while the ring closes.
   // From here on, however the sheet goes away, it goes to the live page: the session is already running.

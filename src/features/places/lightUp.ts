@@ -35,14 +35,23 @@ import { useApp } from '@/store/AppContext';
  *    is a big tile (2 to 3 times a quiet one, bigger each level) with a ring
  *    of the theme's colours travelling round it, a sheen sweeping across, and
  *    a soft glow breathing behind; hot courts move fastest (markers.ts
- *    litCourtPinHtml). And "tuck the icons of people in the corner of the
- *    court ... a couple icons and then +5 more": up to three faces of
- *    friends who follow each other with you on its corner, then "+5" for
- *    everyone else, in place of their own pins beside it (pinList).
+ *    litCourtPinHtml). Oct 28 (owner: "give me a couple to pick
+ *    from"): three looks, A floodlit court, B story ring, C raised pin
+ *    (markers.ts LIT_LOOK). Round 5 (owner, of A: "get rid of the dots
+ *    silver in corner, but also the flash, should be more of a gradient
+ *    change then a actual flash. It should feel more like a loading
+ *    screen"): no lamps, and its light drifts through it as a slow, soft
+ *    gradient of its own colours (markers.ts LIT_FLOW). Who is there shows on it, in place of their own
+ *    pins beside it (pinList): one or two people, their circles and no
+ *    number; three or more, two circles then "+5" ("anything more, should
+ *    show the icon and then +x never just person emoji with the number").
+ *    Friends who follow each other with you show as their faces; a
+ *    stranger only ever as a plain disc, the same for everyone (no face,
+ *    no initials, no name: Apple 5.1.2(i)).
  *    Only counts, as the server already gives
  *    them (court_right_now, migration 189): a stranger is counted only once
  *    two or more adults are there, never named or shown (no face, no pin:
- *    only the "+5"); a teen is never counted, and a teen sees no one else's
+ *    only a plain disc and the "+5"); a teen is never counted, and a teen sees no one else's
  *    count.
  *
  *    Tapping Up to hit while standing at a court (within SAME_COURT_MILES of its
@@ -126,7 +135,7 @@ export type GlowLevel = 1 | 2 | 3;
 /** A court with something on right now, as the map draws it. */
 export interface CourtGlow {
   level: GlowLevel;
-  /** "4 here", "You + 2 here", "You’re here", "Hit 6pm", "2 hits today". */
+  /** "4 here", "You + 2 here", "You’re here", "Playing now" (one or two: their circles say who), "Hit 6pm", "2 hits today". */
   label: string;
   court: Court;
   /** How many people are there now, you included (strangers only as the server counts them). */
@@ -221,8 +230,11 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, users
     const times = (hitsAt.get(c.id) ?? []).sort();
     const level = glowLevel(people + times.length);
     if (!level) continue;
+    // One or two people: their circles on the court say who and how many, so its words carry no number
+    // (Oct 28, owner: "if its 2 or less ppl hitting there. the icons of them should show up instead of it
+    // just saying 2ppl"); three or more: the count.
     const label = people
-      ? you ? (others ? `You + ${others} here` : 'You’re here') : `${people} here`
+      ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
       : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
     // Faces: friends the map places here (most recently seen first), then friends only the server names here.
     const seen = (faceAt.get(c.id) ?? []).slice().sort((a, b) => (Date.parse(b.seenAt ?? '') || 0) - (Date.parse(a.seenAt ?? '') || 0)).map((p) => p.user);

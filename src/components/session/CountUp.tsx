@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import Reanimated, { Easing, cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
@@ -23,24 +23,24 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
   part?: CountPart;
   delay?: number;
   duration?: number;
-  /** Off: the final number, still. Turned on: counts up from 0, once. 'wait': 0, ready to count. */
+  /** Off: the final number, still. Turned on: counts up from 0. 'wait': 0, ready to count. */
   play?: CountPlay;
   style?: StyleProp<TextStyle>;
   maxFontSizeMultiplier?: number;
 }) {
   const reduced = useReducedMotion();
   const v = useSharedValue(play !== false && !reduced ? from : value);
-  // Counts up once. A number already on screen in full (shown while `play` was off, say a Feed page sliding
-  // in) never drops back to 0 to count again when `play` comes on (Oct 27, owner's screen recording: the
-  // stats showed, then fell and counted up again as the page landed).
-  const settled = useRef(play === false || reduced);
+  // Off, the number in full; 'wait', its starting point; on, it counts from there, every time it is turned
+  // on (a poll's new share, a card that turns it on a moment after opening). Where a number must never show
+  // in full and then fall back to count (a Feed page coming in), it is held at 'wait' until it counts
+  // (features/feed/pageCount). Holding instead any number once shown in full (Oct 27 morning) took the
+  // count off every card turned on after a moment, a photo post's stats among them (Oct 27, owner: "on
+  // posts with pictures theres no animation like how it was before").
   useEffect(() => {
     cancelAnimation(v);
-    // Waiting to count: its starting point (unless it has already counted or shown in full).
-    if (play === 'wait' && !reduced) { v.value = settled.current ? value : from; return; }
-    if (!play || reduced || settled.current) { v.value = value; settled.current = true; return; }
-    settled.current = true;
+    if (reduced || !play) { v.value = value; return; }
     v.value = from;
+    if (play === 'wait') return;
     v.value = withDelay(delay, withTiming(value, { duration, easing: Easing.out(Easing.cubic) }));
   }, [value, from, play, reduced, delay, duration, v]);
   const animatedProps = useAnimatedProps(() => {

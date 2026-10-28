@@ -14,6 +14,7 @@ import { courtRows, fetchCourts, isClosedCourt, peekCourts, peekSavedCourts, typ
 import { milesBetween, spotMilesKey } from '@/features/players/geo';
 import { homeFor, homeIsKnown, isRoughSpot, positionFor, wideView, type LatLng, type ViewBounds } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { townLabel, useTownPlayers, type TownPlayer } from '@/features/players/nearMe';
 import { useApp } from '@/store/AppContext';
 import { levelBadge } from '@/lib/badges';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -29,6 +30,12 @@ export type MapFilter = 'all' | 'following' | 'open' | 'near' | 'level' | 'coach
  * any distance.
  */
 export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string; rough: boolean; court?: { id: string; name: string }; mutual?: boolean }
+/**
+ * A row in the full map's players list: a friend checked in (Placed: on the
+ * map, with how far), or, under Near me, a player whose own profile town is
+ * yours (TownPlayer: by the town only, never on the map, never a distance).
+ */
+export type Listed = Placed | TownPlayer;
 /** An open hit with a spot, for a flag on the map. */
 export interface PlacedHit { hit: HitRequest; at: { id?: string; name: string; lat: number; lng: number } }
 
@@ -377,7 +384,22 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   // The full map's players list (its "All N players" pill): the people around you. In a town where nobody
   // shares yet it never lists players 2,000 miles away as "around" it; it
   // names the nearest courts instead. A search or Following lists everyone it finds.
-  const tray = useMemo(() => (query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES)), [shown, query, filter]);
+  // Near me (Oct 27, owner: "Near me should show people that have their location set in the area, like the
+  // city"): the friends checked in nearby first, with how far (their pins, as before), then everyone the
+  // server lists in your profile's town (nearMe, migration 190), most recently active first, by their town
+  // only. Those are never pins: the map stays friends only (Apple 5.1.2(i)).
+  const townList = useTownPlayers(!card);
+  const tray = useMemo<Listed[]>(() => {
+    const around = query.trim() || filter === 'following' ? shown : shown.filter((p) => p.miles <= TRAY_MILES);
+    if (filter !== 'near') return around;
+    const q = query.trim().toLowerCase();
+    const listed = new Set(around.map((p) => p.user.id));
+    const town = townList.filter((t) => !listed.has(t.user.id)
+      && (!q || t.user.name.toLowerCase().includes(q) || t.user.handle.toLowerCase().includes(q) || t.user.location.toLowerCase().includes(q)));
+    return [...around, ...town];
+  }, [shown, query, filter, townList]);
+  /** The town Near me lists: the one on your profile ("Raleigh"), or none. */
+  const nearTown = townLabel(me.location);
 
   const selectedHit = useMemo(() => hits.find((h) => h.hit.id === selectedHitId) ?? null, [hits, selectedHitId]);
   const selectHit = useCallback((id: string | null) => { setSelectedHitId(id); if (id) { setSelectedId(null); setSelectedCourtId(null); } }, []);
@@ -461,7 +483,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
   const cardHits = useMemo(() => (cardFrom ? hits.filter((h) => milesBetween(cardFrom, h.at) <= NEAR_HIT_MILES) : []), [cardFrom, hits]);
   const cardFlags = useMemo(() => cardHits.slice(0, CARD_FLAGS), [cardHits]);
   return {
-    home, homeKnown, homeView, mePos, city, cityName, cityPending, cityExact, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, selected, select, loadPlayersIn,
+    home, homeKnown, homeView, mePos, city, cityName, cityPending, cityExact, inCity, start, ranked, inTown, filter, setFilter, query, setQuery, shown, tray, nearTown, selected, select, loadPlayersIn,
     place, pickPlace, clearPlace, placeSearch, placeRows: placeCourts.rows, placeLoading: placeCourts.loading, placeFailed: placeCourts.failed, retryPlace: placeCourts.retry,
     courtsOn, toggleCourts, courts: card ? [] : pins, ringed, ringFor, courtsLoading, loadCourts, loadRings, selectedCourt, selectCourt,
     cardCourts, cardRinged, cardHits, cardFlags, cardFromYou, courtResults, pickCourt, hits, selectedHit, selectHit, nearestCourts,

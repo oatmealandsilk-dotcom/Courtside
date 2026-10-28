@@ -65,36 +65,64 @@ export function agoShort(iso?: string): string {
 }
 
 /**
- * How a lit court moves (litCourtPinHtml), only while it is one of the liveliest (cs-lit-run): the
- * tile's gradient flows (warm 8 s, lit 5 s, hot 3.2 s a loop), the ring's light goes round (7 s, 4.5 s,
- * 2.6 s a turn), a sheen flashes across the tile (lit and hot: once every 4.2 s, 2.8 s), the glow breathes
- * (3.2 s, 2.6 s, 1.8 s a breath) and a hot court sends a soft pulse out (2.2 s). Transform and opacity
- * only, each on its own layer. Still with Reduce Motion, and for the rest.
+ * How a lit court moves (litCourtPinHtml), only while it is one of the liveliest (cs-lit-run). Every look:
+ * the glow breathes (warm 3.2 s, lit 2.6 s, hot 1.8 s a breath) and a hot court sends a thin ring out in its
+ * own shape (2 s). A: the light on the court drifts through it as a slow, soft gradient of its own colours
+ * (LIT_FLOW: drift, breathe or wave; see litFlowLayer), never a flash. B: the ring's light goes round (5.5 s,
+ * 3.6 s, 2.2 s a turn). C: the card floats up and down over its spot, its shadow on the ground shrinking as it
+ * rises (2.6 s, hot 1.8 s), a sweep crosses it, and a pulse goes out on the ground (3.2 s, 2.4 s, 1.7 s).
+ * Transform and opacity only, each on its own layer, so the compositor runs them off the main thread; every
+ * loop ends exactly where it starts. Still with Reduce Motion, and for the rest.
+ *
+ * A's flows (Oct 28, owner: "the flash, should be more of a gradient change then a actual flash. It should
+ * feel more like a loading screen"):
+ *  drift: a wide gradient (light, the brand, a touch deeper, and back) slides slowly across the court on a
+ *     diagonal, at one even pace with no end to it (8 s, 6.5 s, 5 s a turn).
+ *  breathe: the whole court eases from its lit gradient to a deeper one and back (4.6 s, 3.9 s, 3.2 s a way).
+ *  wave: one wide, soft band of the court's lighter colour glides across, then a calm stretch (4.2 s, 3.8 s,
+ *     3.4 s a pass).
  */
 export const LIT_CSS = `
 .cs-lit-glow{transform:scale(1);opacity:.92}
-.cs-lit-sheen{transform:translateX(-140%);opacity:0}
-.cs-lit-wave{opacity:0}
+.cs-lit-sheen{transform:translateX(-110%);opacity:0}
+.cs-lit-wave,.cs-lit-ground,.cs-lit-tide{opacity:0}
 .cs-far .cs-lit{scale:.84}
-.cs-lit-run .cs-lit-spin{animation:cs-lit-spin 4.5s linear infinite}
-.cs-lit-run.cs-lit-1 .cs-lit-spin{animation-duration:7s}
-.cs-lit-run.cs-lit-3 .cs-lit-spin{animation-duration:2.6s}
-@keyframes cs-lit-spin{to{transform:rotate(360deg)}}
-.cs-lit-run .cs-lit-flow{animation:cs-lit-flow 5s linear infinite}
-.cs-lit-run.cs-lit-1 .cs-lit-flow{animation-duration:8s}
-.cs-lit-run.cs-lit-3 .cs-lit-flow{animation-duration:3.2s}
-@keyframes cs-lit-flow{to{transform:translateX(-50%)}}
 .cs-lit-run .cs-lit-glow{animation:cs-lit-breathe 2.6s ease-in-out infinite alternate}
 .cs-lit-run.cs-lit-1 .cs-lit-glow{animation-duration:3.2s}
 .cs-lit-run.cs-lit-3 .cs-lit-glow{animation-duration:1.8s}
 @keyframes cs-lit-breathe{0%{transform:scale(.84);opacity:.6}100%{transform:scale(1.12);opacity:1}}
-.cs-lit-run.cs-lit-2 .cs-lit-sheen{animation:cs-lit-sheen 4.2s cubic-bezier(.45,0,.25,1) infinite}
-.cs-lit-run.cs-lit-3 .cs-lit-sheen{animation:cs-lit-sheen 2.8s cubic-bezier(.45,0,.25,1) infinite}
-@keyframes cs-lit-sheen{0%{transform:translateX(-140%);opacity:0}6%{opacity:1}38%{transform:translateX(230%);opacity:1}42%,100%{transform:translateX(230%);opacity:0}}
-.cs-lit-run.cs-lit-3 .cs-lit-wave{animation:cs-lit-wave 2.2s cubic-bezier(.2,.7,.3,1) infinite}
-@keyframes cs-lit-wave{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
-.cs-still .cs-lit-run .cs-lit-spin,.cs-still .cs-lit-run .cs-lit-flow,.cs-still .cs-lit-run .cs-lit-glow,.cs-still .cs-lit-run .cs-lit-sheen,.cs-still .cs-lit-run .cs-lit-wave{animation:none}
-@media (prefers-reduced-motion:reduce){.cs-lit-run .cs-lit-spin,.cs-lit-run .cs-lit-flow,.cs-lit-run .cs-lit-glow,.cs-lit-run .cs-lit-sheen,.cs-lit-run .cs-lit-wave{animation:none}}
+.cs-lit-run .cs-lit-sheen{animation:cs-lit-sheen 4.4s cubic-bezier(.45,0,.25,1) infinite}
+.cs-lit-run.cs-lit-2 .cs-lit-sheen{animation-duration:3.4s}
+.cs-lit-run.cs-lit-3 .cs-lit-sheen{animation-duration:2.4s}
+@keyframes cs-lit-sheen{0%{transform:translateX(-110%);opacity:0}8%{opacity:1}46%{transform:translateX(330%);opacity:1}50%,100%{transform:translateX(330%);opacity:0}}
+.cs-lit-run .cs-lit-drift{animation:cs-lit-slide 6.5s linear infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-drift{animation-duration:8s}
+.cs-lit-run.cs-lit-3 .cs-lit-drift{animation-duration:5s}
+.cs-lit-run .cs-lit-band{animation:cs-lit-slide 3.8s linear infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-band{animation-duration:4.2s}
+.cs-lit-run.cs-lit-3 .cs-lit-band{animation-duration:3.4s}
+@keyframes cs-lit-slide{0%{transform:translateX(-33.33333%)}100%{transform:translateX(0)}}
+.cs-lit-run .cs-lit-tide{animation:cs-lit-tide 3.9s cubic-bezier(.45,0,.55,1) infinite alternate}
+.cs-lit-run.cs-lit-1 .cs-lit-tide{animation-duration:4.6s}
+.cs-lit-run.cs-lit-3 .cs-lit-tide{animation-duration:3.2s}
+@keyframes cs-lit-tide{0%{opacity:0}100%{opacity:1}}
+.cs-lit-run .cs-lit-spin{animation:cs-lit-spin 3.6s linear infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-spin{animation-duration:5.5s}
+.cs-lit-run.cs-lit-3 .cs-lit-spin{animation-duration:2.2s}
+@keyframes cs-lit-spin{to{transform:rotate(360deg)}}
+.cs-lit-run.cs-lit-3 .cs-lit-wave{animation:cs-lit-wave 2s cubic-bezier(.2,.7,.3,1) infinite}
+@keyframes cs-lit-wave{0%{transform:scale(1);opacity:.9}100%{transform:scale(1.55);opacity:0}}
+.cs-lit-run .cs-lit-bob{animation:cs-lit-bob 2.6s ease-in-out infinite alternate}
+.cs-lit-run .cs-lit-shade{animation:cs-lit-shade 2.6s ease-in-out infinite alternate}
+.cs-lit-run.cs-lit-3 .cs-lit-bob,.cs-lit-run.cs-lit-3 .cs-lit-shade{animation-duration:1.8s}
+@keyframes cs-lit-bob{0%{transform:translateY(0)}100%{transform:translateY(-5px)}}
+@keyframes cs-lit-shade{0%{transform:scale(1);opacity:1}100%{transform:scale(.7);opacity:.55}}
+.cs-lit-run .cs-lit-ground{animation:cs-lit-ground 2.4s cubic-bezier(.2,.7,.3,1) infinite}
+.cs-lit-run.cs-lit-1 .cs-lit-ground{animation-duration:3.2s}
+.cs-lit-run.cs-lit-3 .cs-lit-ground{animation-duration:1.7s}
+@keyframes cs-lit-ground{0%{transform:scale(.4);opacity:.95}100%{transform:scale(1.9);opacity:0}}
+.cs-still .cs-lit-run [class*="cs-lit-"]{animation:none!important}
+@media (prefers-reduced-motion:reduce){.cs-lit-run [class*="cs-lit-"]{animation:none!important}}
 `;
 
 /**
@@ -359,45 +387,126 @@ function brightness(hex: string): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** A lit court's tile across, by level (1 warm, 2 lit, 3 hot): two to three times a quiet court's 22. */
-export const LIT_SIZE = [22, 44, 54, 64] as const;
-/** The same, picked: a touch bigger again. */
-export const litSize = (level: 1 | 2 | 3, on: boolean) => LIT_SIZE[level] + (on ? 6 : 0);
-/** The page-coloured gap between the travelling ring and the tile, so the ring reads on a tile of the same colour. */
-const GAP_LIT = 2;
-/** The travelling ring's width, by level. */
-const LIT_RING = [0, 3.5, 4, 4.5];
-/** A corner face across, by level: bigger on a bigger court. */
-const CORNER_FACE = [0, 22, 24, 26];
-
-/** A friend's face for a court's corner: their picture, or their initials on their colour, in a ring of the page. */
-const cornerFace = (px: number) => (user: User, i: number) => {
-  const picture = safePicture(user.avatarUrl);
-  const fill = picture ? `background-image:url('${picture}');background-size:cover;background-position:center;` : `background:${surfaceColorFor(user.avatarSeed)};`;
-  return `<div style="position:relative;z-index:${5 - i};width:${px}px;height:${px}px;margin-left:${i ? -Math.round(px * 0.3) : 0}px;border-radius:999px;box-sizing:border-box;border:2px solid ${colors.bg};${fill}color:#fff;font:700 ${px >= 24 ? 9.5 : 8.5}px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;letter-spacing:.2px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.28)">${picture ? '' : esc(initials(user.name))}</div>`;
-};
-
-/** A small person, for a count with no faces (strangers: only how many). */
-const personGlyph = (color: string) =>
-  `<svg width="9" height="10" viewBox="0 0 9 10" aria-hidden="true" style="flex:none;margin-right:2px"><circle cx="4.5" cy="2.6" r="2.2" fill="${color}"/><path d="M0.6 9.6c0-2.3 1.7-3.9 3.9-3.9s3.9 1.6 3.9 3.9z" fill="${color}"/></svg>`;
+/**
+ * Which look a lit court wears (Oct 28, owner: "the new larger map thing is better. but give me a couple
+ * to pick from, the current isnt the best"). Three, each big and moving (litCourtPinHtml):
+ *  A, floodlit court: the court itself from above with its floodlights on, the glow of them round it, its
+ *     light drifting through it as a slow, soft gradient of its own colours (LIT_FLOW; round 5, Oct 28: no
+ *     lamps at its corners and no flash), a little livelier as it gets busier.
+ *  B, story ring: a round badge in a thick ring of the theme's colours whose light travels round it, the way
+ *     a story ring moves; who is there sits on its bottom edge, like a live badge.
+ *  C, raised pin: the court on a card floating over its spot, its shadow and a pulse on the ground under it;
+ *     who is there in a capsule on its corner.
+ * The app wears LIT_LOOK. Only in the web demo (no database) can a picture switch it: ?lit=B once, or
+ * localStorage "courtside-lit-look" = A, B or C.
+ */
+export type LitLook = 'A' | 'B' | 'C';
+export const LIT_LOOK: LitLook = 'A';
+const LOOK_KEY = 'courtside-lit-look';
+const isLook = (v: unknown): v is LitLook => v === 'A' || v === 'B' || v === 'C';
+let lookNow: LitLook | null = null;
+/** The look lit courts wear here: LIT_LOOK, or in the web demo the one a picture asked for. */
+export function litLook(): LitLook {
+  if (lookNow) return lookNow;
+  lookNow = LIT_LOOK;
+  if (process.env.EXPO_PUBLIC_SUPABASE_URL) return lookNow;
+  try {
+    const asked = typeof window !== 'undefined' && typeof window.location?.search === 'string' ? new URLSearchParams(window.location.search).get('lit') : null;
+    if (isLook(asked)) localStorage.setItem(LOOK_KEY, asked);
+    const kept = typeof localStorage !== 'undefined' ? localStorage.getItem(LOOK_KEY) : null;
+    if (isLook(kept)) lookNow = kept;
+  } catch {
+    // No storage here: LIT_LOOK.
+  }
+  return lookNow;
+}
 
 /**
- * Who is at a lit court, tucked into its corner (Oct 27, owner: "tuck the icons of people in the corner
- * of the court ... a couple icons and then +5 more"): up to three faces (only friends who follow each
- * other with you, and you), overlapping, then "+5" for everyone else; never more than three things, so a
- * crowd shows two faces and the rest as "+N". Strangers are only ever in the number. With no face to
- * show, the number alone with a small person ("4"), so it never reads as "4 more" of no one.
+ * How the light moves on a floodlit court (A) (Oct 28, owner, of round 3's floodlit court: "Our current is
+ * better except for 2 things get rid of the dots silver in corner, but also the flash, should be more of a
+ * gradient change then a actual flash. It should feel more like a loading screen"): drift, breathe or wave
+ * (LIT_CSS, litFlowLayer). The app wears LIT_FLOW; in the web demo (no database) a picture can switch it:
+ * ?flow=breathe once, or localStorage "courtside-lit-flow".
  */
-function cornerWho(faces: User[], others: number, level: 1 | 2 | 3): string {
-  if (!faces.length && !others) return '';
-  const px = CORNER_FACE[level];
-  const room = others > 0 ? 2 : 3;
-  const shown = faces.slice(0, room);
-  const more = others + (faces.length - shown.length);
-  const pill = more > 0
-    ? `<div style="position:relative;z-index:1;height:${px}px;min-width:${px}px;margin-left:${shown.length ? -Math.round(px * 0.3) : 0}px;padding:0 ${shown.length ? 6 : 7}px 0 ${shown.length ? 8 : 6}px;box-sizing:border-box;border-radius:999px;border:2px solid ${colors.bg};background:${colors.text};color:${colors.bg};font:700 ${px >= 24 ? 12 : 11}px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;display:flex;align-items:center;justify-content:center;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.28)">${shown.length ? '' : personGlyph(colors.bg)}${shown.length ? '+' : ''}${more}</div>`
-    : '';
-  return `<div class="cs-lit-who" style="position:absolute;z-index:4;left:calc(100% - ${Math.round(px * 0.85)}px);top:-${Math.round(px * 0.48)}px;display:flex;align-items:center;pointer-events:none">${shown.map(cornerFace(px)).join('')}${pill}</div>`;
+export type LitFlow = 'drift' | 'breathe' | 'wave';
+export const LIT_FLOW: LitFlow = 'drift';
+const FLOW_KEY = 'courtside-lit-flow';
+const isFlow = (v: unknown): v is LitFlow => v === 'drift' || v === 'breathe' || v === 'wave';
+let flowNow: LitFlow | null = null;
+/** The flow floodlit courts wear here: LIT_FLOW, or in the web demo the one a picture asked for. */
+export function litFlow(): LitFlow {
+  if (flowNow) return flowNow;
+  flowNow = LIT_FLOW;
+  if (process.env.EXPO_PUBLIC_SUPABASE_URL) return flowNow;
+  try {
+    const asked = typeof window !== 'undefined' && typeof window.location?.search === 'string' ? new URLSearchParams(window.location.search).get('flow') : null;
+    if (isFlow(asked)) localStorage.setItem(FLOW_KEY, asked);
+    const kept = typeof localStorage !== 'undefined' ? localStorage.getItem(FLOW_KEY) : null;
+    if (isFlow(kept)) flowNow = kept;
+  } catch {
+    // No storage here: LIT_FLOW.
+  }
+  return flowNow;
+}
+
+/**
+ * A lit court across, by look and level (1 warm, 2 lit, 3 hot; a quiet court is 22): A the court's width (it
+ * stands 1.42 times as tall), B the round badge, C the raised card. Picked, a touch bigger.
+ */
+const LIT_ACROSS: Record<LitLook, readonly [0, number, number, number]> = { A: [0, 40, 46, 52], B: [0, 46, 54, 62], C: [0, 40, 46, 52] };
+export const litAcross = (level: 1 | 2 | 3, on: boolean, look: LitLook = litLook()) => LIT_ACROSS[look][level] + (on ? 4 : 0);
+/** Half a lit court's width, for the pin engine's room beside it (cw): C's capsule of faces sits out on its side. */
+export function litHalf(level: 1 | 2 | 3, on: boolean, who: boolean): number {
+  const look = litLook();
+  return Math.round(litAcross(level, on, look) / 2 + (look === 'C' && who ? 26 : 0));
+}
+/** Who is there, each circle across, by level: bigger on a bigger court (Oct 28, owner: "make the icons a bit bigger"). */
+const WHO_PX = [0, 24, 26, 28] as const;
+const SANS = '-apple-system,BlinkMacSystemFont,system-ui,sans-serif';
+
+/** A friend's face at a court: their picture, or their initials on their colour, in a rim of the page. */
+function friendDisc(user: User, px: number): string {
+  const picture = safePicture(user.avatarUrl);
+  const fill = picture ? `background-image:url('${picture}');background-size:cover;background-position:center;` : `background:${surfaceColorFor(user.avatarSeed)};`;
+  return `<div style="width:${px}px;height:${px}px;border-radius:999px;box-sizing:border-box;border:2px solid ${colors.bg};${fill}color:#fff;font:700 ${Math.round(px * 0.36)}px ${SANS};letter-spacing:.2px;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.26)">${picture ? '' : esc(initials(user.name))}</div>`;
+}
+
+/**
+ * Someone at a court who is not a friend, the way the map shows them (Apple 5.1.2(i): a stranger's face or
+ * name never shows on a map): a soft disc in the theme's colours with a plain silhouette, the same for
+ * everyone, with no picture, no initials and no name. The server counts strangers only from two up.
+ */
+function strangerDisc(px: number): string {
+  const ink = withAlpha(colors.textMuted, 0.5);
+  return `<div style="width:${px}px;height:${px}px;border-radius:999px;box-sizing:border-box;border:2px solid ${colors.bg};background:${colors.surfaceAlt};overflow:hidden;box-shadow:0 2px 6px rgba(0,0,0,.26)"><svg width="100%" height="100%" viewBox="0 0 20 20" aria-hidden="true" style="display:block"><circle cx="10" cy="8.3" r="3.7" fill="${ink}"/><path d="M2.6 21.5c0-4.7 3.3-7.7 7.4-7.7s7.4 3 7.4 7.7z" fill="${ink}"/></svg></div>`;
+}
+
+/**
+ * Who is at a lit court (Oct 28, owner: "if its 2 or less ppl hitting there. the icons of them should show up
+ * instead of it just saying 2ppl. anything more, should show the icon and then +x never just person emoji with
+ * the number"): one or two people, each one's circle and no number; three or more, two circles then "+5".
+ * Friends who follow each other with you (and you) first, as their faces; everyone else as a stranger's disc.
+ */
+export function whoCircles(faces: User[], strangers: number): { shown: (User | null)[]; more: number } | null {
+  const total = faces.length + Math.max(0, strangers);
+  if (!total) return null;
+  const room = Math.min(2, total);
+  const shown: (User | null)[] = faces.slice(0, room);
+  while (shown.length < room) shown.push(null);
+  return { shown, more: total - room };
+}
+
+/** The circles in a row, overlapping, then "+5": an ink pill as tall as a face (A, B), or bold words in C's capsule. */
+function whoRow(faces: User[], strangers: number, px: number, plus: 'pill' | 'bold'): string {
+  const who = whoCircles(faces, strangers);
+  if (!who) return '';
+  const lap = Math.round(px * 0.28);
+  const circles = who.shown.map((u, i) => `<div style="position:relative;flex:none;z-index:${5 - i};margin-left:${i ? -lap : 0}px">${u ? friendDisc(u, px) : strangerDisc(px)}</div>`).join('');
+  const more = !who.more ? ''
+    : plus === 'pill'
+      ? `<div style="position:relative;flex:none;z-index:1;height:${px}px;min-width:${px}px;margin-left:-${lap}px;padding:0 7px 0 ${lap + 5}px;box-sizing:border-box;border-radius:999px;border:2px solid ${colors.bg};background:${colors.text};color:${colors.bg};font:800 ${px >= 26 ? 12.5 : 12}px ${SANS};display:flex;align-items:center;justify-content:center;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.26)">+${who.more}</div>`
+      : `<span style="flex:none;margin:0 7px 0 5px;color:${colors.text};font:800 14px ${SANS};letter-spacing:-.2px;white-space:nowrap">+${who.more}</span>`;
+  return circles + more;
 }
 
 /** A tennis court from above, in white lines, for a lit tile `px` across: the outline, the service boxes, the net. */
@@ -408,10 +517,30 @@ const courtLines = (px: number, ink: string) => {
 };
 
 /**
- * A colour "switched on": the same hue, brighter and a touch richer (`up`: how much lighter, 0 to 1 of
- * the way), the way a lamp brightens a colour rather than washing it out to pastel as white would.
+ * A whole tennis court from above filling a `w` × `h` surface (A), in lines of `ink`, in a real court's
+ * proportions: the doubles and singles sidelines, the service boxes, and the net, a bolder line reaching past
+ * the sidelines to its posts.
  */
-function lightUp(hex: string, up: number): string {
+function courtFromAbove(w: number, h: number, ink: string): string {
+  const f = (n: number) => n.toFixed(1);
+  const x0 = w * 0.15;
+  const x1 = w - x0;
+  const y0 = h * 0.1;
+  const y1 = h - y0;
+  const alley = (x1 - x0) * 0.125;
+  const box = (y1 - y0) * 0.23;
+  const net = (y0 + y1) / 2;
+  const line = (ax: number, ay: number, bx: number, by: number) => `<line x1="${f(ax)}" y1="${f(ay)}" x2="${f(bx)}" y2="${f(by)}"/>`;
+  return `<svg width="${f(w)}" height="${f(h)}" viewBox="0 0 ${f(w)} ${f(h)}" aria-hidden="true" style="position:absolute;left:0;top:0;z-index:2"><g fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="square">`
+    + `<rect x="${f(x0)}" y="${f(y0)}" width="${f(x1 - x0)}" height="${f(y1 - y0)}"/>`
+    + line(x0 + alley, y0, x0 + alley, y1) + line(x1 - alley, y0, x1 - alley, y1)
+    + line(x0 + alley, y0 + box, x1 - alley, y0 + box) + line(x0 + alley, y1 - box, x1 - alley, y1 - box)
+    + line(w / 2, y0 + box, w / 2, y1 - box)
+    + `</g><line x1="${f(x0 - 3)}" y1="${f(net)}" x2="${f(x1 + 3)}" y2="${f(net)}" stroke="${ink}" stroke-width="2.2" stroke-linecap="round"/></svg>`;
+}
+
+/** A `#RRGGBB` colour with its lightness and saturation remade by `to` (same hue); anything else as it is. */
+function reshade(hex: string, to: (l: number, s: number) => [number, number]): string {
   const h = hex.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(h)) return hex;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
@@ -423,14 +552,23 @@ function lightUp(hex: string, up: number): string {
   let hue = 0;
   if (d) hue = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
   hue = (hue * 60 + 360) % 360;
-  const l2 = Math.min(0.72, l + (1 - l) * up);
-  const s2 = Math.min(0.85, s + 0.12);
+  const [l2, s2] = to(l, s);
   const c = (1 - Math.abs(2 * l2 - 1)) * s2;
   const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
   const m = l2 - c / 2;
   const [r1, g1, b1] = hue < 60 ? [c, x, 0] : hue < 120 ? [x, c, 0] : hue < 180 ? [0, c, x] : hue < 240 ? [0, x, c] : hue < 300 ? [x, 0, c] : [c, 0, x];
   return `#${[r1, g1, b1].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('')}`;
 }
+
+/**
+ * A colour "switched on": the same hue, brighter and a touch richer (`up`: how much lighter, 0 to 1 of
+ * the way, at most `cap`), the way a lamp brightens a colour rather than washing it out to pastel as white would.
+ */
+const lightUp = (hex: string, up: number, cap = 0.72): string =>
+  reshade(hex, (l, s) => [Math.min(cap, l + (1 - l) * up), Math.min(0.85, s + 0.12)]);
+
+/** The same hue a little deeper (`by`: how much of its lightness goes), as a court's light falls away from it. */
+const deepen = (hex: string, by: number): string => reshade(hex, (l, s) => [l * (1 - by), s]);
 
 /**
  * A lit court's colours, from the theme, by level: the tile's two (the brand flowing into B), the ring's
@@ -444,73 +582,242 @@ function litColours(level: 1 | 2 | 3) {
   const light = mix(brand, '#ffffff', 0.62);
   const warm = level === 3 && brightness(colors.sun) > 0.35;
   const b = warm ? colors.sun : lightUp(brand, [0, 0.2, 0.3, 0.4][level]);
-  return { brand, light, a: brand, b, glow: b, ink: colors.brandInk };
+  // The tile's deeper colour is the brand already a little switched on, so no moment of the flow dims to a quiet court's green.
+  const a = lightUp(brand, [0, 0.06, 0.09, 0.12][level]);
+  return { brand, light, a, b, glow: b, ink: colors.brandInk };
+}
+
+/** The soft glow behind a lit court, in its light: stronger from lit up. */
+const litGlowFill = (k: ReturnType<typeof litColours>, level: 1 | 2 | 3) =>
+  `radial-gradient(closest-side,${withAlpha(k.glow, level === 1 ? 0.5 : 0.7)} 0%,${withAlpha(k.glow, level === 1 ? 0.3 : 0.42)} 48%,${withAlpha(k.brand, 0.14)} 74%,${withAlpha(k.brand, 0)} 100%)`;
+
+/** A lit court's words, hung `gap` under its box, centred: "7 here", with the court's name before them close in. */
+function litWords(court: Court, label: string | undefined, gap: number, k: ReturnType<typeof litColours>): string {
+  if (!label) return '';
+  const nameText = court.name && court.name !== 'Tennis courts' ? esc(court.name) : '';
+  return `<span class="cs-court-tag cs-lit-tag" style="position:absolute;left:50%;top:calc(100% + ${gap}px);transform:translateX(-50%);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 9px 3px 7px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 2px 6px rgba(0,0,0,.18);${FONT};font-weight:700"><i style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:4px;vertical-align:0;background:linear-gradient(135deg,${k.a},${k.b})"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(label)}</span>`;
+}
+
+/** A bright band swept across a lit surface now and then (C), on a strip laid across it at an angle. */
+const litSweep = (delay: number) =>
+  `<div style="position:absolute;left:-40%;top:-40%;width:180%;height:180%;transform:rotate(24deg);pointer-events:none;z-index:3"><i class="cs-lit-sheen" style="position:absolute;left:0;top:0;bottom:0;width:30%;background:linear-gradient(90deg,${withAlpha('#ffffff', 0)} 0%,${withAlpha('#ffffff', 0.5)} 50%,${withAlpha('#ffffff', 0)} 100%);animation-delay:-${delay}ms"></i></div>`;
+
+/** Clips a lit surface to its rounded shape while its insides move (Safari drops a rounded clip under a moving layer without it). */
+const CLIP = 'overflow:hidden;isolation:isolate;-webkit-mask-image:-webkit-radial-gradient(white,black)';
+
+interface LitPin {
+  level: 1 | 2 | 3;
+  on: boolean;
+  label?: string;
+  /** Faces to show: friends who follow each other with you (and you). */
+  faces: User[];
+  /** Everyone else there, shown only as strangers' discs and in "+5". */
+  others: number;
+  live: boolean;
 }
 
 /**
- * A court lit up (Oct 27 review, owner: "the lighting up courts should be way more noticble, maybe the
- * courts can be bigger, and the light up should have maybe even a graident, maybe even a live gradient
- * that flahes and animates. it needs to be really like eye catching"; features/places/lightUp).
- *
- * A big rounded tile, LIT_SIZE across by level (44 warm, 54 lit, 64 hot; a quiet court is 22), filled
- * with a gradient of the theme's own colours (the brand into a light of it; a hot court's brand into the
- * theme's warm second colour, sun) with the court drawn on it in the brand's ink. Round it, past a gap of
- * the page, a ring in the same colours with a bright light in it (a story ring: something on, tap it).
- * `live` (the liveliest few, lightUp's LIVE_MAX), it comes alive: the tile's gradient flows across it,
- * the ring's light travels round, a sheen flashes over the tile now and then, and a soft glow breathes
- * behind it; a hot court does all of it faster and sends a soft pulse out. Every moving part is a small
- * layer of its own moved only by transform and opacity (no blur filter, no gradient redrawn each frame),
- * so the page's compositor runs it off the main thread, in the browser and the phone's web view alike;
- * each court starts at its own point in the beat. Reduce Motion (cs-still, or the system's setting):
- * the same gradient, ring and glow, still.
- *
- * Who is there sits on its top right corner (cornerWho): faces of friends, then "+5". Its words ("7 here",
- * with the court's name before them close in) hang under it, centred.
+ * A court lit up (Oct 27, owner: "the courts can be bigger ... a live gradient that flahes and animates ...
+ * really eye catching"; Oct 28: "give me a couple to pick from"): one of three looks (LIT_LOOK, see litLook),
+ * bigger each level, in the theme's own colours (the brand "switched on"; New York's hot courts its orange).
+ * Who is there: one or two circles and no number, or two circles and "+5" (whoCircles): friends' faces,
+ * strangers only ever as a plain disc. Its words hang under it. `live` (the liveliest few, lightUp's
+ * LIVE_MAX): it moves (LIT_CSS); every moving part is a small layer of its own moved only by transform and
+ * opacity, so the compositor runs it off the main thread, in the browser and the phone's web view alike;
+ * each court starts at its own point in the beat. Reduce Motion: the same, still.
  */
-export function litCourtPinHtml(court: Court, { level, on, label, faces, others, live }: {
-  level: 1 | 2 | 3; on: boolean; label?: string; faces: User[]; others: number; live: boolean;
-}): string {
-  const size = litSize(level, on);
-  const ring = LIT_RING[level];
-  const r = Math.round(size * 0.28);
-  const closed = isClosedCourt(court);
+export function litCourtPinHtml(court: Court, pin: LitPin): string {
+  const look = litLook();
+  return look === 'B' ? litRing(court, pin) : look === 'C' ? litRaised(court, pin) : litFloodlit(court, pin);
+}
+
+const litClass = (look: LitLook, { level, live, on }: LitPin) =>
+  `cs-court cs-pin cs-live cs-lit cs-lit-${look.toLowerCase()} cs-lit-${level}${live ? ' cs-lit-run' : ''}${on ? ' cs-on' : ''}`;
+/** Picked: a ring of the page and of the ink round it. */
+const litPicked = (on: boolean) => (on ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.text},` : '');
+
+/** `n` + 1 colour stops across `period` px, coloured `at(v)` as v eases 1 → 0 → 1 (a cosine), so nothing in it has an edge. */
+function softStops(period: number, at: (v: number) => string, n = 16): string {
+  const out: string[] = [];
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    out.push(`${at((1 + Math.cos(2 * Math.PI * t)) / 2)} ${(t * period).toFixed(2)}px`);
+  }
+  return out.join(',');
+}
+
+/** The diagonal a floodlit court's light travels along: down and across, from its top left. */
+const FLOW_ANGLE = 40;
+
+/**
+ * The light on a floodlit court (A), laid over its surface (`iw` × `ih`, inside the rim) in the court's own
+ * colours only, never white: `light` (the brand switched on more, New York's orange on a hot court), the brand
+ * switched on (`mid`), and `deep`, that a touch deeper: about round 3's own darkest corner, never down to a
+ * quiet court's colour, so no moment of it reads as the court switching off. Busier courts: a little more
+ * between light and deep, a little faster.
+ *  drift (LIT_FLOW): a strip of a gradient that repeats every `period`, three long, laid on FLOW_ANGLE and slid
+ *     by exactly one period a turn at an even pace (cs-lit-slide), so a turn ends where it starts. The period
+ *     is three quarters of the court's length along the flow: with that, as much light as deep is on the court
+ *     at every moment, so the court as a whole stays as bright and only the light moves (a period as long as
+ *     the court's diagonal left the whole court darker each time the deep part crossed its middle).
+ *  breathe: a deeper gradient over the court's own, easing in and out (cs-lit-tide).
+ *  wave: the same strip, a longer period, clear but for one wide soft band of the lighter colour in each.
+ * At rest (Reduce Motion, and lit courts that are not among the liveliest) each shows where its turn starts:
+ * drift light and deep across the court, breathe and wave the court's own gradient alone.
+ */
+function litFlowLayer(flow: LitFlow, iw: number, ih: number, level: 1 | 2 | 3, k: ReturnType<typeof litColours>, delay: number): string {
+  const light = k.b;
+  const mid = k.a;
+  // The brand switched on, a touch deeper (same hue, its richer saturation kept), more so the busier: on a
+  // light theme about round 3's darkest corner, above a quiet court's own brand; on a dark theme's bright brand
+  // (New York's yellow) a deeper gold, where the brand's own darker step would hardly show.
+  const by = [0, 0.08, 0.11, 0.14][level];
+  const deep = deepen(k.a, by);
+  if (flow === 'breathe') {
+    const deeper = deepen(k.a, by * 1.3);
+    return `<i class="cs-lit-tide" style="position:absolute;inset:0;z-index:1;background:linear-gradient(170deg,${mid} 0%,${deep} 52%,${deeper} 100%);pointer-events:none;animation-delay:-${delay}ms"></i>`;
+  }
+  const across = Math.ceil(Math.hypot(iw, ih)) + 2;
+  const wave = flow === 'wave';
+  const rad = (FLOW_ANGLE * Math.PI) / 180;
+  const along = iw * Math.cos(rad) + ih * Math.sin(rad);
+  // The strip is three periods long and slides one, so two must reach across the square it turns in.
+  const period = Math.max(Math.ceil(across / 2), Math.round(wave ? across * 1.6 : along * 0.75));
+  // Drift: its three colours lightest to darkest and back (New York's hot court: pale yellow, gold, orange, so no
+  // thin pale line where the orange gives way to gold), the middle one placed by its lightness, so the light
+  // rises and falls along one smooth curve with no crease. Wave: clear, then from 62% of the way one band of light.
+  const [hi, md, lo] = [light, mid, deep].sort((x, y) => brightness(y) - brightness(x));
+  const lit = (c: string) => Math.cbrt(brightness(c));
+  const span = lit(hi) - lit(lo);
+  const mdAt = span > 1e-4 ? (lit(md) - lit(lo)) / span : 0.5;
+  const stops = wave
+    ? bandStops(period, lightUp(k.b, 0.35, 0.84), [0, 0.4, 0.5, 0.6][level])
+    : softStops(period, (v) => (v >= mdAt ? mix(md, hi, (v - mdAt) / (1 - mdAt || 1)) : mix(lo, md, v / (mdAt || 1))));
+  return `<div style="position:absolute;z-index:1;left:${((iw - across) / 2).toFixed(1)}px;top:${((ih - across) / 2).toFixed(1)}px;width:${across}px;height:${across}px;transform:rotate(${FLOW_ANGLE}deg);pointer-events:none">`
+    + `<i class="${wave ? 'cs-lit-band' : 'cs-lit-drift'}" style="position:absolute;left:0;top:0;width:${period * 3}px;height:${across}px;background:repeating-linear-gradient(90deg,${stops});animation-delay:-${delay}ms"></i></div>`;
+}
+
+/** Wave's stops across `period` px: clear to 62% of the way, then one band of `color` easing up to `peak` and away. */
+function bandStops(period: number, color: string, peak: number, from = 0.62, n = 12): string {
+  const out = [`${withAlpha(color, 0)} 0px`, `${withAlpha(color, 0)} ${(from * period).toFixed(2)}px`];
+  for (let i = 1; i <= n; i++) {
+    const t = i / n;
+    const a = peak * Math.sin(Math.PI * t) ** 2;
+    out.push(`${withAlpha(color, Number(a.toFixed(3)))} ${((from + (1 - from) * t) * period).toFixed(2)}px`);
+  }
+  return out.join(',');
+}
+
+/**
+ * A, floodlit court: the court itself from above, standing up (40 / 46 / 52 px across, 1.42 times as tall),
+ * in the brand switched on with its lines in the brand's ink, framed by the page like a court's surround, the
+ * glow of its lights round it. Moving, its light drifts through it as a slow, soft gradient of its own colours
+ * (litFlowLayer; Oct 28, owner: "get rid of the dots silver in corner, but also the flash, should be more of a
+ * gradient change then a actual flash"), and a hot court sends a ring out. Who is there sits on its top right
+ * corner.
+ */
+function litFloodlit(court: Court, pin: LitPin): string {
+  const { level, on, label, faces, others } = pin;
   const k = litColours(level);
-  // The ring: the brand all round, a bright light of it (and on a hot court a second light, warm) going round.
-  const conic = level === 3
-    ? `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 45deg,${k.brand} 100deg,${k.b} 160deg,${mix(k.b, '#ffffff', 0.5)} 205deg,${k.b} 250deg,${k.brand} 320deg,${k.brand} 360deg)`
-    : `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 55deg,${k.brand} 120deg,${k.b} 240deg,${k.brand} 360deg)`;
-  // The tile's gradient, twice over on a strip twice as wide, so sliding it by half loops without a seam.
-  const flow = `linear-gradient(90deg,${k.a} 0%,${k.b} 25%,${k.a} 50%,${k.b} 75%,${k.a} 100%)`;
-  const glow = `radial-gradient(closest-side,${withAlpha(k.glow, level === 1 ? 0.5 : 0.7)} 0%,${withAlpha(k.glow, level === 1 ? 0.3 : 0.42)} 48%,${withAlpha(k.brand, 0.14)} 74%,${withAlpha(k.brand, 0)} 100%)`;
-  const reach = Math.round(size * (0.32 + level * 0.1));
-  const delay = `animation-delay:-${beat(court.id)}ms`;
-  const spin = Math.ceil(size * 1.5);
-  const inner = ring + GAP_LIT;
-  const nameText = court.name && court.name !== 'Tennis courts' ? esc(court.name) : '';
-  const words = label
-    ? `<span class="cs-court-tag cs-lit-tag" style="position:absolute;left:50%;top:calc(100% + ${level === 3 ? 9 : 7}px);transform:translateX(-50%);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:3px 9px 3px 7px;border-radius:999px;background:${colors.bg};color:${colors.text};box-shadow:0 2px 6px rgba(0,0,0,.18);${FONT};font-weight:700"><i style="display:inline-block;width:7px;height:7px;margin-right:5px;border-radius:4px;vertical-align:0;background:linear-gradient(135deg,${k.a},${k.b})"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(label)}</span>`
-    : '';
-  const picked = on ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.text},` : '';
-  return `<div class="cs-court cs-pin cs-live cs-lit cs-lit-${level}${live ? ' cs-lit-run' : ''}${on ? ' cs-on' : ''}" style="position:relative;width:${size}px;height:${size}px;cursor:pointer${closed ? ';opacity:.8' : ''}">`
-    // The glow breathing behind.
-    + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${glow};pointer-events:none;${delay}"></i>`
-    // A hot court's pulse, going out.
-    + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;border-radius:${r}px;background:${withAlpha(k.glow, 0.32)};pointer-events:none;${delay}"></i>` : '')
-    // The ring: a frame of the travelling gradient, the tile laid inside it past a gap of the page.
-    + `<div class="cs-lit-frame" style="position:absolute;inset:0;border-radius:${r}px;overflow:hidden;isolation:isolate;-webkit-mask-image:-webkit-radial-gradient(white,black);box-shadow:${picked}0 4px 14px rgba(0,0,0,.3)">`
-    + `<i class="cs-lit-spin" style="position:absolute;left:50%;top:50%;width:${spin}px;height:${spin}px;margin:-${spin / 2}px 0 0 -${spin / 2}px;background:${conic};${delay}"></i>`
-    + `<div style="position:absolute;inset:${inner}px;border-radius:${Math.max(2, r - inner)}px;background:${k.a};overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 ${GAP_LIT}px ${colors.bg}">`
-    // The tile's gradient, on a wide strip laid across it at an angle (it flows along the strip).
-    + `<div style="position:absolute;left:-60%;top:-60%;width:220%;height:220%;transform:rotate(-32deg);pointer-events:none"><i class="cs-lit-flow" style="position:absolute;left:0;top:0;width:200%;height:100%;background:${flow};${delay}"></i></div>`
-    + courtLines(size - inner * 2, withAlpha(k.ink, closed ? 0.7 : 0.95))
-    + `<i class="cs-lit-sheen" style="position:absolute;top:-20%;bottom:-20%;left:-10%;width:55%;z-index:3;background:linear-gradient(100deg,${withAlpha('#ffffff', 0)} 0%,${withAlpha('#ffffff', 0.55)} 50%,${withAlpha('#ffffff', 0)} 100%);pointer-events:none;${delay}"></i>`
+  const w = litAcross(level, on, 'A');
+  const h = Math.round(w * 1.42);
+  const r = Math.round(w * 0.2);
+  const rim = 3;
+  const closed = isClosedCourt(court);
+  const delay = beat(court.id);
+  const reach = Math.round(w * (0.3 + level * 0.1));
+  const px = WHO_PX[level];
+  const who = whoRow(faces, others, px, 'pill');
+  return `<div class="${litClass('A', pin)}" style="position:relative;width:${w}px;height:${h}px;cursor:pointer${closed ? ';opacity:.8' : ''}">`
+    + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${litGlowFill(k, level)};pointer-events:none;animation-delay:-${delay}ms"></i>`
+    + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:${r}px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;animation-delay:-${delay}ms"></i>` : '')
+    + `<div style="position:absolute;inset:0;border-radius:${r}px;background:${colors.bg};box-shadow:${litPicked(on)}0 4px 14px rgba(0,0,0,.3)">`
+    + `<div style="position:absolute;inset:${rim}px;border-radius:${r - rim}px;${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
+    + litFlowLayer(litFlow(), w - rim * 2, h - rim * 2, level, k, delay)
+    + courtFromAbove(w - rim * 2, h - rim * 2, withAlpha(k.ink, closed ? 0.7 : 0.92))
     + `</div></div>`
-    + cornerWho(faces, others, level)
-    + words
+    + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:calc(100% - ${Math.round(px * 0.8)}px);top:-${Math.round(px * 0.45)}px;display:flex;align-items:center;pointer-events:none">${who}</div>` : '')
+    + litWords(court, label, 8, k)
     + hitDot()
     + `</div>`;
 }
 
+/**
+ * B, story ring: a round badge (46 / 54 / 62 px across), the court drawn on a disc of the brand switched on,
+ * past a gap of the page a thick ring of the same colours with a bright light in it (on a hot court a second,
+ * warm one). Moving, the ring's light travels round it, faster each level, the way a story ring moves, the
+ * glow breathes, and a hot court sends a ring out. Who is there sits on its bottom edge, like a live badge.
+ */
+function litRing(court: Court, pin: LitPin): string {
+  const { level, on, label, faces, others } = pin;
+  const k = litColours(level);
+  const d = litAcross(level, on, 'B');
+  const ring = [0, 4.5, 5, 5.5][level];
+  const gap = 2.5;
+  const closed = isClosedCourt(court);
+  const delay = beat(court.id);
+  const spin = Math.ceil(d * 1.5);
+  const conic = level === 3
+    ? `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 45deg,${k.brand} 100deg,${k.b} 160deg,${mix(k.b, '#ffffff', 0.5)} 205deg,${k.b} 250deg,${k.brand} 320deg,${k.brand} 360deg)`
+    : `conic-gradient(from 0deg,${k.brand} 0deg,${k.light} 55deg,${k.brand} 120deg,${k.b} 240deg,${k.brand} 360deg)`;
+  const reach = Math.round(d * (0.28 + level * 0.1));
+  const px = WHO_PX[level];
+  const who = whoRow(faces, others, px, 'pill');
+  const disc = d - (ring + gap) * 2;
+  return `<div class="${litClass('B', pin)}" style="position:relative;width:${d}px;height:${d}px;cursor:pointer${closed ? ';opacity:.8' : ''}">`
+    + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${litGlowFill(k, level)};pointer-events:none;animation-delay:-${delay}ms"></i>`
+    + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:999px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;animation-delay:-${delay}ms"></i>` : '')
+    + `<div style="position:absolute;inset:0;border-radius:999px;${CLIP};box-shadow:${litPicked(on)}0 4px 14px rgba(0,0,0,.3)">`
+    + `<i class="cs-lit-spin" style="position:absolute;left:50%;top:50%;width:${spin}px;height:${spin}px;margin:-${spin / 2}px 0 0 -${spin / 2}px;background:${conic};animation-delay:-${delay}ms"></i>`
+    + `<div style="position:absolute;inset:${ring}px;border-radius:999px;background:${colors.bg}"></div>`
+    + `<div style="position:absolute;inset:${ring + gap}px;border-radius:999px;background:radial-gradient(circle at 30% 26%,${k.b} 0%,${k.a} 74%);display:flex;align-items:center;justify-content:center;box-sizing:border-box;padding-bottom:${who ? Math.round(px * 0.2) : 0}px">${courtLines(disc * 0.92, withAlpha(k.ink, closed ? 0.7 : 0.95))}</div>`
+    + `</div>`
+    + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:50%;top:calc(100% - ${Math.round(px * 0.62)}px);transform:translateX(-50%);display:flex;align-items:center;pointer-events:none">${who}</div>` : '')
+    + litWords(court, label, who ? Math.round(px * 0.38) + 7 : 8, k)
+    + hitDot()
+    + `</div>`;
+}
+
+/**
+ * C, raised pin: the court on a card (40 / 46 / 52 px) in the brand switched on, framed by the page, raised
+ * over its spot on a point, like a pin standing up off the map. On the ground under it, the glow, the card's
+ * shadow, and a pulse going out (two on a hot court). Moving, the card floats up and down with its shadow
+ * shrinking as it rises, a bright sweep crosses it, the pulse goes out. Who is there rides on its top right
+ * corner in a capsule of the page, the "+5" bold. Its box is the spot on the ground, so the map's centre
+ * anchor stands the point on the court.
+ */
+function litRaised(court: Court, pin: LitPin): string {
+  const { level, on, label, faces, others } = pin;
+  const k = litColours(level);
+  const s = litAcross(level, on, 'C');
+  const r = Math.round(s * 0.3);
+  const rim = 2.5;
+  const closed = isClosedCourt(court);
+  const delay = beat(court.id);
+  const gw = Math.round(s * 0.86);
+  const gh = Math.round(gw * 0.36);
+  const px = WHO_PX[level] - 2;
+  const who = whoRow(faces, others, px, 'bold');
+  const ellipse = (cls: string, wide: number, high: number, look: string, wait = delay) =>
+    `<i class="${cls}" style="position:absolute;left:50%;top:50%;width:${wide}px;height:${high}px;margin:-${(high / 2).toFixed(1)}px 0 0 -${(wide / 2).toFixed(1)}px;border-radius:50%;box-sizing:border-box;${look};pointer-events:none;animation-delay:-${wait}ms"></i>`;
+  return `<div class="${litClass('C', pin)}" style="position:relative;width:${s}px;height:${gh}px;cursor:pointer${closed ? ';opacity:.8' : ''}">`
+    + ellipse('cs-lit-glow', Math.round(gw * 2), Math.round(gh * 2.2), `background:${litGlowFill(k, level)}`)
+    + ellipse('cs-lit-ground', gw, gh, `border:2px solid ${withAlpha(k.glow, 0.95)}`)
+    + (level === 3 ? ellipse('cs-lit-ground', gw, gh, `border:2px solid ${withAlpha(k.glow, 0.95)}`, delay + 850) : '')
+    + ellipse('cs-lit-shade', Math.round(s * 0.6), 9, 'background:radial-gradient(closest-side,rgba(0,0,0,.36),rgba(0,0,0,0))')
+    + `<div class="cs-lit-bob" style="position:absolute;left:0;bottom:calc(50% + 1px);width:${s}px;height:${s + 10}px;animation-delay:-${delay}ms">`
+    + `<i style="position:absolute;left:50%;bottom:0;width:0;height:0;margin-left:-8px;border-left:8px solid transparent;border-right:8px solid transparent;border-top:11px solid ${colors.bg};filter:drop-shadow(0 2px 2px rgba(0,0,0,.18))"></i>`
+    + `<div style="position:absolute;left:0;top:0;width:${s}px;height:${s}px;border-radius:${r}px;background:${colors.bg};box-shadow:${litPicked(on)}0 8px 18px rgba(0,0,0,.28)">`
+    + `<div style="position:absolute;inset:${rim}px;border-radius:${r - rim}px;${CLIP};background:linear-gradient(150deg,${k.b} 0%,${k.a} 70%);display:flex;align-items:center;justify-content:center">`
+    + courtLines(s - rim * 2, withAlpha(k.ink, closed ? 0.7 : 0.95))
+    + litSweep(delay)
+    + `</div></div>`
+    + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:${s - 12}px;top:-${Math.round(px * 0.55)}px;display:flex;align-items:center;padding:3px;border-radius:999px;background:${colors.bg};box-shadow:0 3px 10px rgba(0,0,0,.24);pointer-events:none">${who}</div>` : '')
+    + `</div>`
+    + litWords(court, label, 6, k)
+    + hitDot()
+    + `</div>`;
+}
 
 /** The dot an open hit folds into on a pin when zoomed out (pinEngine puts "cs-hit" on the pin). */
 const hitDot = () => `<i class="cs-hitdot" style="background:${colors.brand};border-color:${colors.bg}"></i>`;

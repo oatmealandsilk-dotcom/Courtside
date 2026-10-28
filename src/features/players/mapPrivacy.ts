@@ -132,6 +132,20 @@ export function askWhoSeesYou(mode: 'first' | 'manage'): Promise<MapVisibility |
   });
 }
 
+/**
+ * Before anything that shows you to friends ("I'm playing here", Show friends
+ * on a live session; Check in asks for itself): with no yes yet, "Who can
+ * see you on the map?" first, every time, and nothing happens without a yes
+ * (Apple 5.1.2(i): permission first, with a way to decline; migration 191
+ * holds the same rule). Resolves whether to go on. No one: false, unasked
+ * (the page already says it, and Settings changes it).
+ */
+export async function yesFirst(now: MapVisibility | null | undefined): Promise<boolean> {
+  if (saidYes(now)) return true;
+  if (now === 'none') return false;
+  return saidYes(await askWhoSeesYou('first'));
+}
+
 /** The screen has closed: with what was chosen, or null. */
 export function settleWhoSeesYou(v: MapVisibility | null) {
   const done = waiting;

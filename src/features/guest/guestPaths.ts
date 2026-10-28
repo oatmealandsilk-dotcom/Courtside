@@ -22,7 +22,7 @@ const ASK: [RegExp, string][] = [
   [/^\/(messages|share)(\/|$)/, 'message players'],
   [/^\/notifications$/, 'see your notifications'],
   [/^\/search$/, 'search players and threads'],
-  [/^\/(map|flyby|open-to-hit|map-visibility|court-now|court-report)$/, 'see players near you'],
+  [/^\/(map|flyby|open-to-hit|map-visibility|court-now|court-report)$/, 'see courts and open hits'],
   [/^\/(likes|who-played|follows)$/, 'see who liked and played'],
   [/^\/session-stats$/, 'see session stats'],
   [/^\/user\//, 'see player profiles'],

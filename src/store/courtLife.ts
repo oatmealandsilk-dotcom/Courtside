@@ -2,9 +2,10 @@ import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
 import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, withReview, type Seeing } from '@/data/mock/courtLife';
-import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, Post, TaggedCourt, User } from '@/data/types';
+import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
 import { notKnownAdult } from '@/features/players/age';
+import { saidYes } from '@/features/players/mapPrivacy';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -49,6 +50,8 @@ export const emptyCourtLife: CourtLifeState = {
 /** What the slice reads from the rest of the app's state. */
 interface Reads {
   currentUserId: ID | null; users: User[]; posts: Post[]; hitRequests: HitRequest[]; followingIds: ID[]; blockedIds: ID[]; mutedIds: ID[]; locationEnabled: boolean;
+  /** Your answer to "Who can see you on the map?": "I'm playing here" needs a yes (migration 191). */
+  mapVisibility: MapVisibility | null | undefined;
   /** Where the phone was last found, and that town's name; a check-in refreshes the first. */
   detectedCoords: { lat: number; lng: number } | null; detectedLocation: string | null;
 }
@@ -240,6 +243,11 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
     const self = s.users.find((u) => u.id === me);
     if (!self || notKnownAdult(self)) return '“I’m playing here” is for adults only.';
+    // A yes to "Who can see you on the map?" first, every time (Apple 5.1.2(i), migration 191): the page
+    // that offers the check-in asks (yesFirst) before it gets here; no answer is never taken as a yes.
+    // Up to hit at a court (Light up, `at`) reaches here only after that same yes, and is held to it too.
+    if (s.mapVisibility === 'none') return 'You chose No one on the map, so no one sees you here.';
+    if (!saidYes(s.mapVisibility)) return 'Say who can see you on the map first.';
     // A spot from the same tap (Light up) is Location on already, whatever this render last saw.
     if (!at && !s.locationEnabled) return 'Turn on Location first, so players know you’re really here.';
     if (live(me)) {
@@ -258,6 +266,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
               : got.error === 'closed_court' ? 'Only for courts anyone can play at.'
                 : got.error === 'slow_down' ? 'That’s a lot of courts today. Try again tomorrow.'
                   : got.error === 'hidden' ? 'You chose No one on the map. Change it in Settings → Privacy.'
+                  : got.error === 'ask_first' ? 'Say who can see you on the map first.'
                   : 'That didn’t go through. Try again.';
       }
     }

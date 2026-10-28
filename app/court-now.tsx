@@ -8,7 +8,7 @@ import { Toggle } from '@/components/ui';
 import { Section, SheetTitle, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtNow } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
-import { canCheckIn, seenByOnMap } from '@/features/players/mapPrivacy';
+import { canCheckIn, seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -26,10 +26,9 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
  * answer). Under it, for adults and only at a court anyone may play at,
  * "I'm playing here": two hours, gone the moment Location goes off; people
  * who follow each other with you see your name, anyone else only a count,
- * and only once two or more are there. With "Who can see you on the map?"
- * answered (migration 63) it follows that answer: Players nearby also puts
- * you on this court on their map while it lasts; Only people you follow back
- * shows you to them alone; Only me cannot check in. With the check-in on offer, a pick
+ * and only once two or more are there. It needs a yes to "Who can see you on
+ * the map?" (migration 191): with no answer yet, turning it on asks first,
+ * and nothing happens without a yes; No one cannot check in. With the check-in on offer, a pick
  * keeps the sheet open (with thanks) so the switch is still in reach;
  * without it, a pick closes the sheet.
  */
@@ -78,6 +77,8 @@ export default function CourtNowSheet() {
     if (!courtId) return;
     setError('');
     if (!next) { await actions.checkOutOfCourt(); return; }
+    // No yes yet: "Who can see you on the map?" first, and nothing without a yes (Apple 5.1.2(i), migration 191).
+    if (!(await yesFirst(mapVisibility))) return;
     const problem = await actions.checkInAtCourt(courtId);
     if (problem) setError(problem);
   };

@@ -42,7 +42,7 @@ import { countLabel } from '@/features/places/court';
 import { useCourtPosts } from '@/features/places/useCourtPosts';
 import { openCourt, openCourtReel, playHere, postFromCourt, sendCourtToChat } from '@/features/players/courtLink';
 import { Toggle } from '@/components/ui';
-import type { MapFilter, Placed } from '@/features/players/mapModel';
+import type { Listed, MapFilter, Placed } from '@/features/players/mapModel';
 import type { Weather } from '@/lib/weather';
 import { buttonShape, TextScale, colors, oneLine, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { levelBadge } from '@/lib/badges';
@@ -57,7 +57,7 @@ import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadro
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
-import { dismissHideTip, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
+import { dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
 import { UpToHitPill, UpToHitRound } from '@/components/map/UpToHit';
 import { formatSpotMiles } from '@/features/players/geo';
@@ -355,7 +355,7 @@ function ChipLabel({ label, x, w, spot, style }: { label: string; x: SharedValue
   return <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[style, tint]}>{label}</Animated.Text>;
 }
 
-export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
+export function FilterChips({ filter, onFilter, onAgain, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; /** The chip already on, tapped again (Near me opens its list again). */ onAgain?: (key: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
   const spots = useRef<Partial<Record<MapFilter, { x: number; w: number }>>>({});
@@ -380,7 +380,7 @@ export function FilterChips({ filter, onFilter, courtsOn, onCourts, courtsLoadin
   const courtsV = useLit(courtsOn);
   const courtsLit = useLitText(courtsV.v, courtsV.bump);
   const pick = (key: MapFilter) => {
-    if (key === active) return;
+    if (key === active) { onAgain?.(key); return; }
     haptics.tap();
     setActive(key);
     moveTo(key, true);
@@ -620,18 +620,24 @@ const GHScrollView = Platform.OS === 'web' ? ScrollView : GestureScrollView;
 /** What keeps players from you (nearbyLock), as the list says it: not with a name typed, or on Following, neither of which depends on it. */
 const lockOf = (lock: NearbyLock | undefined, query: string, filter: MapFilter) => (lock && !query.trim() && filter !== 'following' ? lock : null);
 
+/** A Near me row's town (a player listed by the town on their profile, never on the map), or null for a friend's check-in. */
+const townOf = (p: Listed): string | null => ('town' in p ? p.town : null);
+/** How far a friend's check-in is ("1.2 mi"); a Near me row has no distance, ever. */
+const placedFar = (p: Listed): string => ('miles' in p ? formatSpotMiles(p.miles, p.rough) : '');
+
 /**
  * The list's one line: how many, and where ("10 players near Raleigh"). A
  * search or Following, which list everyone they find, say whose instead.
  * With nobody sharing nearby it counts the nearest courts it names (never
  * "0 players"); with nobody to list at all it says only where, the list
- * itself saying why (its words unchanged).
+ * itself saying why (its words unchanged). Near me names the town on your
+ * profile, the one its players are listed by.
  */
-function listTitle(items: Placed[], query: string, filter: MapFilter, courts: CourtRow[], cityName: string): string {
+function listTitle(items: Listed[], query: string, filter: MapFilter, courts: CourtRow[], cityName: string, nearTown = ''): string {
   const q = query.trim();
   const n = items.length;
   // "you" is the map's own stand-in for a town not named yet: "near you".
-  const place = cityName || 'you';
+  const place = (filter === 'near' && nearTown) || cityName || 'you';
   if (!n) return !q && filter === 'all' && courts.length ? `${courts.length} ${courts.length === 1 ? 'court' : 'courts'} near ${place}` : `Players near ${place}`;
   const who = n === 1 ? '1 player' : `${n} players`;
   if (q) return `${who} matching “${q}”`;
@@ -640,13 +646,15 @@ function listTitle(items: Placed[], query: string, filter: MapFilter, courts: Co
 }
 
 /** With nobody to list, the pill's few words for why: the list's own reason, shortened. */
-function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked: NearbyLock): string {
+function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked: NearbyLock, nearTown = ''): string {
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
   if (locked === 'hidden') return 'On Only me, players are hidden';
-  if (filter === 'following') return 'Nobody you follow is sharing nearby';
-  if (filter !== 'all') return 'Nobody nearby matches that';
-  return courts.length ? `No one sharing yet · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No one sharing nearby yet';
+  if (filter === 'following') return 'Nobody you follow is up to hit';
+  if (filter === 'near') return nearTown ? `No players in ${nearTown} yet` : 'Add your city to see players';
+  if (filter !== 'all') return 'Nobody matches that';
+  // The map's people are friends who are up to hit, at any age (migration 189; Oct 27 audit wording; Oct 28 "Up to hit").
+  return courts.length ? `No friends up to hit · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends up to hit yet';
 }
 
 /**
@@ -656,10 +664,10 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
  * says it in full with the tap that changes it. The reason goes without the
  * pill's ⌃, so it fits whole on a narrow phone (Android's common 360 points).
  */
-export function PlayersPill({ items, query = '', filter = 'all', courts = [], lock = null, onOpen }: { items: Placed[]; query?: string; filter?: MapFilter; courts?: CourtRow[]; lock?: NearbyLock; onOpen: () => void }) {
+export function PlayersPill({ items, query = '', filter = 'all', courts = [], lock = null, nearTown = '', onOpen }: { items: Listed[]; query?: string; filter?: MapFilter; courts?: CourtRow[]; lock?: NearbyLock; /** The town on your profile, which Near me lists. */ nearTown?: string; onOpen: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const n = items.length;
-  const words = n === 1 ? '1 player' : n ? `All ${n} players` : emptyLine(query, filter, courts, lockOf(lock, query, filter));
+  const words = n === 1 ? '1 player' : n ? `All ${n} players` : emptyLine(query, filter, courts, lockOf(lock, query, filter), nearTown);
   // Its words crossfade and its width glides to fit them (Oct 22 sweep: "6 players" to "No one sharing yet…" snapped).
   // The width it wants is measured from an unseen copy at its own size, kept to the room beside Back to me.
   const room = useContext(PillRoom);
@@ -737,8 +745,13 @@ export function ChipsNoteLine({ children }: { children: React.ReactNode }) {
  * to list it says why in a line, with the tap that changes it, or names the
  * nearest courts. × (or a pull down past the tray, or a tap on the map)
  * closes it, back to the bare map.
+ *
+ * Under Near me (Oct 27) it also lists the players whose own profile town is
+ * yours, after the friends checked in: by their town ("Raleigh") where a
+ * friend's row says how far, and a tap opens their profile, since they have
+ * no pin (the map stays friends only, Apple 5.1.2(i)).
  */
-export function PlayersSheet({ items, cityName, onSelect, query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose, openTall = false, onTall, room, stripAt }: { items: Placed[]; cityName: string; onSelect: (id: string) => void; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void; /** Opens as the full list (it was when a row opened a player's card). */ openTall?: boolean; /** Which height it is going to (the full list, or the tray), each time that changes. */ onTall?: (tall: boolean) => void; /** Where the list may reach (the map's height, the foot of the filters, the strip under the home indicator). */ room?: ListRoom; /** How far along the tray's faces were scrolled, kept by the map, so closing a player's card comes back to the same place. */ stripAt?: { current: number } }) {
+export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = '', query = '', filter = 'all', courts = [], onPickCourt, lock = null, onUnlock, onClose, openTall = false, onTall, room, stripAt }: { items: Listed[]; cityName: string; onSelect: (id: string) => void; /** A Near me row (no pin): opens their profile. */ onProfile?: (id: string) => void; /** The town on your profile, which Near me lists. */ nearTown?: string; /** What is typed in the search, which the players are filtered by. */ query?: string; /** Which chip is on, so an empty list says why. */ filter?: MapFilter; /** With nobody sharing nearby, the nearest few places anyone may play, to tap. */ courts?: CourtRow[]; onPickCourt?: (id: string) => void; /** What keeps "Players nearby" from you (nearbyLock): an empty list says so, not that nobody is there. */ lock?: NearbyLock; /** The one tap that lifts it: Location on, or who can see you. */ onUnlock?: () => void; onClose: () => void; /** Opens as the full list (it was when a row opened a player's card). */ openTall?: boolean; /** Which height it is going to (the full list, or the tray), each time that changes. */ onTall?: (tall: boolean) => void; /** Where the list may reach (the map's height, the foot of the filters, the strip under the home indicator). */ room?: ListRoom; /** How far along the tray's faces were scrolled, kept by the map, so closing a player's card comes back to the same place. */ stripAt?: { current: number } }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowH, width: windowW } = useWindowDimensions();
   const stops = useListStops({ rows: items.length, room, windowH, windowW, openTall, onTall, onClose });
@@ -756,7 +769,9 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
     restored.current = true;
     if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
   };
-  const pick = (id: string) => { if (!stops.justDragged()) { haptics.tap(); onSelect(id); } };
+  // A friend's check-in flies the map to their pin; a Near me row (no pin) opens their profile.
+  const open = (p: Listed) => (townOf(p) !== null ? (onProfile ?? onSelect)(p.user.id) : onSelect(p.user.id));
+  const pick = (p: Listed) => { if (!stops.justDragged()) { haptics.tap(); open(p); } };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
   const keepAt = (e: NativeSyntheticEvent<NativeScrollEvent>) => { if (stripAt) stripAt.current = e.nativeEvent.contentOffset.x; };
   // The faces as they stand, for the crossfade to fade out: no ref, handlers or gesture, at the place they were scrolled to.
@@ -780,7 +795,7 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
       onMomentumScrollEnd={keepAt}
       onContentSizeChange={onStripSize}
     >
-      {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => pick(p.user.id)} />)}
+      {items.map((p) => <TrayFace key={p.user.id} placed={p} onPress={() => pick(p)} />)}
     </ScrollView>
   );
   // A chip or a search changing who is listed: the faces crossfade to the new set (Oct 22 sweep: swapped in one frame),
@@ -813,7 +828,7 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
       onContentSizeChange={stops.onContentSizeChange}
     >
       {items.map((p, i) => (
-        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={`${p.user.name}, ${formatSpotMiles(p.miles, p.rough)}`} onPress={() => onSelect(p.user.id)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
+        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={townOf(p) !== null ? `${p.user.name}, ${townOf(p)}. Open profile` : `${p.user.name}, ${placedFar(p)}`} onPress={() => open(p)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
           {/* A hairline between rows, from the names across, the way a contacts list draws it. */}
           {i > 0 ? <View pointerEvents="none" style={styles.listRowRule} /> : null}
           <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
@@ -822,7 +837,8 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
               <LevelPill profile={p.user.profile} small />
             </View>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[formatSpotMiles(p.miles, p.rough), p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            {/* A friend's check-in: how far and how long ago. A Near me row: only the town on their profile. */}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -843,8 +859,8 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
           )}
           <View style={styles.listTitleRow}>
             {/* "6 players near Raleigh" to "1 player…": the words crossfade rather than swap. */}
-            <CrossFade id={listTitle(items, query, filter, courts, cityName)} style={styles.listTitleBox}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={[styles.listTitle, styles.flexNone]} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName)}</Text>
+            <CrossFade id={listTitle(items, query, filter, courts, cityName, nearTown)} style={styles.listTitleBox}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={[styles.listTitle, styles.flexNone]} numberOfLines={1}>{listTitle(items, query, filter, courts, cityName, nearTown)}</Text>
             </CrossFade>
             {/* More players than fit across: See all opens them as the full list. */}
             {stops.canTall && !stops.up ? (
@@ -893,15 +909,17 @@ export function PlayersSheet({ items, cityName, onSelect, query = '', filter = '
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
-                : filter === 'following' ? 'Nobody you follow is sharing their spot nearby.'
-                  : filter !== 'all' ? 'Nobody nearby matches that.'
-                    : 'No one sharing nearby yet. Tap a court to see what’s played there.'}
+                : filter === 'following' ? 'Nobody you follow is up to hit.'
+                  : filter === 'near' ? (nearTown ? `No players in ${nearTown} yet.` : 'Add your city to your profile to see the players in your town.')
+                  : filter !== 'all' ? 'Nobody matches that.'
+                    // The map's people are friends who are up to hit, at any age (migration 189; the pill's own words, emptyLine).
+                    : 'No friends up to hit yet. Tap a court to see what’s played there.'}
             </Text>
           ) : (
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No one sharing nearby yet. The nearest courts:'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends up to hit yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
@@ -1008,14 +1026,17 @@ function EmptyBox({ from, onHeight, children }: { from: number; onHeight: (h: nu
  * ring round it when they are open to hit, the coach's mark on it), their
  * first name, their level, and how far and how long ago, small.
  */
-function TrayFace({ placed: p, onPress }: { placed: Placed; onPress: () => void }) {
+function TrayFace({ placed: p, onPress }: { placed: Listed; onPress: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const open = isOpenToHit(p.user);
-  const far = formatSpotMiles(p.miles, p.rough);
-  const ago = p.seenAt ? agoShort(p.seenAt) : '';
-  const said = [p.user.name, levelBadge(p.user.profile).label, far, p.seenAt ? agoLabel(p.seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
+  // A Near me row says only the town on their profile: never how far, never when (they have no pin).
+  const town = townOf(p);
+  const seenAt = 'seenAt' in p ? p.seenAt : undefined;
+  const far = town ?? placedFar(p);
+  const ago = seenAt ? agoShort(seenAt) : '';
+  const said = [p.user.name, levelBadge(p.user.profile).label, far, seenAt ? agoLabel(seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel={`${said}. Show on the map`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`${said}. ${town !== null ? 'Open profile' : 'Show on the map'}`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
       <OpenRing open={open} size={TRAY_FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} size={TRAY_FACE} ring={p.user.isCoach} /></OpenRing>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
       <LevelPill profile={p.user.profile} small style={styles.trayLevel} />
@@ -1128,7 +1149,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the players and courts near you.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
@@ -1293,9 +1314,10 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   const noteOn = useAnimatedStyle(() => ({ opacity: Math.max(0, lit.value * 2 - 1) }));
   // Who sees the ring follows Who can see you, the row under it: on Only me nobody else does, and
   // on Only people you follow back (always, for a teen) only those friends (map_players).
-  const ringNote = seenBy === 'none' || (teen && seenBy == null)
+  // The map is friends only, at any age, and only on a check-in (migration 189; Oct 27 audit #8): no yes, no one.
+  const ringNote = !saidYes(seenBy)
     ? 'Only you see your ring on the map.'
-    : teen || seenBy === 'mutuals' ? `Friends who follow you back see your green ring ${till}.` : `Players nearby see your green ring ${till}.`;
+    : `Friends who follow you back see your green ring ${till} while you’re up to hit.`;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -1617,8 +1639,8 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
   // only your friends come back, so an empty map says how to see the
   // players here, never "Be the first player on the map".
   const hint = lock === 'location' ? 'Turn on Location to see players' : lock === 'hidden' ? 'On Only me, players nearby are hidden' : null;
-  // Players first; with none sharing yet, the courts still say the map is worth opening.
-  const line = count === 1 ? '1 player around' : count ? `${count} players around`
+  // Friends first (the only people on the map, migration 189); with none checked in, the courts still say the map is worth opening.
+  const line = count === 1 ? '1 friend around' : count ? `${count} friends around`
     : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
       : hint ?? 'No one here yet';
   return (
@@ -1637,7 +1659,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
             : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Be the first player on the map</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
       </Animated.View>
       {checkIn ? (
@@ -1671,7 +1693,7 @@ export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
     <View style={styles.cityless}>
       <View style={styles.citylessDisc}><Ionicons name="location-outline" size={20} color={colors.brand} /></View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessTitle}>Where do you play?</Text>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the players near you.</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.citylessBody}>Add your city to see the courts and players in your town.</Text>
       <View style={styles.citylessActions}>
         <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />

@@ -39,6 +39,10 @@ export const darkColors: Palette = {
   launchLine: '#8A948F',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2E3A34', avatarTint2: '#3A3530', avatarTint3: '#3B3034', avatarTint4: '#2D3640', avatarTint5: '#35313D', avatarTint6: '#363A2E',
+  // The metals at night: bright inks on deep coins, warm against the green-black page.
+  medalGold: '#E6C165', medalGoldFill: '#383021',
+  medalSilver: '#CBD3DA', medalSilverFill: '#2A3236',
+  medalBronze: '#DE9B6B', medalBronzeFill: '#3B2A20',
 };
 
 /**
@@ -67,6 +71,10 @@ const cleanColors: Palette = {
   launchLine: '#5F6871',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
+  // On pure white the coins are a touch fuller than on the cream page, or they wash out.
+  medalGold: '#7E5C0C', medalGoldFill: '#F4E4B8',
+  medalSilver: '#5A6673', medalSilverFill: '#E5E9ED',
+  medalBronze: '#8C502F', medalBronzeFill: '#F2DDC6',
 };
 
 /**
@@ -95,6 +103,10 @@ const aoColors: Palette = {
   launchLine: '#496273',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D3E3EF', avatarTint2: '#E4DED2', avatarTint3: '#EBD8D4', avatarTint4: '#D5E5DD', avatarTint5: '#DDD9EA', avatarTint6: '#E3E6D3',
+  // Silver's coin leans a little cooler here, so it still reads as metal on the blue page.
+  medalGold: '#7D5B0C', medalGoldFill: '#F2E3B8',
+  medalSilver: '#56636F', medalSilverFill: '#DCE4EB',
+  medalBronze: '#8B5030', medalBronzeFill: '#EEDAC4',
 };
 
 /**
@@ -122,6 +134,10 @@ const rolandGarrosColors: Palette = {
   launchLine: '#6D5745',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#EBD9CB', avatarTint2: '#E2DDCC', avatarTint3: '#D9DFD5', avatarTint4: '#DDD8E2', avatarTint5: '#EFD5CF', avatarTint6: '#D7DEE3',
+  // Bronze browner than the court's brick, so 3rd never reads as just the brand colour here.
+  medalGold: '#7C5A0B', medalGoldFill: '#F1E3BB',
+  medalSilver: '#58636E', medalSilverFill: '#E3E3E3',
+  medalBronze: '#7D4B2A', medalBronzeFill: '#EAD2BE',
 };
 
 /**
@@ -149,6 +165,9 @@ const wimbledonColors: Palette = {
   launchLine: '#586552',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D9E6CF', avatarTint2: '#E6E0CC', avatarTint3: '#E9D8D7', avatarTint4: '#D3E0E4', avatarTint5: '#DED9E6', avatarTint6: '#E4E5D0',
+  medalGold: '#7D5C0D', medalGoldFill: '#F1E3B6',
+  medalSilver: '#58646E', medalSilverFill: '#DFE4E5',
+  medalBronze: '#8B5131', medalBronzeFill: '#EEDAC2',
 };
 
 /**
@@ -177,6 +196,12 @@ const usOpenColors: Palette = {
   launchLine: '#A9B9CA',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',
+  // Gold a warmer amber than the ball's yellow (the brand here), so 1st never reads as "yours";
+  // silver a bright steel on a grey steel coin (a blue-grey one read as the page's own navy, not as
+  // metal; review, Oct 28); bronze a copper.
+  medalGold: '#F0C258', medalGoldFill: '#4B4127',
+  medalSilver: '#D9E0E7', medalSilverFill: '#3B444E',
+  medalBronze: '#E9A676', medalBronzeFill: '#4B3934',
 };
 
 export type ThemeName = 'default' | 'clean' | 'night' | 'ao' | 'roland-garros' | 'wimbledon' | 'us-open';

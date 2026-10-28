@@ -42,6 +42,9 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
+import { CityBoardPreview } from '@/components/CityBoardPreview';
+import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
+import { useCityFill } from '@/features/cityBoard/fill';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
@@ -65,6 +68,7 @@ import { formatMiles, formatSpotMiles, milesBetween, spotMilesKey } from '@/feat
 import { isRoughSpot, placeFor } from '@/features/players/positions';
 import { nearestPlace } from '@/data/locations';
 import { useMyCity } from '@/features/players/useMyCity';
+import { useTownPlayers } from '@/features/players/nearMe';
 import { useFindable } from '@/features/people/findable';
 import { isOpenToHit as isOpenToHitNow } from '@/features/players/openToHit';
 import { plain } from '@/features/search/words';
@@ -113,6 +117,8 @@ const NEW_SHOWN = 6;
 /** Keys for the folding lists (FoldList): a hit by its id, a player by theirs. */
 const hitKey = (x: { hit: { id: string } }) => x.hit.id;
 const userKey = (u: { id: string }) => u.id;
+/** A Near you row listed by its town (nearMe), keyed by the player. */
+const townRowKey = (t: { user: { id: string } }) => t.user.id;
 const NO_HITS: never[] = [];
 const SORT_HINT = { new: 'Newest first', hot: 'Busiest right now', top: 'Most upvoted', unanswered: 'Nobody has replied yet' } as const;
 /** "Joined 3 days ago", for New on CourtSide. */
@@ -442,6 +448,17 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       // In the order the distances read: a rough "~1 mi" never after "1.1 mi".
       .sort((a, b) => spotMilesKey(a.miles, a.rough) - spotMilesKey(b.miles, b.rough) || a.miles - b.miles);
   }, [users, lastSeen, currentUserId, blockedIds, nearFrom?.lat, nearFrom?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  // And, under them, the players whose own profile town is yours (Oct 27, owner: "Near me should show people
+  // that have their location set in the area, like the city"): the same list as the map's Near me (nearMe,
+  // migration 190), most recently active first, by their town only, never a spot or a distance. The server
+  // says who (a teen never to a stranger). Not counted as anyone on the map: "You're early" still means no
+  // friend checked in.
+  const townPlayers = useTownPlayers();
+  const townNear = useMemo(() => {
+    const listed = new Set(nearPlayers.map((p) => p.user.id));
+    return townPlayers.filter((t) => !listed.has(t.user.id));
+  }, [nearPlayers, townPlayers]);
+  const [nearOpen, setNearOpen] = useState(false);
   // "New on CourtSide": who joined in the last two weeks, newest first. With
   // the map's round 2 on the database (migration 63) the server decides who
   // (new_on_courtside): known adults (to a known adult), and anyone you
@@ -456,7 +473,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const usersIn = users.length > 0;
   useEffect(() => { if (currentUserId && usersIn) void loadNewOnCourtside(); }, [currentUserId, mapLive, usersIn, followingIds.length, loadNewOnCourtside]);
   const newPlayers = useMemo(() => {
-    const near = new Set(nearPlayers.map((p) => p.user.id));
+    const near = new Set([...nearPlayers, ...townNear].map((p) => p.user.id));
     // Your own town first (Oct 5): in Boise, the newest player in Raleigh is not who to follow first.
     const townFirst = (list: typeof users) => [...list].sort((a, b) => Number(sameCity(b)) - Number(sameCity(a)));
     if (newOnCourtside) {
@@ -470,14 +487,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       // (Since migration 64 nobody's age but your own reaches the phone: then only people you follow.)
       .filter((u) => followingIds.includes(u.id) || (viewerAdult && ageSaysAdult(u)))
       .sort((a, b) => b.joinedAt.localeCompare(a.joinedAt)));
-  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, newOnCourtside, ageSaysAdult, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [users, currentUser, currentUserId, blockedIds, followingIds, nearPlayers, townNear, newOnCourtside, ageSaysAdult, myCity]); // eslint-disable-line react-hooks/exhaustive-deps
   // Nobody new in your own town: the list says these are from other cities, rather than looking like your neighbours.
   const newElsewhere = !!myCity && newPlayers.length > 0 && !newPlayers.some(sameCity);
   // And with players near you already listed above, those from other cities wait behind one quiet link
   // (a second column of Follow buttons for strangers far away helps nobody). In an empty town they are
   // the only people there are, so they show in full.
   const [elsewhereOpen, setElsewhereOpen] = useState(false);
-  const newTucked = newElsewhere && nearPlayers.length > 0 && !elsewhereOpen;
+  const newTucked = newElsewhere && nearPlayers.length + townNear.length > 0 && !elsewhereOpen;
   // "Open to hit" (was "Who's up today"): from the map's own pins only (nobody is placed by
   // their profile's city), measured from the same spot as Near you below: where you are (the
   // phone's fix, or your own last spot), else your profile's city. With Location off the row
@@ -495,7 +512,19 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Only for a known adult: a teen sees only friends who follow each other
   // with them (migration 78; before it, nobody), so an empty list says nothing
   // about the town for them.
-  const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // City boards (migration 196; owner, Oct 28: "New rank city sessions is good"), admins first
+  // (CITY_BOARD_FOR_EVERYONE): this month's board takes the invite card's place, fading into Open to hit,
+  // while there is a board to show (on its way, or your city on it or waiting for players). Off, not open
+  // to you, or not loaded: the page is exactly as before.
+  const cityBoard = useCityBoard();
+  const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
+  const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home
+  // city's regulars (by the town on their profile, never where they are), as the server picked them for you.
+  const homeCityId = boardShown ? cityBoard.board?.me.cityId ?? null : null;
+  const homeCityName = homeCityId ? cityBoard.board?.me.cityName ?? null : null;
+  const homePage = useCityPage(homeCityId, cityBoard.month).page;
+  const upFill = useCityFill(homeCityId ? homePage : null, upToday.map((p) => p.user.id));
   // The same moment for a teen, or anyone not known to be an adult (Oct 5,
   // owner: "Do all"): no friend on their map yet, which for them says only
   // that their friends are not here yet. "Bring your friends" takes the
@@ -710,9 +739,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
+        {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
+            People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
+        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
@@ -723,7 +755,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             <View style={styles.hitsHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
               {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
-              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None near you yet.'}</Text>}
+              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None at courts near you yet.'}</Text>}
             </View>
             {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
                 the title. With nothing open and a public court close by, it starts the hit at that
@@ -732,7 +764,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 elsewhere is a photo or clip. */}
             {(() => {
               const court = !listedHits.length ? promptCourt : null;
-              const who = hitsForFriends ? 'Friends who follow you' : 'Players nearby';
+              const who = hitsForFriends ? 'Friends who follow you' : 'Players';
               return (
                 <PostHitField
                   label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
@@ -819,12 +851,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </View>
         </Fold>
         {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
-        {/* Near you: friends checked in within 30 miles (only friends since migration 189), the same "near" as the map. */}
-        {!search && nearPlayers.length ? (
+        {/* Near you: friends checked in within 30 miles (only friends since migration 189), with how far, then the players
+            whose profile town is yours (migration 190), by their town only: the same "near" as the map's Near me. */}
+        {!search && (nearPlayers.length || townNear.length) ? (
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>Friends up to hit within 30 miles</Text>}
+              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends up to hit, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends up to hit within 30 miles'}</Text>}
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
@@ -838,6 +871,25 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 </View>
               </Pressable>
             ))}
+            {/* In your town by their profile: the town where a friend's row says how far; Show all unfolds the rest. */}
+            <FoldList items={nearOpen ? townNear : townNear.slice(0, NEW_SHOWN)} keyOf={townRowKey} render={({ user, town }, index) => (
+              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${town}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+                <View style={[styles.playerBody, styles.playerFollowBody, (index > 0 || nearPlayers.length > 0) && styles.playerLine]}>
+                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[town, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+                  </View>
+                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+                </View>
+              </Pressable>
+            )} />
+            {townNear.length > NEW_SHOWN ? (
+              <Pressable accessibilityRole="button" accessibilityState={{ expanded: nearOpen }} onPress={() => setNearOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{nearOpen ? 'Fewer' : `Show all (${townNear.length})`}</Text>
+                <Ionicons name={nearOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}

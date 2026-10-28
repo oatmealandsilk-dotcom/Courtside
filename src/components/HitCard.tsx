@@ -87,12 +87,14 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
   const styles = useThemedStyles(styleDefinitions);
   const rested = usePaneRested(!!tip && restKey !== undefined, restKey);
   const tipReady = listReady && (restKey === undefined || rested);
-  const { users, currentUserId, actions } = useApp();
+  const { users, currentUserId, actions, blockedIds, blockedMeIds } = useApp();
   const [busy, setBusy] = useState(false);
   const cardRef = useRef<View>(null);
   const author = users.find((u) => u.id === hit.authorId);
   const posterFirst = author?.name.split(' ')[0] ?? 'The poster';
-  const joined = hit.joinedIds.map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
+  // Never someone blocked either way (Oct 27 audit #4; the server leaves them out too, migration 191).
+  const joined = hit.joinedIds.filter((id) => !blockedIds.includes(id) && !blockedMeIds.includes(id))
+    .map((id) => users.find((u) => u.id === id)).filter((u): u is NonNullable<typeof u> => !!u);
   const mine = hit.authorId === currentUserId;
   const inIt = !!currentUserId && hit.joinedIds.includes(currentUserId);
   // "Can't make it" while the hit is still on the lists (until an hour after its start, openHits),
@@ -234,7 +236,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
             </View>
           ) : null}
           {mine && hit.audience === 'invite_first' && left > 0 ? (
-            <SwipePressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It goes on Find Players and the map for players nearby, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
+            <SwipePressable accessibilityRole="button" accessibilityLabel="Open to everyone now" onPress={(e) => { e.stopPropagation?.(); confirm({ title: 'Open to everyone now?', message: 'It shows at its court on Find Players and the map, for everyone, not just the people you invited.', confirmLabel: 'Open it', onConfirm: () => { void actions.openHitNow(hit.id); } }); }} style={({ pressed }) => [styles.openNow, pressed && { opacity: PRESS_DIM }]}>
               <Ionicons name="earth-outline" size={15} color={colors.text} />
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNowText}>Open to everyone now</Text>
             </SwipePressable>

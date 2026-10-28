@@ -3,6 +3,7 @@ import type { MapVisibility } from '@/data/types';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
+import { confirm } from '@/lib/confirm';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
 import { liveCheckIn } from '@/features/players/checkIn';
 import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
@@ -98,7 +99,10 @@ export interface CheckInZoomHooks {
  * then it goes by itself. Tapped again: Check out, gone at once. The first
  * time, "Who can see you on the map?" comes first (yes, or Not now: then
  * nothing happens), then Apple's own prompt. `where` says which button the
- * one tip after the first check-in points at.
+ * one tip after the first check-in points at. In the full map ('map') the
+ * button is the round arrow, which also reads as "find me": after the first
+ * time a one-line question comes first (Oct 27 audit #11), so a tap meant to
+ * recentre never shows you to anyone.
  *
  * `zoom`: the check-in zoom (checkInZoom), when it is on for you (CheckInZoomHooks).
  */
@@ -127,6 +131,17 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
       const chose = await askWhoSeesYou('first');
       if (!saidYes(chose)) return;
       first = true;
+    } else if (where === 'map') {
+      // The round arrow: "Up to hit?" first, every time (the first time, the question above was it).
+      const yes = await new Promise<boolean>((resolve) => confirm({
+        title: 'Up to hit?',
+        message: `Friends who follow you back see where you are ${litSpan()}.`,
+        confirmLabel: 'Up to hit',
+        cancelLabel: 'Not now',
+        onConfirm: () => resolve(true),
+        onCancel: () => resolve(false),
+      }));
+      if (!yes) return;
     }
     // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
     const zooming = !!zoomRef.current;
