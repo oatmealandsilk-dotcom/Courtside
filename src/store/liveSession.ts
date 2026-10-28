@@ -13,10 +13,12 @@ import type { CourtLifeActions } from '@/store/courtLife';
  * app's state, the way store/courtLife is: the session lives in AppContext
  * with everything else, the actions are written here.
  *
- * Start runs a clock and, at a court on the map, checks you in there with
- * the court sheet's own "I'm playing here" (checkInAtCourt, migration 63),
- * so its rules are the ones that decide who sees you: nothing new is shared.
- * Finish stops the clock and checks you out; the "Log it" composer then fills
+ * Start runs a clock, and only the clock: it never shows you to anyone (Oct
+ * 27 audit #3, Apple 5.1.2(i): a check-in is its own tap, each time). The
+ * session's page has Show friends, which checks you in at its court with the
+ * court sheet's own "I'm playing here" (checkInAtCourt), after a yes to "Who
+ * can see you on the map?", so its rules are the ones that decide who sees
+ * you. Finish stops the clock and checks you out; the "Log it" composer then fills
  * itself in from it (app/compose?live=1, Oct 7; under five minutes Finish asks
  * instead: features/activity/finishLive). The session is kept on this phone, for
  * each account, so it survives the app closing; the server never has it.
@@ -40,14 +42,13 @@ interface Reads {
 
 export interface LiveSessionActions {
   /**
-   * Start: the clock runs from now. At a court on the map you are checked in
-   * there too, where the court sheet would let you ("I'm playing here").
-   * Resolves once that has gone through or been refused. A session already
+   * Start: the clock runs from now. Nothing is shared: Show friends on the
+   * session's page is a tap of its own (Oct 27 audit #3). A session already
    * going is kept, never started twice.
    */
   startLiveSession: (input: { kind: LiveSession['kind']; court?: TaggedCourt | null; place?: string; access?: CourtAccess }) => Promise<LiveSession | null>;
   pauseLiveSession: () => void;
-  /** Goes on from a pause, or from Finish (the log not saved yet): checked in again where Start checked you in. */
+  /** Goes on from a pause, or from Finish (the log not saved yet). Never checks you in again by itself: Show friends does. */
   resumeLiveSession: () => void;
   /** Stops the clock and checks you out; the session waits to be logged. */
   finishLiveSession: () => void;
@@ -55,7 +56,7 @@ export interface LiveSessionActions {
   discardLiveSession: () => void;
   /** It has been logged: done with. */
   endLiveSession: () => void;
-  /** "Let friends see you're here", after a check-in that did not happen. Resolves the refusal, or null. */
+  /** Show friends ("Let friends see you're here"), a tap each time, after a yes (the page asks first). Resolves the refusal, or null. */
   checkInLiveSession: () => Promise<string | null>;
   /** "Still playing?" was asked (Keep going, or put away): the clock runs on, and it is asked again two hours later. */
   keepGoingLiveSession: () => void;
@@ -145,10 +146,10 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
       pausedMs: 0, checkedIn: false,
     };
     // No beat here: Start's own button gives it, as its ring closes (components/session/StartButton).
+    // No check-in either (Oct 27 audit #3): Show friends on the session's page, a tap of its own, does that.
     put(me, s);
-    await checkIn(s, input.access);
     return latest.current ?? s;
-  }, [stateRef, put, checkIn]);
+  }, [stateRef, put]);
 
   const pauseLiveSession = useCallback(() => {
     const s = latest.current;
@@ -167,10 +168,9 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
     const stoppedAt = Date.parse((state === 'finished' ? s.endedAt : s.pausedAt) ?? new Date(now).toISOString());
     const { pausedAt: _p, endedAt: _e, ...rest } = s;
     const next: LiveSession = { ...rest, pausedMs: s.pausedMs + Math.max(0, now - stoppedAt) };
-    put(s.userId, next);
-    // Finish checked you out: going on puts you back where Start checked you in.
-    if (state === 'finished' && s.checkedIn) void checkIn(next);
-  }, [stateRef, put, checkIn]);
+    // Finish checked you out, and going on does not check you in again (Oct 27 audit #3): Show friends does.
+    put(s.userId, state === 'finished' ? { ...next, checkedIn: false } : next);
+  }, [stateRef, put]);
 
   const finishLiveSession = useCallback(() => {
     const s = latest.current;
@@ -209,8 +209,9 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
   }, [put]);
 
   // Signed in: this account's session from the phone, if one was going. A
-  // check-in it made is put back: the server's still stands for its two
-  // hours (asked again here), the demo's lived only in the closed page.
+  // check-in it made is only looked up: the server's still stands for its two
+  // hours; the demo's lived only in the closed page and is never put back by
+  // itself (Oct 27 audit #3: only Show friends checks in).
   useEffect(() => {
     if (!currentUserId) return undefined;
     let on = true;
@@ -220,8 +221,7 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
       const s = valid(found) && found.userId === currentUserId ? found : null;
       setState((prev) => (prev.currentUserId !== currentUserId ? prev : { ...prev, liveSession: prev.liveSession ?? s, liveSessionRead: true }));
       if (!s?.court || !s.checkedIn || liveState(s) === 'finished') return;
-      if (live(currentUserId)) void courts.loadCourtInfo([s.court.id]);
-      else void courts.checkInAtCourt(s.court.id);
+      void courts.loadCourtInfo([s.court.id]);
     });
     return () => { on = false; };
   }, [currentUserId]); // eslint-disable-line react-hooks/exhaustive-deps

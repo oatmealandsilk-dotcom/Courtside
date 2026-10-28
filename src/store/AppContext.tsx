@@ -510,6 +510,14 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   /** New on CourtSide as the server lists it for you (migration 63), newest first; null until asked, or before 63. */
   newOnCourtside: { userId: ID; joinedAt: string }[] | null;
   /**
+   * Near me (migration 190): the players whose own profile town is yours, as
+   * the server lists them for you (players_in_town: friends who follow each
+   * other with you; anyone else only a known adult, to a known adult), most
+   * recently active first. Only who, never where: shown by the town on their
+   * profile. Null until asked, or before 190.
+   */
+  townPlayers: ID[] | null;
+  /**
    * The Question of the week (Oct 20 sweep, R5; migration 169): the thread an
    * admin pinned to the top of Discussions, and when. Null when none is
    * pinned (a pin lasts 7 days). A guest's comes with guest mode's own data.
@@ -643,7 +651,7 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     ...freshAccountSettings(),
   };
@@ -664,6 +672,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
   loadNewOnCourtside: () => Promise<void>;
+  /** Asks who is in your town for Near me (migration 190); before it, nobody but friends checked in is listed. At most once a minute for the same town. */
+  loadTownPlayers: () => Promise<void>;
   /**
    * Asks again whose tournament plans you may see (migration 123: only
    * friends who follow each other), so a follow-back since the app opened
@@ -2407,6 +2417,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     mapVisibility: isSupabaseConfigured ? undefined : readDemoVisibility(),
     teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
+    townPlayers: null,
     pinnedQuestion: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
@@ -4177,6 +4188,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!rows || stateRef.current.currentUserId !== me) return;
     // (Every profile comes down with the app's first load, so each one listed is already on the phone.)
     setState((prev) => ({ ...prev, newOnCourtside: rows, mapLive: true }));
+  }, []);
+
+  // Near me's town list (migration 190): asked when Find Players or the map wants it, at most once a minute for the same town.
+  const townAsked = useRef<{ key: string; at: number } | null>(null);
+  const loadTownPlayers = useCallback(async () => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return;
+    const self = s.users.find((u) => u.id === me);
+    const key = `${me}|${(self?.location ?? '').trim().toLowerCase()}|${self?.cityAt ? `${self.cityAt.lat},${self.cityAt.lng}` : ''}`;
+    const last = townAsked.current;
+    if (last && last.key === key && Date.now() - last.at < 60_000) return;
+    townAsked.current = { key, at: Date.now() };
+    if (!live(me)) {
+      setState((prev) => ({ ...prev, townPlayers: demoApi.playersInTown({ me, users: prev.users, posts: prev.posts, followingIds: prev.followingIds, followEdges: prev.followEdges, blockedIds: prev.blockedIds }) }));
+      return;
+    }
+    const ids = await remote.fetchPlayersInTown();
+    // Not answered (offline, or a database before 190): what was listed stays, and the next ask a minute on tries again.
+    if (!ids || stateRef.current.currentUserId !== me) return;
+    // (Every profile comes down with the app's first load, so each one listed is already on the phone.)
+    setState((prev) => ({ ...prev, townPlayers: ids }));
   }, []);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled' | 'opensAt'>): Promise<ID> => {
@@ -9495,6 +9528,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       checkInOnMap,
       checkOutOfMap,
       loadNewOnCourtside,
+      loadTownPlayers,
       loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
@@ -9751,6 +9785,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       checkInOnMap,
       checkOutOfMap,
       loadNewOnCourtside,
+      loadTownPlayers,
       loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
@@ -10206,7 +10241,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
     hitRequests: [], lastSeen: {}, followingIds: [], followEdges: [], followRequests: [], tips: [], sessions: [], sessionTags: [],
     saved: { postIds: [], questionIds: [] }, mutedIds: [], reportedIds: [], blockedIds: [], blockedMeIds: [], alertIds: [],
-    newOnCourtside: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
+    newOnCourtside: null, townPlayers: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
   } satisfies Partial<AppState>), [isGuest, guest]);
   const value = useMemo<AppContextValue>(
     () => (guestValue

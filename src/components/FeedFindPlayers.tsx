@@ -80,7 +80,7 @@ export function FeedFindPlayers({ room }: { room: number }) {
   const cardHeight = Math.max(MIN_CARD, Math.min(CARD_HEIGHT, room - OVER));
   return (
     <View style={styles.wrap}>
-      <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={1.2}>Find players near you</Text>
+      <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={1.2}>Find players</Text>
       <NearbyMap
         cardHeight={cardHeight}
         // Not what the app opens on: it never holds the opening curtain.

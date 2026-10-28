@@ -15,7 +15,7 @@ const HOUR = 3_600_000;
  * row and menu show, and the one line a screen reader hears with it.
  */
 export const AUDIENCES: { value: HitAudience; title: string; line: string }[] = [
-  { value: 'everyone', title: 'Everyone', line: 'Players nearby see it on Find Players.' },
+  { value: 'everyone', title: 'Everyone', line: 'Anyone sees it at its court, on Find Players and the map.' },
   { value: 'invite_first', title: 'Invite first', line: 'Your invites get first go, then it opens to everyone.' },
   { value: 'invite_only', title: 'Only people I invite', line: 'No one else sees it.' },
 ];

@@ -232,7 +232,7 @@ export default function NewHit() {
     showToast({
       title: 'Your hit is up',
       // Short enough to sit beside "Send to a chat" on a phone without being cut off.
-      body: forFriends ? 'Friends who follow you back can see it.' : 'Players nearby can see it.',
+      body: forFriends ? 'Friends who follow you back can see it.' : 'Players can see it at its court.',
       icon: 'checkmark-circle-outline',
       action: { label: 'Send to a chat', onPress: () => router.push({ pathname: '/share', params: { kind: 'hit-request', id } }) },
     });

@@ -285,6 +285,40 @@ export function newOnCourtside({ me, users: everyone, followingIds, blockedIds, 
     .map((u) => ({ userId: u.id, joinedAt: u.joinedAt }));
 }
 
+/* ------------------------------------------- Near me (migration 190) */
+
+/** "Raleigh, NC" → "raleigh": two profiles in the same town share this. */
+const townKey = (location: string | undefined) => (location ?? '').split(',')[0].trim().toLowerCase();
+
+/**
+ * The demo's stand-in for players_in_town(): the players whose own profile
+ * town is yours, by the same rule. In your town: within 30 miles when both
+ * towns were picked from the search (by their centres, never a live spot),
+ * else the same town by name. Who: friends who follow each other with you,
+ * any age; anyone else only a known adult, and only to a known adult (the
+ * demo's fixtures by their own age), so a teen is never listed to a
+ * stranger. Never you, anyone blocked, or a suspended account. Most
+ * recently active first (their newest post, else when they joined), at most 60.
+ */
+export function playersInTown({ me, users: everyone, posts: all, followingIds, followEdges, blockedIds }: { me: ID; users: User[]; posts: Post[]; followingIds: ID[]; followEdges: { followerId: ID; followingId: ID }[]; blockedIds: ID[] }): ID[] {
+  const viewer = everyone.find((u) => u.id === me);
+  const mine = townKey(viewer?.location);
+  if (!viewer || (!mine && !viewer.cityAt)) return [];
+  const adult = viewer.ageGroup !== 'teen';
+  const following = new Set(followingIds);
+  const followsMe = new Set(followEdges.filter((e) => e.followingId === me).map((e) => e.followerId));
+  const lastPost = new Map<ID, string>();
+  for (const p of all) if ((lastPost.get(p.authorId) ?? '') < p.createdAt) lastPost.set(p.authorId, p.createdAt);
+  const active = (u: User) => lastPost.get(u.id) ?? u.joinedAt;
+  const inTown = (u: User) => (viewer.cityAt && u.cityAt ? milesBetween(viewer.cityAt, u.cityAt) <= 30 : !!mine && townKey(u.location) === mine);
+  return everyone
+    .filter((u) => u.id !== me && !blockedIds.includes(u.id) && !u.suspended && inTown(u))
+    .filter((u) => (following.has(u.id) && followsMe.has(u.id)) || (adult && u.ageGroup === 'adult'))
+    .sort((a, b) => active(b).localeCompare(active(a)) || b.joinedAt.localeCompare(a.joinedAt))
+    .slice(0, 60)
+    .map((u) => u.id);
+}
+
 /* ------------------------------------------- Session tags (migration 62) */
 
 /*
