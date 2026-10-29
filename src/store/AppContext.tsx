@@ -4266,19 +4266,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /**
    * Who sees your sessions that log themselves (migration 193). The server's
-   * read rule follows it at once, for the ones already logged too; your own
-   * posts of them here go on Only me (they come back with the next load).
+   * read rule follows it at once, for the ones already logged too. Your own
+   * stay with you whatever you choose (Oct 28: a player always sees their own
+   * sessions in Activities and on their profile; Only me means nobody else).
    */
   const setAutoLogSharing = useCallback(async (v: AutoLogAudience): Promise<boolean> => {
     const me = stateRef.current.currentUserId;
     const was = stateRef.current.autoLogSharing;
     haptics.tap();
     setState((prev) => ({ ...prev, autoLogSharing: v }));
-    const hideOwn = () => { if (v === 'private' && me) setState((prev) => ({ ...prev, posts: prev.posts.filter((p) => !(p.autoLogged && p.authorId === me)) })); };
     if (!live(me)) {
       // The demo keeps it in the browser, the way the server keeps it with the account.
       try { if (Platform.OS === 'web') localStorage.setItem(DEMO_AUTO_LOG_SHARING_KEY, v); } catch {}
-      hideOwn();
       return true;
     }
     const kept = await remote.setAutoLogSharing(v);
@@ -4286,7 +4285,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (kept === null) { setState((prev) => ({ ...prev, autoLogSharing: was })); return false; }
     // 'public' is kept as 'mutuals' for anyone not known to be an adult.
     setState((prev) => ({ ...prev, autoLogSharing: kept }));
-    hideOwn();
     return true;
   }, []);
 

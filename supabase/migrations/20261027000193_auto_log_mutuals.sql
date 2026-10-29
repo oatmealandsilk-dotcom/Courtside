@@ -37,7 +37,8 @@
 --      session ("Not tennis? Remove", Your sessions, the tracker taking it
 --      back) takes the server's post with it, and so does disconnecting a
 --      tracker and removing what it sent. Only me hides every one of them at
---      once, from everyone; switching back shows them again.
+--      once from everyone but the player (who still sees their own in
+--      Activities and on their profile); switching back shows them again.
 --   4. Apple Health (Guideline 5.1.3, health data shown to other people only
 --      with a clear yes): a session from Apple Health or Health Connect is
 --      shown to anyone only once the player has made the choice in step 1
@@ -174,9 +175,10 @@ $$;
 
 -- The read rule's question (step 3): may whoever is asking see post p_id?
 -- True for any post the server did not make (the other rules decide those).
--- One it made: its player, and their audience, while the player has not
--- posted the session themselves. Signed out: never. One held back
--- (auto_held) goes by Apple Health's rule: nobody else until they chose.
+-- One it made: its player (always, Only me and held back included), and
+-- their audience, while the player has not posted the session themselves.
+-- Signed out: never. One held back (auto_held) goes by Apple Health's rule:
+-- nobody else until they chose.
 create or replace function public.auto_post_shown(p_id uuid) returns boolean
 language plpgsql stable security definer set search_path = public as $$
 declare
@@ -199,9 +201,12 @@ begin
             or (v_session ? 'activityId' and lower(q.session->>'activityId') = lower(v_session->>'activityId')))) then
     return false;
   end if;
+  -- Its player always (Oct 28: a player sees their own sessions in Activities and on their profile,
+  -- on Only me and while held back too; "Only me" means nobody else).
+  if v_me = v_author then return true; end if;
   v_aud := public.auto_log_audience_of(v_author, case when v_held then 'apple-health' else v_session->>'source' end);
   if v_aud = 'private' then return false; end if;
-  if v_me = v_author or v_aud = 'public' then return true; end if;
+  if v_aud = 'public' then return true; end if;
   return public.follow_each_other(v_me, v_author);
 end $$;
 
@@ -995,7 +1000,7 @@ declare
     "first_day_stats()": "0c3035690a2912d05759871ed9b4fe5e",
     "auto_log_audience_of(uuid,text)": "293871d300210378c59492ba6cf530f6",
     "auto_log_seen_by(uuid,text,boolean)": "5bef48ae8ad986f188a8455ad5572910",
-    "auto_post_shown(uuid)": "e0bc185ffa5d520e51e17cc14b290970",
+    "auto_post_shown(uuid)": "817120565ce9e19e1834f29349c68404",
     "guard_auto_post()": "7a56a8f8282dd1d7b4d54219135d3e5f",
     "auto_post_for_session(uuid,boolean)": "a922725c8beee32d80959b8ab502067a",
     "auto_post_follows_session()": "a943542e975922638c38f9ddc7d89f20",
