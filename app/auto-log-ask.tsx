@@ -171,10 +171,10 @@ export default function AutoLogAsk() {
           >
             {/* Who a yes shows them to, by face and name: real friends who follow you back only; none, no row. */}
             {friends.length ? <Faces people={friends} words={sees} label={sees} lines={2} /> : null}
-            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>Show your tennis to friends?</Text>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>Let friends see your tennis?</Text>
             {/* Apple 5.1.3: who sees them and exactly what of them, said before the yes. */}
             <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(sourcesWords(currentUserId, detectedActivities), currentUser, teen)}</Text>
-            <Text {...EVEN} style={[styles.cardLine, EVEN_WEB]}>Right now only you see them. Friends can like and comment on them in Activities. Change it anytime in Settings.</Text>
+            <Text {...EVEN} style={[styles.cardLine, styles.cardSmall, EVEN_WEB]}>Only friends who follow you back · change anytime in Settings</Text>
           </ScrollView>
           <View style={styles.cardActions}>
             {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}
@@ -224,6 +224,7 @@ const styleDefinitions = StyleSheet.create({
   cardWords: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2 },
   cardTitle: { ...typography.heading, lineHeight: 22, color: colors.text },
   cardLine: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.textMuted, marginTop: spacing.xs },
+  cardSmall: { fontSize: 12.5, lineHeight: 17, color: colors.textFaint },
   cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: spacing.md, gap: spacing.xs },
   // Keep private: plain words under the button, a full finger's height, in the page's own ink.
   keep: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, borderRadius: BUTTON_CORNER },

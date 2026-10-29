@@ -59,17 +59,19 @@ export function sourcesWords(me: string | null, activities: Pick<DetectedActivit
  * `user` and `teen` are kept so a teen's card reads the same way.
  */
 export function askLine(sources: string, _user?: Pick<User, 'ageGroup'> | null, _teen = false): string {
-  return `Your sessions from ${sources} will show to friends who follow you back, with heart rate, zones and calories.`;
+  // Wording A (owner, Oct 29: "the wording can be better on card" → "A").
+  const what = sources === 'your tracker' ? 'tracker' : sources;
+  return `Your ${what} sessions show up in Activities, so friends can like and comment. Heart rate and calories included.`;
 }
 
-/** "Sam, Marcus and 5 friends will see them" (real friends who follow you back; none, no line). */
+/** "Sam, Marcus and 5 friends" (real friends who follow you back; none, no line). Wording A, Oct 29: the names alone. */
 export function willSeeWords(people: Pick<User, 'name'>[]): string {
   const first = people.map((u) => u.name.split(' ')[0]);
   if (!first.length) return '';
-  if (first.length === 1) return `${first[0]} will see them`;
-  if (first.length <= 3) return `${first.slice(0, -1).join(', ')} and ${first[first.length - 1]} will see them`;
+  if (first.length === 1) return first[0];
+  if (first.length <= 3) return `${first.slice(0, -1).join(', ')} and ${first[first.length - 1]}`;
   const rest = first.length - 2;
-  return `${first.slice(0, 2).join(', ')} and ${rest} ${rest === 1 ? 'friend' : 'friends'} will see them`;
+  return `${first.slice(0, 2).join(', ')} and ${rest} ${rest === 1 ? 'friend' : 'friends'}`;
 }
 
 /**
