@@ -9,6 +9,7 @@ import { beginPageFade } from './ThemeFade';
 import { ScreenFadeHost, fadeScreen, screenDrawn } from './screenFade';
 import { PHONE_APPEARANCE, onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
 import { keysAtOpen, keysAtOpenNow, usedBefore } from '@/lib/usedBefore';
+import { storedLoginId, storedLoginNow } from '@/lib/supabase';
 import { claimedDepth } from '@/features/navigation/gestureClaim';
 import { isPageDragging, isPageScrolling, subscribePageDragging } from '@/features/navigation/swipeLock';
 
@@ -350,11 +351,25 @@ let autoDark = false;
 /** The phone (or browser) in dark mode, as last heard. */
 let phoneIsDark = false;
 
+/*
+ * Signed out (Oct 29, owner: "I clicked a web link to a discussion and I was on Australian open
+ * theme. I think it should always be on ckean or courtside theme or night", then "Clean or night
+ * for people who open link without based off of if their phone is dark or light mode"). Anyone not
+ * signed in (a link opened on the website, guest mode, the sign-in and sign-up pages) sees Clean
+ * while the phone or browser is light and Night while it is dark, following it as Match phone does.
+ * The court saved here and Match phone are left as they are, only not shown: once signed in, they
+ * show exactly as before. Set from the saved login as the app opens (a guess, so a returning
+ * player never opens on Clean first), then from the account itself (VisitorThemeGate).
+ */
+let signedOut = false;
+/** Set once the account itself has said (VisitorThemeGate), so a late read of the saved login never overrides it. */
+let accountKnown = false;
+
 /** What shows for a court picked, with Match phone on or off and the phone dark or light. */
 export function shownFor(court: ThemeName, auto: boolean, dark: boolean): ThemeName {
   return auto && dark && !DARK_THEMES.has(court) ? 'night' : court;
 }
-const shownNow = () => shownFor(chosen, autoDark && PHONE_APPEARANCE, phoneIsDark);
+const shownNow = () => (signedOut ? (phoneIsDark ? 'night' : DEFAULT_THEME) : shownFor(chosen, autoDark && PHONE_APPEARANCE, phoneIsDark));
 
 /** Whether this app can offer Match phone (it can see the phone's light or dark mode). */
 export const AUTO_DARK_AVAILABLE = PHONE_APPEARANCE;
@@ -555,6 +570,21 @@ function installFollowPhone(): () => void {
   };
 }
 
+/**
+ * Signed in or out, from the account (VisitorThemeGate): signed out shows Clean or Night by the
+ * phone's mode, signed in the court saved here (see `signedOut`). Nothing saved changes.
+ */
+export function setSignedOut(on: boolean) {
+  accountKnown = true;
+  if (on === signedOut) return;
+  signedOut = on;
+  phoneIsDark = phoneDark();
+  const next = shownNow();
+  if (next === live) return;
+  show(next);
+  catchUpShown();
+}
+
 // Kept so existing callers of the old night-mode switch keep working.
 const setNight = (value: boolean) => setTheme(value ? 'night' : DEFAULT_THEME);
 
@@ -587,6 +617,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const stored = readStored();
     chosen = stored.court;
     autoDark = stored.autoDark;
+    // In a browser the saved login can be read now; on a phone it is read with the saved court (below).
+    signedOut = Platform.OS === 'web' && !storedLoginNow();
     phoneIsDark = phoneDark();
     live = shownNow();
     noteLive(live);
@@ -611,9 +643,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (Platform.OS === 'web') return undefined;
     let alive = true;
     const giveUp = setTimeout(() => { if (alive) setLoaded(true); }, 800);
-    Promise.all([AsyncStorage.multiGet([STORAGE_KEY, AUTO_DARK_KEY]), keysAtOpen()])
-      .then(([pairs, keysBefore]) => {
+    Promise.all([AsyncStorage.multiGet([STORAGE_KEY, AUTO_DARK_KEY]), keysAtOpen(), storedLoginId()])
+      .then(([pairs, keysBefore, loginId]) => {
         if (!alive || picked) return;
+        if (!accountKnown) signedOut = !loginId;
         const saved = pairs[0]?.[1];
         if (saved && saved in themes) chosen = saved as ThemeName;
         autoDark = matchPhoneFrom(pairs[1]?.[1], keysBefore);
