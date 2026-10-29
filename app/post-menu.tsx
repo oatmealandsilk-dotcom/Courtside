@@ -17,6 +17,7 @@ import { shareLink } from '@/lib/shareLink';
 import { postShareText } from '@/features/share/shareText';
 import { REPORT_THANKS, blockQuestion, reportQuestion, useScopedConfirm } from '@/lib/confirm';
 import { notKnownAdult } from '@/features/players/age';
+import { seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { removedLine, thingWord } from '@/features/moderation/reasons';
 import { useReviewOf } from '@/features/moderation/RemovedNote';
@@ -99,7 +100,7 @@ export default function PostMenu() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { id = '', kind: rawKind } = useLocalSearchParams<{ id?: string; kind?: string }>();
-  const { posts, stories, users, currentUserId, currentUser, mutedIds, blockedIds, actions } = useApp();
+  const { posts, stories, users, currentUserId, currentUser, mutedIds, blockedIds, actions, autoLogSharing } = useApp();
   const isHit = rawKind === 'hit';
   const ask = useScopedConfirm();
   // Reporting takes the post or Instant out of every list at once; the menu
@@ -340,7 +341,13 @@ export default function PostMenu() {
     dangerRows.push({ key: 'delete', icon: 'trash-outline', label: 'Delete', danger: true, onPress: () => ask({ title: 'Delete Instant?', message: 'Its likes and comments go with it. This can’t be undone.', confirmLabel: 'Delete', destructive: true, onConfirm: () => { void actions.deleteStory(story.id); close(); } }) });
   }
   if (mine && post) {
-    if (!removed) {
+    if (!removed && post.autoLogged) {
+      // Your session that logged itself (migration 193): the server's card, seen by whoever you chose. A caption,
+      // photo, score, tags or the court go on by posting it, from its own page, as from "Tennis logged".
+      const activityId = post.session?.activityId;
+      rows.push({ key: 'edit', icon: 'create-outline', label: 'Add the score or post it', note: seenByLine(shownTo(autoLogSharing, post.session?.source, currentUser, !!post.autoHeld)), onPress: () => router.replace(activityId ? { pathname: '/log-session', params: { activity: activityId } } : '/your-sessions') });
+      rows.push({ key: 'pin', icon: 'pin-outline', label: post.pinned ? 'Unpin from profile' : 'Pin to profile', onPress: () => { actions.togglePinPost(post.id); close(); } });
+    } else if (!removed) {
       rows.push({ key: 'edit', icon: 'create-outline', label: 'Edit', onPress: () => router.replace({ pathname: '/edit-post', params: { id: post.id, kind: 'post' } }) });
       // A place only typed, with no court: one tap to pick the court, so the post shows on its page.
       // Known adults only: a court tag says where a minor regularly plays.

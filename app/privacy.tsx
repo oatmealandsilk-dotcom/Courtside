@@ -10,6 +10,7 @@ import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
+import { audienceValue } from '@/features/activity/autoLogSharing';
 import { cityBoardOn } from '@/features/cityBoard/flag';
 import { notKnownAdult } from '@/features/players/age';
 import { colors, spacing, typography } from '@/theme';
@@ -17,7 +18,7 @@ import { corner } from '@/theme/look';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, cityBoardsVisible, cityBoards } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, cityBoardsVisible, cityBoards, autoLogSharing } = useApp();
   // City boards (migration 196), admins first, once the database has the switch. Your sessions count for your city
   // either way; off, nobody sees your name or clips there. A teen too (migration 197; owner, Oct 28: "Ok it shows
   // mutual"): a teen is named only to friends who follow each other with them, never to anyone else, and can say no.
@@ -81,6 +82,8 @@ export default function PrivacyCentre() {
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
+        {/* Who sees the tennis your tracker logs for you (migration 193): "Not chosen" (only you) until chosen. */}
+        {autoLogSharing !== undefined ? link('pulse-outline', 'Sessions that log themselves', audienceValue(autoLogSharing, currentUser), () => router.push('/auto-log-sharing')) : null}
       </View>
 
       {/* Flyby (migration 130): what "I'm playing here" leaves behind, said plainly. */}

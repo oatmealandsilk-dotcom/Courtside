@@ -2,6 +2,7 @@ import type { TaggedCourt, User } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
 import type { GrowPlan } from '@/features/players/mapGrow';
+import type { ReactNode } from 'react';
 
 export interface NearbyMapProps {
   me: User; players: User[]; onOpen: (id: string) => void;
@@ -68,8 +69,13 @@ export interface NearbyMapProps {
    * (the page around it pushing in), rather than the full map sliding in. Only where the page can push in.
    */
   grow?: boolean;
-  /** The full map, opened by the card growing into it: where it starts (the grown card's own view) and the picture over it. */
+  /** The full map, opened by the card growing into it: where it starts (the grown card's own view); on a phone, opened early and hidden (mapGrow v6). */
   growFrom?: GrowPlan | null;
   /** The grown card has handed over to the full map (it is now just the full map): told once. */
   onGrown?: () => void;
+  /**
+   * The phone's grown full map (app/map.tsx): the strip along its left edge that its edge swipe starts on, laid over the
+   * map itself and under the map's buttons, so a finger there never pans the map. The website ignores it.
+   */
+  edge?: ReactNode;
 }

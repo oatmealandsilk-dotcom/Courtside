@@ -53,7 +53,7 @@ export function useRatePrompt({ calm }: { calm: boolean }) {
     const now = Date.now();
     const mine = sessions.filter((s) => s.userId === currentUserId);
     const likes = new Map(posts
-      .filter((p) => p.authorId === currentUserId && !p.archived && !p.removed)
+      .filter((p) => p.authorId === currentUserId && !p.archived && !p.removed && !p.autoLogged)
       .map((p) => [p.id, p.likedBy.filter((id) => id !== currentUserId).length] as const));
     const was = seen.current;
     seen.current = { user: currentUserId, since: was?.user === currentUserId ? was.since : now, sessions: new Set(mine.map((s) => s.id)), likes };

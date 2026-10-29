@@ -133,7 +133,7 @@ function Tile({ icon, label, height, busy, done, disabled, onPress }: { icon: Re
  * green pill, its number rolling up when this session made it grow. With
  * Reduce Motion it simply changes.
  */
-export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled, label = 'Share', quietLabel = 'Save privately', streak }: {
+export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, shareDisabled, label = 'Share', quietLabel = 'Save privately', quietIcon = 'lock-closed-outline', quietHint = 'Only you see it, and it counts toward your streak', streak }: {
   canJustLog: boolean;
   busy: null | 'log' | 'share';
   /** Saved, and by which button (false: not yet). */
@@ -146,6 +146,10 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
   label?: string;
   /** The quiet button's word. */
   quietLabel?: string;
+  /** The quiet button's mark: a lock while only you see it; a tick for a session that logged itself which others see (migration 193). */
+  quietIcon?: keyof typeof Ionicons.glyphMap;
+  /** What the quiet button keeps it as, for a screen reader. */
+  quietHint?: string;
   /** The streak with this session in it (`now`), and before it: the line over the buttons. */
   streak?: { now: number; before: number } | null;
 }) {
@@ -192,7 +196,7 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
         {canJustLog ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`${quietLabel}. Only you see it, and it counts toward your streak`}
+            accessibilityLabel={`${quietLabel}. ${quietHint}`}
             accessibilityState={{ disabled: off, busy: busy === 'log' }}
             disabled={off}
             onPress={onJustLog}
@@ -202,7 +206,7 @@ export function LogDock({ canJustLog, busy, ticked, error, onJustLog, onShare, s
               <DrawnTick size={22} color={colors.brand} />
             ) : busy === 'log' ? <ActivityIndicator size="small" color={colors.text} /> : (
               <>
-                <Ionicons name="lock-closed-outline" size={15} color={colors.textMuted} />
+                <Ionicons name={quietIcon} size={15} color={colors.textMuted} />
                 <Text style={styles.quietText} numberOfLines={1}>{quietLabel}</Text>
               </>
             )}

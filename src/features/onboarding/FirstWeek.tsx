@@ -87,7 +87,7 @@ export function useFirstWeek(): { showing: boolean; deciding: boolean; card: Rea
       // Ever turned on, not only on right now (it runs out at the end of the day); remembered once seen.
       open: !!currentUser?.openToHitUntil || !!kept?.opened,
       session: !!currentUserId && sessions.some((s) => s.userId === currentUserId),
-      post: !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId)),
+      post: !!currentUserId && (posts.some((p) => p.authorId === currentUserId && !p.autoLogged) || questions.some((q) => q.authorId === currentUserId)),
     };
     // Once ticked, a row stays ticked (an unfollow does not take it back).
     (kept?.ticked ?? []).forEach((s) => { d[s] = true; });

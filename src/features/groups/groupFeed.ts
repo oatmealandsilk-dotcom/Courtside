@@ -10,12 +10,13 @@ import type { FeedGroup, ID, Post } from '@/data/types';
  * a real account work the same way.
  */
 export function inGroupFeed(
-  post: Pick<Post, 'authorId' | 'groupId' | 'archived' | 'removed'>,
+  post: Pick<Post, 'authorId' | 'groupId' | 'archived' | 'removed' | 'autoLogged'>,
   groupId: ID,
   group: Pick<FeedGroup, 'members'> | undefined,
 ): boolean {
-  // Put away by its author, or taken down by an admin (migration 108).
-  if (post.archived || post.removed) return false;
+  // Put away by its author, or taken down by an admin (migration 108). Never a session that logged itself:
+  // those are for Activities and profiles, to their own audience (migration 193; group_feed leaves them out too).
+  if (post.archived || post.removed || post.autoLogged) return false;
   if (post.groupId) return post.groupId === groupId && (!group || group.members.some((m) => m.id === post.authorId));
   return !!group && group.members.some((m) => m.id === post.authorId);
 }

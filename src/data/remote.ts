@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -274,6 +274,10 @@ type PostRow = {
   speed?: number | string | null; volume?: number | string | null;
   location?: string | null; edited_at?: string | null; feature_ok?: boolean | null; referred_by?: string | null; is_first?: boolean | null;
   court_id?: string | null; court_name?: string | null; court_lat?: number | null; court_lng?: number | null;
+  /** Made by the server for a session that logged itself (migration 193). Absent before it. */
+  auto_logged?: boolean | null;
+  /** One of those held back until its player chooses who sees them (migration 193). */
+  auto_held?: boolean | null;
   post_likes?: { user_id: string }[]; post_saves?: { user_id: string }[]; comments?: { id: string; parent_id?: string | null }[];
 } & RemovedColumns;
 type CommentRow = {
@@ -422,6 +426,8 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   isFirst: row.is_first || undefined,
   editedAt: row.edited_at ?? undefined,
   groupId: row.group_id ?? undefined,
+  autoLogged: row.auto_logged || undefined,
+  autoHeld: (row.auto_logged && row.auto_held) || undefined,
 }, row);
 
 const toComment = (row: CommentRow): Comment => withHidden(withRemoved<Comment>({
@@ -702,6 +708,12 @@ export interface UserState {
    */
   mapVisibility?: MapVisibility | null;
   /**
+   * Who sees your sessions that log themselves (migration 193). Undefined on
+   * a database without it; null once it has it but you never chose (Friends,
+   * and Apple Health's only you until you choose).
+   */
+  autoLogSharing?: AutoLogAudience | null;
+  /**
    * The map's teen rule (migration 78): undefined on a database without it.
    * 'on': you may share with friends who follow you back (if you are not a
    * known adult). Since migration 119 that includes under 16s, the same
@@ -801,7 +813,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98; `until`, your own check-in's end, since 189). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; auto_log_audience?: string | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -874,12 +886,15 @@ const toUserState = (r: UserStateRow): UserState => ({
   constraints: Array.isArray(r.private_profile?.constraints) ? r.private_profile!.constraints : undefined,
   // The key is there only once migration 63 has run; null means never chosen.
   mapVisibility: 'map_visibility' in r ? asVisibility(r.map_visibility) : undefined,
+  // The key is there only once migration 193 has run; null means never chosen.
+  autoLogSharing: 'auto_log_audience' in r ? asAudience(r.auto_log_audience) : undefined,
   // The key is there only once migration 78 has run. Under 16s too (migration 119): the same rule as 16 and 17 year olds.
   teenMap: 'map_answered_at' in r ? 'on' : undefined,
   ownOpenUntil: 'open_to_hit_until' in r ? r.open_to_hit_until ?? null : undefined,
   ...(ageFromBirthDate(r.birth_date) !== undefined ? { ageYears: ageFromBirthDate(r.birth_date) } : {}),
 });
 const asVisibility = (v: unknown): MapVisibility | null => (v === 'nearby' || v === 'mutuals' || v === 'none' ? v : null);
+const asAudience = (v: unknown): AutoLogAudience | null => (v === 'mutuals' || v === 'public' || v === 'private' ? v : null);
 
 interface CoachApplicationRow {
   id: string; user_id: string; full_name: string; email: string; phone: string; utr: string | null; ntrp: string | null; utr_link?: string | null; ntrp_link?: string | null;
@@ -4300,6 +4315,29 @@ export const remote = {
     const { error } = await need().rpc('set_open_to_hit_miles', { miles: asHitMiles(miles) ?? null });
     if (error) { if (missingFunction(error)) { lacksOpenToHitMiles = true; return 'missing'; } fail('open to hit distance')(error); return false; }
     return true;
+  },
+  /**
+   * Settings → "Sessions that log themselves" (migration 193). Resolves with
+   * what the server kept ('public' is kept as 'mutuals' for anyone not known
+   * to be an adult), or null when it could not be saved.
+   */
+  async setAutoLogSharing(v: AutoLogAudience): Promise<AutoLogAudience | null> {
+    const { data, error } = await need().rpc('set_auto_log_sharing', { v });
+    if (error) { fail('auto log sharing')(error); return null; }
+    return asAudience(data);
+  },
+  /**
+   * "Yes, these were tennis" (migration 193): every Fitbit "Was this
+   * tennis?" session of yours still waiting is logged. How many (and how many
+   * were already logged by hand), and whether
+   * Fitbit's Sport now logs itself as tennis; 'missing' on a database without it.
+   */
+  async logUnsureTennis(): Promise<{ logged: number; already: number; learned: boolean } | 'missing'> {
+    const { data, error } = await need().rpc('log_unsure_tennis');
+    if (error) { if (missingFunction(error)) return 'missing'; throw new Error(error.message); }
+    const r = (data ?? {}) as { logged?: unknown; already?: unknown; learned?: unknown };
+    // `already`: ones logged by hand before, filed as that rather than logged twice.
+    return { logged: typeof r.logged === 'number' ? r.logged : 0, already: typeof r.already === 'number' ? r.already : 0, learned: r.learned === true };
   },
   /** "Who can see you on the map?" (migration 63). Resolves false when it could not be saved. */
   async setMapVisibility(v: MapVisibility): Promise<boolean> {

@@ -1607,10 +1607,11 @@ const STEPS = [
     },
   },
   {
-    // Oct 24 (migration 185): a tracker's tennis the server logged for you, privately. Your sessions says
+    // Oct 24 (migration 185): a tracker's tennis the server logged for you. Your sessions says
     // "Logged for you" with a "Not tennis? Remove" (asked first; Cancel here, so nothing is removed), and its
-    // Post it opens the post page: "Logged privately · only you see it", the kind chips, Keep private and
-    // Not tennis? Remove. Closed again, nothing posted.
+    // Post it opens the post page: "Logged for you · Only you can see it" (the demo's is from an Apple Watch,
+    // and nobody chose who sees them yet: Apple Health's stay private until then, migration 193), the kind
+    // chips, Keep private and Not tennis? Remove. Closed again, nothing posted.
     name: 'auto-logged',
     title: 'A session logged for you: Not tennis? Remove, and its post page',
     async run(page) {
@@ -1626,14 +1627,14 @@ const STEPS = [
       await page.gone({ text: 'It comes off your streak and totals, and won’t come back.' });
       // Its own Post it, in the same row as its Not tennis? link.
       await page.tap({ css: 'div:has(> [aria-label^="Not tennis? Remove: "]) [aria-label^="Post it: "]' });
-      await page.waitFor({ text: 'Logged privately · only you see it' });
+      await page.waitFor({ text: /^Logged for you · Only you can see it/ });
       // At the foot of the page, under the buttons until scrolled to.
       await page.reveal({ label: 'Not tennis? Remove this session' });
     },
     expect: [{ text: 'Keep private' }, { text: 'Post session' }],
     after: async (page) => {
       await page.tap({ text: 'Keep private' });
-      await page.gone({ text: 'Logged privately · only you see it' });
+      await page.gone({ text: /^Logged for you · Only you can see it/ });
       await page.waitFor({ label: /^Not tennis\? Remove: / });
       await page.tap({ label: 'Go back' });
       await page.tap({ label: 'Community' });

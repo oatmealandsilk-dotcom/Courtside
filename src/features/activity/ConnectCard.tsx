@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useConnectRow } from '@/features/activity/autoLog';
 import { isDemo } from '@/features/activity/flags';
+import { friendsAtMost, shownTo } from '@/features/activity/autoLogSharing';
 import { useShownAt } from '@/features/navigation/shownAt';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -39,7 +40,7 @@ const GRACE_MS = 250;
 
 export function ConnectCard() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId } = useApp();
+  const { currentUserId, currentUser, autoLogSharing } = useApp();
   const { auto, source, offer, close, known } = useConnectRow('profile');
   const here = Platform.OS !== 'web' || isDemo(currentUserId);
   const onShow = useShownAt('/profile');
@@ -57,12 +58,18 @@ export function ConnectCard() {
   if (!here || !decided || !offer || !source) return null;
   const both = auto.apple && auto.whoop;
   const names = both ? 'Apple Health or WHOOP' : source === 'whoop' ? 'WHOOP' : 'Apple Health';
+  // Who sees the tennis that logs itself, said before connecting (migration 193), read aloud too. One tap here never
+  // chooses it (review, Oct 28): not chosen yet, it is asked on "Tennis logged" (Friends or Only me) or in Settings.
+  const seen = shownTo(autoLogSharing, source, currentUser);
+  const numbers = friendsAtMost(currentUser) ? '' : ', with its heart rate and calories';
+  const line = `Connect ${names}: your tennis logs itself${!autoLogSharing ? ', and you choose who sees it' : seen === 'private' ? ', for you only' : seen === 'public' ? ` to your profile${numbers}` : `, and friends who follow you back see it${numbers}`}.`;
   const connect = async () => {
     if (busy) return;
     haptics.tap();
     if (both) { router.push('/health'); return; }
     setBusy(true);
     try {
+      // Connecting here never chooses who sees the tennis that logs itself (review, Oct 28).
       await auto.connect(source);
       showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' });
     } catch (err) {
@@ -73,11 +80,11 @@ export function ConnectCard() {
   };
   return (
     <View style={styles.row}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Log your hits automatically. Connect ${names}`} disabled={busy} onPress={() => { void connect(); }} style={styles.rowMain}>
+      <Pressable accessibilityRole="button" accessibilityLabel={`Log your hits automatically. ${line}`} disabled={busy} onPress={() => { void connect(); }} style={styles.rowMain}>
         <Ionicons name="pulse-outline" size={20} color={colors.brand} />
         <View style={{ flex: 1 }}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Log your hits automatically</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : `Connect ${names} and every hit shows up ready to log.`}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : line}</Text>
         </View>
       </Pressable>
       {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}

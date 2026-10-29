@@ -18,7 +18,8 @@ import { appleHealthAvailable, inExpoGo } from '@/features/health/appleHealth';
 import { FoodSection } from '@/features/health/FoodSection';
 import { alertsAllowed } from '@/features/health/workoutWatch';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { WHOOP_WORKOUTS_ASK, WORKOUTS_ASK } from '@/features/activity/workouts';
+import { WHOOP_WORKOUTS_ASK, WORKOUTS_ASK, askWithSharing } from '@/features/activity/workouts';
+import { consentLine, onConnect, savesOnConnect, shownTo } from '@/features/activity/autoLogSharing';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
@@ -94,6 +95,13 @@ export default function Health() {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { healthHistory, actions, currentUserId } = app;
+  // Who sees the tennis that logs itself (migration 193), said before a source connects. Apple Health's sheet never
+  // chooses it (Apple's 5.1.3: not chosen yet, "only you until you choose", asked on "Tennis logged" or in Settings);
+  // WHOOP's says friends will see them, and its Turn on saves that when nothing was chosen.
+  const seenBy = shownTo(app.autoLogSharing, null, app.currentUser);
+  const sharing = consentLine(seenBy, app.currentUser, app.autoLogSharing);
+  const sharingApple = consentLine(onConnect(app.autoLogSharing, 'apple-health', app.currentUser), app.currentUser, app.autoLogSharing);
+  const sharingWhoop = consentLine(onConnect(app.autoLogSharing, 'whoop', app.currentUser), app.currentUser, app.autoLogSharing);
   // Every source always has a row: the catalog, with this account's connections laid over it.
   const integrations = withCatalog(app.integrations);
   // Food apps the Food card does not already cover (see foodCardCovers).
@@ -147,7 +155,7 @@ export default function Health() {
   const removers = ['WHOOP', ...trackerRows.filter((i) => isTracker(i.provider)).map((i) => i.label)];
   const removersText = removers.length > 1 ? `${removers.slice(0, -1).join(', ')} or ${removers[removers.length - 1]}` : removers[0];
 
-  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off' | 'workouts') => {
+  const run = async (provider: Integration['provider'], what: 'toggle' | 'sync' | 'tennis' | 'tennis-off' | 'workouts', told = false) => {
     setBusy(provider);
     setStep(what);
     try {
@@ -162,6 +170,8 @@ export default function Health() {
       }
       else if (what === 'workouts') { if (provider === 'apple-health' || provider === 'whoop') await actions.turnOnTennis(provider, { workouts: true }); }
       else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
+      // Turned on after being told friends will see the tennis that logs itself (WHOOP only): a choice never made is saved as that.
+      if (told && savesOnConnect(app.autoLogSharing, provider)) void actions.setAutoLogSharing('mutuals');
     } catch (err) {
       // What failed, in its own words: a failed Sync never says "Could not connect".
       const was = integrations.find((i) => i.provider === provider)?.connected;
@@ -179,18 +189,20 @@ export default function Health() {
   // Apple Health's own permission sheet comes next, so CourtSide says why first.
   // 'workouts': someone with tennis sessions on, saying yes to every workout as well.
   const askApple = (next: 'toggle' | 'tennis' | 'workouts') => confirm(flags.workoutsApple ? {
-    ...WORKOUTS_ASK,
+    ...askWithSharing(WORKOUTS_ASK, sharingApple),
     confirmLabel: 'Continue',
     onConfirm: () => run('apple-health', next),
   } : {
-    title: 'Tennis sessions from Apple Health',
-    message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page. Nothing is posted unless you choose to.',
+    ...askWithSharing({
+      title: 'Tennis sessions from Apple Health',
+      message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page.',
+    }, sharingApple),
     confirmLabel: 'Continue',
     onConfirm: () => run('apple-health', next),
   });
 
   // WHOOP, with tennis sessions on, saying yes to every workout as well: its own yes, though WHOOP already shares them.
-  const askWhoop = () => confirm({ ...WHOOP_WORKOUTS_ASK, confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts') });
+  const askWhoop = () => confirm({ ...askWithSharing(WHOOP_WORKOUTS_ASK, sharingWhoop), confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts', true) });
 
   // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
   // Fitbit, Oura and Polar always remove their tennis sessions on disconnect.
@@ -425,11 +437,11 @@ export default function Health() {
       <Text style={styles.foot}>
         {`Only you see these.${coachOn ? ` If you agree to use the AI coach, your recent sleep and heart rate variability are sent to Anthropic, which powers it${flags.whoop ? '; WHOOP’s numbers never are' : ''}.` : ''} `}
         {flags.whoop
-          ? `${flags.workoutsApple || flags.workoutsWhoop ? 'Tennis sessions and workouts stay' : 'Tennis sessions stay'} private until you post one. Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
+          ? `${seenBy !== 'private' ? (flags.workoutsApple || flags.workoutsWhoop ? `${sharing} Other workouts stay private until you post one.` : sharing) : `${flags.workoutsApple || flags.workoutsWhoop ? 'Tennis sessions and workouts stay' : 'Tennis sessions stay'} private until you post one.`} Disconnecting ${removersText} removes what it sent; other sources stay until you delete your account.`
           : flags.workoutsApple
-            ? 'Tennis sessions and workouts stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
+            ? `${seenBy !== 'private' ? `${sharing} Other workouts stay private until you post one.` : 'Tennis sessions and workouts stay private until you post one.'} Disconnecting stops new numbers; what was already read stays until you delete your account.`
           : flags.apple
-            ? 'Tennis sessions stay private until you post one. Disconnecting stops new numbers; what was already read stays until you delete your account.'
+            ? `${seenBy !== 'private' ? sharing : 'Tennis sessions stay private until you post one.'} Disconnecting stops new numbers; what was already read stays until you delete your account.`
             : 'Disconnecting stops new numbers; what was already read stays until you delete your account.'}
       </Text>
     </Screen>
