@@ -26,13 +26,14 @@ import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha }
  * day. Strangers never see where you are. No: nothing of yours is ever on
  * the map.
  *
- * `mode=first`: the first ask, design C1, the small pop-up card (Oct 28,
+ * `mode=first`: the first ask, design C2, the small pop-up card (Oct 28,
  * owner: "C is better but make it a bit more aesthetic and the whole card a
  * bit smaller"; before that, "Too many words, Too big / a whole sheet, We
  * want to encourage them to turn it on"). A small card in the middle of the
  * dimmed screen, the way every "are you sure?" in the app asks (ConfirmHost:
  * the same width, corner, shadow, dim and motion, popMotion). The faces of up
- * to three friends who follow you back (real ones; none, no faces), "Let
+ * to three friends who follow you back and their names under them, "Sam,
+ * Marcus and 3 others" (real ones; none, neither), "Let
  * friends see you're up to hit?", and one short line: only friends who follow
  * you back see where you are, and it ends by itself (at 10pm, or in 2 hours
  * from 8pm). "Turn on" saves the yes; then Apple's own location prompt, then
@@ -66,7 +67,7 @@ const TITLE_ID = 'courtside-who-sees-title';
 const LINE_ID = 'courtside-who-sees-line';
 
 /**
- * The first ask, design C1: a small card in the middle of the dimmed screen.
+ * The first ask, design C2: a small card in the middle of the dimmed screen.
  * It comes and goes as the app's "are you sure?" card does (popMotion): the
  * dim and the card fade in, the card growing the last few percent; on an
  * answer both fade away, then the screen closes and whoever asked hears the
@@ -218,7 +219,7 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
             onLayout={(e) => { sizes.current.view = e.nativeEvent.layout.height; checkOverflow(); }}
             onContentSizeChange={(_, h) => { sizes.current.content = Math.ceil(h); checkOverflow(); }}
           >
-            {/* With no friend who follows you back yet there are simply no faces: the question starts the card. */}
+            {/* With no friend who follows you back yet there are simply no faces and no names: the question starts the card. */}
             {friends.length ? <Faces people={friends} /> : null}
             <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>{askTitle(upToHit, fontScale <= 1)}</Text>
             {/* Apple 5.1.2(i) / 5.1.1: what friends see (where you are), who (only friends who follow you back), and that it ends by itself. */}
@@ -315,7 +316,7 @@ const FACE_RING = 2;
  */
 const FACE_TUCK = 5;
 
-/** "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
+/** Their first names, as the card says them: "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
 function friendsWords(people: User[]): string {
   const first = people.map((u) => u.name.split(' ')[0]);
   if (first.length <= 1) return first[0] ?? '';
@@ -324,20 +325,27 @@ function friendsWords(people: User[]): string {
 }
 
 /**
- * A few small faces, each just over the last, ringed in the card's own
- * colour. In the quiet tones the Send to sheet uses (a photo shows as
- * itself), so the faces sit with the card instead of shouting over it.
+ * Who a yes is for, made plain (design C2): a few small faces, each just
+ * over the last, ringed in the card's own colour, and under them their names,
+ * "Sam, Marcus and 3 others". The faces are in the quiet tones the Send to
+ * sheet uses (a photo shows as itself), so they sit with the card instead of
+ * shouting over it. Real friends who follow you back only, never strangers;
+ * with none, the card has neither.
  */
 function Faces({ people }: { people: User[] }) {
   const styles = useThemedStyles(styleDefinitions);
   const shown = people.slice(0, FACES);
+  const names = friendsWords(people);
   return (
-    <View style={styles.faces} accessible accessibilityLabel={`${friendsWords(people)} follow${people.length > 1 ? '' : 's'} you back`}>
-      {shown.map((u, i) => (
-        <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
-          <Avatar quiet name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} />
-        </View>
-      ))}
+    <View style={styles.who} accessible accessibilityLabel={`${names} follow${people.length > 1 ? '' : 's'} you back`}>
+      <View style={styles.faces}>
+        {shown.map((u, i) => (
+          <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
+            <Avatar quiet name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} />
+          </View>
+        ))}
+      </View>
+      <Text {...EVEN} style={[styles.whoNames, EVEN_WEB]}>{names}</Text>
     </View>
   );
 }
@@ -497,7 +505,10 @@ const styleDefinitions = StyleSheet.create({
   // ConfirmHost's own line: 14 on 19, muted.
   cardLine: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
   cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: 6, gap: 2 },
-  faces: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md },
+  // The faces and, under them, their names: one small group above the question.
+  who: { alignItems: 'center', marginBottom: spacing.md },
+  faces: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  whoNames: { ...typography.smallStrong, lineHeight: 17, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
   faceRing: { padding: FACE_RING, borderRadius: radius.pill, backgroundColor: colors.surface },
   // Quiet but plain to read: the muted ink, semibold, a full finger's height.
   notNow: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
