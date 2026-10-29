@@ -32,6 +32,14 @@ const SLIDE_PAST = 48;
 const SLID_AT_REST = { transform: [{ translateY: 0 }] };
 
 /**
+ * What is closing a sheet, as beforeClose hears it: a drag down, a tap on
+ * the dimmed page outside it, a phone's Back, or a computer's Escape (the
+ * .web twin). A page can then wait out only a tap outside, say (the second
+ * half of a double tap on what opened it), and still close at once on Back.
+ */
+export type SheetCloseHow = 'drag' | 'outside' | 'back' | 'escape';
+
+/**
  * The comments stage's own drag, for a list inside it that hands a pull down
  * at its top over to the sheet (see comments). Worklets: start, follow the
  * finger, let go. Every other sheet has none.
@@ -182,6 +190,13 @@ export function DragSheet(props: {
    * ignores it.
    */
   contentHeight?: number;
+  /**
+   * With contentHeight: the opening waits for that height (at most 150ms),
+   * so the sheet rises once, straight to where it stays, never up to
+   * `peekFraction` first and then down to its contents (a consent sheet
+   * that must not bounce, review Oct 28). Opt-in; the stage ignores it.
+   */
+  waitForFit?: boolean;
   /** On a wide computer screen the sheet docks to the right (see the .web twin); a phone ignores it. */
   side?: boolean;
   /** The sheet has come to rest where it was going (first: it has finished opening). */
@@ -196,9 +211,10 @@ export function DragSheet(props: {
    * Asked before a drag down, a tap outside or (in a browser) Escape closes
    * the sheet: false keeps it open (the page then asks its own question,
    * "Discard this group?", and bumps closeSignal if the answer is yes). A
-   * close from closeSignal is never asked. The comments stage ignores it.
+   * close from closeSignal is never asked. `how` says what is closing it
+   * (SheetCloseHow). The comments stage ignores it.
    */
-  beforeClose?: () => boolean;
+  beforeClose?: (how: SheetCloseHow) => boolean;
   /**
    * The page handles Android's Back itself (a step back in a form, say), so
    * the sheet leaves it alone. Without it, Back closes the sheet the way a
@@ -249,6 +265,7 @@ function PlainSheet({
   closeSignal = 0,
   onSettled,
   contentHeight,
+  waitForFit = false,
   beforeClose,
   ownBack = false,
   handOverSignal = 0,
@@ -263,7 +280,8 @@ function PlainSheet({
   closeSignal?: number;
   onSettled?: () => void;
   contentHeight?: number;
-  beforeClose?: () => boolean;
+  waitForFit?: boolean;
+  beforeClose?: (how: SheetCloseHow) => boolean;
   ownBack?: boolean;
   handOverSignal?: number;
   plain?: boolean;
@@ -324,6 +342,8 @@ function PlainSheet({
   latestOpen.current = openOffset;
   // Whether it has been sent to rest yet (a sheet handed over waits for its contents' height first).
   const sent = useRef(false);
+  // The opening's first move, kept for waitForFit (it waits for its contents' height, the effect below).
+  const riseNow = useRef<() => void>(() => undefined);
   useEffect(() => {
     // Settled however the opening ends: at rest, or cut short by the keyboard
     // taking it up ("Add a comment") or a finger on the handle.
@@ -338,7 +358,14 @@ function PlainSheet({
       restY.value = latestOpen.current;
       translateY.value = withSpring(latestOpen.current, slideOpen ? SLIDE_SPRING : SPRING, (finished) => { landed(finished); runOnJS(settled)(); });
     };
-    if (!arriving) { rise(); return undefined; }
+    riseNow.current = rise;
+    if (!arriving && !waitForFit) { rise(); return undefined; }
+    // waitForFit: it rises once its contents have measured (below), straight to
+    // their height; this is only the fallback if they never say.
+    if (!arriving) {
+      const wait = setTimeout(rise, 150);
+      return () => clearTimeout(wait);
+    }
     // Handed over: it waits where it is for its contents' height (the effect
     // below), so it settles once, never up to the opening height and back down.
     contentOpacity.value = withTiming(1, { duration: HAND_IN_MS, easing: EASE });
@@ -355,6 +382,8 @@ function PlainSheet({
   // that first fitted a short page is never left stuck short. The browser's
   // twin measures again on every change for the same reason.
   useEffect(() => {
+    // waitForFit, not risen yet: the rise below goes there itself.
+    if (waitForFit && !sent.current) return;
     if (touched.current || dismissedRef.current || closing.value || openOffset === restAt.current) return;
     sent.current = true;
     restAt.current = openOffset;
@@ -362,6 +391,10 @@ function PlainSheet({
     translateY.value = withSpring(openOffset, slideOpen ? SLIDE_SPRING : SPRING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fitted]);
+  // waitForFit: its contents (and header) have measured, so it rises now, once, to where it stays.
+  useEffect(() => {
+    if (waitForFit && contentHeight && headH) riseNow.current();
+  }, [waitForFit, contentHeight, headH]);
 
   const finish = () => {
     if (dismissedRef.current) return;
@@ -397,8 +430,8 @@ function PlainSheet({
   // A close the person started (a drag down, a tap outside): the page may say not yet.
   const latestBefore = useRef(beforeClose);
   latestBefore.current = beforeClose;
-  const userDismiss = (origin?: number) => {
-    if (latestBefore.current && !latestBefore.current()) {
+  const userDismiss = (how: SheetCloseHow, origin?: number) => {
+    if (latestBefore.current && !latestBefore.current(how)) {
       if (origin !== undefined) returnTo(origin);
       return;
     }
@@ -407,7 +440,7 @@ function PlainSheet({
   // Android's Back, while this sheet's page is in front: the same close as a
   // drag down (it slides away, the page's own question first, and onDismissed
   // then leaves the page), rather than the page vanishing in one frame.
-  useAndroidBack(() => { if (!dismissedRef.current) userDismiss(); return true; }, !ownBack);
+  useAndroidBack(() => { if (!dismissedRef.current) userDismiss('back'); return true; }, !ownBack);
   // The keyboard: the sheet opens all the way, and its bottom rides up with
   // the keyboard frame by frame (the phone reports its height as it moves),
   // so a box at the bottom stays right on top of it, never jumping after it.
@@ -486,7 +519,7 @@ function PlainSheet({
       const origin = startY.value;
       const travelled = translateY.value - origin;
       if (e.velocityY > FLICK_PX_PER_S || (travelled > 0 && travelled > (fullHeight - origin) * 0.32)) {
-        runOnJS(userDismiss)(origin);
+        runOnJS(userDismiss)('drag', origin);
       } else if (e.velocityY < -FLICK_PX_PER_S || (travelled < 0 && Math.abs(travelled) > origin * 0.32)) {
         runOnJS(openFull)();
       } else {
@@ -507,7 +540,7 @@ function PlainSheet({
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
       <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: colors.overlay }, backdropStyle]} />
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss()} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" style={StyleSheet.absoluteFill} onPress={() => userDismiss('outside')} />
       <Animated.View style={[styles.sheet, sheetStyle, risen && SLID_AT_REST]}>
         {/* The same warm glow the pages open with, so a sheet reads as part of the app. */}
         {plain ? null : <Wash height={300} strength={0.85} />}

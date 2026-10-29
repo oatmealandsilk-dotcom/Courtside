@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Keyboard, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useModalOpenWhile } from '@/lib/modalOpen';
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import { FullWindowOverlay } from 'react-native-screens';
 
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -12,14 +12,14 @@ import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { POP_FROM_SCALE, POP_IN, POP_OUT, POP_SETTLE_MS, POP_SPRING } from '@/components/popMotion';
 
-// Timed by hand below, so Reduce Motion is honoured here (fade only) rather than by skipping the fade too.
-const NEVER = ReduceMotion.Never;
-/** The card grows the last few percent on a spring: quick, with the faintest settle. */
-const FROM_SCALE = 0.92;
-const SPRING = { damping: 20, stiffness: 320, mass: 0.8, reduceMotion: NEVER } as const;
-const IN = { duration: 180, easing: Easing.out(Easing.quad), reduceMotion: NEVER } as const;
-const OUT = { duration: 140, easing: Easing.in(Easing.quad), reduceMotion: NEVER } as const;
+// The pop-up card's motion, shared with the first "Let friends see you're up to hit?" (popMotion).
+// Timed by hand, so Reduce Motion is honoured here (fade only) rather than by skipping the fade too.
+const FROM_SCALE = POP_FROM_SCALE;
+const SPRING = POP_SPRING;
+const IN = POP_IN;
+const OUT = POP_OUT;
 /**
  * A touch that begins this soon after the card comes up is the second half
  * of a double tap on whatever asked, not an answer, so it is ignored (the
@@ -27,7 +27,7 @@ const OUT = { duration: 140, easing: Easing.in(Easing.quad), reduceMotion: NEVER
  * double-tap window. Escape, Android's back and the screen reader's escape
  * still cancel at once.
  */
-const SETTLE_MS = 300;
+const SETTLE_MS = POP_SETTLE_MS;
 const TITLE_ID = 'courtside-confirm-title';
 const MESSAGE_ID = 'courtside-confirm-message';
 

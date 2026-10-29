@@ -24,13 +24,19 @@ export function tintFor(seed: string): string {
 /**
  * The Send to sheet's face colour: one of the court's six quiet tones
  * (avatarTint1-6), by the same seed, so a grid of initials reads as different
- * people without any loud accent. Only that sheet uses it (Avatar `quiet`).
+ * people without any loud accent. Only that sheet and the faces on the first
+ * "Let friends see you're up to hit?" card use it (Avatar `quiet`).
  */
 export function quietTintFor(seed: string): string {
-  const palette = [colors.avatarTint1, colors.avatarTint2, colors.avatarTint3, colors.avatarTint4, colors.avatarTint5, colors.avatarTint6];
+  const palette = quietTints();
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
   return palette[hash % palette.length];
+}
+
+/** The six quiet tones a face with no photo picks from (quietTintFor), in order: for a row of faces that must each differ from the next. */
+export function quietTints(): string[] {
+  return [colors.avatarTint1, colors.avatarTint2, colors.avatarTint3, colors.avatarTint4, colors.avatarTint5, colors.avatarTint6];
 }
 
 interface Props {
@@ -68,6 +74,8 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;
   const fill = typeof drawn === 'string' ? drawn : tint;
+  // A quiet face keeps its quiet ink on another of the quiet tones (a row of faces, each its own tone).
+  const quietInk = quiet && (typeof drawn !== 'string' || quietTints().includes(drawn));
   const badge = Math.max(14, Math.round(size * 0.36));
   return (
     <View
@@ -83,7 +91,7 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
       ]}
     >
       {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
-      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, quiet && typeof drawn !== 'string' ? { fontSize: size * 0.36, color: colors.text, ...font('500') } : { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
+      {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, quietInk ? { fontSize: size * 0.36, color: colors.text, ...font('500') } : { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
       {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View

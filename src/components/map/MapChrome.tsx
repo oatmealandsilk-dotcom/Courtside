@@ -1831,7 +1831,7 @@ function NoOneReaskTip({ ready, span }: { ready: boolean; span: string }) {
     setGone(true);
     releaseTip('no-one-reask');
     const who = id.current;
-    void askWhoSeesYou('first').then((v) => {
+    void askWhoSeesYou('first', 'reask').then((v) => {
       if (!who) return;
       if (saidYes(v)) noteReaskYes(who);
       else noteReaskNotNow(who);
