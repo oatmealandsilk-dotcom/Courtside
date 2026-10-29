@@ -181,6 +181,14 @@ const styleDefinitions = StyleSheet.create({
  * Spread inside a page's own StyleSheet.create, so each court's colours are swapped in.
  */
 export const setupLook = {
+  /**
+   * The faint court wash behind the top of every setup page (Oct 29, owner: "Do you think throwing a tiny tiny
+   * gradient in the set up screens will help or no. Like the ones in community tab near the bottom. But even less
+   * maybe"): the "You're early" card's strength (0.6), about 70% of the Community page's own (0.85). The court's own
+   * colours (Wash), scaled by the wash switch in theme/look.ts, so WASH 'none' takes it off here too. Static: drawn
+   * once as the page's first child, never inside a step that slides or fades.
+   */
+  wash: { height: 360, strength: 0.6 } as const,
   /** Under the progress bar, to the title. */
   titleGap: spacing.xl,
   /** Between groups. */

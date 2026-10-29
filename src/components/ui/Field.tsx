@@ -2,7 +2,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type KeyboardTypeOptions } from 'react-native';
 
-import { colors, lift, radius, spacing, typography } from '@/theme';
+import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionCandidates } from '@/features/mentions/useMentionCandidates';
 import { activeMention, applyMention } from '@/lib/mentions';
@@ -56,6 +56,8 @@ interface Props {
   bare?: boolean;
   /** A quiet filled box with no outline, for a field sitting inside a card's grouped list (a settings page). */
   well?: boolean;
+  /** One row of an inset list, its label drawn beside it by the caller (sign-up's Name and Town): no box, 48pt, 15/500. */
+  row?: boolean;
   /**
    * What the box holds, for the phone's password manager and autofill
    * ('email', 'password', 'new-password', 'name', 'username-new'). Passed on
@@ -100,6 +102,7 @@ export function Field({
   compact = false,
   bare = false,
   well = false,
+  row = false,
   autoComplete,
   maxLength,
 }: Props) {
@@ -195,6 +198,7 @@ export function Field({
           compact && styles.compact,
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
           bare && styles.bare,
+          row && styles.row,
         ]}
       />
       </View>
@@ -223,6 +227,7 @@ const styleDefinitions = StyleSheet.create({
   inputFocused: { borderColor: colors.borderStrong },
   bare: { backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: 0, paddingVertical: 6, fontSize: 16, lineHeight: 22 },
   hint: { ...typography.small, color: colors.textFaint },
+  row: { backgroundColor: 'transparent', borderWidth: 0, borderRadius: 0, paddingHorizontal: 0, paddingVertical: 0, height: 48, fontSize: 15, ...font('500') },
   // A fixed height and no top/bottom padding: iPhone then centres the words and the grey example
   // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
   softLine: { ...lift, borderWidth: 0, borderRadius: inputCorner(radius.pill), height: 52, paddingVertical: 0, fontSize: 16 },

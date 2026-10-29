@@ -20,6 +20,8 @@ import { isOfficial } from '@/features/players/official';
 import { OfficialCheck } from '@/components/OfficialCheck';
 import { useTheme } from '@/theme/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import { SCALES } from '@/features/players/ratingScales';
 import { colors, font, lift } from '@/theme';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
@@ -48,12 +50,25 @@ const played = new Set<string>();
  * Oct 5, owner: no level words under the rating ("Advanced junior / D3"),
  * and no ruler of ticks under it: the number and its system say it.
  */
-export function PlayerCard({ user, variant, onPress }: {
+export function PlayerCard({ user, variant, onPress, setup }: {
   user: User;
-  variant: 'full' | 'banner';
+  variant: 'full' | 'banner' | 'setup';
   /** The banner's link. */
   onPress?: () => void;
+  /** The setup card's draft (variant 'setup'): what has been answered so far. */
+  setup?: SetupDraft;
 }) {
+  if (variant === 'setup') return <SetupCard user={user} draft={setup ?? { rated: false, years: null }} />;
+  return <ShownCard user={user} variant={variant} onPress={onPress} />;
+}
+
+/**
+ * What the sign-up's live card knows (variant 'setup'): whether the rating typed is a real one yet, the years
+ * played (0 is under a year; null not said yet), and whether to show how they play (Your game).
+ */
+export interface SetupDraft { rated: boolean; years: number | null; game?: boolean }
+
+function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | 'banner'; onPress?: () => void }) {
   const { theme } = useTheme();
   // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
   // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
@@ -163,6 +178,93 @@ export function PlayerCard({ user, variant, onPress }: {
       {items.length ? <Strip items={items} look={look} size={24} filled={filled} caps={fullPop} /> : null}
     </View>
   );
+}
+
+/**
+ * The sign-up's live card (ONBOARDING_V2, Oct 29, owner: "3 and 5 specifically need to push more for ppl to put in
+ * information"): the player's own card building as they type, in the Profile tab banner's look on every court
+ * (boxLook, CardWash, Clean's soft wash and lift), so what they fill in is visibly what other players will see.
+ * Display only: nothing here saves. A part not answered yet shows as a faint stand-in at the same size, so the card
+ * never changes height as it fills. The rating gives one small scale-up the moment it becomes a real rating, and
+ * nothing else moves.
+ */
+function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
+  const { theme } = useTheme();
+  // Chosen as the banner's is, so it is the Profile tab's card on every court.
+  const look = LESS_AI_ROUND2 || quietBox(theme) ? boxLook(theme) : cardLook(theme);
+  const ratingInk = look.plain ? look.touch ?? colors.brand : look.figure;
+  const pop = look.plain ? BANNER_POP : 'now';
+  const p = user.profile;
+  const system = p.skillSystem === 'UTR' ? 'UTR' : 'NTRP';
+  const name = user.name.trim();
+  const town = user.location ? cityOf(user.location) : '';
+  const rating = draft.rated ? ratingText(p) : '';
+  const scale = SCALES[system];
+  const level = draft.rated ? (scale.bands.find((b) => p.rating <= b.upTo) ?? scale.bands[scale.bands.length - 1]).label : '';
+  const years = draft.years === null ? '' : draft.years === 0 ? '<1 yr' : `${draft.years} ${draft.years === 1 ? 'yr' : 'yrs'}`;
+  const filled = look.filled;
+  const spoken = `Your card: ${name || 'no name yet'}, ${town || 'no town yet'}, ${rating ? `${system} ${rating}` : 'no rating yet'}${draft.years === null ? '' : `, playing ${draft.years === 0 ? 'less than a year' : `${draft.years} ${draft.years === 1 ? 'year' : 'years'}`}`}.`;
+  return (
+    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
+      <CardWash look={look} radius={corner(16)} />
+      {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+      <View style={styles.setupTop}>
+        <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={44} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines }} />
+        <View style={styles.identityWords}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.setupName, { color: name ? look.ink : look.faint }]}>{name || 'Your name'}</Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.small, { color: look.muted }]}>
+            @{user.handle}<Text style={{ color: town ? look.muted : look.faint }}>{` · ${town || 'Your town'}`}</Text>
+          </Text>
+        </View>
+        <Bump token={rating}>
+          <View style={styles.setupRating}>
+            <Text maxFontSizeMultiplier={1.2} style={[styles.setupFigure, { color: rating ? ratingInk : look.faint }]}>{rating || '–.–'}</Text>
+            <Text maxFontSizeMultiplier={1.2} style={[styles.setupSystem, { color: look.eyebrow }]}>{system}</Text>
+          </View>
+        </Bump>
+      </View>
+      {draft.game ? (
+        <View style={styles.setupGame}>
+          <View style={styles.inline}>
+            <Text style={[styles.small, { color: look.muted }]}>{playStyleLabel[p.playStyle]} · </Text>
+            <Swatch surface={p.preferredSurface} look={look} />
+            <Text numberOfLines={1} style={[styles.small, styles.shrink, { color: look.muted }]}>{surfaceWord[p.preferredSurface]}</Text>
+          </View>
+          <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>{handsLine(p)}</Text>
+        </View>
+      ) : null}
+      <SetupFacts look={look} cells={[{ key: 'years', figure: years, empty: '– yrs', label: 'Playing' }, { key: 'level', figure: level, empty: '–', label: 'Level', wide: true }]} />
+    </View>
+  );
+}
+
+/** The setup card's two facts on a hairline, Strip's look: two by two never needed (there are only two). */
+function SetupFacts({ look, cells }: { look: CardLook; cells: { key: string; figure: string; empty: string; label: string; wide?: boolean }[] }) {
+  return (
+    <View style={[styles.setupFacts, { borderTopColor: look.lines }]}>
+      {cells.map((c, i) => (
+        <View key={c.key} style={[styles.cell, c.wide ? styles.setupWide : styles.setupNarrow, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[styles.setupFact, styles.tabular, { color: c.figure ? look.figure : look.faint }]}>{c.figure || c.empty}</Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, look.plain && styles.capsLabel, { color: look.muted }]}>{c.label}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/** One small scale-up when `token` becomes something (a rating typed in full): no fade, then still. */
+function Bump({ token, children }: { token: string; children: React.ReactNode }) {
+  const reduced = useReducedMotion();
+  const s = useSharedValue(1);
+  const [last, setLast] = useState(token);
+  useEffect(() => {
+    if (token === last) return;
+    setLast(token);
+    if (!token || reduced) return;
+    s.value = withSequence(withTiming(1.14, { duration: 140, easing: Easing.out(Easing.cubic) }), withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
+  }, [token, last, reduced, s]);
+  const anim = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
+  return <Reanimated.View style={anim}>{children}</Reanimated.View>;
 }
 
 /** A player's tournaments still to come, soonest first. Whatever the data layer shares: other players' only reach here when they may be seen. */
@@ -275,4 +377,16 @@ const styles = StyleSheet.create({
   // A unit after a figure ("50 days"): smaller and lighter, on the figure's baseline, in its colour.
   unit: { ...font('500'), letterSpacing: 0 },
   tabular: { fontVariant: ['tabular-nums'] },
+  // The sign-up's live card (variant 'setup').
+  setupCard: { borderRadius: corner(16), padding: 16, overflow: 'hidden' },
+  setupTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  setupName: { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.2 },
+  setupRating: { flexDirection: 'row', alignItems: 'baseline', gap: 5 },
+  setupFigure: { ...font('700'), fontSize: 34, lineHeight: 40, letterSpacing: -1, fontVariant: ['tabular-nums'] },
+  setupSystem: { ...font('600'), fontSize: 13, letterSpacing: 1 },
+  setupGame: { marginTop: 10, gap: 0 },
+  setupFacts: { flexDirection: 'row', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
+  setupFact: { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.3 },
+  setupNarrow: { flexGrow: 0, flexBasis: 96 },
+  setupWide: { flexGrow: 1 },
 });

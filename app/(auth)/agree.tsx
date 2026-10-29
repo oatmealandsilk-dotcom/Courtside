@@ -73,8 +73,8 @@ export default function Agree() {
 
   return (
     <View style={styles.root}>
-      {/* The sign-up redraw (ONBOARDING_V2): a flat page, no wash, no mark, the bar at setup's one height. */}
-      {ONBOARDING_V2 ? null : <Wash height={420} />}
+      {/* The sign-up redraw (ONBOARDING_V2): setup's own faint wash, no mark, the bar at setup's one height. */}
+      {ONBOARDING_V2 ? <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} /> : <Wash height={420} />}
       <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: ONBOARDING_V2 && setupCount ? space.header : space.top }]}>
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         {ONBOARDING_V2 ? null : <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>}
@@ -101,7 +101,7 @@ export default function Agree() {
         </Animated.Text>
       </ScrollView>
       {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}
-      <StatusShade wash={ONBOARDING_V2 ? undefined : { height: 420 }} />
+      <StatusShade wash={ONBOARDING_V2 ? setupLook.wash : { height: 420 }} />
 
       {/* Setup's bottom, the same on every setup page: the main button, and the quieter way out as a word under it. */}
       <Animated.View entering={enter(4)}>

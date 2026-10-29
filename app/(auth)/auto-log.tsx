@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -9,6 +9,10 @@ import { useSetupCount } from '@/features/onboarding/setupCount';
 import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { StatusShade } from '@/components/StatusShade';
 import { Wash } from '@/components/Wash';
+import { SessionCard } from '@/components/session/SessionCard';
+import { Avatar } from '@/components/ui';
+import { SAMPLE_SESSION } from '@/features/welcome/sampleSession';
+import type { User } from '@/data/types';
 import { useAutoLog, type AutoLogSource } from '@/features/activity/autoLog';
 import { consentLine } from '@/features/activity/autoLogSharing';
 import { useApp } from '@/store/AppContext';
@@ -40,7 +44,29 @@ export default function AutoLog() {
   const styles = useThemedStyles(styleDefinitions);
   const space = useGateSpace();
   const auto = useAutoLog();
-  const { currentUser, autoLogSharing } = useApp();
+  const { currentUser, currentUserId, autoLogSharing, posts, users, blockedIds, blockedMeIds } = useApp();
+  const win = useWindowDimensions();
+  // The sample card counts up once, a beat after the page lands.
+  const [play, setPlay] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setPlay(true), 300); return () => clearTimeout(t); }, []);
+  // Who already logs this way (round 2): the people behind the tennis that logged itself in posts this player can
+  // already see (the server's audience rules, teen rules included, already applied to what was loaded), newest
+  // first, never anyone blocked either way. Fewer than two: no row (never a count, never stand-in faces).
+  const loggers = useMemo(() => {
+    if (!ONBOARDING_V2) return [] as User[];
+    const byId = new Map(users.map((u) => [u.id, u]));
+    const seen = new Set<string>();
+    const out: User[] = [];
+    [...posts].filter((p) => p.autoLogged && !!p.session && p.authorId !== currentUserId && !blockedIds.includes(p.authorId) && !blockedMeIds.includes(p.authorId))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .forEach((p) => {
+        const u = byId.get(p.authorId);
+        if (!u || seen.has(u.id) || out.length >= 3) return;
+        seen.add(u.id);
+        out.push(u);
+      });
+    return out.length >= 2 ? out : [];
+  }, [posts, users, currentUserId, blockedIds, blockedMeIds]);
   const [busy, setBusy] = useState<AutoLogSource | null>(null);
   // Setup's one step count (Oct 20 sweep).
   const setupCount = useSetupCount('auto-log', true);
@@ -71,6 +97,61 @@ export default function AutoLog() {
       setBusy(null);
     }
   };
+
+  if (ONBOARDING_V2) {
+    // Round 2 (Oct 29, owner: "3 and 5 specifically need to push more for ppl to put in information and connect"):
+    // what they get, shown, not said. The feed's own sideways session card with sample numbers on their own name,
+    // marked EXAMPLE; the real people already logging this way, when there are any; then who sees it, as before.
+    const contentW = Math.min(win.width, 460) - spacing.xl * 2;
+    const cardH = Math.max(170, Math.min(240, win.height - 560));
+    const firstName = currentUser?.name?.split(' ')[0] || undefined;
+    const sample = { ...SAMPLE_SESSION, source: auto.apple || !auto.whoop ? 'apple-health' as const : 'whoop' as const };
+    const first = (u: User) => u.name.split(' ')[0];
+    const facesLine = loggers.length === 3 ? `${first(loggers[0])}, ${first(loggers[1])} and ${first(loggers[2])} log this way.` : loggers.length === 2 ? `${first(loggers[0])} and ${first(loggers[1])} log this way.` : '';
+    const ready = shown || offering;
+    return (
+      <View style={styles.root}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
+        <ScrollView contentContainerStyle={[styles.scroll, styles.v2Scroll, { paddingTop: setupCount ? space.header : space.top, paddingBottom: spacing.xl }]}>
+          {setupCount ? <Animated.View entering={enter(0)} style={styles.v2Bar}><SetupProgress count={setupCount} /></Animated.View> : null}
+          <Animated.View entering={enter(0)} style={styles.head}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={2} style={styles.title}>Your tennis, logged for you</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>Connect once. Every hit of 20 minutes or more logs itself.</Text>
+          </Animated.View>
+          <Animated.View entering={enter(1)} style={styles.v2Card}>
+            <SessionCard session={sample} width={contentW} height={cardH} author={firstName} eyebrow="EXAMPLE · TODAY" showSource play={play} people={[]} accessibilityHint="An example, not a real session" />
+          </Animated.View>
+          {loggers.length ? (
+            <Animated.View entering={enter(2)} style={styles.v2Faces} accessible accessibilityLabel={facesLine}>
+              <View style={styles.v2Stack}>
+                {loggers.map((u, i) => (
+                  <View key={u.id} style={[styles.v2Face, i > 0 && styles.v2FaceOver]}>
+                    <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
+                  </View>
+                ))}
+              </View>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2FacesText} numberOfLines={1}>{facesLine}</Text>
+            </Animated.View>
+          ) : null}
+          {ready ? (
+            <Animated.Text entering={enter(2)} style={styles.v2Who}>
+              {consentLine(auto.seenBy(auto.apple ? 'apple-health' : 'whoop'), currentUser, autoLogSharing)}{auto.apple ? ' Also adds sleep, steps and food to your Health page.' : ''}
+            </Animated.Text>
+          ) : <View style={styles.v2WhoWaiting}><ActivityIndicator color={colors.textFaint} /></View>}
+        </ScrollView>
+        <Animated.View entering={enter(3)}>
+          <SetupFooter
+            primary={auto.apple || !auto.whoop
+              ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || !ready, disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
+              : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
+            secondary={auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
+            link={{ label: 'Not now', onPress: onward, disabled: !!busy }}
+          />
+        </Animated.View>
+        <StatusShade wash={setupLook.wash} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -132,4 +213,17 @@ const styleDefinitions = StyleSheet.create({
   foot: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   // The redraw (ONBOARDING_V2): a plain hairline inset card, words only.
   cardV2: { ...setupLook.inset, padding: spacing.lg },
+  // Round 2.
+  v2Scroll: { gap: 0 },
+  v2Bar: { marginBottom: setupLook.titleGap },
+  v2Lead: { ...setupLook.lead },
+  v2Card: { marginTop: 20 },
+  v2Faces: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
+  v2Stack: { flexDirection: 'row' },
+  // Each face ringed in the page's colour, so the overlap reads as three faces, not one shape.
+  v2Face: { borderRadius: 16, borderWidth: 2, borderColor: colors.bg },
+  v2FaceOver: { marginLeft: -8 },
+  v2FacesText: { ...typography.small, fontSize: 13, color: colors.textMuted, flex: 1 },
+  v2Who: { ...typography.small, fontSize: 13, lineHeight: 18, color: colors.textMuted, marginTop: spacing.lg },
+  v2WhoWaiting: { marginTop: spacing.lg, height: 54, alignItems: 'flex-start', justifyContent: 'center' },
 });

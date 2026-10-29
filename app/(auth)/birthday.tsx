@@ -18,6 +18,7 @@ import { useGateSpace } from '@/lib/useGateSpace';
 import { useAndroidBack } from '@/lib/androidBack';
 import { goBack } from '@/lib/goBack';
 import { StatusShade } from '@/components/StatusShade';
+import { Wash } from '@/components/Wash';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
@@ -149,6 +150,7 @@ export default function Birthday() {
     // The redraw (ONBOARDING_V2): the two answers as one inset list, exactly alike, a checkmark on the one picked.
     return (
       <View style={styles.root}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
         <ScrollView style={styles.fill} contentContainerStyle={[styles.scroll, styles.scrollV2, { paddingTop: setupCount ? space.header : space.top }]}>
           <Rise>
             <SetupProgress count={setupCount} />
@@ -179,7 +181,7 @@ export default function Birthday() {
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkV2}>Add my birthday instead</Text>
           </Pressable>
         </View>
-        <StatusShade />
+        <StatusShade wash={setupLook.wash} />
         {curtain}
       </View>
     );
@@ -234,6 +236,7 @@ export default function Birthday() {
     return (
       <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
       <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
         <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} style={styles.fill} contentContainerStyle={[styles.scroll, styles.scrollV2, { paddingTop: setupCount ? space.header : space.top }]} keyboardShouldPersistTaps="handled">
           <Rise>
             <SetupProgress count={setupCount} />
@@ -258,7 +261,7 @@ export default function Birthday() {
             ? <QuietButton label="Not now" disabled={busy} onPress={() => goBack()} />
             : <QuietButton label="Skip for now" disabled={busy} onPress={() => { setStep('skip'); setError(''); }} />}
         </View>
-        <StatusShade />
+        <StatusShade wash={setupLook.wash} />
         {curtain}
       </KeyboardAvoidingView>
       </KeyboardScrollContext.Provider>

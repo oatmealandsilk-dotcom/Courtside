@@ -10,6 +10,9 @@ import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
 import { SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
+import { PlayerCard } from '@/components/tennis/PlayerCard';
+import { StatusShade } from '@/components/StatusShade';
+import { Wash } from '@/components/Wash';
 import { useSetupCount } from '@/features/onboarding/setupCount';
 import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -95,6 +98,15 @@ const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
   { title: 'Calendar', lead: 'Optional. Gives the plan a target.', skip: 'calendar' },
   { title: 'Review', lead: 'What the coach works from.' },
 ];
+
+/**
+ * The redraw's one line under About you and Your game (ONBOARDING_V2, round 2, Oct 29, owner: "3 and 5
+ * specifically need to push more for ppl to put in information"): why it is worth filling in, said once.
+ */
+const V2_LEADS: Record<number, string> = {
+  0: 'Players near you find you by town and level.',
+  1: 'This is what other players see.',
+};
 
 /** Opened from the Tennis profile to change your answers: the steps about you and your game, with Save on each. */
 const EDIT_STEPS = [0, 1, 3, 4];
@@ -527,7 +539,7 @@ function OnboardingSteps() {
   const foundViaBlockV2 = (
     <View style={styles.v2Found} accessibilityRole="radiogroup" accessibilityLabel="How did you find CourtSide? Optional">
       <View style={styles.foundHead}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>How did you find CourtSide?</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>How did you find CourtSide?</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.optional}>Optional</Text>
       </View>
       <View style={styles.v2Grid}>
@@ -535,7 +547,7 @@ function OnboardingSteps() {
           const on = foundVia === o.value;
           return (
             <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={o.label} onPress={() => pickFoundVia(o.value)} style={[styles.v2Chip, styles.v2GridChip, on && styles.v2ChipOn]}>
-              <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.v2ChipText, on && { color: colors.brandInk }]}>{o.label}</Text>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.v2ChipText, styles.v2GridText, on && { color: colors.brandInk }]}>{o.label}</Text>
             </Pressable>
           );
         })}
@@ -547,14 +559,35 @@ function OnboardingSteps() {
   );
 
   const styleNow = PLAY_STYLES.find((p) => p.value === playStyle);
+  // The live card on About you and Your game (round 2): the account as it stands with what is typed here laid
+  // over it. Display only: nothing is saved until Continue, which saves exactly as before.
+  const draft = useMemo(() => (currentUser ? {
+    ...currentUser,
+    name,
+    location,
+    profile: { ...currentUser.profile, skillSystem: skillSystem as SkillSystem, rating, startedYear, playStyle, handedness, backhand, preferredSurface: surface },
+  } : null), [currentUser, name, location, skillSystem, rating, startedYear, playStyle, handedness, backhand, surface]);
+  const liveCard = (game: boolean) => (draft ? (
+    <PlayerCard variant="setup" user={draft} setup={{ rated: ratingValid, years: yearsOk ? typedYears : null, game }} />
+  ) : null);
   const inviteShown = inviteOpen || !!prefilled || !!inviteCode || !!inviteNote;
 
   // About you, redrawn: who you are, your rating on one row, years playing, and "Invited by" only when wanted.
   const aboutV2 = (
     <>
+      {liveCard(false)}
       <View style={styles.v2You}>
-        <Field label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
-        <LocationField value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
+        {/* Name and town as one inset list, each label beside its box (round 2: two boxes with labels over them took about 40pt more). */}
+        <View style={styles.v2Inset}>
+          <View style={styles.v2FieldRow}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2FieldLabel}>Name</Text>
+            <View style={styles.v2FieldBox}>
+              <Field row accessibilityLabel="Name" placeholder="Your name" value={name} onChangeText={setName} autoCapitalize="words" />
+            </View>
+          </View>
+          <View style={styles.v2Hairline} />
+          <LocationField row value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
+        </View>
         {currentUser?.ageGroup === 'teen' ? (
           <View style={[styles.v2Inset, styles.v2PrivRow]}>
             <View style={{ flex: 1, gap: 2 }}>
@@ -566,9 +599,10 @@ function OnboardingSteps() {
         ) : null}
       </View>
       <View style={styles.v2Section}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>Rating</Text>
         <View style={styles.v2RatingRow}>
           <View style={{ flex: 1 }}>
-            <Field label="Rating" value={ratingText} onChangeText={typeRating} placeholder={skillSystem === 'UTR' ? 'e.g. 6.0' : 'e.g. 3.5'} keyboardType="decimal-pad" selectTextOnFocus />
+            <Field accessibilityLabel="Rating" value={ratingText} onChangeText={typeRating} placeholder={skillSystem === 'UTR' ? 'e.g. 6.0' : 'e.g. 3.5'} keyboardType="decimal-pad" selectTextOnFocus />
           </View>
           <View style={styles.v2System}>
             <SegmentedControl<'NTRP' | 'UTR'> accessibilityLabel="Rating system" value={skillSystem} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
@@ -577,7 +611,7 @@ function OnboardingSteps() {
         <View style={styles.v2NoteRow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.v2Note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : ''}</Text>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: levelsOpen }} accessibilityLabel="Not sure of your rating? Pick your level" hitSlop={8} onPress={() => { haptics.tap(); setLevelsOpen((o) => !o); }}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2NotSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
           </Pressable>
         </View>
         <Collapse open={levelsOpen}>
@@ -589,7 +623,7 @@ function OnboardingSteps() {
         </Collapse>
       </View>
       <View style={styles.v2Section}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>Years playing</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>Years playing</Text>
         <View style={styles.v2YearsRow}>
           <View style={styles.v2YearBox}>
             <Field accessibilityLabel="How many years have you played?" placeholder="e.g. 5" value={yearsText} onChangeText={typeYears} keyboardType="number-pad" selectTextOnFocus />
@@ -635,7 +669,8 @@ function OnboardingSteps() {
   // Your game, redrawn: the style as one pop-up row, hand and backhand side by side, the surface, then the optional question.
   const gameV2 = (
     <>
-      <View style={styles.v2Inset}>
+      {liveCard(true)}
+      <View style={[styles.v2Inset, styles.v2GameFirst]}>
         <Pressable accessibilityRole="button" accessibilityState={{ expanded: styleOpen }} accessibilityLabel="Style of play" onPress={() => setStyleOpen((o) => !o)} style={({ pressed }) => [styles.v2StyleRow, pressed && { backgroundColor: colors.surfaceAlt }]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2StyleLabel}>Style</Text>
           <View style={styles.v2StyleValue}>
@@ -651,7 +686,7 @@ function OnboardingSteps() {
           ))}
         </Collapse>
       </View>
-      <View style={[styles.twoCol, styles.v2SectionRow]}>
+      <View style={[styles.twoCol, styles.v2GameRow]}>
         <View style={{ flex: 1 }}>
           <Group label="Hand">
             <SegmentedControl<Handedness> value={handedness} onChange={pick(setHandedness)} segments={[{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]} />
@@ -663,7 +698,7 @@ function OnboardingSteps() {
           </Group>
         </View>
       </View>
-      <View style={styles.v2Section}>
+      <View style={[styles.v2Section, styles.v2GameRow]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>Surface</Text>
         <SegmentedControl<SurfacePreference> value={surface} onChange={pick(setSurface)} segments={SURFACES} />
       </View>
@@ -675,6 +710,8 @@ function OnboardingSteps() {
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <View style={[styles.root, { paddingTop: space.header }]}>
+      {/* Setup's faint court wash (round 2), drawn once behind the whole page: it stays still while the steps move over it. */}
+      {setupRun && ONBOARDING_V2 ? <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} /> : null}
       <View style={[styles.head, v2 && styles.v2Narrow]}>
         {setupRun ? <View style={v2 ? styles.v2Progress : styles.progress}><SetupProgress count={setupCount} /></View> : ratingOnly ? null : (
           <View style={styles.track}>
@@ -685,7 +722,8 @@ function OnboardingSteps() {
           <Reanimated.Text key={ratingOnly ? 'rating' : STEPS[step].title} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Reanimated.Text>
           {ratingOnly || setupRun ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
-        {ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
+        {v2 && V2_LEADS[step] ? <Reanimated.Text key={V2_LEADS[step]} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{V2_LEADS[step]}</Reanimated.Text>
+          : ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
           : STEPS[step].lead ? <Reanimated.Text key={STEPS[step].lead} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Reanimated.Text> : null}
       </View>
 
@@ -958,6 +996,8 @@ function OnboardingSteps() {
         </View>
       </View>
       )}
+      {/* What scrolls up stops at the status bar, painted like the page behind it. */}
+      {v2 ? <StatusShade wash={setupLook.wash} /> : null}
     </View>
     </KeyboardScrollContext.Provider>
   );
@@ -1072,9 +1112,20 @@ const styleDefinitions = StyleSheet.create({
   v2Narrow: { maxWidth: 460 },
   // The title 24pt under the bar (the head's own 4pt gap and this).
   v2Progress: { marginBottom: setupLook.titleGap - spacing.xs },
-  v2Body: { maxWidth: 460, paddingTop: spacing.lg },
-  v2You: { gap: spacing.lg },
-  v2Section: { marginTop: setupLook.sectionGap, gap: spacing.sm },
+  // The live card 16pt under the lead (the head's own 8 and this).
+  v2Body: { maxWidth: 460, paddingTop: spacing.sm },
+  v2You: { gap: spacing.md, marginTop: 20 },
+  // Round 2: 20 between groups (was 24), so the page fills without an empty middle.
+  v2Section: { marginTop: 20, gap: spacing.sm },
+  v2Lead: { ...setupLook.lead, marginTop: spacing.xs },
+  v2FieldRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.lg },
+  v2FieldLabel: { ...typography.body, color: colors.textMuted, width: 88 },
+  v2FieldBox: { flex: 1, minWidth: 0 },
+  v2Hairline: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
+  v2SmallLabel: { ...typography.small, fontSize: 13, color: colors.textMuted },
+  v2NotSure: { ...typography.smallStrong, color: colors.textMuted },
+  v2GameFirst: { marginTop: 20 },
+  v2GameRow: { marginTop: spacing.lg },
   v2SectionRow: { marginTop: setupLook.sectionGap },
   v2Inset: { ...setupLook.inset },
   v2PrivRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
@@ -1096,7 +1147,9 @@ const styleDefinitions = StyleSheet.create({
   v2StyleLabel: { ...typography.body, color: colors.textMuted },
   v2StyleValue: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
   v2StyleNow: { ...typography.body, ...font('500'), color: colors.text, flexShrink: 1 },
-  v2Found: { marginTop: setupLook.sectionGap, paddingTop: setupLook.sectionGap, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  v2Found: { marginTop: 20, paddingTop: spacing.lg, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   v2Grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  v2GridChip: { flexBasis: '30%', flexGrow: 1, paddingHorizontal: spacing.sm, paddingVertical: 8 },
+  // Round 2: 32pt chips, three to a row.
+  v2GridChip: { flexBasis: '30%', flexGrow: 1, minHeight: 32, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  v2GridText: { fontSize: 14 },
 });

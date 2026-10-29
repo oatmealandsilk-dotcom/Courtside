@@ -30,7 +30,7 @@ const useMySessionCount = () => {
  * your counted sessions this month; `countsHere`: your month counts for the
  * city on your profile (false after a move: it stays where it began).
  */
-export function useCityBoard(): {
+export function useCityBoard(enabled = true): {
   on: boolean;
   status: BoardStatus;
   stale: boolean;
@@ -42,7 +42,8 @@ export function useCityBoard(): {
   retry: () => void;
 } {
   const { currentUser, currentUserId, sessions, cityBoards, actions } = useApp();
-  const on = cityBoardOn(currentUser);
+  // `enabled` false: never asked for (a page that only sometimes wants the board, such as sign-up's last step).
+  const on = enabled && cityBoardOn(currentUser);
   // Worked out on every draw, never kept: Find Players stays open for days on a phone, and the board must
   // move on to the new month (and ask again on a new day) without the app being closed first.
   const first = boardMonth();

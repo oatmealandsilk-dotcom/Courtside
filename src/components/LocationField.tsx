@@ -8,6 +8,7 @@ import { PLACES, searchPlaces } from '@/data/locations';
 import { searchCitiesRemote, type CityHit } from '@/features/places/search';
 import { useApp } from '@/store/AppContext';
 import { colors, radius, spacing, typography, font } from '@/theme';
+import { TextScale } from '@/theme/textScale';
 
 /**
  * A city box that offers places as you type — the built-in list at once,
@@ -23,7 +24,15 @@ const matchLength = (name: string, typed: string) => {
 };
 
 type At = { lat: number; lng: number };
-export function LocationField({ value, onChange }: { value: string; onChange: (next: string, at: At | null) => void }) {
+export function LocationField({ value, onChange, row = false }: {
+  value: string;
+  onChange: (next: string, at: At | null) => void;
+  /**
+   * Drawn as one row of an inset list (sign-up's Name and Town, ONBOARDING_V2): "Town" beside the box, the places
+   * and "Use my location" as further rows of the same list under it, each on a hairline.
+   */
+  row?: boolean;
+}) {
   const styles = useThemedStyles(styleDefinitions);
   const { locationEnabled, detectedLocation, detectedCoords } = useApp();
   const [focused, setFocused] = useState(false);
@@ -44,6 +53,50 @@ export function LocationField({ value, onChange }: { value: string; onChange: (n
     return [...local, ...remote.filter((r) => !names.has(r.name.toLowerCase()))].filter((p) => p.name !== value).slice(0, 6);
   }, [value, remote]);
   const showDetected = locationEnabled && detectedLocation && detectedLocation !== value;
+  const useDetected = () => { if (!detectedLocation) return; const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, bank ? { lat: bank.lat, lng: bank.lng } : null); setFocused(false); };
+
+  if (row) {
+    return (
+      <View>
+        <View style={styles.rowLine}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel}>Town</Text>
+          <View style={styles.rowBox}>
+            <Field
+              row
+              accessibilityLabel="Town"
+              placeholder="Search your town"
+              value={value}
+              onChangeText={(next) => { setFocused(true); onChange(next, null); }}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setTimeout(() => setFocused(false), 150)}
+              autoCapitalize="words"
+              autoCorrect={false}
+            />
+          </View>
+        </View>
+        {focused && options.length ? options.map((place) => (
+          <Pressable
+            key={place.name}
+            accessibilityRole="button"
+            accessibilityLabel={`Use ${place.name}`}
+            onPress={() => { onChange(place.name, { lat: place.lat, lng: place.lng }); setFocused(false); }}
+            style={({ pressed }) => [styles.rowOption, pressed && { backgroundColor: colors.surfaceAlt }]}
+          >
+            <Text style={styles.optionText} numberOfLines={1}>
+              <Text style={styles.match}>{place.name.slice(0, matchLength(place.name, value))}</Text>
+              {place.name.slice(matchLength(place.name, value))}
+            </Text>
+          </Pressable>
+        )) : null}
+        {showDetected ? (
+          <Pressable accessibilityRole="button" onPress={useDetected} style={({ pressed }) => [styles.rowOption, pressed && { backgroundColor: colors.surfaceAlt }]}>
+            <Ionicons name="navigate" size={15} color={colors.brand} />
+            <Text style={styles.detectedText} numberOfLines={1}>Use my location · {detectedLocation}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.wrap}>
@@ -81,7 +134,7 @@ export function LocationField({ value, onChange }: { value: string; onChange: (n
       {showDetected ? (
         // The town's own centre, never where the phone is (Oct 27 audit #1): a profile keeps a town,
         // not someone's home. detectedLocation is always a town from the built-in list (nearestPlace).
-        <Pressable accessibilityRole="button" onPress={() => { const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, bank ? { lat: bank.lat, lng: bank.lng } : null); setFocused(false); }} style={styles.detected}>
+        <Pressable accessibilityRole="button" onPress={useDetected} style={styles.detected}>
           <Ionicons name="navigate" size={16} color={colors.brand} />
           <Text style={styles.detectedText}>Use my location · {detectedLocation}</Text>
         </Pressable>
@@ -111,4 +164,9 @@ const styleDefinitions = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 11 },
   optionText: { ...typography.body, color: colors.text },
   match: { ...font('700'), color: colors.text },
+  // The inset-list row (row).
+  rowLine: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.lg },
+  rowLabel: { ...typography.body, color: colors.textMuted, width: 88 },
+  rowBox: { flex: 1, minWidth: 0 },
+  rowOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingLeft: spacing.lg + 88, paddingRight: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 });

@@ -9,7 +9,7 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { SessionCard } from '@/components/session/SessionCard';
 import { StreakFlame } from '@/components/StreakFlame';
-import type { SessionDetail } from '@/data/types';
+import { SAMPLE_SESSION } from '@/features/welcome/sampleSession';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, withAlpha } from '@/theme';
 import { corner } from '@/theme/look';
@@ -120,16 +120,7 @@ function MapMoment() {
 // 2. A session: the shirt-coloured card sliding up, its numbers counting.
 // ---------------------------------------------------------------------------
 
-const SESSION: SessionDetail = {
-  focus: 'Practice',
-  minutes: 84,
-  drills: [],
-  kind: 'practice',
-  activityId: 'welcome-demo',
-  maxHr: 171,
-  avgHr: 138,
-  zones: [9, 21, 28, 19, 7],
-};
+const SESSION = SAMPLE_SESSION;
 
 function SessionMoment() {
   const play = useAfter(260);
