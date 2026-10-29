@@ -214,11 +214,11 @@ export function ChipStrip<T extends string | number>({ options, value, onChange,
  * in grey, saying what is missing; once pressed it stays green and turns a
  * small wheel while it works, saying what it is doing ("Signing in…").
  */
-export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel, short = false }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string; /** A page's button height (44), for a small pop-up card rather than a sheet. */ short?: boolean }) {
+export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel, short = false, radius: corner }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string; /** A page's button height (44), for a small pop-up card rather than a sheet. */ short?: boolean; /** Its corner, when a small card it sits in has a tighter one than a button's own (buttonShape.radius). */ radius?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const off = disabled || busy;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, short && styles.submitShort, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, short && styles.submitShort, corner != null && { borderRadius: corner }, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
       {busy ? (
         <View style={styles.submitRow}>
           <ActivityIndicator size="small" color={colors.brandInk} />
@@ -226,7 +226,7 @@ export function Submit({ label, onPress, disabled = false, busy = false, waiting
         </View>
       ) : (
         <>
-          {off ? null : <BrandWash radius={buttonShape.radius} curve />}
+          {off ? null : <BrandWash radius={corner ?? buttonShape.radius} curve />}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.submitText, off && styles.submitTextOff]}>{disabled && waiting ? waiting : label}</Text>
         </>
       )}

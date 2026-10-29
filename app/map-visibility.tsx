@@ -1,4 +1,3 @@
-import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -39,7 +38,7 @@ import { TextScale, buttonShape, colors, font, lift, radius, spacing, typography
  * ones; none, neither); "Let friends see you're up to hit?" in the app's own
  * title weight; and one short line: only friends who follow
  * you back, only when you tap, and it ends by itself (at 10pm, or in 2 hours
- * from 8pm). Two full-width buttons in the app's own shape: "Turn on", the
+ * from 8pm). Two full-width buttons, the app's own shape a step less round than the card: "Turn on", the
  * solid green one, saves the yes; then Apple's own location prompt, then
  * Up to hit. "Not now", the plain grey one (or a tap outside, Escape, Android's Back), saves
  * nothing and shares nothing; it asks again the next time you tap Up to hit.
@@ -237,9 +236,11 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
           </ScrollView>
           <View style={styles.cardActions}>
             {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}
-            <Submit short label={FIRST_YES} busy={busy} busyLabel="Saving…" onPress={() => { void turnOn(); }} />
-            {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): the same shape as Turn on, in plain grey, never hidden. */}
-            <Pressable ref={notNowRef} accessibilityRole="button" accessibilityLabel="Not now" accessibilityState={{ disabled: busy }} disabled={busy} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && { opacity: PRESS_DIM }]}>
+            {/* Corners a step tighter than the card's own, so the buttons never look softer than what holds them. */}
+            <Submit short radius={BUTTON_CORNER} label={FIRST_YES} busy={busy} busyLabel="Saving…" onPress={() => { void turnOn(); }} />
+            {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): the same shape as Turn on, in plain grey, never hidden.
+                Pressed, it gives a little as Turn on does (the same 0.99), so the two answer a finger alike. */}
+            <Pressable ref={notNowRef} accessibilityRole="button" accessibilityLabel="Not now" accessibilityState={{ disabled: busy }} disabled={busy} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && !busy && styles.pressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
             </Pressable>
           </View>
@@ -317,12 +318,16 @@ function useFriendsBack(): User[] {
 
 /** The faces drawn: the first three. */
 const FACES = 3;
-/** Each face, its ring included: small, a caption's height, beside the names that say who they are. */
-const FACE = 24;
+/**
+ * Each face, its ring included: small, about the title's height, beside the
+ * names that say who they are; big enough that a face with no photo keeps
+ * its initials readable (about 9.4pt).
+ */
+const FACE = 28;
 /** A crisp ring in the card's own colour, so one face sits cleanly over the next. */
 const FACE_RING = 1;
 /** How far each face tucks under the one before: about a quarter, a small overlapping row, never a stack. */
-const FACE_TUCK = 6;
+const FACE_TUCK = 7;
 
 /** Their first names, as the card says them: "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
 function friendsWords(people: User[]): string {
@@ -360,7 +365,8 @@ function Faces({ people }: { people: User[] }) {
       <View style={styles.faces}>
         {shown.map((u, i) => (
           <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
-            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} quiet style={{ backgroundColor: tints[i] }} />
+            {/* A face with no photo gets a hairline edge, so its pale tone still holds its shape on a light card. */}
+            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} quiet style={[{ backgroundColor: tints[i] }, !u.avatarUrl && styles.faceEdge]} />
           </View>
         ))}
       </View>
@@ -498,6 +504,9 @@ function facts(): string[] {
 /** The card's inner side margin: the faces, the words and both buttons share this one left edge. */
 const CARD_PAD = spacing.lg + spacing.xs;
 
+/** The buttons' corner: a step under the card's (radius.lg), never rounder than the card that holds them. */
+const BUTTON_CORNER = radius.md;
+
 /** ConfirmHost's own test: a computer's browser gets the wider card. */
 const desktop = isDesktopBrowser();
 
@@ -511,7 +520,8 @@ const styleDefinitions = StyleSheet.create({
   card: {
     flexShrink: 1,
     backgroundColor: colors.surface,
-    // A plainer corner than C's (a sheet's), the app's own card corner: less of a soft blob.
+    // A plainer corner than C's (a sheet's), the app's own card corner: less of a soft blob. ConfirmHost's
+    // "are you sure?" keeps its bigger corner and wider shadow for now; only the motion is shared with it.
     borderRadius: radius.lg,
     ...buttonShape.curve,
     // The page behind is dimmed, but on a dark court the card is dark too: a faint edge keeps it a card.
@@ -526,15 +536,19 @@ const styleDefinitions = StyleSheet.create({
   // The app's own title weight (semibold, as a sheet's), one line at the usual text size.
   cardTitle: { ...typography.heading, lineHeight: 22, color: colors.text },
   cardLine: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.textMuted, marginTop: spacing.xs },
-  cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: spacing.lg, gap: spacing.sm },
+  // As much room under Not now as at the sides: the bottom is never the tightest edge.
+  cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: CARD_PAD, gap: spacing.sm },
   // The faces and their names: one quiet line above the question.
   who: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md },
   faces: { flexDirection: 'row', alignItems: 'center' },
   faceRing: { padding: FACE_RING, borderRadius: radius.pill, backgroundColor: colors.surface },
+  faceEdge: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   whoNames: { ...typography.small, flexShrink: 1, color: colors.textMuted },
   // The same shape as Turn on, in plain grey with the page's ink: plain to see, plainly the second choice.
-  notNow: { minHeight: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: colors.surfaceAlt },
+  notNow: { minHeight: buttonShape.height, borderRadius: BUTTON_CORNER, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg, backgroundColor: colors.surfaceAlt },
   notNowText: { ...typography.bodyStrong, fontSize: buttonShape.label, color: colors.text, textAlign: 'center' },
+  // Submit's own press: a 1% give, no fade.
+  pressed: { transform: [{ scale: 0.99 }] },
   errorGap: { marginBottom: spacing.xs },
   // Settings → Privacy's sheet.
   scroll: { flexShrink: 1 },
