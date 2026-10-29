@@ -214,11 +214,11 @@ export function ChipStrip<T extends string | number>({ options, value, onChange,
  * in grey, saying what is missing; once pressed it stays green and turns a
  * small wheel while it works, saying what it is doing ("Signing in…").
  */
-export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string }) {
+export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel, short = false }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string; /** A page's button height (44), for a small pop-up card rather than a sheet. */ short?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const off = disabled || busy;
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
+    <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, short && styles.submitShort, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
       {busy ? (
         <View style={styles.submitRow}>
           <ActivityIndicator size="small" color={colors.brandInk} />
@@ -315,6 +315,7 @@ const styleDefinitions = StyleSheet.create({
   // Instagram's shape (Oct 22): a rounded rectangle with Apple's smooth corner; a touch taller than a
   // page's button, as the one thing a sheet or sign-in asks you to tap.
   submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
+  submitShort: { minHeight: buttonShape.height },
   submitOn: { backgroundColor: colors.brand, boxShadow: brandBoxShadow },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },
