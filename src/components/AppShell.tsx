@@ -40,6 +40,7 @@ import { claimCarriedBirthDate, isDeviceBlocked, recallAnswered } from '@/featur
 import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
+import { ALERTS_WHY, noteAlertsLaunch } from '@/features/push/alertsWhy';
 import { PhoneAppWelcome } from '@/features/phoneApp/PhoneAppCard';
 import { recoverChatPick } from '@/features/messages/pendingPick';
 import { setUpNotificationChannels } from '@/features/push/channels';
@@ -171,7 +172,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (!isSupabaseConfigured || !remoteLoaded || !onboardingComplete || !(currentUser?.ageGroup || currentUser?.birthdaySkipped)) return;
     if (pushAskedFor.current === currentUserId) return;
     pushAskedFor.current = currentUserId;
-    void registerForPush();
+    // With the "why turn on alerts" card on (alertsWhy.ts) the phone does not ask here: the card asks later,
+    // at a moment alerts help. Off (today), the phone asks here exactly as before.
+    void registerForPush({ ask: !ALERTS_WHY });
+    void noteAlertsLaunch();
   }, [currentUserId, remoteLoaded, onboardingComplete, currentUser?.ageGroup, currentUser?.birthdaySkipped]);
   // Android: a chat photo taken or chosen just before the phone closed the app
   // (short of memory) is collected, and the app goes back to that chat with it
