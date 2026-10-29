@@ -131,7 +131,10 @@ export const LIT_CSS = `
  * map when zoomed in that far, "cs-far" when far out, and "cs-short" below
  * zoom 12, where players' names drop their "· 2h" (SHORT_ZOOM: the pin
  * engine leaves them less room there). "cs-hit" on a pin: an open hit
- * folded into it, zoomed out (a small dot, pinEngine). "cs-quiet" on the
+ * folded into it, zoomed out (a small dot, pinEngine). "cs-hits": a court's
+ * "+2" open hits badge, scaled back to full size where cs-far shrinks its
+ * court (to .72, a lit one to .84), so its number stays readable; on a small
+ * court it also steps 4 px out, so it covers no more of the court than up close. "cs-quiet" on the
  * still card: no pin takes a tap (the card does), and its pins settle in
  * with a 4 px drop as they fade (cs-drop), as the map fades in under them.
  *
@@ -167,6 +170,8 @@ export const MAP_PIN_CSS = `
 .cs-close .cs-court-nm,.cs-court.cs-on .cs-court-nm{display:inline}
 .cs-far .cs-court.cs-live{transform:none}
 .cs-far .cs-court{transform:scale(.72)}
+.cs-far .cs-court:not(.cs-live) .cs-hits{scale:1.39;translate:4px -4px}
+.cs-far .cs-lit .cs-hits{scale:1.19}
 .cs-pin{transition:transform .15s ease-out}
 .cs-pin:active{transform:scale(.94)}
 .cs-disc{position:relative;flex:none}

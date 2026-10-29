@@ -2,7 +2,6 @@ import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
 import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litHalf, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
 import type { CourtGlow } from '@/features/places/lightUp';
-import { sameCourt } from '@/features/places/court';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
 import { COURTS_MIN_ZOOM, type MapModel, type Placed } from '@/features/players/mapModel';
@@ -90,12 +89,28 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
   }
   // How many open hits are scheduled at each court, for the "+2" on its corner (Oct 29, owner): the hits
   // you may see (model.hits: the Open hits list's own filters, called off, past, blocked, muted, who may
-  // see it), counted the way the court's card lists them (useCourtHits: its id, or within 0.15 mi).
-  const hitsHere = (c: { id: string; lat: number; lng: number }) => {
-    let n = 0;
-    for (const h of model.hits) if (sameCourt(h.at, c)) n++;
-    return n;
-  };
+  // see it). Each hit counts on one court only: the court it was made at when that court is on the map,
+  // else the nearest court within 0.15 mi (the court card's sameCourt distance), so two courts side by
+  // side in one park never both count the same hit.
+  const hitsAt = new Map<string, number>();
+  let pickedAt: string | undefined;
+  if (expanded && model.courts.length) {
+    const ids = new Set(model.courts.map((c) => c.id));
+    for (const h of model.hits) {
+      let id = h.hit.place.id && ids.has(h.hit.place.id) ? h.hit.place.id : undefined;
+      if (!id) {
+        let best = 0.15;
+        for (const c of model.courts) {
+          const miles = milesBetween(h.at, c);
+          if (miles < best) { best = miles; id = c.id; }
+        }
+      }
+      if (id) hitsAt.set(id, (hitsAt.get(id) ?? 0) + 1);
+      // A picked hit's flag stands over its court's top edge (HIT_LIFT), so that court's badge steps aside
+      // while it is picked: the flag and its card say it.
+      if (id && h.hit.id === selectedHitId) pickedAt = id;
+    }
+  }
   const drawn = new Set<string>();
   // The court someone exactly placed is standing on (within about 20 m of its pin), if any: the nearest. Only exact spots (you,
   // friends who follow each other with you): a rough spot is nudged about, so it never puts anyone at a court.
@@ -124,7 +139,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const tag = glow ? g?.label ?? (hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined) : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
     // Your pin standing on it already says so: the court only glows under it, no words beside.
     const underYou = (yours || !!g?.you) && !on && !!meAt && milesBetween(meAt, c) < 0.05;
-    const hits = hitsHere(c);
+    const hits = c.id === pickedAt ? 0 : hitsAt.get(c.id) ?? 0;
     const hitsSaid = hits ? `${hits} open ${hits === 1 ? 'hit' : 'hits'}` : null;
     if (g) {
       // A lit court (Oct 27 review; Oct 28, three looks to pick from: LIT_LOOK): big, its light moving, who is
