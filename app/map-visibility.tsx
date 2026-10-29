@@ -10,7 +10,9 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { DragSheet } from '@/components/DragSheet';
 import { POP_FROM_SCALE, POP_IN, POP_OUT, POP_SETTLE_MS, POP_SPRING } from '@/components/popMotion';
 import { Avatar } from '@/components/ui';
+import { faceTints, tintFor } from '@/components/ui/Avatar';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
+import { isDesktopBrowser } from '@/lib/browserDevice';
 import type { MapVisibility, User } from '@/data/types';
 import { CONSENT_CHOICES, FIRST_YES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
 import { checkInEnds, clock } from '@/features/players/checkIn';
@@ -35,7 +37,7 @@ import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha }
  * to three friends who follow you back and their names under them, "Sam,
  * Marcus and 3 others" (real ones; none, neither), "Let
  * friends see you're up to hit?", and one short line: only friends who follow
- * you back see where you are, and it ends by itself (at 10pm, or in 2 hours
+ * you back, only when you tap, and it ends by itself (at 10pm, or in 2 hours
  * from 8pm). "Turn on" saves the yes; then Apple's own location prompt, then
  * Up to hit. "Not now" (or a tap outside, Escape, Android's Back) saves
  * nothing and shares nothing; it asks again the next time you tap Up to hit.
@@ -43,8 +45,8 @@ import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha }
  * I'm playing here (`court`), Show friends, a teen's Open to hit and the
  * re-ask each end on their own clock, so theirs ask "Let friends see where
  * you are?" and say only when you share, and that it ends by itself. A teen's
- * line says their rule instead: under 18, only friends who follow you back,
- * only your rough area.
+ * line says their rule instead (under 18, only friends who follow you back,
+ * only your rough area) and that it ends by itself.
  * `mode=manage`: from Settings → Privacy. A tap saves at once; "No one"
  * also takes any live check-in off the map.
  *
@@ -166,8 +168,15 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
     setError('');
     busyRef.current = true;
     setBusy(true);
-    const ok = await actions.setMapVisibility('mutuals');
-    busyRef.current = false;
+    // A save that throws is a save that failed: the card never stays locked over the app (Not now, Back and Escape wait on it).
+    let ok = false;
+    try {
+      ok = await actions.setMapVisibility('mutuals');
+    } catch {
+      ok = false;
+    } finally {
+      busyRef.current = false;
+    }
     if (!alive.current) return;
     setBusy(false);
     if (!ok) { setError('Couldn’t save that. Try again.'); return; }
@@ -206,7 +215,7 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
     <View style={styles.layer}>
       <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
       {/* The dialog's own box is a plain view (a browser drops dialog settings from an animated one), raised over the dimmed screen. */}
-      <View ref={boxRef} style={styles.box} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
+      <View ref={boxRef} style={[styles.box, desktop && styles.boxWide]} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
         <Animated.View style={[styles.card, cardStyle]}>
           {/* Only scrolls if the phone's largest text would push the buttons off the screen; then its bar says so. */}
           <ScrollView
@@ -222,7 +231,7 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
             {/* With no friend who follows you back yet there are simply no faces and no names: the question starts the card. */}
             {friends.length ? <Faces people={friends} /> : null}
             <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>{askTitle(upToHit, fontScale <= 1)}</Text>
-            {/* Apple 5.1.2(i) / 5.1.1: what friends see (where you are), who (only friends who follow you back), and that it ends by itself. */}
+            {/* Apple 5.1.2(i) / 5.1.1: who sees you (only friends who follow you back), only when you tap or share, and that it ends by itself. */}
             <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(upToHit, teen, ageUnknown(currentUser))}</Text>
           </ScrollView>
           <View style={styles.cardActions}>
@@ -266,47 +275,49 @@ function endsWords(now: Date = new Date()): string {
 
 /**
  * The first ask's one short line, two lines at most on a phone (Oct 28,
- * owner: "Too many words"). Up to hit's: only friends who follow you back
- * see where you are, and when it ends by itself (the question above already
- * says it is your tap on Up to hit). Any other ask (I'm playing here, Show
- * friends, the re-ask): only friends who follow you back, only when you
- * share, and it ends by itself, each on its own clock. A teen's line is their
- * rule: only friends who follow you back, only the rough area (no birthday
- * on file: the same rule, said why). Apple 5.1.2(i): each one says who sees
- * you, and that no one else does.
+ * owner: "Too many words"). Up to hit's: only friends who follow you back,
+ * only when you tap (one share at a time, never ongoing: Apple 5.1.2(i)), and
+ * when it ends by itself. Any other ask (I'm playing here, Show friends, the
+ * re-ask): only friends who follow you back, only when you share, and it ends
+ * by itself, each on its own clock. A teen's line is their rule, only friends
+ * who follow you back and only the rough area (no birthday on file: the same
+ * rule, said why), and that it ends by itself. Each one says who sees you,
+ * and that no one else does.
  */
 function askLine(upToHit: boolean, teen: boolean, noBirthday: boolean): string {
-  if (teen) return `${noBirthday ? 'No birthday yet, so only' : 'Under 18, only'} friends who follow you back see your rough area.`;
-  if (upToHit) return `Only friends who follow you back see where you are. Ends by itself ${endsWords()}.`;
+  if (teen) return `${noBirthday ? 'No birthday yet, so only' : 'Under 18, only'} friends who follow you back see your rough area. Ends by itself.`;
+  if (upToHit) return `Only friends who follow you back, only when you tap. Ends by itself ${endsWords()}.`;
   return 'Only friends who follow you back, only when you share. Ends by itself.';
 }
 
 /**
  * The friends who follow you back: who a yes is for. Real ones only, from
  * the people you follow, in the order you followed them; none, an empty list
- * (never a stranger, never a made-up face).
+ * (never a stranger, never a made-up face). Never anyone who could not see
+ * your pin or you would not want named: whoever you blocked, whoever blocked
+ * you, whoever you muted, a suspended account.
  */
 function useFriendsBack(): User[] {
-  const { users, currentUserId, followingIds, followEdges, blockedIds } = useApp();
+  const { users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds } = useApp();
   return useMemo(() => {
     if (!currentUserId) return [];
     const followsMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
-    const blocked = new Set(blockedIds);
+    const hidden = new Set([...blockedIds, ...blockedMeIds, ...mutedIds]);
     const byId = new Map(users.map((u) => [u.id, u]));
     const out: User[] = [];
     for (const id of followingIds) {
-      if (id === currentUserId || blocked.has(id) || !followsMe.has(id)) continue;
+      if (id === currentUserId || hidden.has(id) || !followsMe.has(id)) continue;
       const u = byId.get(id);
       if (u && !u.suspended && !out.includes(u)) out.push(u);
     }
     return out;
-  }, [users, currentUserId, followingIds, followEdges, blockedIds]);
+  }, [users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds]);
 }
 
 /** The faces drawn: the first three. */
 const FACES = 3;
-/** Each face, its ring included. */
-const FACE = 26;
+/** Each face, its ring included: big enough that its initials read (about 10.6pt), as the app's other small faces do. */
+const FACE = 32;
 /** The card's colour round each face, so one sits cleanly over the next. */
 const FACE_RING = 2;
 /**
@@ -314,7 +325,7 @@ const FACE_RING = 2;
  * the row reads as one small group while an initials-only face keeps its
  * letters clear of the next (review, Oct 28: "SO(ML(OR").
  */
-const FACE_TUCK = 5;
+const FACE_TUCK = 6;
 
 /** Their first names, as the card says them: "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
 function friendsWords(people: User[]): string {
@@ -327,21 +338,31 @@ function friendsWords(people: User[]): string {
 /**
  * Who a yes is for, made plain (design C2): a few small faces, each just
  * over the last, ringed in the card's own colour, and under them their names,
- * "Sam, Marcus and 3 others". The faces are in the quiet tones the Send to
- * sheet uses (a photo shows as itself), so they sit with the card instead of
- * shouting over it. Real friends who follow you back only, never strangers;
- * with none, the card has neither.
+ * "Sam, Marcus and 3 others". The faces take the court's own accents, as the
+ * app's other faces do (the "Played here by" faces on the court sheet right
+ * behind this card), each one a different accent from the faces beside it,
+ * so the row reads as three people (a photo shows as itself). Real friends
+ * who follow you back only, never strangers; with none, the card has neither.
  */
 function Faces({ people }: { people: User[] }) {
   const styles = useThemedStyles(styleDefinitions);
   const shown = people.slice(0, FACES);
   const names = friendsWords(people);
+  // Each face its own accent: the seed's, unless a face already shown has it; then the next one free.
+  const accents = faceTints();
+  const used: string[] = [];
+  const tints = shown.map((u) => {
+    const own = tintFor(u.avatarSeed);
+    const tint = used.includes(own) ? accents.find((a) => !used.includes(a)) ?? own : own;
+    used.push(tint);
+    return tint;
+  });
   return (
     <View style={styles.who} accessible accessibilityLabel={`${names} follow${people.length > 1 ? '' : 's'} you back`}>
       <View style={styles.faces}>
         {shown.map((u, i) => (
           <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
-            <Avatar quiet name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} />
+            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} style={{ backgroundColor: tints[i] }} />
           </View>
         ))}
       </View>
@@ -369,8 +390,6 @@ function TeenNotice() {
     </View>
   );
 }
-
-/* --------------------------------------------------- Settings → Privacy */
 
 /**
  * `mode=manage`, from Settings → Privacy: the two answers, saved as they are
@@ -478,16 +497,19 @@ function facts(): string[] {
   ];
 }
 
-/** The card's side margin on a phone: never wider than the screen less 36 a side (a 390 phone: ConfirmHost's 300). */
-const CARD_SIDE = spacing.xxl + spacing.xs;
 /** The card's inner side margin: the words, the button and Not now share one edge. */
 const CARD_PAD = spacing.lg + spacing.xs;
 
+/** ConfirmHost's own test: a computer's browser gets the wider card. */
+const desktop = isDesktopBrowser();
+
 const styleDefinitions = StyleSheet.create({
   // The first ask: a card in the middle of the dimmed screen, ConfirmHost's own size, corner, shadow and dim.
-  layer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: CARD_SIDE, paddingVertical: spacing.xxxl },
+  layer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxxl },
   dim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
   box: { zIndex: 1, width: '100%', maxWidth: 300, maxHeight: '100%' },
+  // A computer's screen has the room for ConfirmHost's wider box; a phone gets the narrower one.
+  boxWide: { maxWidth: 400 },
   card: {
     flexShrink: 1,
     backgroundColor: colors.surface,
@@ -506,9 +528,10 @@ const styleDefinitions = StyleSheet.create({
   cardLine: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
   cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: 6, gap: 2 },
   // The faces and, under them, their names: one small group above the question.
-  who: { alignItems: 'center', marginBottom: spacing.md },
+  who: { alignItems: 'center', marginBottom: spacing.sm },
   faces: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  whoNames: { ...typography.smallStrong, lineHeight: 17, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
+  // Regular weight, a step under the line below: a caption to the faces, not a third grey heading.
+  whoNames: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
   faceRing: { padding: FACE_RING, borderRadius: radius.pill, backgroundColor: colors.surface },
   // Quiet but plain to read: the muted ink, semibold, a full finger's height.
   notNow: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },

@@ -15,10 +15,15 @@ import { TextScale } from '@/theme/textScale';
  * with the court, so Roland Garros avatars are clay and Wimbledon's are grass.
  */
 export function tintFor(seed: string): string {
-  const palette = [colors.brand, colors.court, colors.hard, colors.clay, colors.grass, colors.borderStrong];
+  const palette = faceTints();
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
   return palette[hash % palette.length];
+}
+
+/** The court's accents a default picture picks from (tintFor), in order: for a row of faces that must each differ from the next. */
+export function faceTints(): string[] {
+  return [colors.brand, colors.court, colors.hard, colors.clay, colors.grass, colors.borderStrong];
 }
 
 /**
