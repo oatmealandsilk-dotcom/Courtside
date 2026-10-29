@@ -27,6 +27,7 @@ import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { EarlyThemesGate } from '@/theme/EarlyThemesGate';
+import { VisitorThemeGate } from '@/theme/VisitorThemeGate';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
@@ -89,6 +90,7 @@ export default function RootLayout() {
       <AppProvider>
         <ThemedStatusBar/>
         <EarlyThemesGate />
+        <VisitorThemeGate />
         <AppShell><RootStack /></AppShell>
         <SignOutCurtainHost />
         {/* "Why turn on alerts" before the phone's own question (alertsWhy.ts; off until he picks it). Under "are you sure?". */}
