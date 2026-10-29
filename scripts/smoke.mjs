@@ -818,6 +818,7 @@ async function matchPhoneCheck(page, seed, shot) {
     await other.goto('/peek');
     const theme = await court();
     const saved = await other.eval(`localStorage.getItem('courtside-theme-auto-dark')`);
+    const savedCourt = await other.eval(`localStorage.getItem('courtside-theme')`);
     await other.waitFor({ text: 'Open hits near you' }, 45000);
     const pageBg = await other.call(() => {
       const el = [...document.querySelectorAll('div')].find((d) => d.childElementCount === 0 && d.textContent === 'Open hits near you' && d.getBoundingClientRect().height > 0);
@@ -844,7 +845,7 @@ async function matchPhoneCheck(page, seed, shot) {
     if (other.problems.length) throw Object.assign(new Error(`${other.problems.length} error(s) in the Match phone page`), { problems: other.problems });
     if (other.blockedSupabase.length) throw new Error(`the app tried to reach the live backend: ${other.blockedSupabase[0]}`);
     log(`match phone (${seed ? 'used before' : 'new'}): saved ${saved}, ${theme} (page ${pageBg}), after reload ${afterReload}${inLight ? `, light ${inLight}` : ''}${fade ? `, faded by ${fade.way}` : ''}`);
-    return { saved, theme, page: pageBg, afterReload, inLight, fade };
+    return { saved, savedCourt, theme, page: pageBg, afterReload, inLight, fade };
   } finally {
     await cdp.send('Target.disposeBrowserContext', { browserContextId }).catch(() => undefined);
   }
@@ -1350,7 +1351,9 @@ const STEPS = [
     // storage), each with the screen dark: a fresh one (a new player: Match phone on, so the app
     // opens on Night, still on after a reload, and back on Clean when the screen turns light), one
     // that came through a link (the landing page's marks only: still new, on Night), and one that
-    // has used the app before (an old saved thing there: Match phone off, the app on Clean).
+    // has used the app before (an old saved thing there and Melbourne picked: Match phone off, saved
+    // "0", and Melbourne kept, but signed out the app shows Night in a dark browser: Oct 29, owner:
+    // "Clean or night for people who open link without based off of if their phone is dark or light mode").
     // The run's own page is not touched.
     name: 'match-phone',
     title: 'Match phone: on for a new player, off for one who used the app before',
@@ -1367,9 +1370,9 @@ const STEPS = [
       const linked = await matchPhoneCheck(page, { 'courtside-visitor': '00000000-0000-4000-8000-000000000000', 'courtside-seen-fb': new Date().toDateString() }, path.join(OPTS.out, `${number}-match-phone-link.png`));
       if (linked.saved !== '1' || linked.theme !== 'night' || linked.page !== NIGHT_BG) throw new Error(`a new player who came through a link (the landing page's marks saved), in a dark browser: Match phone saved "${linked.saved}", app on ${linked.theme}, page ${linked.page} (want "1", night, ${NIGHT_BG}: keep src/lib/usedBefore.ts LINK_MARKS in step with public/waitlist.html)`);
       if (linked.afterReload !== 'night') throw new Error(`a new player who came through a link, opened again: the app is on ${linked.afterReload} (want night)`);
-      const used = await matchPhoneCheck(page, { 'courtside.tips.done.v2': '["theme"]' }, path.join(OPTS.out, `${number}-match-phone-used.png`));
-      if (used.saved !== '0' || used.theme !== 'clean' || used.page !== DEFAULT_BG) throw new Error(`someone who used the app before, in a dark browser: Match phone saved "${used.saved}", app on ${used.theme}, page ${used.page} (want "0", clean, ${DEFAULT_BG})`);
-      if (used.afterReload !== 'clean') throw new Error(`someone who used the app before, opened again: the app is on ${used.afterReload} (want clean)`);
+      const used = await matchPhoneCheck(page, { 'courtside.tips.done.v2': '["theme"]', 'courtside-theme': 'ao' }, path.join(OPTS.out, `${number}-match-phone-used.png`));
+      if (used.saved !== '0' || used.savedCourt !== 'ao' || used.theme !== 'night' || used.page !== NIGHT_BG) throw new Error(`someone who used the app before with Melbourne picked, signed out in a dark browser: Match phone saved "${used.saved}", court saved ${used.savedCourt}, app on ${used.theme}, page ${used.page} (want "0", ao kept, night, ${NIGHT_BG}: signed out is Clean or Night by the screen)`);
+      if (used.afterReload !== 'night') throw new Error(`someone who used the app before, signed out, opened again: the app is on ${used.afterReload} (want night)`);
     },
     expect: [{ text: 'Edit profile' }],
   },
