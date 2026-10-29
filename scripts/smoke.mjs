@@ -993,15 +993,21 @@ const STEPS = [
   },
   {
     name: 'guest-community',
-    title: 'Guest mode: Find Players is open hits, no map, no people',
+    title: 'Guest mode: Find Players is a courts-only map and open hits, no players map, no people',
     async run(page) {
       await page.tap({ label: 'Go back' });
       await page.tap({ text: 'Find Players' });
+      // The courts-only map (Oct 29): its own label, and its button that asks for Location only on a tap.
+      await page.waitFor({ label: 'Map of courts near you', any: true });
+      await page.waitFor({ text: { re: '^Find (a hit|courts) near me$' } });
       await page.waitFor({ text: 'Open hits' });
       await page.waitFor({ text: 'Use my location' });
       if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
+      if (await page.find({ label: 'Up to hit', any: true }) || await page.find({ text: 'Up to hit', any: true })) throw new Error('a guest sees Up to hit');
       if (await page.find({ text: 'Open to hit', any: true })) throw new Error('a guest sees who is open to hit');
       await guestShowsOnlyAdults(page);
+      // The first open hit sits under the map now: scrolled up to it, as a thumb would.
+      await page.reveal({ label: 'I\'m in' });
     },
     expect: [{ label: 'I\'m in' }, { label: 'Sign in' }],
   },

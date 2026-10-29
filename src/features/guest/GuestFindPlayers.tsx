@@ -17,6 +17,7 @@ import { courtRows, fetchCourts, isClosedCourt, type CourtRow } from '@/features
 import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
 import { colors, lift, radius, spacing, typography } from '@/theme';
+import { GUEST_PEEK_LIMIT, GuestCourtsMap } from './GuestCourtsMap';
 import { openJoinSheet } from './joinAsk';
 import { TextScale } from '@/theme/textScale';
 
@@ -27,7 +28,9 @@ const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
  * stranger may see (the peek's own list, peek_hits, migration 163: public
  * adults' hits at listed courts, no names) and, once they tap "Use my
  * location", the courts near them. Never the players map, never people,
- * nobody's spot. "I'm in" asks them to join, and joins the hit once they are
+ * nobody's spot. Over them (Oct 29), a map of courts and the open hits at
+ * them only (GuestCourtsMap), which asks for their location on a tap of its
+ * own button; the two share the one spot. "I'm in" asks them to join, and joins the hit once they are
  * in (useShareLanding), the same as the peek.
  */
 export function GuestFindPlayers() {
@@ -37,15 +40,24 @@ export function GuestFindPlayers() {
   const [note, setNote] = useState<string | null>(null);
   const [hits, setHits] = useState<PeekHit[] | null | undefined>(undefined);
   const [courts, setCourts] = useState<CourtRow[] | null>(null);
+  // Why the last ask for their location came back empty, for the map's how-to.
+  const [locFail, setLocFail] = useState<'denied' | 'unavailable' | null>(null);
 
   const load = useCallback((point: { lat: number; lng: number } | null) => {
     let live = true;
     setHits(undefined);
-    fetchPeekHits(point, 30).then((got) => { if (live) setHits(got); }).catch(() => { if (live) setHits(null); });
+    fetchPeekHits(point, GUEST_PEEK_LIMIT).then((got) => { if (live) setHits(got); }).catch(() => { if (live) setHits(null); });
     if (point) fetchCourts(point).then((got) => { if (live) setCourts(courtRows(got.filter((c) => !isClosedCourt(c)), point).slice(0, 6)); }).catch(() => { if (live) setCourts([]); });
     return () => { live = false; };
   }, []);
   useEffect(() => load(near), [near, load]);
+  // A browser that already lets this site know where it is (said yes before) is simply found, with no
+  // question: the map shows their courts straight away. Anything else waits for a tap (owner: "ask on tap").
+  useEffect(() => {
+    let live = true;
+    getPosition({ quiet: true }).then((got) => { if (live && got.ok) setNear((was) => was ?? { lat: got.lat, lng: got.lng }); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
 
   const locate = async () => {
     if (locating) return;
@@ -53,7 +65,8 @@ export function GuestFindPlayers() {
     setNote(null);
     const got = await getPosition({}).catch(() => ({ ok: false as const, reason: 'unavailable' as const }));
     setLocating(false);
-    if (got.ok) { setNear({ lat: got.lat, lng: got.lng }); return; }
+    if (got.ok) { setLocFail(null); setNear({ lat: got.lat, lng: got.lng }); return; }
+    setLocFail(got.reason === 'denied' ? 'denied' : 'unavailable');
     setNote(got.reason === 'denied' ? 'Location is off for this site, so here are the soonest hits.' : 'Couldn’t find where you are. Here are the soonest hits.');
   };
 
@@ -63,6 +76,7 @@ export function GuestFindPlayers() {
 
   return (
     <View style={styles.wrap}>
+      <GuestCourtsMap near={near} hits={hits} locating={locating} failed={locFail} onLocate={() => { void locate(); }} />
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Open hits</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>Players looking for someone to hit with in the next 7 days.</Text>

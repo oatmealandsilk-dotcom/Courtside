@@ -56,6 +56,8 @@ import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
 // bundler moved the engine (about a megabyte) into the app's first download
 // for everyone, sign-in page included. One door in keeps it out.
 export { snapshotMap } from '@/components/map/snapshotWeb';
+// The guest's courts-only map (guest mode, Oct 29) comes in through this same door.
+export { GuestCourtsCanvas } from '@/features/guest/GuestCourtsCanvas';
 
 const HEIGHT = CARD_HEIGHT;
 const START_ZOOM = 11.5;
