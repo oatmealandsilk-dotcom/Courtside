@@ -67,10 +67,12 @@ const jobs = new Map<string, Job>();
  * `zoom`: how close in (a chat's card shows the streets around, Start a
  * session the court's own block).
  */
-export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw = true }: {
+export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw = true, onShown }: {
   lat: number; lng: number; width: number; height: number; zoom?: number;
   /** False: only a picture kept from before shows (else the stand-in); nothing new is drawn until it turns true. */
   draw?: boolean;
+  /** Told whether the real picture is showing (true once it has loaded), or the stand-in (false): a card shows the map's credit only over a real map. */
+  onShown?: (shown: boolean) => void;
 }) {
   const { theme } = useTheme();
   const key = thumbKey(theme, lat, lng, width, height, zoom);
@@ -88,6 +90,7 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw
   // The picture fades in over the stand-in once it has loaded, never popping.
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
+  useEffect(() => { onShown?.(shown); }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">

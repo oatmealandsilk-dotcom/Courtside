@@ -1,6 +1,6 @@
-import { PRESS_DIM } from '@/theme/press';
+import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -13,6 +13,9 @@ import { ClipVideo } from '@/components/ClipVideo';
 import { LevelPill } from '@/components/LevelPill';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { OpenRing } from '@/components/map/OpenRing';
+import { NowCardBody, nowFrame } from '@/components/place/CourtCardNow';
+import { usePeekLook } from '@/components/place/CourtsNear';
+import { PeekCardBody, peekFrame, useCourtPicturesGo } from '@/components/place/CourtsNearPeek';
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { MIN_PLAYERS, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
@@ -26,9 +29,9 @@ import { courtHref } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
-import type { Post, User } from '@/data/types';
+import type { ActiveCourt, Post, User } from '@/data/types';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, spacing, typography } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
@@ -61,9 +64,12 @@ interface PlayerLine { user: User; sessions: number; rank: number; me: boolean }
  *   5. Most active courts, right under Top players (owner, Oct 28: "Under
  *      here should be most active courts"): the city's courts by visits this
  *      month, a tap opening the court's page; none yet, one calm line saying
- *      how to put one there (never a missing section).
- *   (Round 5: both lists carry a head row, Rank · Player · Sessions and
- *   Court · Visits, and their numbers stand bare.)
+ *      how to put one there (never a missing section). As court cards, not a
+ *      second list (owner, Oct 28: "should be like the rectangles, not
+ *      looking the same as the list above"): design A, a sideways row of
+ *      Courts near you's cards.
+ *   (Round 5: Top players carries a head row, Rank · Player · Sessions, and
+ *   its numbers stand bare.)
  *   6. "Help Los Angeles climb" (yours) or "Visiting Austin?" (another).
  *
  * A city at 0 on the board (no row this month: nobody played there, or too
@@ -271,18 +277,7 @@ export default function CityPage() {
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Most active courts</Text>
         </View>
-        {activeCourts.length ? (
-          <>
-            {/* Not ranked (its rows have no places), so no "Rank". */}
-            <BoardHead name="Court" value="Visits" rankWidth={null} style={styles.boardHead} />
-            {activeCourts.map((c, i) => (
-              <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={`${c.name}, ${visitsWords(c.visits)} this month. Open court`} onPress={() => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }))} style={({ pressed }) => [styles.courtRow, i > 0 && styles.line, pressed && { opacity: PRESS_DIM }]}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, styles.courtName]}>{c.name}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.value}>{c.visits}</Text>
-              </Pressable>
-            ))}
-          </>
-        ) : (
+        {activeCourts.length ? <ActiveCourtsRow courts={activeCourts} /> : (
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtsEmpty}>Log a session at a court to put it here</Text>
         )}
       </View>
@@ -364,6 +359,58 @@ function ZeroCityPage({ city }: { city: ZeroCity }) {
     </View>
   );
 }
+
+/**
+ * Most active courts, design A: a sideways row of the very cards this person
+ * sees in Courts near you, most visits first. Map peek's (the court's map
+ * across the top, its name and visits under it) for whoever has map peek
+ * there (usePeekLook: admins, until PEEK_FOR_EVERYONE); everyone else the
+ * outlined card, so the two never differ. Its place is a small tag ("#1";
+ * level counts share one; none for a city's only court, whose card is then
+ * as tall as its own words). Swipe for more. A tap opens the court's page.
+ */
+function ActiveCourtsRow({ courts }: { courts: ActiveCourt[] }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const look = usePeekLook();
+  const draw = useCourtMapsGo();
+  const alone = courts.length === 1;
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.courtsScroll} contentContainerStyle={styles.courtsRow}>
+      {courts.map((c) => {
+        const place = placeAmong(courts, c);
+        // Its place only beside others: "#1" of one says nothing.
+        const tag = alone ? null : `#${place}`;
+        return (
+          <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place, alone)} onPress={() => openActiveCourt(c)}
+            style={({ pressed }) => [styles.courtCard, look === 'N' ? peekFrame : nowFrame, pressed && styles.courtPressed]}>
+            {look === 'N'
+              ? <PeekCardBody name={c.name} lat={c.lat} lng={c.lng} meta={visitsWords(c.visits)} tag={tag} draw={draw} fit={alone} />
+              : <NowCardBody name={c.name} meta={visitsWords(c.visits)} tag={tag} fit={alone} />}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/**
+ * Whether Most active courts' map cards may draw a court's map not kept from
+ * before. In a browser, as Courts near you's (useCourtPicturesGo): while
+ * this page is on show and the app's opening is over, off screen, one map
+ * at a time. Never on a phone yet: there the drawing is a hidden web view
+ * (CourtMapSnapshots) this page does not mount until it has been seen on an
+ * iPhone, so a card shows a map kept from Courts near you, else its stand-in.
+ */
+function useCourtMapsGo(): boolean {
+  const go = useCourtPicturesGo();
+  return Platform.OS === 'web' && go;
+}
+
+/** A court's place among the city's most active: 1 + how many have more visits (level counts share a place). */
+const placeAmong = (courts: ActiveCourt[], c: ActiveCourt) => 1 + courts.filter((k) => k.visits > c.visits).length;
+/** What VoiceOver hears for a court's card: its place too, as its tag shows it (none for a city's only court). */
+const courtSaid = (c: ActiveCourt, place: number, alone: boolean) => `${c.name}, ${visitsWords(c.visits)} this month${alone ? '' : `, number ${place}`}. Open court`;
+const openActiveCourt = (c: ActiveCourt) => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }));
 
 /** Still coming: Up to hit's faces and Top players' rows as quiet shapes, so nothing jumps when they land. */
 function LoadingPage() {
@@ -570,9 +617,12 @@ const styleDefinitions = StyleSheet.create({
   sub: { ...typography.small, color: colors.textFaint },
   subMine: { ...typography.small, ...font('500'), color: colors.text },
   value: { ...font('700'), fontSize: 17, color: colors.text, fontVariant: ['tabular-nums'] },
-  courtRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 58, paddingHorizontal: spacing.md },
-  courtName: { flex: 1, minWidth: 0 },
-  courtsEmpty: { ...typography.body, color: colors.textMuted, paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  // Most active courts: Courts near you's strip and cards (its outline, corners and press; the size and room are the look's frame), from the page's margins.
+  courtsScroll: { marginHorizontal: -spacing.lg, flexGrow: 0 },
+  courtsRow: { paddingHorizontal: spacing.lg, gap: spacing.sm, paddingTop: spacing.xs, paddingBottom: spacing.xs },
+  courtCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  courtPressed: { transform: [{ scale: PRESS_SHRINK }] },
+  courtsEmpty: { ...typography.body, color: colors.textMuted, paddingTop: spacing.xs },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
   footHead: { ...typography.heading, color: colors.text, textAlign: 'center' },
   footBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
