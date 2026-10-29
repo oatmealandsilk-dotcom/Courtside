@@ -3,6 +3,7 @@ import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-na
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 
 import { levelBadge } from '@/lib/badges';
+import { isOfficial } from '@/features/players/official';
 import { useTheme } from '@/theme/ThemeProvider';
 import type { PlayerProfile } from '@/data/types';
 import { colors, font, pageIsDark, radius } from '@/theme';
@@ -28,9 +29,10 @@ const SYSTEM_INK: Record<string, { light: string; dark: string; media: string }>
  * system ("UTR") set small and the number set bold, so the number is what
  * reads. Over a clip it is the frosted dark chip every reels feed uses.
  */
-export const LevelPill = React.memo(function LevelPill({ profile, small = false, onMedia = false, style }: { profile: PlayerProfile; small?: boolean; onMedia?: boolean; style?: StyleProp<ViewStyle> }) {
+export const LevelPill = React.memo(function LevelPill({ profile, userId, small = false, onMedia = false, style }: { profile: PlayerProfile; /** Whose level: an official CourtSide account shows none (features/players/official). */ userId?: string; small?: boolean; onMedia?: boolean; style?: StyleProp<ViewStyle> }) {
   // Without this the pill keeps the colours of whichever theme it first drew in.
   useTheme();
+  if (isOfficial(userId)) return null;
   const badge = levelBadge(profile);
   const space = badge.label.indexOf(' ');
   const system = space > 0 ? badge.label.slice(0, space) : '';

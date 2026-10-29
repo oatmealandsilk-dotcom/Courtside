@@ -16,6 +16,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /**
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
@@ -91,12 +92,12 @@ export default function Likes() {
                   <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={48} ring={user.isCoach} />
                   <View style={{ flex: 1, gap: 3 }}>
                     <View style={styles.nameLine}>
-                      <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                      <Text style={styles.name} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={13} />
                       <StreakFlame days={shownStreak(user, currentUserId)} />
                     </View>
                     <View style={styles.meta}>
                       <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
-                      <LevelPill profile={user.profile} small />
+                      <LevelPill profile={user.profile} userId={user.id} small />
                     </View>
                   </View>
                   {isMe ? <Text style={styles.you}>You</Text> : (

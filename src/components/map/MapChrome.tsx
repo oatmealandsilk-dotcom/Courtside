@@ -69,6 +69,7 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
+import { isOfficial } from '@/features/players/official';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -855,7 +856,7 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
           <View style={styles.listWords}>
             <View style={styles.personTop}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
-              <LevelPill profile={p.user.profile} small />
+              <LevelPill profile={p.user.profile} userId={p.user.id} small />
             </View>
             {/* A friend's check-in: how far and how long ago (on Following, My level and Near me, "Up to hit" first, as those lists hold people who are not). A town row: only the town on their profile. */}
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[upTag && townOf(p) === null ? 'Up to hit' : null, townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
@@ -1059,12 +1060,12 @@ function TrayFace({ placed: p, onPress }: { placed: Listed; onPress: () => void 
   const seenAt = 'seenAt' in p ? p.seenAt : undefined;
   const far = town ?? placedFar(p);
   const ago = seenAt ? agoShort(seenAt) : '';
-  const said = [p.user.name, levelBadge(p.user.profile).label, far, seenAt ? agoLabel(seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
+  const said = [p.user.name, isOfficial(p.user.id) ? null : levelBadge(p.user.profile).label, far, seenAt ? agoLabel(seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${said}. ${town !== null ? 'Open profile' : 'Show on the map'}`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
       <OpenRing open={open} size={TRAY_FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} size={TRAY_FACE} ring={p.user.isCoach} /></OpenRing>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-      <LevelPill profile={p.user.profile} small style={styles.trayLevel} />
+      <LevelPill profile={p.user.profile} userId={p.user.id} small style={styles.trayLevel} />
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayMeta} numberOfLines={1}>{[far, ago].filter(Boolean).join(' · ')}</Text>
     </Pressable>
   );
@@ -1247,7 +1248,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile} style={styles.personWords}>
           <View style={styles.personTop}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
-            <LevelPill profile={user.profile} small />
+            <LevelPill profile={user.profile} userId={user.id} small />
           </View>
           {/* At a court right now (migration 63): which one, first; otherwise the town, and how far (never finer than the pin is). */}
           {/* "Follows you" joins whichever line is short: this one at a court (no town on it, and the
@@ -1354,7 +1355,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         <View style={styles.personWords}>
           <View style={styles.personTop}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>You</Text>
-            <Level profile={me.profile} small />
+            <Level profile={me.profile} userId={me.id} small />
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
         </View>

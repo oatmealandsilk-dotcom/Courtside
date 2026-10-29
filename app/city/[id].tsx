@@ -539,7 +539,7 @@ function PlayerRow({ p, line = false, sub = null, onPress }: { p: PlayerLine; li
       <View style={styles.playerWords}>
         <View style={styles.playerNameLine}>
           <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.name, p.me && styles.mineName]}>{p.me ? 'You' : p.user.name}</Text>
-          <LevelPill profile={p.user.profile} small />
+          <LevelPill profile={p.user.profile} userId={p.user.id} small />
         </View>
         {sub ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.subMine}>{sub}</Text> : null}
       </View>

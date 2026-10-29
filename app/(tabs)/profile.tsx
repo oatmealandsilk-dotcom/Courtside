@@ -56,6 +56,7 @@ import { TextScale, oneLine } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { PROFILE_TABS_LOOK, ProfileTabRow } from '@/features/profile/ProfileTabRow';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -225,13 +226,13 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
          {LESS_AI ? <>
            {/* The hand-made look (Oct 24): no streak or Log pills; the flame and number after the name are the way to Your sessions,
                the same number as the Tennis profile card (signed in, both come from what you logged, as Your sessions does). */}
-           <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>{shownStreak(user, currentUserId) ? <Pressable accessibilityRole="link" accessibilityLabel={`${shownStreak(user, currentUserId)}-day streak. See your sessions`} hitSlop={10} onPress={() => router.push('/your-sessions')} style={({ pressed }) => pressed && styles.pillPressed}><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></Pressable> : null}</View>
+           <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><OfficialCheck userId={user.id} size={18}/>{shownStreak(user, currentUserId) ? <Pressable accessibilityRole="link" accessibilityLabel={`${shownStreak(user, currentUserId)}-day streak. See your sessions`} hitSlop={10} onPress={() => router.push('/your-sessions')} style={({ pressed }) => pressed && styles.pillPressed}><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></Pressable> : null}</View>
            {/* Your level stays under your name, on its own. */}
-           <View style={styles.nameRow}><LevelPill profile={profile}/></View>
+           <View style={styles.nameRow}><LevelPill profile={profile} userId={user.id}/></View>
          </> : <>
-         <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
+         <View style={styles.nameLine}><PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName><OfficialCheck userId={user.id} size={18}/><StreakFlame days={shownStreak(user, currentUserId)} size="large" silent/></View>
          {/* The streak opens your sessions (only you see them); Log beside it opens the log sheet, two taps from here to a logged session. */}
-         <View style={styles.nameRow}><LevelPill profile={profile}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.logPillText}>Log</Text></Pressable></View>
+         <View style={styles.nameRow}><LevelPill profile={profile} userId={user.id}/>{user.stats.currentStreakDays >= 2 ? <Pressable accessibilityRole="link" accessibilityLabel={`${user.stats.currentStreakDays}-day streak. See your sessions`} hitSlop={6} onPress={() => router.push('/your-sessions')} style={({ pressed }) => [styles.streak, pressed && styles.pillPressed]}><Ionicons name="flame" size={12} color={colors.clay}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.streakText}>{user.stats.currentStreakDays}-day streak</Text></Pressable> : null}<Pressable accessibilityRole="button" accessibilityLabel="Log a session" hitSlop={6} onPress={() => router.push('/log-session')} style={({ pressed }) => [styles.logPill, pressed && styles.pillPressed]}><Ionicons name="add" size={13} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.logPillText}>Log</Text></Pressable></View>
          </>}
        </View>
      </View>

@@ -14,7 +14,9 @@ import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 
 import { router, useLocalSearchParams } from 'expo-router';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import { goBack } from '@/lib/goBack';
-import { confirmReport } from '@/lib/confirm';
+import { afterMenu, confirmAfterMenu, confirmReport } from '@/lib/confirm';
+import { RisingSheet } from '@/components/RisingSheet';
+import { useModalSheetBottom } from '@/lib/modalSheet';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { ThreadSkeleton } from '@/components/Skeleton';
@@ -37,7 +39,6 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
 import { HiddenComments, HiddenReplyRow } from '@/components/HiddenComments';
 import { hiddenAnswersOn, shownInList } from '@/features/hiddenWords/hiddenWords';
-import { confirm } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
 import { publicRoute } from '@/features/share/publicRoute';
 import { openPlayer } from '@/features/navigation/openPlayer';
@@ -45,6 +46,7 @@ import { show as showToast } from '@/lib/toast';
 import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, corner } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 function QuestionDetail() {
   const styles = useThemedStyles(styleDefinitions);
@@ -81,6 +83,10 @@ function QuestionDetail() {
   const canPin = actions.canPinQuestion;
   const isAdmin = !!currentUser?.isAdmin;
   const [pinnable, setPinnable] = useState(false);
+  // The "⋯" menu at the top (Oct 29, owner: the row of icons was "super super confusing"): Share stays out, the rest is in here.
+  const [menuOpen, setMenuOpen] = useState(false);
+  // The menu clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
+  const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   useEffect(() => {
     if (!isAdmin || !question || question.removed) { setPinnable(false); return undefined; }
     let on = true;
@@ -122,9 +128,10 @@ function QuestionDetail() {
   const moderate = currentUser?.isAdmin ? () => {
     haptics.tap();
     if (removed) {
-      confirm({ title: 'Restore this thread?', message: 'Everyone who could see it before sees it again, with its replies.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('question', question.id); } });
+      confirmAfterMenu({ title: 'Restore this thread?', message: 'Everyone who could see it before sees it again, with its replies.', confirmLabel: 'Restore', onConfirm: () => { void actions.restoreContent('question', question.id); } });
     } else {
-      router.push({ pathname: '/take-down', params: { kind: 'question', id: question.id } });
+      // Once the menu has gone: a page opened while it is still fading can fail to appear on a phone.
+      afterMenu(() => router.push({ pathname: '/take-down', params: { kind: 'question', id: question.id } }));
     }
   } : undefined;
   // Admins: pin this thread as the Question of the week (Oct 20 sweep, R5), at the top of Discussions
@@ -133,24 +140,34 @@ function QuestionDetail() {
   const pin = isAdmin && !removed && (pinnable || pinnedNow) ? () => {
     haptics.tap();
     if (pinnedNow) {
-      confirm({ title: 'Unpin the Question of the week?', message: 'It goes back to being an ordinary thread in Discussions.', confirmLabel: 'Unpin', onConfirm: () => {
+      confirmAfterMenu({ title: 'Unpin the Question of the week?', message: 'It goes back to being an ordinary thread in Discussions.', confirmLabel: 'Unpin', onConfirm: () => {
         void actions.pinQuestionOfWeek(null).then((ok) => showToast(ok ? { title: 'Unpinned', icon: 'pin-outline' } : { title: 'Couldn’t unpin it', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' }));
       } });
     } else {
-      confirm({ title: 'Pin as Question of the week?', message: 'It shows at the top of Discussions for everyone for 7 days, marked This week. The last one comes off.', confirmLabel: 'Pin', onConfirm: () => {
+      confirmAfterMenu({ title: 'Pin as Question of the week?', message: 'It shows at the top of Discussions for everyone for 7 days, marked This week. The last one comes off.', confirmLabel: 'Pin', onConfirm: () => {
         void actions.pinQuestionOfWeek(question.id).then((ok) => showToast(ok ? { title: 'Pinned as Question of the week', icon: 'pin' } : { title: 'Couldn’t pin it', body: 'Check your connection and try again.', icon: 'cloud-offline-outline' }));
       } });
     }
   } : undefined;
-  // Someone else's thread can be reported from the flag at the top (App Review 1.2, Oct 5).
+  // Someone else's thread can be reported from the "⋯" menu at the top (App Review 1.2, Oct 5).
   // It leaves your screens at once, so the page goes back.
   // A guest can report too (guest mode, Oct 17): by signing in, or by email to support.
   const theirs = (!!currentUserId || isGuest) && question.authorId !== currentUserId;
-  const report = isGuest ? () => openJoinSheet('report this', { report: `question:${question.id}` }) : () => confirmReport('thread', () => {
+  const report = isGuest ? () => afterMenu(() => openJoinSheet('report this', { report: `question:${question.id}` })) : () => confirmReport('thread', () => {
     const asker = users.find((u) => u.id === question.authorId);
     afterReport(actions.reportUser(question.authorId, `question:${question.id}`), asker, actions);
     goBack('/discuss');
-  });
+  }, true);
+  const edit = question.authorId === currentUserId && !removed ? () => afterMenu(() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })) : undefined;
+  // The menu's rows, in this order, only those that apply: Edit (yours), the Question of the week pin and Take down
+  // (admins), Report (someone else's). With none, there is no "⋯" at all, only Share.
+  type MenuRow = { key: string; icon: React.ComponentProps<typeof Ionicons>['name']; label: string; spoken: string; danger?: boolean; onPress: () => void };
+  const menu: MenuRow[] = [
+    edit ? { key: 'edit', icon: 'pencil-outline', label: 'Edit', spoken: 'Edit this thread', onPress: edit } : null,
+    pin ? { key: 'pin', icon: pinnedNow ? 'pin' : 'pin-outline', label: pinnedNow ? 'Unpin Question of the week' : 'Pin as Question of the week', spoken: pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week', onPress: pin } : null,
+    moderate ? { key: 'moderate', icon: removed ? 'eye-outline' : 'eye-off-outline', label: removed ? 'Restore' : 'Take down', spoken: removed ? 'Restore this thread' : 'Take down this thread', danger: !removed, onPress: moderate } : null,
+    theirs && !removed ? { key: 'report', icon: 'flag-outline', label: 'Report', spoken: 'Report this thread', onPress: report } : null,
+  ].filter((row): row is MenuRow => !!row);
 
   const submit = () => {
     const text = draft.trim();
@@ -172,7 +189,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{pin ? <Pressable accessibilityRole="button" accessibilityLabel={pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week'} hitSlop={10} onPress={pin}><Ionicons name={pinnedNow ? 'pin' : 'pin-outline'} size={22} color={pinnedNow ? colors.brand : colors.text} /></Pressable> : null}{moderate ? <Pressable accessibilityRole="button" accessibilityLabel={removed ? 'Restore this thread' : 'Take down this thread'} hitSlop={10} onPress={moderate}><Ionicons name={removed ? 'eye-outline' : 'eye-off-outline'} size={23} color={removed ? colors.text : colors.danger} /></Pressable> : null}{question.authorId === currentUserId && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Edit this thread" hitSlop={10} onPress={() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })}>{/* The word, not a pen-in-a-box (Oct 29, owner: it read as Apple Notes' new-note button). */}<Text maxFontSizeMultiplier={TextScale.CHROME} style={{ ...typography.bodyStrong, fontSize: 17, color: colors.text }}>Edit</Text></Pressable> : null}{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{theirs && !removed ? <Pressable accessibilityRole="button" accessibilityLabel="Report this thread" hitSlop={10} onPress={report}><Ionicons name="flag-outline" size={22} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
@@ -180,7 +197,7 @@ function QuestionDetail() {
           <Pressable accessibilityRole="link" accessibilityLabel={asker ? `Open ${asker.name}'s profile` : undefined} onPress={() => asker && openPlayer(asker.id, currentUserId)} style={styles.asker}>
             <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
             <View style={{ flex: 1 }}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askerName} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text>
+              <View style={styles.askerNameLine}><Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.askerName, styles.shrink]} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text><OfficialCheck userId={asker?.id} size={13} /></View>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
             </View>
           </Pressable>
@@ -285,11 +302,41 @@ function QuestionDetail() {
         </HiddenComments>
 
       </View>
+
+      {/* The thread's menu, the same sheet a profile's and a coach question's "⋯" opens. */}
+      <RisingSheet visible={menuOpen} onClose={() => setMenuOpen(false)} closeLabel="Close menu" sheetStyle={[styles.sheet, { paddingBottom: menuBottom }]}>
+        <View style={styles.grabber} />
+        {menu.map((row) => (
+          <Pressable
+            key={row.key}
+            accessibilityRole="button"
+            accessibilityLabel={row.spoken}
+            onPress={() => { setMenuOpen(false); row.onPress(); }}
+            style={({ pressed }) => [styles.menuRow, pressed && { backgroundColor: colors.surfaceAlt }]}
+          >
+            <Ionicons name={row.icon} size={21} color={row.danger ? colors.danger : row.key === 'pin' && pinnedNow ? colors.brand : colors.text} />
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.menuLabel, row.danger && { color: colors.danger }]}>{row.label}</Text>
+          </Pressable>
+        ))}
+      </RisingSheet>
     </Screen></SwipeSurface>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
+  sheet: {
+    backgroundColor: colors.bg,
+    borderTopLeftRadius: radius.xl,
+    borderTopRightRadius: radius.xl,
+    paddingBottom: spacing.xxl,
+    paddingTop: spacing.sm,
+    maxWidth: 520,
+    width: '100%',
+    alignSelf: 'center',
+  },
+  grabber: { width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, alignSelf: 'center', marginBottom: spacing.md },
+  menuRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  menuLabel: { ...typography.body, color: colors.text },
   questionCard: { gap: spacing.md, borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', paddingHorizontal: 0, paddingBottom: 24, borderBottomWidth: 1, borderBottomColor: colors.border },
   askerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   replyButton: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: buttonShape.smallHeight, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.surfaceAlt },
@@ -304,6 +351,8 @@ const styleDefinitions = StyleSheet.create({
   sendOff: { opacity: 0.35 },
   asker: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   askerName: { ...typography.smallStrong, color: colors.text, fontSize: 14 },
+  askerNameLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shrink: { flexShrink: 1 },
   time: { ...typography.small, color: colors.textFaint },
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },

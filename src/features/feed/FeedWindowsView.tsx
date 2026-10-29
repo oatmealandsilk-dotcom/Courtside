@@ -30,6 +30,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { useTheme } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
+import { OfficialCheck } from '@/components/OfficialCheck';
 import {
   CARD_GAP, CARD_MAX, FOR_YOU, LABEL_HEIGHT, LABEL_SPACE, SPRING_BACK, SPRING_DRAG, SPRING_OPEN, SPRING_SNAP,
   cardAt, feedReadyAt, feedShot, feedShownAt, feedSpot, feedWhole, registerShotNode, setWindowsController, setWindowsState, snapFeed, swipeTarget,
@@ -968,12 +969,12 @@ function WrittenFace({ face, H }: { face: Extract<Face, { kind: 'text' }>; H: nu
             <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={44} />
             <View style={styles.writtenWho}>
               <View style={styles.writtenNameRow}>
-                <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.writtenName, { color: colors.text }]}>{author.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.writtenName, { color: colors.text }]}>{author.name}</Text><OfficialCheck userId={author.id} size={13} />
                 <StreakFlame days={shownStreak(author, currentUserId)} silent />
               </View>
               <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[typography.small, { color: colors.textFaint }]}>@{author.handle}{post ? ` · ${relativeTime(post.createdAt)}` : ''}</Text>
             </View>
-            <LevelPill profile={author.profile} small />
+            <LevelPill profile={author.profile} userId={author.id} small />
           </View>
         ) : face.author ? (
           <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.writtenName, { color: colors.text }]}>{face.author}</Text>

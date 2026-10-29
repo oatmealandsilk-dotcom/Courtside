@@ -980,8 +980,15 @@ const STEPS = [
       await page.tap({ label: 'Reply to this thread' });
       await page.waitFor({ text: 'Join CourtSide to reply' });
       await page.tap({ text: 'Not now' });
+      await page.gone({ text: 'Join CourtSide to reply' });
+      // Share is the one icon at the top; Report is in the "⋯" menu (Oct 29, owner), and still asks a guest to join.
+      await page.tap({ label: 'More options' });
+      await page.tap({ label: 'Report this thread' });
+      await page.waitFor({ text: 'Join CourtSide to report this' });
+      await page.tap({ text: 'Not now' });
+      await page.gone({ text: 'Join CourtSide to report this' });
     },
-    expect: [{ text: 'Replies' }, { label: 'Report this thread' }],
+    expect: [{ text: 'Replies' }, { label: 'Share this thread' }, { label: 'More options' }],
   },
   {
     name: 'guest-community',

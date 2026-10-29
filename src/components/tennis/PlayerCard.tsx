@@ -16,6 +16,8 @@ import {
   cityOf, daysUntil, factsList, handsLine, ratingText, shortDate, stripItems, surfaceSlot, surfaceWord, tournamentName, type StripItem,
 } from '@/features/players/tennisProfile';
 import { usePerWeek } from '@/features/players/usePerWeek';
+import { isOfficial } from '@/features/players/official';
+import { OfficialCheck } from '@/components/OfficialCheck';
 import { useTheme } from '@/theme/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { colors, font, lift } from '@/theme';
@@ -71,6 +73,9 @@ export function PlayerCard({ user, variant, onPress }: {
   useEffect(() => { played.add(key); }, [key]);
   const p = user.profile;
   const system = p.skillSystem;
+  // An official CourtSide account shows no rating (features/players/official): no big number, none said aloud.
+  const official = isOfficial(user.id);
+  const rated = official ? '' : ` ${system} ${ratingText(p)}`;
   // The system's name in the card's small ink (the deeper green on cream, the muted ink on a dark page): the level pill
   // beside the name already wears the system's own colour, and NTRP green beside New York's yellow figures fought them.
   const systemInk = look.eyebrow;
@@ -82,7 +87,7 @@ export function PlayerCard({ user, variant, onPress }: {
     const pop = look.plain ? BANNER_POP : 'now';
     const next = upcoming(user)[0];
     const items: StripItem[] = next ? [...stripItems(user, 2, week), nextItem(next)] : stripItems(user, 3, week);
-    const spoken = `${user.name}'s tennis profile. ${system} ${ratingText(p)}. ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
+    const spoken = `${user.name}'s tennis profile.${rated ? `${rated}.` : ''} ${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface]}. ${items.map((i) => i.spoken).join(', ')}`;
     return (
       <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift], pressed && styles.pressed]}>
         <CardWash look={look} radius={corner(16)} />
@@ -95,10 +100,10 @@ export function PlayerCard({ user, variant, onPress }: {
           <Text style={[styles.bannerTitle, { color: look.ink }]}>Tennis profile</Text>
           <Ionicons name="chevron-forward" size={15} color={look.muted} />
         </View>
-        <View style={[styles.heroRow, styles.bannerHero]}>
+        {official ? null : <View style={[styles.heroRow, styles.bannerHero]}>
           <Text maxFontSizeMultiplier={1.3} style={[styles.bannerFigure, { color: pop === 'now' || pop === 'A' ? look.figure : look.touch ?? colors.brand }]}>{ratingText(p)}</Text>
           <Text maxFontSizeMultiplier={1.3} style={[styles.system, styles.bannerSystem, { color: systemInk }]}>{system}</Text>
-        </View>
+        </View>}
         <View style={styles.inline}>
           <Text style={[styles.small, { color: look.muted }]}>{playStyleLabel[p.playStyle]} · </Text>
           <Swatch surface={p.preferredSurface} look={look} />
@@ -114,7 +119,7 @@ export function PlayerCard({ user, variant, onPress }: {
   // Clean's full card wears the banner's own wash (BANNER_POP A or D), so the Tennis profile page matches the Profile tab.
   const fullPop = look.plain && theme === 'clean' && (BANNER_POP === 'A' || BANNER_POP === 'D');
   const spoken = [
-    `${user.name}, ${system} ${ratingText(p)}.`,
+    `${user.name},${rated}.`,
     `${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface].toLowerCase()}, ${handsLine(p).replace(' · ', ', ').toLowerCase()}.`,
     facts.length ? `${facts.join(', ')}.` : '',
     items.length ? `${items.map((i) => i.spoken).join(', ')}.` : '',
@@ -129,16 +134,16 @@ export function PlayerCard({ user, variant, onPress }: {
             a deeper shade of the card instead (a brand disc would vanish into it). */}
         <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : colors.brand }} />
         <View style={styles.identityWords}>
-          <Text numberOfLines={1} style={[styles.name, { color: look.ink }]}>{user.name}</Text>
+          <View style={styles.nameLine}><Text numberOfLines={1} style={[styles.name, styles.shrink, { color: look.ink }]}>{user.name}</Text><OfficialCheck userId={user.id} size={17} /></View>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
         </View>
         {LESS_AI ? null : <View style={styles.mark}><BrandMark size={22} color={ratingInk} /></View>}
       </View>
 
-      <View style={[styles.heroRow, styles.hero]}>
+      {official ? null : <View style={[styles.heroRow, styles.hero]}>
         <CountUp value={Number(ratingText(p))} part={system === 'ITF' ? 'int' : 'dec1'} play={play} duration={700} maxFontSizeMultiplier={1.3} style={[styles.figure, { color: ratingInk }]} />
         <Text maxFontSizeMultiplier={1.3} style={[styles.system, styles.heroSystem, { color: systemInk }]}>{system}</Text>
-      </View>
+      </View>}
 
       <View style={styles.play}>
         <View style={styles.inline}>
@@ -231,6 +236,7 @@ const styles = StyleSheet.create({
   bannerTitle: { ...font('600'), fontSize: 17, letterSpacing: -0.2 },
   identity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   identityWords: { flex: 1, minWidth: 0, gap: 2 },
+  nameLine: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   name: { ...font('500'), fontSize: 22, lineHeight: 27, letterSpacing: -0.4 },
   mark: { alignSelf: 'flex-start' },
   small: { ...font('400'), fontSize: 13, lineHeight: 19 },

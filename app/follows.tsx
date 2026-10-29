@@ -17,6 +17,7 @@ import { confirmUnfollow } from '@/lib/confirm';
 import { compactNumber } from '@/lib/format';
 import { colors, spacing, typography } from '@/theme';
 import { LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 type Tab = 'followers' | 'following';
 const TABS: Tab[] = ['followers', 'following'];
@@ -114,12 +115,12 @@ export default function Follows() {
                 <Avatar name={user.name} seed={user.avatarSeed} size={48} ring={user.isCoach} />
                 <View style={{ flex: 1, gap: 3 }}>
                   <View style={styles.nameLine}>
-                    <Text style={styles.name} numberOfLines={1}>{user.name}</Text>
+                    <Text style={styles.name} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={13} />
                     <StreakFlame days={shownStreak(user, currentUserId)} />
                   </View>
                   <View style={styles.meta}>
                     <Text style={styles.handle} numberOfLines={1}>@{user.handle}</Text>
-                    <LevelPill profile={user.profile} small />
+                    <LevelPill profile={user.profile} userId={user.id} small />
                   </View>
                 </View>
                 {isMe ? null : (

@@ -48,6 +48,7 @@ import { photosOf } from '@/features/compose/carousel';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 interface Props {
   post: Post;
@@ -315,9 +316,10 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
             <View style={styles.nameRow}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{author.name}</Text>
               <View style={styles.badges}>
+                <OfficialCheck userId={author.id} size={13} />
                 <StreakFlame days={streak} />
                 {author.isCoach ? <Ionicons name="shield-checkmark" size={14} color={colors.brand} /> : null}
-                <LevelPill profile={author.profile} small />
+                <LevelPill profile={author.profile} userId={author.id} small />
               </View>
             </View>
             {/* "New" on the handle's line (or the one under it), out of the name's way, as on a written post (Oct 6 audit, item 9). */}

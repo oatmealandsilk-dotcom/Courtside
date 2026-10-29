@@ -19,6 +19,7 @@ import { openTopic } from '@/features/community/openTopic';
 import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -87,6 +88,7 @@ function QuestionCardInner({
           {author && !question.source ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footerName}>{author.name}{LESS_AI_ROUND2 ? '' : ' '}</Text> : null}
           {LESS_AI_ROUND2 && author && !question.source ? null : `@${author?.handle ?? 'player'}`}
         </PlayerName>
+        <OfficialCheck userId={question.source ? undefined : author?.id} size={12} />
         {question.source ? (
           <View style={styles.sourceBadge}>
             <Ionicons name={question.source.name === 'reddit' ? 'logo-reddit' : 'globe-outline'} size={12} color={colors.textMuted} />
@@ -94,7 +96,7 @@ function QuestionCardInner({
           </View>
         ) : author ? (
           // The rating keeps its colour (Oct 25, owner: "I like the no @handle but I want to keep color for rating").
-          <LevelPill profile={author.profile} small style={styles.levelPill} />
+          <LevelPill profile={author.profile} userId={author.id} small style={styles.levelPill} />
         ) : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
         {LESS_AI_DISCUSS ? (

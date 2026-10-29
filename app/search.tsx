@@ -43,6 +43,7 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 type Tab = 'all' | 'people' | 'posts' | 'threads' | 'courts';
 /** A recent search's own key, for its row. */
@@ -448,6 +449,7 @@ export default function Search() {
             {user ? (
               <View style={styles.recentName}>
                 <Text style={[styles.recentText, styles.recentTextShrink]} numberOfLines={1}>{user.name}</Text>
+                <OfficialCheck userId={user.id} size={13} />
                 <StreakFlame days={streak} />
               </View>
             ) : <Text style={styles.recentText} numberOfLines={1}>{tag ? <Text style={styles.hashInline}>#</Text> : null}{text}</Text>}

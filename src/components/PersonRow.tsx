@@ -17,6 +17,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_ROUND2 } from '@/theme/look';
+import { isOfficial } from '@/features/players/official';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /**
  * One person in a list, the way Instagram's search shows them: picture
@@ -49,14 +51,14 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
   // anyone is (the same for every account, so it says nothing about age).
   const why = reason ?? '';
   const bold = (parts: { s: string; on: boolean }[]) => parts.map((p, i) => (p.on ? <Text key={i} style={styles.handleMatch}>{p.s}</Text> : p.s));
-  const label = `${user.name}${streakWords(streak)}, @${user.handle}, ${levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
+  const label = `${user.name}${streakWords(streak)}, @${user.handle}, ${isOfficial(user.id) ? 'official account' : levelBadge(user.profile).label}${user.isCoach ? ', coach' : ''}`;
   return (
     <SwipePressable accessibilityRole="link" accessibilityLabel={label} onPress={onPress} style={({ pressed }) => [styles.row, pressed && styles.pressed]}>
       <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={44} ring={user.isCoach} />
       <View style={[styles.body, !first && styles.rule]}>
         <View style={styles.words}>
           <View style={styles.nameLine}>
-            <Highlighted text={user.name} words={words} style={styles.name} strong={styles.nameMatch} lines={1} wordStart />
+            <Highlighted text={user.name} words={words} style={styles.name} strong={styles.nameMatch} lines={1} wordStart /><OfficialCheck userId={user.id} size={13} style={styles.flame} />
             {/* The small flame here, close after the name: the row also holds the level and Follow. */}
             <StreakFlame days={streak} size="small" style={styles.flame} />
             {streak ? (
@@ -64,9 +66,9 @@ export function PersonRow({ user, reason, via, words = [], first = false, onPres
               // when it fits beside them, and otherwise drops to a hidden second line (it is on their profile).
               <View style={styles.levelRoom}>
                 <View style={styles.levelGate} />
-                <LevelPill profile={user.profile} small />
+                <LevelPill profile={user.profile} userId={user.id} small />
               </View>
-            ) : <LevelPill profile={user.profile} small />}
+            ) : <LevelPill profile={user.profile} userId={user.id} small />}
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>
             @{bold(highlightParts(user.handle, words, { inside: 2 }))}

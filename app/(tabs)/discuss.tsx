@@ -84,6 +84,7 @@ import { TextScale, colors, oneLine, radius, spacing, typography, font, lift, us
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { LESS_AI, LESS_AI_ROUND2, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -810,7 +811,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {search ? foundPlayers.map((user, index) => <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
           <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
           <View style={[styles.playerBody, index > 0 && styles.playerLine]}>
-            <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+            <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>@{user.handle}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.playerChevron} />
@@ -872,7 +873,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
@@ -885,7 +886,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, (index > 0 || nearPlayers.length > 0) && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[town, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
@@ -920,7 +921,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
                 <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
                   <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><LevelPill profile={user.profile} small /></View>
+                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
                   </View>
                   <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
