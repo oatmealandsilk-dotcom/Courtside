@@ -5,8 +5,9 @@ import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 
 import { BrandMark } from '@/components/BrandMark';
 import { useLeave } from '@/components/LeaveCurtain';
-import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
 import { useSetupCount } from '@/features/onboarding/setupCount';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { Wash } from '@/components/Wash';
 import { openLegal, TERMS_VERSION } from '@/lib/legal';
 import { useApp } from '@/store/AppContext';
@@ -72,16 +73,17 @@ export default function Agree() {
 
   return (
     <View style={styles.root}>
-      <Wash height={420} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top }]}>
+      {/* The sign-up redraw (ONBOARDING_V2): a flat page, no wash, no mark, the bar at setup's one height. */}
+      {ONBOARDING_V2 ? null : <Wash height={420} />}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: ONBOARDING_V2 && setupCount ? space.header : space.top }]}>
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
-        <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>
+        {ONBOARDING_V2 ? null : <Animated.View entering={enter(0)}><BrandMark size={40} /></Animated.View>}
         <Animated.View entering={enter(1)} style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Community guidelines</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Please read and agree to these before you continue. You only need to do this once.</Text>
         </Animated.View>
 
-        <Animated.View entering={enter(2)} style={styles.card}>
+        <Animated.View entering={enter(2)} style={ONBOARDING_V2 ? styles.cardV2 : styles.card}>
           {RULES.map((rule, index) => (
             <View key={rule.head} style={[styles.rule, index > 0 && styles.ruleLine]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ruleHead}>{rule.head}</Text>
@@ -99,7 +101,7 @@ export default function Agree() {
         </Animated.Text>
       </ScrollView>
       {/* The guidelines scroll; they stop at the status bar instead of running under the clock. */}
-      <StatusShade wash={{ height: 420 }} />
+      <StatusShade wash={ONBOARDING_V2 ? undefined : { height: 420 }} />
 
       {/* Setup's bottom, the same on every setup page: the main button, and the quieter way out as a word under it. */}
       <Animated.View entering={enter(4)}>
@@ -127,4 +129,6 @@ const styleDefinitions = StyleSheet.create({
   fine: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   link: { color: colors.text, ...font('600'), textDecorationLine: 'underline' },
   error: { ...typography.small, color: colors.danger, textAlign: 'center' },
+  // The redraw (ONBOARDING_V2): the rules in a hairline inset card (the title sits the page's own 24pt gap under the bar).
+  cardV2: { ...setupLook.inset, paddingHorizontal: spacing.lg },
 });

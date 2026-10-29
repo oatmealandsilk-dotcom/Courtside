@@ -8,7 +8,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { tick } from '@/lib/haptics';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
+import { colors, font, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
 /**
  * A birthday picked on a wheel, like the phone's own date picker (Oct 17,
@@ -35,11 +35,16 @@ export type WheelDate = { month: number | null; day: number | null; year: number
 
 export const EMPTY_WHEEL: WheelDate = { month: null, day: null, year: null };
 
-export function DateWheel({ value, onChange, rowHeight = 40, label = 'Birthday' }: {
+export function DateWheel({ value, onChange, rowHeight = 40, label = 'Birthday', plain = false }: {
   value: WheelDate;
   onChange: (next: WheelDate) => void;
   rowHeight?: number;
   label?: string;
+  /**
+   * On the page like the iPhone's own picker (the sign-up redraw, ONBOARDING_V2): no card round
+   * it, a neutral grey band, lighter figures, and the fades in the page's colour.
+   */
+  plain?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const thisYear = new Date().getFullYear();
@@ -61,30 +66,31 @@ export function DateWheel({ value, onChange, rowHeight = 40, label = 'Birthday' 
   const dark = pageIsDark();
   const band = withAlpha(colors.brand, dark ? 0.2 : 0.09);
   return (
-    <View style={[styles.wheel, { height }]} accessibilityRole="none" aria-label={label}>
-      <View pointerEvents="none" style={[styles.band, { top: rowHeight * 2, height: rowHeight, backgroundColor: band }]} />
-      <Column flex={1.55} align="left" label="Month" items={months} index={value.month === null ? 0 : value.month + 1} rowHeight={rowHeight}
+    <View style={[styles.wheel, plain && styles.wheelPlain, { height }]} accessibilityRole="none" aria-label={label}>
+      <View pointerEvents="none" style={[styles.band, plain && styles.bandPlain, { top: rowHeight * 2, height: rowHeight }, !plain && { backgroundColor: band }]} />
+      <Column flex={1.55} align="left" label="Month" items={months} index={value.month === null ? 0 : value.month + 1} rowHeight={rowHeight} plain={plain}
         onIndex={(i) => onChange({ ...value, month: i === 0 ? null : i - 1 })} />
-      <Column flex={0.75} align="center" label="Day" items={days} index={value.day === null ? 0 : Math.min(value.day, dayCount)} rowHeight={rowHeight}
+      <Column flex={0.75} align="center" label="Day" items={days} index={value.day === null ? 0 : Math.min(value.day, dayCount)} rowHeight={rowHeight} plain={plain}
         onIndex={(i) => onChange({ ...value, day: i === 0 ? null : i })} />
-      <Column flex={1} align="right" label="Year" items={years} index={value.year === null ? 0 : thisYear - value.year + 1} rowHeight={rowHeight}
+      <Column flex={1} align="right" label="Year" items={years} index={value.year === null ? 0 : thisYear - value.year + 1} rowHeight={rowHeight} plain={plain}
         onIndex={(i) => onChange({ ...value, year: i === 0 ? null : thisYear - i + 1 })} />
-      {/* The soft fade at the top and bottom, in the card's own colour. */}
-      <Fade height={rowHeight * 1.8} top />
-      <Fade height={rowHeight * 1.8} />
+      {/* The soft fade at the top and bottom, in the card's own colour (plain: the page's). */}
+      <Fade height={rowHeight * 1.8} top plain={plain} />
+      <Fade height={rowHeight * 1.8} plain={plain} />
     </View>
   );
 }
 
-function Fade({ height, top }: { height: number; top?: boolean }) {
-  const id = top ? 'wheelFadeTop' : 'wheelFadeBottom';
+function Fade({ height, top, plain }: { height: number; top?: boolean; plain?: boolean }) {
+  const id = `${top ? 'wheelFadeTop' : 'wheelFadeBottom'}${plain ? 'Plain' : ''}`;
+  const into = plain ? colors.bg : colors.surface;
   return (
     <View pointerEvents="none" style={[StyleSheet.absoluteFill, top ? { bottom: undefined } : { top: undefined }, { height }]}>
       <Svg width="100%" height="100%">
         <Defs>
           <LinearGradient id={id} x1="0" y1={top ? '0' : '1'} x2="0" y2={top ? '1' : '0'}>
-            <Stop offset="0" stopColor={colors.surface} stopOpacity={0.95} />
-            <Stop offset="1" stopColor={colors.surface} stopOpacity={0} />
+            <Stop offset="0" stopColor={into} stopOpacity={0.95} />
+            <Stop offset="1" stopColor={into} stopOpacity={0} />
           </LinearGradient>
         </Defs>
         <Rect x="0" y="0" width="100%" height="100%" fill={`url(#${id})`} />
@@ -96,9 +102,9 @@ function Fade({ height, top }: { height: number; top?: boolean }) {
 /** How many rows either side of the middle are drawn; the rest are off the wheel. */
 const REACH = 5;
 
-function Column({ items, index, onIndex, label, rowHeight, flex, align }: {
+function Column({ items, index, onIndex, label, rowHeight, flex, align, plain }: {
   items: string[]; index: number; onIndex: (i: number) => void;
-  label: string; rowHeight: number; flex: number; align: 'left' | 'center' | 'right';
+  label: string; rowHeight: number; flex: number; align: 'left' | 'center' | 'right'; plain?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const last = items.length - 1;
@@ -221,7 +227,7 @@ function Column({ items, index, onIndex, label, rowHeight, flex, align }: {
       >
         <Animated.View style={[StyleSheet.absoluteFill, rail]}>
           {shown.map((i) => (
-            <Row key={i} i={i} text={items[i]} pos={pos} rowHeight={rowHeight} align={align} />
+            <Row key={i} i={i} text={items[i]} pos={pos} rowHeight={rowHeight} align={align} plain={plain} />
           ))}
         </Animated.View>
       </View>
@@ -229,7 +235,7 @@ function Column({ items, index, onIndex, label, rowHeight, flex, align }: {
   );
 }
 
-function Row({ i, text, pos, rowHeight, align }: { i: number; text: string; pos: SharedValue<number>; rowHeight: number; align: 'left' | 'center' | 'right' }) {
+function Row({ i, text, pos, rowHeight, align, plain }: { i: number; text: string; pos: SharedValue<number>; rowHeight: number; align: 'left' | 'center' | 'right'; plain?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = useAnimatedStyle(() => {
     const d = (i * rowHeight - pos.value) / rowHeight;
@@ -241,7 +247,7 @@ function Row({ i, text, pos, rowHeight, align }: { i: number; text: string; pos:
   });
   return (
     <Animated.View style={[styles.row, { top: i * rowHeight, height: rowHeight }, look]}>
-      <Text numberOfLines={1} style={[styles.rowText, i === 0 && styles.rowPlaceholder, { textAlign: align }]}>{text}</Text>
+      <Text numberOfLines={1} style={[styles.rowText, plain && styles.rowTextPlain, i === 0 && styles.rowPlaceholder, { textAlign: align }]}>{text}</Text>
     </Animated.View>
   );
 }
@@ -252,10 +258,14 @@ const styleDefinitions = StyleSheet.create({
     backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
     paddingHorizontal: spacing.md,
   },
+  // Plain: on the page itself, no card (the wheel's own padding keeps the figures in from the band's ends).
+  wheelPlain: { borderRadius: 0, backgroundColor: 'transparent', borderWidth: 0, paddingHorizontal: spacing.sm },
   band: { position: 'absolute', left: spacing.sm, right: spacing.sm, borderRadius: radius.md },
+  bandPlain: { left: 0, right: 0, borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
   column: { overflow: 'hidden', borderRadius: radius.md, ...(Platform.OS === 'web' ? { cursor: 'grab', outlineStyle: 'none' } : null) } as object,
   columnFocused: Platform.OS === 'web' ? { outlineWidth: 2, outlineStyle: 'solid', outlineColor: colors.brand, outlineOffset: -2 } as object : {},
   row: { position: 'absolute', left: spacing.sm, right: spacing.sm, justifyContent: 'center' },
   rowText: { ...typography.title, fontSize: 21, color: colors.text, fontVariant: ['tabular-nums'] },
+  rowTextPlain: { ...font('400') },
   rowPlaceholder: { color: colors.textFaint },
 });

@@ -12,8 +12,9 @@ import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { useNearCourts } from '@/components/place/CourtsNear';
 import { Avatar, Button } from '@/components/ui';
-import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { QuietButton, SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
 import { useSetupCount } from '@/features/onboarding/setupCount';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
 import type { User } from '@/data/types';
@@ -140,6 +141,10 @@ export default function FirstMove() {
       if (adult && !/^(Plays in|Interacted)/.test(s.reason)) return;
       add(s.user, adult || s.reason !== 'Suggested for you' ? s.reason : 'Follows you');
     });
+    // The sign-up redraw (ONBOARDING_V2): an adult's list is filled up to MOST with the rest of the
+    // suggestions, in their own order ("Coach on CourtSide", "Suggested for you"): the same people,
+    // under the same rules, the app's own Suggested players row already shows them. A teen's list is as before.
+    if (ONBOARDING_V2 && adult) suggested.forEach((s) => add(s.user, s.reason));
     setPicks(list);
   }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter]);
   const empty = !!picks && !picks.length;
@@ -203,6 +208,83 @@ export default function FirstMove() {
   const line = !adult ? 'Your map shows only your friends.'
     : empty && cityName ? `CourtSide is new in ${cityName}.`
       : 'Follow anyone you know. Their clips and hits fill your feed and map.';
+
+  if (ONBOARDING_V2) {
+    // The redraw (Oct 29, owner: "People you may know screen I don't even feel a need to read I'm just
+    // tapping next because it seems confusing"): the people, each with Follow, and one quiet way to bring
+    // your own. Nothing else to read, and Finish the only green button.
+    const finishLabel = setupCount && setupCount.index === setupCount.total - 1 ? 'Finish' : 'Continue';
+    const inviteLabel = shared ? 'Link shared' : adult ? 'Invite your hitting partners' : 'Invite your friends';
+    const emptyLine = !adult ? FRIENDS_LINE
+      : court ? `Your link opens on ${court.name}.`
+        : cityName ? `CourtSide is new in ${cityName}.`
+          : 'Whoever joins with your link follows you.';
+    const ways = (
+      <>
+        <View style={empty ? null : styles.v2InviteGap}>
+          <QuietButton label={inviteLabel} icon="paper-plane-outline" onPress={() => { void share(); }} />
+        </View>
+        {contacts ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={CONTACTS_LABEL} onPress={findContacts} style={({ pressed }) => [styles.v2Inset, styles.v2Contacts, pressed && styles.pressed]}>
+            <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2ContactsText} numberOfLines={1}>{CONTACTS_LABEL}</Text>
+            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
+        {/* Teen search (migration 118): by name or @handle, never by town. */}
+        <Pressable accessibilityRole="link" accessibilityLabel="Search by @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.v2Search, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietText}>Search by @handle</Text>
+        </Pressable>
+      </>
+    );
+    return (
+      <View style={styles.root}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, styles.v2Scroll, { paddingTop: setupCount ? space.header : space.top }]}>
+          {setupCount ? <Animated.View entering={enter(0)} style={styles.v2Bar}><SetupProgress count={setupCount} /></Animated.View> : null}
+          <Animated.View entering={enter(0)} style={styles.head}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{empty ? (adult ? 'Bring your hitting partners' : FRIENDS_TITLE) : 'People you may know'}</Text>
+            {empty ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{emptyLine}</Text> : null}
+          </Animated.View>
+          <Animated.View entering={enter(1)} style={styles.v2Body}>
+            {picks === null ? (
+              // Room kept for three people, so the page does not jump when they arrive.
+              <View style={styles.v2Waiting}><ActivityIndicator color={colors.textFaint} /></View>
+            ) : picks.length ? (
+              <Animated.View entering={FadeIn.duration(220)}>
+                {canFollowAll ? (
+                  <View style={styles.v2AllRow}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Follow all ${notYet.length}`} hitSlop={8} onPress={followAll} style={({ pressed }) => [styles.v2All, pressed && { opacity: PRESS_DIM }]}>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2AllText}>Follow all</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {picks.map(({ user, meta }, i) => (
+                  <View key={user.id} style={styles.v2Person}>
+                    <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
+                    <View style={[styles.v2PersonWords, i > 0 && styles.v2PersonLine]}>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                      </View>
+                      <FollowPill small soft following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
+                    </View>
+                  </View>
+                ))}
+                {ways}
+              </Animated.View>
+            ) : (
+              <Animated.View entering={FadeIn.duration(220)}>{ways}</Animated.View>
+            )}
+          </Animated.View>
+        </ScrollView>
+        <Animated.View entering={enter(2)}>
+          <SetupFooter primary={{ label: finishLabel, onPress: () => done(move) }} />
+        </Animated.View>
+        <StatusShade />
+        {curtain}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -358,4 +440,24 @@ const styleDefinitions = StyleSheet.create({
   instant: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   instantText: { ...typography.small, color: colors.textMuted },
   instantLink: { ...typography.smallStrong, color: colors.text },
+
+  // The sign-up redraw (ONBOARDING_V2).
+  v2Scroll: { gap: 0 },
+  // The title 24pt under the bar.
+  v2Bar: { marginBottom: setupLook.titleGap },
+  v2Lead: { ...setupLook.lead },
+  v2Body: { marginTop: spacing.xl, gap: spacing.md },
+  v2Waiting: { height: 192, alignItems: 'center', justifyContent: 'center' },
+  v2AllRow: { flexDirection: 'row', justifyContent: 'flex-end', height: 32, alignItems: 'center', marginTop: -spacing.sm },
+  v2All: { minHeight: 32, justifyContent: 'center' },
+  v2AllText: { ...typography.bodyStrong, color: colors.brand },
+  v2Person: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 64 },
+  // The hairline starts at the name, not the photo, as on the iPhone's own lists and Instagram's.
+  v2PersonWords: { flex: 1, minWidth: 0, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  v2PersonLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  v2InviteGap: { marginTop: 20 },
+  v2Inset: { ...setupLook.inset },
+  v2Contacts: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  v2ContactsText: { ...typography.body, color: colors.text, flex: 1 },
+  v2Search: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: spacing.xs },
 });

@@ -4,8 +4,9 @@ import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
 import { useSetupCount } from '@/features/onboarding/setupCount';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { StatusShade } from '@/components/StatusShade';
 import { Wash } from '@/components/Wash';
 import { useAutoLog, type AutoLogSource } from '@/features/activity/autoLog';
@@ -73,21 +74,22 @@ export default function AutoLog() {
 
   return (
     <View style={styles.root}>
-      <Wash height={420} />
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: space.top, paddingBottom: spacing.xl }]}>
+      {/* The sign-up redraw (ONBOARDING_V2): a flat page, the bar at setup's one height. */}
+      {ONBOARDING_V2 ? null : <Wash height={420} />}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingTop: ONBOARDING_V2 && setupCount ? space.header : space.top, paddingBottom: spacing.xl }]}>
         {setupCount ? <Animated.View entering={enter(0)}><SetupProgress count={setupCount} /></Animated.View> : null}
         <Animated.View entering={enter(0)} style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Log your tennis automatically</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>Connect once. Every hit, match and workout shows up ready to log.</Text>
         </Animated.View>
 
-        <Animated.View entering={enter(1)} style={styles.card}>
+        <Animated.View entering={enter(1)} style={ONBOARDING_V2 ? styles.cardV2 : styles.card}>
           {!shown && !offering ? (
             <View style={styles.waiting}><ActivityIndicator color={colors.textFaint} /></View>
           ) : (
             <View>
               <View style={styles.cardHead}>
-                <View style={styles.tile}><Ionicons name="pulse" size={20} color={colors.brand} /></View>
+                {ONBOARDING_V2 ? null : <View style={styles.tile}><Ionicons name="pulse" size={20} color={colors.brand} /></View>}
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardTitle}>Your workouts, ready to log</Text>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cardBody}>The last 7 days come in first. {consentLine(auto.seenBy(auto.apple ? 'apple-health' : 'whoop'), currentUser, autoLogSharing)} Other workouts only you see until you post one.{auto.apple ? ' Apple Health also shares their heart rate, plus sleep, steps and food (calories, protein, carbs, fat) for your Health page.' : ''}</Text>
@@ -109,7 +111,7 @@ export default function AutoLog() {
           link={{ label: 'Not now', onPress: onward, disabled: !!busy }}
         />
       </Animated.View>
-      <StatusShade wash={{ height: 420 }} />
+      <StatusShade wash={ONBOARDING_V2 ? undefined : { height: 420 }} />
     </View>
   );
 }
@@ -128,4 +130,6 @@ const styleDefinitions = StyleSheet.create({
   cardTitle: { ...typography.heading, color: colors.text },
   cardBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   foot: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
+  // The redraw (ONBOARDING_V2): a plain hairline inset card, words only.
+  cardV2: { ...setupLook.inset, padding: spacing.lg },
 });

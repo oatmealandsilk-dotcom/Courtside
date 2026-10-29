@@ -6,6 +6,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTimi
 
 import { groupFor, toBirthDate, yearsOld } from '@/features/age/ageCheck';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { TextScale } from '@/theme/textScale';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 
@@ -170,7 +171,118 @@ export function ProtectionsCard() {
   );
 }
 
+/* ---------------- The sign-up redraw (ONBOARDING_V2): calm, no boxes, no icons ---------------- */
+
+/**
+ * One quiet line under the wheel, left-aligned, in place of the readout and
+ * the privacy line: what the date says and that it is never shown. Never
+ * the word "Private" (Oct 29, owner: it read as a private account). Under 13
+ * it says only the age, nothing that would hint at a "right" answer.
+ */
+export function AgeLine({ month, day, year, error }: { month: string; day: string; year: string; error?: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const complete = !!month && !!day && year.length === 4;
+  const birthDate = complete ? toBirthDate(month, day, year) : null;
+  let bad = '';
+  let age: number | null = null;
+  if (error) bad = error;
+  else if (complete && !birthDate) {
+    const m = Number(month), d = Number(day), y = Number(year);
+    const when = new Date(Date.UTC(y, m - 1, d));
+    const real = when.getUTCFullYear() === y && when.getUTCMonth() === m - 1 && when.getUTCDate() === d;
+    bad = !real ? "That date doesn't exist" : when.getTime() > Date.now() ? "That date hasn't happened yet" : 'Check the year';
+  } else if (birthDate) age = yearsOld(birthDate);
+  const after = age === null ? 'Your birthday is never shown to anyone.'
+    : age < 13 ? ''
+      : groupFor(age) === 'teen' ? ' Teen protections on.' : ' Never shown to anyone.';
+  return (
+    <View style={styles.line} accessibilityLiveRegion="polite" aria-live="polite">
+      {bad ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.lineText, styles.lineBad]}>{bad}</Text> : (
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lineText}>
+          {age !== null ? <Text style={styles.lineAge}>You're {age}.</Text> : null}
+          {after}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+/** A hairline, then a small capital label over plain lines: what a block of words is about, with no card round it. */
+function PlainBlock({ label, lines, oneLine, foot }: { label: string; lines: string[]; oneLine?: boolean; foot?: string }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.block}>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockLabel}>{label.toUpperCase()}</Text>
+      <View style={styles.blockLines}>
+        {lines.map((text) => <Text maxFontSizeMultiplier={TextScale.CARD} key={text} style={styles.blockLine} numberOfLines={oneLine ? 1 : undefined}>{text}</Text>)}
+      </View>
+      {foot ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockFoot}>{foot}</Text> : null}
+    </View>
+  );
+}
+
+/** What a birthday opens up at 18. Never the map (Oct 27 audit #8): it is friends only, at any age. */
+export function AdultBlock({ compact }: { compact?: boolean }) {
+  return <PlainBlock label="At 18 and over" oneLine={compact} lines={['Players in your town can find you', "Players you don't follow can message you"]} />;
+}
+
+/** What no birthday means, said plainly before they choose. */
+export function NoBirthdayBlock() {
+  return (
+    <PlainBlock
+      label="Without a birthday"
+      lines={['Your account starts private', 'Only people you follow can message you', 'On the map, only friends who follow you back see you']}
+      foot="Add it anytime in Settings → Account center."
+    />
+  );
+}
+
+/**
+ * The two answers to "Are you 13 or older?" as one inset list, the way the
+ * iPhone's own settings pick one of two: a row each, a checkmark on the one
+ * picked. Both rows are drawn exactly alike, so the question leans neither way.
+ */
+export function AnswerRow({ title, detail, selected, disabled, first, onPress }: {
+  title: string; detail: string; selected: boolean; disabled?: boolean; first?: boolean; onPress: () => void;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected, disabled }}
+      aria-checked={selected}
+      accessibilityLabel={title}
+      accessibilityHint={detail}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.answerRow, !first && styles.answerRowLine, pressed && { backgroundColor: colors.surfaceAlt }]}
+    >
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.answerRowText}>{title}</Text>
+      {selected ? <Ionicons name="checkmark" size={20} color={colors.brand} /> : null}
+    </Pressable>
+  );
+}
+
+/** The list the two answers sit in. */
+export function AnswerList({ children }: { children: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return <View accessibilityRole="radiogroup" aria-label="Are you 13 or older?" style={styles.answerList}>{children}</View>;
+}
+
 const styleDefinitions = StyleSheet.create({
+  line: { minHeight: 20, marginTop: spacing.md },
+  lineText: { ...typography.small, lineHeight: 18, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  lineAge: { ...typography.smallStrong, color: colors.text },
+  lineBad: { color: colors.danger },
+  block: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 20, gap: spacing.sm },
+  blockLabel: { ...typography.caption, letterSpacing: 0.6, color: colors.textMuted },
+  blockLines: { gap: 6 },
+  blockLine: { ...typography.body, lineHeight: 21, color: colors.text },
+  blockFoot: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  answerList: { backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radius.lg, overflow: 'hidden' },
+  answerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 56, paddingHorizontal: spacing.lg },
+  answerRowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  answerRowText: { ...typography.body, fontSize: 17, color: colors.text },
   privacy: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center' },
   privacyText: { ...typography.small, color: colors.textMuted },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, padding: spacing.lg, gap: spacing.md },
