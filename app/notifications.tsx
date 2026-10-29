@@ -338,8 +338,9 @@ export default function Notifications() {
     const r = await actions.confirmUnsureTennis();
     setUnsureBusy(false);
     if (!r) { showToast({ title: 'Couldn’t log them', body: 'Try again in a moment.', icon: 'alert-circle-outline' }); return; }
-    // After the first yes ever (on this phone), Fitbit's watch tip follows the note (approved Oct 27; watchTip).
-    const tip = fromFitbit ? fitbitTipAfterYes(currentUserId) : undefined;
+    // After the first yes ever (on this phone), Fitbit's watch tip follows the note (approved Oct 27; watchTip). Not when
+    // the note says Sport from the Fitbit logs itself as tennis from now on: the tip would read against it (review, Oct 28).
+    const tip = fromFitbit && !r.learned ? fitbitTipAfterYes(currentUserId) : undefined;
     // Every one was already logged by hand: filed as that, nothing logged twice (migration 193).
     if (!r.logged) { showToast({ title: 'Already in Your sessions', body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'You logged these yourself.', icon: 'checkmark-circle-outline', ...(tip ? { onClosed: tip } : {}) }); return; }
     showToast({

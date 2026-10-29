@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 
 import { useApp } from '@/store/AppContext';
-import { show as showToast } from '@/lib/toast';
+import { show as showToast, type ToastMessage } from '@/lib/toast';
 import { isDemo } from './flags';
 
 /*
@@ -61,6 +61,11 @@ function load(id: string) {
     .finally(() => { loading.delete(id); emit(); });
 }
 
+/** Read this account's saved tip ahead of time (asked as the tabs open, with the connect card's), so Activities knows at once. */
+export function warmWatchTip(id: string) {
+  load(id);
+}
+
 function update(id: string, change: (s: Saved) => Saved) {
   const next = change(state.get(id) ?? blank());
   state.set(id, next);
@@ -75,6 +80,8 @@ export interface WatchTip {
   due: boolean;
   /** "Got it": away for a few days, everywhere. */
   gotIt: () => void;
+  /** Everything `due` depends on has been heard (connections, sessions, this phone's saved tip): it is the final word. */
+  known: boolean;
 }
 
 export function useWatchTip(): WatchTip {
@@ -85,7 +92,8 @@ export function useWatchTip(): WatchTip {
   useSyncExternalStore(subscribe, () => version, () => 0);
   useEffect(() => { if (ready && me) load(me); }, [ready, me]);
   const apple = integrations.some((i) => i.provider === 'apple-health' && i.connected && !!i.readsWorkouts);
-  const fitbit = integrations.some((i) => i.provider === 'fitbit' && i.connected);
+  // Fitbit with tennis turned off is not told it logs itself (review, Oct 28): the same test as Apple Health's.
+  const fitbit = integrations.some((i) => i.provider === 'fitbit' && i.connected && !!i.readsWorkouts);
   const source: WatchTipSource | null = apple ? 'apple-health' : fitbit ? 'fitbit' : null;
   // A tennis session from any tracker: detected as tennis (Fitbit's "Sport" ones still asking do not count), or
   // logged from one, by the server or by hand.
@@ -95,7 +103,7 @@ export function useWatchTip(): WatchTip {
   useEffect(() => { if (ready && me && saved && !saved.done && arrived) update(me, (s) => ({ ...s, done: true })); }, [ready, me, saved, arrived]);
   const gotIt = useCallback(() => { if (me) update(me, (s) => ({ ...s, gotItAt: Date.now() })); }, [me]);
   const due = ready && !!source && !arrived && !!saved && !saved.done && (!saved.gotItAt || Date.now() - saved.gotItAt >= AGAIN_MS);
-  return { source, due, gotIt };
+  return { source, due, gotIt, known: ready && !!saved };
 }
 
 /**
@@ -115,4 +123,26 @@ export function fitbitTipAfterYes(me: string | null | undefined): ((how: string)
       showToast({ title: 'A tip for next time', body: WATCH_TIP.fitbit, icon: 'watch-outline', long: true });
     }, 600);
   };
+}
+
+/**
+ * The same tip after a Fitbit "Sport" session is logged as tennis from its own row in Notifications ("Was this
+ * tennis?" → the session's page → Log), not only from Yes (review, Oct 28). Noted by the save (useTrackerSession),
+ * then picked up by its "Logged" note (showLogged): the session's page itself is unchanged.
+ */
+let yesFromRow: { me: string; sessionId: string } | null = null;
+
+export function noteFitbitYes(me: string | null | undefined, sessionId: string) {
+  if (me) yesFromRow = { me, sessionId };
+}
+
+/** The "Logged" note's onClosed for `sessionId`: the tip when that save was a Fitbit yes and it is due, else `next`. */
+export function fitbitTipAfterLogged(sessionId: string | undefined, next: ToastMessage['onClosed']): ToastMessage['onClosed'] {
+  const yes = yesFromRow;
+  if (!yes || !sessionId || yes.sessionId !== sessionId) return next;
+  yesFromRow = null;
+  const tip = fitbitTipAfterYes(yes.me);
+  if (!tip) return next;
+  // Gone by itself or tapped away: the tip, in what would have followed's place. Otherwise what would have followed.
+  return (how, upMs) => { if (how === 'timeout' || how === 'tap') tip(how); else next?.(how, upMs); };
 }

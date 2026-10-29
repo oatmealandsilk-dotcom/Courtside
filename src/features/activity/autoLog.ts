@@ -10,8 +10,9 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { isDemo, isTracker, knownTennisFlags, tennisFlags, type TennisFlags } from './flags';
 import { friendsAtMost, onConnect, savesOnConnect, shownTo } from './autoLogSharing';
-import { trackerStatus } from './trackers';
+import { knownTrackerStatus, trackerStatus } from './trackers';
 import type { AutoLogAudience, User } from '@/data/types';
+import { warmWatchTip } from './watchTip';
 
 /*
  * "Log your tennis automatically" (owner, Oct 6): a friend who had worked
@@ -67,14 +68,18 @@ export function useAutoLog(): AutoLog {
   const whoop = !!flags && (flags.whoop || flags.workoutsWhoop);
   // Fitbit's sign-in is open when the server has its keys: asked only of someone its switch is on for.
   const fitbitFlag = !!flags?.fitbit;
-  const [fitbitOpen, setFitbitOpen] = useState(() => demo);
+  // null: not heard yet. Seeded from the last answer on this phone, so a repeat open knows at once.
+  const [fitbitOpen, setFitbitOpen] = useState<boolean | null>(() => (demo ? true : knownTrackerStatus()?.fitbit ?? null));
   useEffect(() => {
     if (!fitbitFlag) return undefined;
     let on = true;
     void trackerStatus(currentUserId).then((t) => { if (on) setFitbitOpen(t.fitbit); });
     return () => { on = false; };
   }, [fitbitFlag, currentUserId]);
-  const fitbit = fitbitFlag && fitbitOpen;
+  const fitbit = fitbitFlag && fitbitOpen === true;
+  // Where Fitbit's switch is on, nothing is final until its sign-in is known to be open or not (review, Oct 28): else
+  // the choices (and the card's words and tap) changed after the card was up, or the card dropped in late.
+  const fitbitHeard = !fitbitFlag || fitbitOpen !== null;
   const connected = integrations.some((i) => i.connected && !!i.readsWorkouts && (i.provider === 'apple-health' || i.provider === 'whoop' || isTracker(i.provider)));
   const workoutsApple = !!flags?.workoutsApple;
   const workoutsWhoop = !!flags?.workoutsWhoop;
@@ -84,7 +89,7 @@ export function useAutoLog(): AutoLog {
     if (opts?.told && savesOnConnect(autoLogSharing, source)) void actions.setAutoLogSharing('mutuals');
   }, [actions, workoutsApple, workoutsWhoop, autoLogSharing]);
   // A real account's connections are known once its Health page data has loaded (healthIsReal); the demo's at once.
-  return { ready: !!flags && (demo || !!healthIsReal), known: !!flags, apple, whoop, fitbit, connected, connect, seenBy };
+  return { ready: !!flags && fitbitHeard && (demo || !!healthIsReal), known: !!flags && fitbitHeard, apple, whoop, fitbit, connected, connect, seenBy };
 }
 
 /*
@@ -95,8 +100,10 @@ export function useAutoLog(): AutoLog {
  * is connected (never again after that). Each place has its own Not now.
  *
  * What it offers is what this phone can connect: Apple Health on an iPhone (never on Android or the website),
- * WHOOP or Fitbit where they are switched on for the player. One choice connects in one tap (Fitbit's goes to its
- * own sign-in on the Health page); more than one opens the Health page, which has a row for each.
+ * WHOOP or Fitbit where they are switched on for the player. On an iPhone the tap connects Apple Health at once, as
+ * the old row did (15 of the first 18 connections came that way); the Health page still lists WHOOP and Fitbit.
+ * Without Apple Health, one choice connects in one tap (Fitbit's goes to its own sign-in on the Health page); more
+ * than one opens the Health page, which has a row for each.
  */
 export type ConnectPlace = 'activities' | 'profile';
 /** "Not now" puts the card away this long; then it comes back (at most once a day, on a visit). */
@@ -138,15 +145,29 @@ const namesOf = (choices: ConnectSource[]) => {
 };
 
 /**
- * The card's line: what connects, and who will see the tennis that logs itself, said honestly before connecting
- * (migration 193). One tap from the card never chooses who sees it (review, Oct 28): not chosen yet, it is asked on
- * "Tennis logged" (Friends or Only me) or in Settings, so the card says "You choose who sees it".
+ * What the card's tap connects at once: Apple Health wherever it is a choice (an iPhone), else the one choice when
+ * there is one and it is not Fitbit (whose own sign-in is on the Health page). Null: the tap opens the Health page.
+ */
+export const tapConnects = (choices: ConnectSource[]): AutoLogSource | null => (
+  choices.includes('apple-health') ? 'apple-health' : choices.length === 1 && choices[0] === 'whoop' ? 'whoop' : null
+);
+
+/**
+ * The card's line: what the tap connects, and who will see the tennis that logs itself, said honestly before
+ * connecting (migration 193). One tap from the card never chooses who sees it (review, Oct 28): not chosen yet, it is
+ * asked on "Tennis logged" (Friends or Only me) or in Settings, so the card says "You choose who sees it". Where the
+ * tap opens the Health page instead (WHOOP or Fitbit, no Apple Health), connecting there saves Friends when nothing is
+ * chosen, that page saying so first, so the card says the same.
  */
 export function connectLine(choices: ConnectSource[], chosen: AutoLogAudience | null | undefined, user: Pick<User, 'ageGroup'> | null | undefined): string {
-  const from = `Your tennis logs itself from ${namesOf(choices)}.`;
-  if (!chosen) return `${from} You choose who sees it.`;
-  const seen = shownTo(chosen, null, user);
+  const tap = tapConnects(choices);
+  const from = `Your tennis logs itself from ${tap === 'apple-health' ? 'Apple Health' : namesOf(choices)}.`;
   const numbers = friendsAtMost(user) ? '' : ', with its heart rate and calories';
+  if (!chosen) {
+    const viaPage = !tap && onConnect(chosen, choices[0], user) !== 'private';
+    return viaPage ? `${from} Friends who follow you back see it${numbers}.` : `${from} You choose who sees it.`;
+  }
+  const seen = shownTo(chosen, null, user);
   return seen === 'private' ? `${from} Only you see it.`
     : seen === 'public' ? `${from} It goes on your profile${numbers}.`
     : `${from} Friends who follow you back see it${numbers}.`;
@@ -174,7 +195,9 @@ export interface ConnectRow {
 export function warmConnectOffer(userId: string) {
   readClosed('profile', userId);
   readClosed('activities', userId);
-  void tennisFlags(userId);
+  // Fitbit's sign-in asked now too where its switch is on, so the card's choices are final before a page asks.
+  void tennisFlags(userId).then((f) => (f.fitbit ? trackerStatus(userId) : undefined)).catch(() => undefined);
+  warmWatchTip(userId);
 }
 
 /** What this phone can connect, Apple Health first (an iPhone only), then WHOOP and Fitbit where they are switched on. */
@@ -207,9 +230,9 @@ export function useConnectRow(place: ConnectPlace = 'activities'): ConnectRow {
 }
 
 /**
- * The card's tap: one choice connects at once (Fitbit opens the Health page, where its own sign-in is); more than
- * one opens the Health page, which has a row for each. Connecting here never chooses who sees the tennis that logs
- * itself (review, Oct 28).
+ * The card's tap: Apple Health connects at once on an iPhone (the old row's one tap, review Oct 28); elsewhere one
+ * choice connects at once (Fitbit opens the Health page, where its own sign-in is), and more than one opens the
+ * Health page, which has a row for each. Connecting here never chooses who sees the tennis that logs itself.
  */
 export function useConnectTap(row: Pick<ConnectRow, 'auto' | 'source' | 'choices'>): { busy: boolean; connect: () => void } {
   const [busy, setBusy] = useState(false);
@@ -217,10 +240,11 @@ export function useConnectTap(row: Pick<ConnectRow, 'auto' | 'source' | 'choices
     const { auto, source, choices } = row;
     if (!source || busy) return;
     haptics.tap();
-    if (choices.length > 1 || source === 'fitbit') { router.push('/health'); return; }
+    const now = tapConnects(choices);
+    if (!now) { router.push('/health'); return; }
     setBusy(true);
-    void auto.connect(source)
-      .then(() => showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' }))
+    void auto.connect(now)
+      .then(() => showToast({ title: now === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' }))
       .catch((err: unknown) => showToast({ title: 'Couldn’t connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' }))
       .finally(() => setBusy(false));
   }, [row, busy]);

@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui';
 import { Wash } from '@/components/Wash';
 import type { User } from '@/data/types';
 import { connectLine, useConnectRow, useConnectTap } from '@/features/activity/autoLog';
+import { setConnectCardOnShow } from '@/features/activity/afterLogConnect';
 import { WATCH_TIP, useWatchTip } from '@/features/activity/watchTip';
 import { hasSessionStats } from '@/features/activity/format';
 import { finishLive } from '@/features/activity/finishLive';
@@ -29,6 +30,8 @@ import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 /** People offered to follow on the page. */
 const PICKS = 3;
+/** A first answer still on its way as Activities comes on show is waited for this long (as Profile's card does). */
+const GRACE_MS = 250;
 
 /**
  * Activities' first page for a new player (following fewer than ten people,
@@ -56,8 +59,13 @@ const PICKS = 3;
  * show) or "Your activities": the page opened on "Start logging" with their
  * own sessions right under it (Oct 6 audit, item 8). `sessions`: how many
  * session pages follow it, for the line at its foot.
+ *
+ * The connect card or the watch tip is decided as Activities comes on show (`shown`): one only known after the page
+ * is up waits for the next visit, so nothing drops in over Start a session and Log a session (review, Oct 28). One
+ * already there follows what happens to it (Not now, Got it, the tip in the card's place once connected). `onTop`:
+ * this page is the one on screen, so the note after logging by hand knows the card is saying it already.
  */
-export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0 }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number }) {
+export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0, shown = true, onTop = true }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number; shown?: boolean; onTop?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, actions, sessions: log, posts, currentUserId, liveSession, currentUser, autoLogSharing } = useApp();
   // Anything in your own log, or a session of yours posted with its numbers.
@@ -69,7 +77,27 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
   const line = connectLine(choices, autoLogSharing, currentUser);
   // Connected, with no tennis session in from it yet: the watch tip in the card's place (features/activity/watchTip).
   const watch = useWatchTip();
-  const tip = !offer && watch.due && !!watch.source;
+  const live: 'connect' | 'tip' | null = offer ? 'connect' : watch.due && watch.source ? 'tip' : null;
+  const known = row.known && watch.known;
+  // Whether the card's place is open this visit (undefined: not decided yet). Kept in step while out of sight.
+  const [open, setOpen] = useState<boolean | undefined>(() => (known ? !!live : undefined));
+  const cameAt = useRef(Date.now());
+  useEffect(() => { if (shown) cameAt.current = Date.now(); }, [shown]);
+  useEffect(() => {
+    if (!shown) { setOpen(known ? !!live : undefined); return; }
+    if (open === undefined) { if (known) setOpen(!!live && Date.now() - cameAt.current < GRACE_MS); return; }
+    // Put away (Not now, Got it) or connected with nothing more to say: closed for the rest of the visit.
+    if (open && !live) setOpen(false);
+  }, [shown, known, live, open]);
+  const card = open ? live : null;
+  const tip = card === 'tip';
+  const connectShown = card === 'connect';
+  // The note after logging by hand stays away while this card is on screen saying the same (afterLogConnect).
+  const cardOnScreen = connectShown && shown && onTop;
+  useEffect(() => {
+    setConnectCardOnShow(cardOnScreen);
+    return () => { if (cardOnScreen) setConnectCardOnShow(false); };
+  }, [cardOnScreen]);
   const liveNow = liveSession ? liveState(liveSession) : null;
   const inviter = useInviterToFollow();
   // Someone followed from here stays, saying Following (as the feed's strip does).
@@ -97,7 +125,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
       </View>
 
       <View style={styles.card}>
-        {offer ? (
+        {connectShown ? (
           // "Connect your watch" (Oct 28, owner: push auto log hard): one tap connects; Not now puts it away for two
           // days, then it is back, until something is connected (features/activity/autoLog).
           <View style={styles.connect}>
@@ -128,7 +156,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
           accessibilityRole="button"
           accessibilityLabel={!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'}
           onPress={() => (!liveNow ? router.push('/start-session') : liveNow === 'finished' && liveSession ? finishLive(liveSession, actions) : router.push('/live-session'))}
-          style={({ pressed }) => [styles.row, (offer || tip) && styles.rowLine, pressed && styles.pressed]}
+          style={({ pressed }) => [styles.row, !!card && styles.rowLine, pressed && styles.pressed]}
         >
           {LESS_AI && !liveNow ? null : <View style={styles.tile}><Ionicons name={liveNow ? 'radio-button-on' : 'play'} size={16} color={liveNow ? colors.open : colors.brand} /></View>}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowText}>{!liveNow ? 'Start a session' : liveNow === 'finished' ? 'Log your session' : 'Session in progress'}</Text>
