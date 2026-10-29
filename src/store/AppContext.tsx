@@ -790,6 +790,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   loadNewOnCourtside: () => Promise<void>;
   /** Asks who is in your town for Near me (migration 190); before it, nobody but friends checked in is listed. At most once a minute for the same town. */
   loadTownPlayers: () => Promise<void>;
+  /** A new teen's other teens for "People you may know" (migration 202): ids only, the server's pick; empty when there are none, for anyone else, or before 202. */
+  loadTeensToSuggest: () => Promise<ID[]>;
   /**
    * Asks again whose tournament plans you may see (migration 123: only
    * friends who follow each other), so a follow-back since the app opened
@@ -4461,6 +4463,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!ids || stateRef.current.currentUserId !== me) return;
     // (Every profile comes down with the app's first load, so each one listed is already on the phone.)
     setState((prev) => ({ ...prev, townPlayers: ids }));
+  }, []);
+
+  // A new teen's other teens (migration 202): asked once by setup's People you may know; not kept in state.
+  const loadTeensToSuggest = useCallback(async (): Promise<ID[]> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    if (!me) return [];
+    if (!live(me)) return demoApi.teensToSuggest({ me, users: s.users, followingIds: s.followingIds, blockedIds: s.blockedIds, blockedMeIds: s.blockedMeIds, mutedIds: s.mutedIds });
+    return remote.fetchTeensToSuggest();
   }, []);
 
   const postHit = useCallback(async (input: Omit<HitRequest, 'id' | 'authorId' | 'createdAt' | 'joinedIds' | 'conversationId' | 'cancelled' | 'opensAt'>): Promise<ID> => {
@@ -9917,6 +9928,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       checkOutOfMap,
       loadNewOnCourtside,
       loadTownPlayers,
+      loadTeensToSuggest,
       loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,
@@ -10179,6 +10191,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       checkOutOfMap,
       loadNewOnCourtside,
       loadTownPlayers,
+      loadTeensToSuggest,
       loadTournamentPlans,
       setDefaultPayment,
       addPaymentMethod,

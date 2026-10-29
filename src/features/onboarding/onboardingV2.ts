@@ -15,6 +15,8 @@
  * changes: Edit profile → Game details, Edit rating, the AI coach's setup
  * and the profile's "finish setting up" look as they do today either way.
  * Turned on for everyone by setting this to true and shipping an
- * over-the-air update: no database change.
+ * over-the-air update: no database change. ON since Oct 29 (owner: "Both
+ * look good"). A teen's other teens on People you may know need migration
+ * 202 (teens_to_suggest); without it a teen's list is as before.
  */
-export const ONBOARDING_V2 = false;
+export const ONBOARDING_V2 = true;
