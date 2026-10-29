@@ -34,6 +34,7 @@ import { FIND_PLAYERS_ROOM, FeedFindPlayers, useFindPlayersShown } from '@/compo
 import { FollowPill } from '@/components/FollowPill';
 import { START_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
 import { useConnectRow } from '@/features/activity/autoLog';
+import { useWatchTip } from '@/features/activity/watchTip';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
@@ -456,7 +457,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // Also, however many you follow, while the slim "Connect Apple Health" row has something to offer (owner, Oct 6).
   // Once there, it stays for the visit: following your tenth player, or connecting, from it never pulls it out from under you.
   const connectRow = useConnectRow();
-  const actsStartNow = !!scope?.activities && ready && (followingIds.length < START_UNDER || connectRow.offer);
+  // And while the watch tip is due (connected, no tennis session in from it yet; features/activity/watchTip, Oct 28).
+  const watchTip = useWatchTip();
+  const actsStartNow = !!scope?.activities && ready && (followingIds.length < START_UNDER || connectRow.offer || watchTip.due);
   const actsStartKept = useRef(false);
   if (actsStartNow) actsStartKept.current = true;
   const actsStart = actsStartNow || (!!scope?.activities && actsStartKept.current);

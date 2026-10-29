@@ -1,14 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { useConnectRow } from '@/features/activity/autoLog';
+import { connectLine, useConnectRow, useConnectTap } from '@/features/activity/autoLog';
 import { isDemo } from '@/features/activity/flags';
-import { friendsAtMost, shownTo } from '@/features/activity/autoLogSharing';
 import { useShownAt } from '@/features/navigation/shownAt';
 import * as haptics from '@/lib/haptics';
-import { show as showToast } from '@/lib/toast';
+import { PRESS_DIM } from '@/theme/press';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, typography } from '@/theme';
@@ -16,19 +14,16 @@ import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
 /**
- * "Log your hits automatically" at the top of Profile (owner, Oct 24: "I like
- * the small card on profile"): about four in five players had never linked
- * Apple Health or WHOOP, and after setup's one card the only ways in were a
- * row at the top of Activities and Settings → Health and nutrition.
+ * "Connect your watch" at the top of Profile (owner, Oct 24: "I like the small card on profile"; Oct 28: "Auto log
+ * should be very pushed hard"): most players had never linked Apple Health, WHOOP or Fitbit.
  *
- * The same offer as that Activities row (features/activity/autoLog), with its
- * own ×: shown while something here can connect and nothing brings sessions
- * in yet, gone for good on this phone once closed, and gone the moment a
- * connection is made. One tap connects where there is one choice; with both
- * Apple Health and WHOOP it opens the Health page, which has a row for each.
+ * The same offer as the card at the top of Activities (features/activity/autoLog), with its own Not now: shown while
+ * something here can connect and nothing brings sessions in yet; Not now puts it away for two days, then it is back;
+ * gone the moment a connection is made. One tap connects where there is one choice; with more it opens the Health
+ * page, which has a row for each.
  *
- * In the phone apps only (the website's top card is "Get CourtSide on your
- * iPhone", and one card at a time is enough there), and the demo.
+ * In the phone apps only (the website's top card is "Get CourtSide on your iPhone", and one card at a time is enough
+ * there), and the demo.
  *
  * Decided as Profile comes on show: an offer that only becomes known while
  * the page is up waits for the next visit, so the card never drops in over a
@@ -41,7 +36,9 @@ const GRACE_MS = 250;
 export function ConnectCard() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUserId, currentUser, autoLogSharing } = useApp();
-  const { auto, source, offer, close, known } = useConnectRow('profile');
+  const row = useConnectRow('profile');
+  const { choices, offer, close, known } = row;
+  const { busy, connect } = useConnectTap(row);
   const here = Platform.OS !== 'web' || isDemo(currentUserId);
   const onShow = useShownAt('/profile');
   // Kept in step while the page is out of sight; held once decided while it is on show
@@ -54,42 +51,22 @@ export function ConnectCard() {
     if (!onShow) { setDecided(known ? offer : null); return; }
     if (decided === null && known) setDecided(offer && Date.now() - cameAt.current < GRACE_MS);
   }, [onShow, known, offer, decided]);
-  const [busy, setBusy] = useState(false);
-  if (!here || !decided || !offer || !source) return null;
-  const both = auto.apple && auto.whoop;
-  const names = both ? 'Apple Health or WHOOP' : source === 'whoop' ? 'WHOOP' : 'Apple Health';
+  if (!here || !decided || !offer || !choices.length) return null;
   // Who sees the tennis that logs itself, said before connecting (migration 193), read aloud too. One tap here never
   // chooses it (review, Oct 28): not chosen yet, it is asked on "Tennis logged" (Friends or Only me) or in Settings.
-  const seen = shownTo(autoLogSharing, source, currentUser);
-  const numbers = friendsAtMost(currentUser) ? '' : ', with its heart rate and calories';
-  const line = `Connect ${names}: your tennis logs itself${!autoLogSharing ? ', and you choose who sees it' : seen === 'private' ? ', for you only' : seen === 'public' ? ` to your profile${numbers}` : `, and friends who follow you back see it${numbers}`}.`;
-  const connect = async () => {
-    if (busy) return;
-    haptics.tap();
-    if (both) { router.push('/health'); return; }
-    setBusy(true);
-    try {
-      // Connecting here never chooses who sees the tennis that logs itself (review, Oct 28).
-      await auto.connect(source);
-      showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' });
-    } catch (err) {
-      showToast({ title: 'Couldn’t connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
-    } finally {
-      setBusy(false);
-    }
-  };
+  const line = connectLine(choices, autoLogSharing, currentUser);
   return (
     <View style={styles.row}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`Log your hits automatically. ${line}`} disabled={busy} onPress={() => { void connect(); }} style={styles.rowMain}>
-        <Ionicons name="pulse-outline" size={20} color={colors.brand} />
+      <Pressable accessibilityRole="button" accessibilityLabel={`Connect your watch. ${line}`} disabled={busy} onPress={connect} style={styles.rowMain}>
+        <Ionicons name="watch-outline" size={20} color={colors.brand} />
         <View style={{ flex: 1 }}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Log your hits automatically</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Connect your watch</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>{busy ? 'Connecting…' : line}</Text>
         </View>
       </Pressable>
-      {/* Closed here, it stays closed on this phone; Settings → Health and nutrition still connects. */}
-      <Pressable accessibilityRole="button" accessibilityLabel="Close the log automatically card" hitSlop={10} disabled={busy} onPress={() => { haptics.tap(); close(); }} style={styles.rowClose}>
-        <Ionicons name="close" size={16} color={colors.textMuted} />
+      {/* Not now: away for two days, then back, until something is connected (features/activity/autoLog). */}
+      <Pressable accessibilityRole="button" accessibilityLabel="Not now: connect your watch on Profile" hitSlop={6} disabled={busy} onPress={() => { haptics.tap(); close(); }} style={({ pressed }) => [styles.notNow, pressed && { opacity: PRESS_DIM }]}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
       </Pressable>
     </View>
   );
@@ -101,5 +78,6 @@ const styleDefinitions = StyleSheet.create({
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 14, paddingLeft: 14 },
   rowTitle: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   rowMeta: { fontSize: 12, color: colors.textMuted, lineHeight: 19 },
-  rowClose: { padding: 14 },
+  notNow: { minHeight: 44, paddingHorizontal: 14, justifyContent: 'center' },
+  notNowText: { ...typography.smallStrong, fontSize: 13, color: colors.textMuted },
 });

@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import type { DetectedActivity, ID, MatchSet, PracticeSession, SessionPlayer } from '@/data/types';
+import { connectAfterLogged } from '@/features/activity/afterLogConnect';
 import { activityDay } from '@/features/activity/format';
 import { andList, canTagKind } from '@/features/activity/sessionTags';
 import { sourceOn } from '@/features/activity/recent';
@@ -177,14 +178,16 @@ export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'w
     showToast({ title: record.title, body: record.body, glyph: 'record', ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}) });
     return;
   }
+  const closed = connectAfterLogged(onClosed);
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
     glyph: 'logged',
     ...(streak.now >= 2 ? { stat: { value: streak.now, from: streak.before, label: 'day streak' } } : {}),
     ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}),
-    // Told when the note goes, for what follows it (log-session's "Something come up today?", R11).
-    ...(onClosed ? { onClosed } : {}),
+    // Told when the note goes, for what follows it: "Want this to log itself next time?" for a player with nothing
+    // connected (afterLogConnect, at most once a day), else log-session's "Something come up today?" (R11).
+    ...(closed ? { onClosed: closed } : {}),
   });
 }
 
