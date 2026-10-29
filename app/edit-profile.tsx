@@ -47,9 +47,10 @@ export default function EditProfile() {
       setRatingText(p.rating && p.skillSystem !== 'ITF' ? p.rating.toFixed(1) : '');
     }
   }, [currentUser]);
-  // The rating step (the Rating row below) also has your name and city. Changed
-  // there, they show here on the way back, so Save changes never puts the old
-  // ones back; anything you had typed here yourself stays.
+  // Game details (EDIT_PROFILE_V2's row) opens the edit steps on Your game, and Back from
+  // there reaches About you, which also has your name and city. Changed there, they show
+  // here on the way back, so Save never puts the old ones back; anything you had typed
+  // here yourself stays. (The old page has no link to those steps; this is harmless there.)
   const seen = useRef({ name: currentUser?.name ?? '', location: currentUser?.location ?? '' });
   useEffect(() => {
     if (!currentUser) return;
@@ -70,7 +71,7 @@ export default function EditProfile() {
   const typed = Number(ratingText.replace(',', '.'));
   const ratingEmpty = ratingText.trim() === '';
   const ratingOk = !ratingEmpty && Number.isFinite(typed) && typed >= scale.min && typed <= scale.max;
-  // Game details (EDIT_PROFILE_V2's row) changes the rating too: back here, the box shows the new one, so Save never
+  // Game details (EDIT_PROFILE_V2's row) can change the rating too (Back to About you): back here, the box shows the new one, so Save never
   // puts the old one back. A number you had typed here yourself stays.
   const shownFor = (p?: typeof prof) => ({ text: p?.rating && p.skillSystem !== 'ITF' ? p.rating.toFixed(1) : '', system: p?.skillSystem === 'UTR' ? 'UTR' as const : 'NTRP' as const });
   const seenRating = useRef(shownFor(prof));
@@ -202,8 +203,8 @@ export default function EditProfile() {
                     </Text>
                   </View>
                   <View style={styles.hairline} />
-                  {/* Plays, hand, backhand, surface: the Tennis profile's own edit pages. */}
-                  <Pressable accessibilityRole="button" accessibilityLabel="Game details" onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '0' } })} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+                  {/* Plays, hand, backhand, surface: opens straight on the edit steps' Your game (step 1), not About you, which repeats this page. */}
+                  <Pressable accessibilityRole="button" accessibilityLabel="Game details" onPress={() => router.push({ pathname: '/onboarding', params: { from: 'edit', step: '1' } })} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Game details</Text>
                     <Ionicons name="chevron-forward" size={16} color={colors.textFaint} style={styles.chevron} />
                   </Pressable>
