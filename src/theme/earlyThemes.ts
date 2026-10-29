@@ -30,7 +30,7 @@ export const EARLY_THEMES_CUTOFF: string | null = null;
  * only, and only once there is a cutoff (so it means something). Off: the
  * page is exactly as it was.
  */
-export const EARLY_MEMBER_NOTE: boolean = false;
+export const EARLY_MEMBER_NOTE: boolean = true;
 
 /** What a player who joined after the cutoff can pick. Clean is the court a new player starts on. */
 export const NEW_PLAYER_THEMES: readonly ThemeName[] = ['clean', 'night'];
