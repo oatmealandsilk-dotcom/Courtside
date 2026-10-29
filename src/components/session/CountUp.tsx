@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import Reanimated, { Easing, cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
@@ -30,14 +30,9 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
 }) {
   const reduced = useReducedMotion();
   const v = useSharedValue(play && !reduced ? from : value);
-  // Counts up once. A number already on screen in full (shown while `play` was off, say a Feed page sliding
-  // in) never drops back to 0 to count again when `play` comes on (Oct 27, owner's screen recording: the
-  // stats showed, then fell and counted up again as the page landed).
-  const settled = useRef(!(play && !reduced));
   useEffect(() => {
     cancelAnimation(v);
-    if (!play || reduced || settled.current) { v.value = value; settled.current = true; return; }
-    settled.current = true;
+    if (!play || reduced) { v.value = value; return; }
     v.value = from;
     v.value = withDelay(delay, withTiming(value, { duration, easing: Easing.out(Easing.cubic) }));
   }, [value, from, play, reduced, delay, duration, v]);
