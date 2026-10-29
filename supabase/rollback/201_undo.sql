@@ -23,7 +23,7 @@ do $$
 declare
   r record;
   want jsonb := '{
-    "push_for_notification": ["5d81017b02bec3c24b735b6489b7ccbf", "38654034e46b1ddabc0af87e81d2096e"],
+    "push_for_notification": ["5d81017b02bec3c24b735b6489b7ccbf", "7cb911ec389617fe1d6c341664e1997c"],
     "send_activity_pushes": ["c07030432cc8698f53f9e8ab0646bae8", "439790d34a77a14d5dcc4fee80947add"],
     "tell_adults_new_player": ["76a46bd9d39a7ce1e647a69d7d6ee18c", "7e44fe562f1092d35c40219e4484612e"]
   }';
@@ -278,8 +278,9 @@ revoke all on function public.send_activity_pushes(uuid, uuid[]) from public, an
 -- What 201 added.
 drop function if exists public.send_catch_up_alerts(timestamptz, boolean);
 drop function if exists private.send_like_bundles(timestamptz, boolean);
-drop function if exists private.like_bundle_words(uuid, uuid, integer, text, text);
-drop function if exists private.like_noun(uuid, text, text);
+drop function if exists private.like_bundle_words(uuid, uuid, integer, text, text, text);
+drop function if exists private.like_comment_mix(uuid, text, text, timestamptz, timestamptz);
+drop function if exists private.like_noun(uuid, text, text, text);
 drop function if exists private.take_activity_push(uuid);
 drop table if exists private.push_sends;
 alter table public.user_state drop column if exists push_catch_up;

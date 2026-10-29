@@ -19,13 +19,21 @@
 --      filed in Notifications and To do as before, only without the buzz
 --      (detected_activities.pushed_as = 'capped'). One WHOOP player got 27
 --      in 14 days; nobody's alerts are switched off.
+--      This limits only the alerts this database sends: WHOOP's, and Apple
+--      Watch sessions the phone did not announce itself. When Apple Health
+--      saves a workout, the iPhone app shows its own "Tennis detected",
+--      "Activity detected" or "N workouts found" and the server stays quiet
+--      (note_detected_activity, quiet = true), so those are NOT limited yet;
+--      that needs a change in the phone app (a new App Store build).
 --   2. Likes, bundled: at most one like alert per post (or instant) per
 --      hour. The first like buzzes as before ("Sam liked your post: …").
 --      Likes in the hour after it are filed in Notifications as always, and
 --      once the hour is up ONE alert says "Sam and 4 others liked your clip"
 --      (the newest liker by name; clip, photo, session or post by what the
---      post is; "comment" when it was your comment on someone else's post;
---      "instant" for an instant). A like after a quiet hour buzzes at once,
+--      post is; "comment" when it was your comment on someone else's post,
+--      or when every like in the bundle was on your comment; "post" when
+--      the bundle mixes likes on your post with likes on your comment
+--      there; "instant" for an instant). A like after a quiet hour buzzes at once,
 --      counting the ones since the last alert. The "Likes and comments"
 --      switch still stops them all.
 --      "Your post is taking off": the first alert is now at 50 views (10 and
@@ -47,6 +55,12 @@
 --      Nothing to say: no alert (it looks again the next hour). It is one of
 --      the come-back alerts of 170/171/180: 9am to 9pm their time, at most
 --      one of them a day (private.nudge_ok), and recorded in public.nudges.
+--      It runs at 57 past the hour, a minute no other come-back alert uses
+--      ("Want friends to see it?" runs at 55): two at the same minute could
+--      each miss the other's and both buzz the same person that day.
+--      a. only goes to players with "Friends up for a hit" on, b. only to
+--      players with "New open hits" on (Settings → Notifications); with one
+--      off, it says the next thing on the list instead.
 --      Teens: never a stranger's name, never a hit by a stranger; only
 --      friends who follow each other with them, under the map's teen rule
 --      (send_map_alert), and the city board. Its own switch: Settings →
@@ -70,9 +84,9 @@
 -- Adds: user_state.push_catch_up, private.push_sends (one line per person
 -- and kind: the last like alert per post, the day's workout alert count;
 -- nobody can read it from the app), private.take_activity_push,
--- private.like_noun, private.like_bundle_words, private.send_like_bundles,
+-- private.like_noun, private.like_comment_mix, private.like_bundle_words, private.send_like_bundles,
 -- public.send_catch_up_alerts, two pg_cron jobs (courtside-like-bundles every
--- 10 minutes, courtside-catch-up-alerts at 55 past every hour), and 'capped'
+-- 10 minutes, courtside-catch-up-alerts at 57 past every hour), and 'capped'
 -- to detected_activities.pushed_as's list. Replaces: push_for_notification,
 -- send_activity_pushes, tell_adults_new_player.
 
@@ -85,7 +99,7 @@ do $$
 declare
   r record;
   want jsonb := '{
-    "push_for_notification": ["5d81017b02bec3c24b735b6489b7ccbf", "38654034e46b1ddabc0af87e81d2096e"],
+    "push_for_notification": ["5d81017b02bec3c24b735b6489b7ccbf", "7cb911ec389617fe1d6c341664e1997c"],
     "send_activity_pushes": ["c07030432cc8698f53f9e8ab0646bae8", "439790d34a77a14d5dcc4fee80947add"],
     "tell_adults_new_player": ["76a46bd9d39a7ce1e647a69d7d6ee18c", "7e44fe562f1092d35c40219e4484612e"]
   }';
@@ -266,7 +280,11 @@ revoke all on function public.send_activity_pushes(uuid, uuid[]) from public, an
 -- What was liked, in the alert's word: "clip", "photo", "session" or "post"
 -- for the recipient's own post; "comment" for their comment on someone
 -- else's post (or instant); "instant" for their instant; "thread" for a thread.
-create or replace function private.like_noun(recipient uuid, p_kind text, p_id text)
+-- A like on a comment is filed under its post (notify_comment_like), so a
+-- post's bundle can hold likes on the recipient's comment there: p_comments
+-- says so ('all': every like was on their comment → "comment"; 'some': a mix
+-- → plain "post"; 'none': as the post is).
+create or replace function private.like_noun(recipient uuid, p_kind text, p_id text, p_comments text default 'none')
 returns text language plpgsql stable security definer set search_path = public as $$
 declare
   p public.posts;
@@ -279,6 +297,8 @@ begin
     select * into p from public.posts where id = p_id::uuid;
     if not found then return 'post'; end if;
     if p.author_id is distinct from recipient then return 'comment'; end if;
+    if p_comments = 'all' then return 'comment'; end if;
+    if p_comments = 'some' then return 'post'; end if;
     if p.kind = 'clip' or p.video_url is not null then return 'clip'; end if;
     if jsonb_typeof(p.session) = 'object' then return 'session'; end if;
     if p.image_url is not null or coalesce(cardinality(p.image_urls), 0) > 0 then return 'photo'; end if;
@@ -291,16 +311,33 @@ begin
   end if;
   return 'post';
 end $$;
-revoke all on function private.like_noun(uuid, text, text) from public, anon, authenticated;
+revoke all on function private.like_noun(uuid, text, text, text) from public, anon, authenticated;
+
+-- Of the likes filed for this post between `since` and `upto`: were they on
+-- the post itself ('none'), all on the recipient's comment there ('all'), or
+-- a mix ('some')? A post like is filed with the post's own words, a comment
+-- like with the comment's (notify_post_like, notify_comment_like).
+create or replace function private.like_comment_mix(recipient uuid, p_kind text, p_id text, since timestamptz, upto timestamptz)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select case when count(*) filter (where n.preview is distinct from p.body) = 0 then 'none'
+                when count(*) filter (where n.preview is not distinct from p.body) = 0 then 'all'
+                else 'some' end
+      from public.notifications n
+      join public.posts p on p.id::text = n.target_id
+     where p_kind = 'post' and n.user_id = recipient and n.kind = 'like' and n.target_kind = 'post'
+       and n.target_id = p_id and n.created_at > since and n.created_at <= upto), 'none')
+$$;
+revoke all on function private.like_comment_mix(uuid, text, text, timestamptz, timestamptz) from public, anon, authenticated;
 
 -- "Sam and 4 others liked your clip". `others` is how many more people liked it since the last alert.
-create or replace function private.like_bundle_words(recipient uuid, actor uuid, others integer, p_kind text, p_id text)
+create or replace function private.like_bundle_words(recipient uuid, actor uuid, others integer, p_kind text, p_id text, p_comments text default 'none')
 returns text language sql stable security definer set search_path = public as $$
   select coalesce((select coalesce(nullif(name, ''), handle) from public.profiles where id = actor), 'Someone')
     || ' and ' || others || case when others = 1 then ' other' else ' others' end
-    || ' liked your ' || private.like_noun(recipient, p_kind, p_id)
+    || ' liked your ' || private.like_noun(recipient, p_kind, p_id, p_comments)
 $$;
-revoke all on function private.like_bundle_words(uuid, uuid, integer, text, text) from public, anon, authenticated;
+revoke all on function private.like_bundle_words(uuid, uuid, integer, text, text, text) from public, anon, authenticated;
 
 -- The alert for every new Notifications row (14, 37, 86, 146, 151, 153, 191),
 -- word for word, with three changes (201): the view milestones buzz from 50;
@@ -396,7 +433,17 @@ begin
       select s.sent_at into v_prev from private.push_sends s
        where s.user_id = new.user_id and s.kind = 'like' and s.ref = v_ref for update;
       if found then
-        if v_prev > now() - interval '1 hour' then return new; end if;
+        if v_prev > now() - interval '1 hour' then
+          -- Held. If the last alert went out stamped after this like was
+          -- made (it ran while this like was still being saved, so it could
+          -- not count it), move its stamp to just before this like, so the
+          -- next bundle counts it rather than skipping it.
+          if v_prev > new.created_at then
+            update private.push_sends set sent_at = new.created_at - interval '1 millisecond'
+             where user_id = new.user_id and kind = 'like' and ref = v_ref;
+          end if;
+          return new;
+        end if;
         update private.push_sends set sent_at = now(), n = 1 where user_id = new.user_id and kind = 'like' and ref = v_ref;
         select count(distinct n.actor_id) into v_others from public.notifications n
          where n.user_id = new.user_id and n.kind = 'like' and n.target_id = new.target_id
@@ -410,7 +457,8 @@ begin
         if not found then return new; end if;
       end if;
       if v_others > 0 then
-        perform public.send_push(new.user_id, 'CourtSide', private.like_bundle_words(new.user_id, new.actor_id, v_others, new.target_kind, new.target_id), link);
+        perform public.send_push(new.user_id, 'CourtSide', private.like_bundle_words(new.user_id, new.actor_id, v_others, new.target_kind, new.target_id,
+          private.like_comment_mix(new.user_id, new.target_kind, new.target_id, v_prev, now())), link);
         return new;
       end if;
     exception when others then
@@ -485,7 +533,8 @@ begin
       v_link := case r.t_kind when 'post' then '/post/' || r.t_id when 'hit' then '/hits/' || r.t_id
                               when 'question' then '/question/' || r.t_id else '/notifications' end;
       if v_count > 1 then
-        v_body := private.like_bundle_words(r.user_id, v_latest.actor_id, v_count - 1, r.t_kind, r.t_id);
+        v_body := private.like_bundle_words(r.user_id, v_latest.actor_id, v_count - 1, r.t_kind, r.t_id,
+          private.like_comment_mix(r.user_id, r.t_kind, r.t_id, r.sent_at, p_now));
       else
         -- One like: the usual words.
         v_body := coalesce((select coalesce(nullif(name, ''), handle) from public.profiles where id = v_latest.actor_id), 'Someone')
@@ -573,14 +622,16 @@ begin
     with zones as materialized (select z.name from pg_catalog.pg_timezone_names z),
     people as materialized (
       select us.user_id, us.tz, coalesce(us.muted_ids, '{}') || coalesce(us.blocked_ids, '{}') as quiet,
-             (p_now at time zone us.tz)::date as today
+             (p_now at time zone us.tz)::date as today,
+             -- The map's own switches: "Friends up for a hit" (a) and "New open hits" (b).
+             us.push_map_friends is not false as friends_on, us.push_map_hits is not false as hits_on
         from public.user_state us
         join public.profiles pr on pr.id = us.user_id and pr.suspended_at is null
        where us.tz is not null and us.tz in (select name from zones)
          and us.push_catch_up is not false
          and exists (select 1 from public.push_tokens t where t.user_id = us.user_id)
     )
-    select pe.user_id, pe.tz, pe.quiet, pe.today, pr.location, pr.city_lat, pr.city_lng,
+    select pe.user_id, pe.tz, pe.quiet, pe.today, pe.friends_on, pe.hits_on, pr.location, pr.city_lat, pr.city_lng,
            ls.lat as spot_lat, ls.lng as spot_lng,
            greatest((select max(a.day) from public.app_opens a where a.user_id = pe.user_id),
                     (select (max(t.updated_at) at time zone pe.tz)::date from public.push_tokens t where t.user_id = pe.user_id)) as last_day,
@@ -606,7 +657,8 @@ begin
 
       -- a. Friends who follow each other with them, up for a hit today, near them.
       --    The map's rule for "Friends up for a hit": two known adults, or their spot is shown to them.
-      if here_lat is not null then
+      --    Not when they turned "Friends up for a hit" off: then b, c or d.
+      if here_lat is not null and r.friends_on then
         select count(*), (array_agg(x.nm order by x.until desc))[1:2], (array_agg(x.id order by x.until desc))[1]
           into v_n, v_names, v_first
           from (
@@ -635,7 +687,8 @@ begin
       end if;
 
       -- b. Open hits near their town in the next 7 days, by known adults, to known adults only.
-      if w is null and here_lat is not null and public.known_adult(r.user_id) then
+      --    Not when they turned "New open hits" off: then c or d.
+      if w is null and here_lat is not null and r.hits_on and public.known_adult(r.user_id) then
         select count(distinct h.author_id), coalesce(bool_and(extract(isodow from (h.starts_at at time zone r.tz)) in (6, 7)
                                                             and (h.starts_at at time zone r.tz)::date - r.today <= 7 - extract(isodow from r.today)::int), false)
           into v_n, v_weekend
@@ -723,13 +776,15 @@ end $$;
 revoke all on function public.send_catch_up_alerts(timestamptz, boolean) from public, anon, authenticated;
 
 -- ------------------------------------------------------------- 7. the jobs
--- Scheduling the same job name again replaces it. Where pg_cron is not
+-- Catch-up at 57 past: no other come-back alert job runs then (auto-log ask
+-- 55, hit invites 10, questions 25, partner streaks 40), so the one-a-day
+-- check always sees the others' rows. Scheduling the same job name again replaces it. Where pg_cron is not
 -- turned on this says so and carries on (nothing sent).
 do $$
 begin
   if exists (select 1 from pg_extension where extname = 'pg_cron') then
     perform cron.schedule('courtside-like-bundles', '*/10 * * * *', 'select private.send_like_bundles()');
-    perform cron.schedule('courtside-catch-up-alerts', '55 * * * *', 'select count(*) from public.send_catch_up_alerts()');
+    perform cron.schedule('courtside-catch-up-alerts', '57 * * * *', 'select count(*) from public.send_catch_up_alerts()');
   else
     raise notice 'pg_cron not turned on: no like bundles or catch-up alerts until it is';
   end if;
@@ -742,7 +797,7 @@ do $$
 declare
   r record;
   want jsonb := '{
-    "push_for_notification": "38654034e46b1ddabc0af87e81d2096e",
+    "push_for_notification": "7cb911ec389617fe1d6c341664e1997c",
     "send_activity_pushes": "439790d34a77a14d5dcc4fee80947add",
     "tell_adults_new_player": "7e44fe562f1092d35c40219e4484612e"
   }';
@@ -769,7 +824,7 @@ begin
   end if;
   if exists (select 1 from pg_extension where extname = 'pg_cron')
      and (not exists (select 1 from cron.job where jobname = 'courtside-like-bundles' and schedule = '*/10 * * * *')
-          or not exists (select 1 from cron.job where jobname = 'courtside-catch-up-alerts' and schedule = '55 * * * *')) then
+          or not exists (select 1 from cron.job where jobname = 'courtside-catch-up-alerts' and schedule = '57 * * * *')) then
     raise exception 'Migration 20261029000201 stopped: the two jobs were not scheduled. Nothing was changed.';
   end if;
 end $$;
@@ -784,7 +839,7 @@ commit;
 
 -- ------------------------------------------------- 9. checks to run afterwards
 -- Read-only. Paste one at a time into the SQL editor (remove the leading "-- ").
--- (a) The two jobs (expect courtside-like-bundles */10 and courtside-catch-up-alerts 55):
+-- (a) The two jobs (expect courtside-like-bundles */10 and courtside-catch-up-alerts 57):
 -- select jobname, schedule from cron.job where jobname in ('courtside-like-bundles', 'courtside-catch-up-alerts');
 -- (b) Workout alerts held back by the 3-a-day rule, last 14 days:
 -- select count(*) from public.detected_activities where pushed_as = 'capped' and pushed_at > now() - interval '14 days';
