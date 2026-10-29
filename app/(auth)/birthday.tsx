@@ -55,6 +55,8 @@ export default function Birthday() {
   const fromSettings = from === 'settings';
   // Setup's one step count (Oct 20 sweep); none when opened from Settings.
   const setupCount = useSetupCount('birthday', !fromSettings);
+  // Only the sign-up run is redrawn: Settings → Add your birthday stays as it is.
+  const v2 = ONBOARDING_V2 && !fromSettings;
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   // The wheel starts on "Month / Day / Year", no date at all; Continue waits until all three are picked.
   const [wheel, setWheel] = useState<WheelDate>(EMPTY_WHEEL);
@@ -143,7 +145,7 @@ export default function Birthday() {
     );
   }
 
-  if (step === 'skip' && ONBOARDING_V2) {
+  if (step === 'skip' && v2) {
     // The redraw (ONBOARDING_V2): the two answers as one inset list, exactly alike, a checkmark on the one picked.
     return (
       <View style={styles.root}>
@@ -161,7 +163,7 @@ export default function Birthday() {
             {error ? <Text style={[styles.error, styles.errorV2]}>{error}</Text> : null}
           </Rise>
           <Rise delay={140}>
-            <NoBirthdayBlock />
+            <NoBirthdayBlock rule={false} />
           </Rise>
         </ScrollView>
         <View style={[styles.footer, { paddingBottom: space.footer }]}>
@@ -225,7 +227,7 @@ export default function Birthday() {
     );
   }
 
-  if (ONBOARDING_V2) {
+  if (v2) {
     // The redraw (ONBOARDING_V2, Oct 29, owner: "When's your birthday screen is not aesthetic enough"):
     // the wheel on the page like the iPhone's own, one quiet line under it, and what 18 opens as
     // plain words under a hairline. No mark, no boxes, no icons.

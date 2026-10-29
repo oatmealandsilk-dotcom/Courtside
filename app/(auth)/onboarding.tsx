@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -337,6 +337,13 @@ function OnboardingSteps() {
   const yearNoteV2 = yearsText !== '' && !yearsOk ? yearNote : playing ? yearNote : '';
   // The redraw's "Invited by": a quiet link until it is tapped, or open from the start when a link filled it in.
   const [inviteOpen, setInviteOpen] = useState(false);
+  // Opened by the link tap (never when a link filled it in): the box takes the caret once the fold has opened, so one tap is enough to start typing.
+  const inviteInput = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!inviteOpen) return undefined;
+    const t = setTimeout(() => inviteInput.current?.focus(), 280);
+    return () => clearTimeout(t);
+  }, [inviteOpen]);
 
   /* ------------------------------ Animation ------------------------------ */
 
@@ -552,7 +559,7 @@ function OnboardingSteps() {
           <View style={[styles.v2Inset, styles.v2PrivRow]}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.privacyTitle}>Private account</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note} numberOfLines={1}>{currentUser.isPrivate ? 'Only people you approve see your posts.' : 'Anyone can see your posts.'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note}>{currentUser.isPrivate ? 'Only people you approve see your posts.' : 'Anyone can see your posts.'}</Text>
             </View>
             <Toggle value={!!currentUser.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
           </View>
@@ -609,6 +616,7 @@ function OnboardingSteps() {
           )}
           <Collapse open={inviteShown}>
             <Field
+              inputRef={inviteInput}
               label="Invited by"
               placeholder="Their @handle or link"
               value={inviteCode}

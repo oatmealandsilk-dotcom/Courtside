@@ -207,11 +207,14 @@ export function AgeLine({ month, day, year, error }: { month: string; day: strin
   );
 }
 
-/** A hairline, then a small capital label over plain lines: what a block of words is about, with no card round it. */
-function PlainBlock({ label, lines, oneLine, foot }: { label: string; lines: string[]; oneLine?: boolean; foot?: string }) {
+/**
+ * A hairline, then a small capital label over plain lines: what a block of words is about, with no card round it.
+ * `rule={false}` drops the hairline, for a block that follows a list with its own border (two rules in a row read busy).
+ */
+function PlainBlock({ label, lines, oneLine, foot, rule = true }: { label: string; lines: string[]; oneLine?: boolean; foot?: string; rule?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.block}>
+    <View style={[styles.block, !rule && styles.blockNoRule]}>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.blockLabel}>{label.toUpperCase()}</Text>
       <View style={styles.blockLines}>
         {lines.map((text) => <Text maxFontSizeMultiplier={TextScale.CARD} key={text} style={styles.blockLine} numberOfLines={oneLine ? 1 : undefined}>{text}</Text>)}
@@ -226,10 +229,11 @@ export function AdultBlock({ compact }: { compact?: boolean }) {
   return <PlainBlock label="At 18 and over" oneLine={compact} lines={['Players in your town can find you', "Players you don't follow can message you"]} />;
 }
 
-/** What no birthday means, said plainly before they choose. */
-export function NoBirthdayBlock() {
+/** What no birthday means, said plainly before they choose. `rule={false}` under the 13+ answers' own bordered list. */
+export function NoBirthdayBlock({ rule = true }: { rule?: boolean }) {
   return (
     <PlainBlock
+      rule={rule}
       label="Without a birthday"
       lines={['Your account starts private', 'Only people you follow can message you', 'On the map, only friends who follow you back see you']}
       foot="Add it anytime in Settings → Account center."
@@ -275,6 +279,8 @@ const styleDefinitions = StyleSheet.create({
   lineAge: { ...typography.smallStrong, color: colors.text },
   lineBad: { color: colors.danger },
   block: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 20, gap: spacing.sm },
+  // No hairline: the page's own gap above is the only space, so the label sits 24pt under the list.
+  blockNoRule: { borderTopWidth: 0, paddingTop: 0 },
   blockLabel: { ...typography.caption, letterSpacing: 0.6, color: colors.textMuted },
   blockLines: { gap: 6 },
   blockLine: { ...typography.body, lineHeight: 21, color: colors.text },

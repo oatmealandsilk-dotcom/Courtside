@@ -87,6 +87,13 @@ export default function FirstMove() {
   const firstName = currentUser?.name?.split(' ')[0];
   const contacts = canReadContacts();
   const instantsOn = useInstantsOn() === true;
+  // Whatever was picked, the app opens on its start page (Community, on the
+  // map: see startTab); a post, an Instant or a search then opens over it.
+  // Opened from the profile's "Make your first move", the app is already
+  // underneath: this page closes down to it (never a second copy of the tabs
+  // on top), and Continue with nothing done simply goes back to the profile.
+  const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
+  const overApp = openedFrom === 'profile';
 
   // Who plays round your city: that part of the map, asked for once, the
   // same ask the full map makes when it looks there (an adult only).
@@ -144,21 +151,14 @@ export default function FirstMove() {
     // The sign-up redraw (ONBOARDING_V2): an adult's list is filled up to MOST with the rest of the
     // suggestions, in their own order ("Coach on CourtSide", "Suggested for you"): the same people,
     // under the same rules, the app's own Suggested players row already shows them. A teen's list is as before.
-    if (ONBOARDING_V2 && adult) suggested.forEach((s) => add(s.user, s.reason));
+    if (ONBOARDING_V2 && !overApp && adult) suggested.forEach((s) => add(s.user, s.reason));
     setPicks(list);
-  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter]);
+  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter, overApp]);
   const empty = !!picks && !picks.length;
 
   const nearCourts = useNearCourts(empty && adult ? city : null);
   const court = useInviteCourt(city, nearCourts);
 
-  // Whatever was picked, the app opens on its start page (Community, on the
-  // map: see startTab); a post, an Instant or a search then opens over it.
-  // Opened from the profile's "Make your first move", the app is already
-  // underneath: this page closes down to it (never a second copy of the tabs
-  // on top), and Continue with nothing done simply goes back to the profile.
-  const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
-  const overApp = openedFrom === 'profile';
   // Setup's last page: setup's one step count (Oct 20 sweep); none when opened again from the profile.
   const setupCount = useSetupCount('first-move', !overApp);
   const done = (move: FirstMove, then?: () => void) => {
@@ -209,7 +209,8 @@ export default function FirstMove() {
     : empty && cityName ? `CourtSide is new in ${cityName}.`
       : 'Follow anyone you know. Their clips and hits fill your feed and map.';
 
-  if (ONBOARDING_V2) {
+  // Only the sign-up run is redrawn: "Make your first move" from the profile stays as it is.
+  if (ONBOARDING_V2 && !overApp) {
     // The redraw (Oct 29, owner: "People you may know screen I don't even feel a need to read I'm just
     // tapping next because it seems confusing"): the people, each with Follow, and one quiet way to bring
     // your own. Nothing else to read, and Finish the only green button.

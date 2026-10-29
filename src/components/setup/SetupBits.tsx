@@ -83,12 +83,14 @@ function SegmentFill() {
  * a second green button on the page. Drawn here so Button stays as it is
  * everywhere else.
  */
-export function QuietButton({ label, onPress, icon, disabled, loading, accessibilityLabel }: {
+export function QuietButton({ label, onPress, icon, disabled, loading, dim, accessibilityLabel }: {
   label: string;
   onPress: () => void;
   icon?: React.ComponentProps<typeof Ionicons>['name'];
   disabled?: boolean;
   loading?: boolean;
+  /** Looks faded but stays tappable, as Button's dim does. */
+  dim?: boolean;
   accessibilityLabel?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -100,7 +102,7 @@ export function QuietButton({ label, onPress, icon, disabled, loading, accessibi
       scaleTo={PRESS_SHRINK}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      style={[styles.quiet, inactive && styles.quietOff]}
+      style={[styles.quiet, (inactive || !!dim) && styles.quietOff]}
     >
       <View style={styles.quietInner}>
         {loading ? <CourtSpinner size={18} ink={colors.text} /> : icon ? <Ionicons name={icon} size={17} color={colors.text} /> : null}
@@ -137,7 +139,7 @@ export function SetupFooter({ primary, secondary, link, children }: {
       {children}
       <Button label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} dim={primary.dim} full />
       {secondary ? (ONBOARDING_V2
-        ? <QuietButton label={secondary.label} onPress={secondary.onPress} disabled={secondary.disabled || secondary.dim} loading={secondary.loading} />
+        ? <QuietButton label={secondary.label} onPress={secondary.onPress} disabled={secondary.disabled} loading={secondary.loading} dim={secondary.dim} />
         : <Button label={secondary.label} variant="secondary" onPress={secondary.onPress} disabled={secondary.disabled} loading={secondary.loading} dim={secondary.dim} full />) : null}
       {link ? (
         <Pressable accessibilityRole="button" accessibilityLabel={link.accessibilityLabel ?? link.label} disabled={link.disabled} hitSlop={8} onPress={link.onPress} style={({ pressed }) => [styles.link, pressed && styles.linkPressed]}>
