@@ -20,10 +20,11 @@ import { isOfficial } from '@/features/players/official';
 import { OfficialCheck } from '@/components/OfficialCheck';
 import { useTheme } from '@/theme/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
-import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { SCALES } from '@/features/players/ratingScales';
 import { colors, font, lift } from '@/theme';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
+import { initials } from '@/lib/format';
+import { EaseSwatch, GlideText, RollRating, SoftSwap, SoftText } from './SetupMotion';
 
 
 /**
@@ -185,8 +186,10 @@ function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | '
  * information"): the player's own card building as they type, in the Profile tab banner's look on every court
  * (boxLook, CardWash, Clean's soft wash and lift), so what they fill in is visibly what other players will see.
  * Display only: nothing here saves. A part not answered yet shows as a faint stand-in at the same size, so the card
- * never changes height as it fills. The rating gives one small scale-up the moment it becomes a real rating, and
- * nothing else moves.
+ * never changes height as it fills. Every piece changes softly as they type or tap, in its own slot so nothing
+ * beside it jumps (owner, Oct 29: "update the card when you type or select something, it should be smooth and nice
+ * animations"; SetupMotion): the name's letters fade in, the initials swap, the town and level cross-dissolve, the
+ * rating rolls to each new number, the style, surface and hand change in place and the swatch eases to its colour.
  */
 function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const { theme } = useTheme();
@@ -203,35 +206,39 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const level = draft.rated ? (scale.bands.find((b) => p.rating <= b.upTo) ?? scale.bands[scale.bands.length - 1]).label : '';
   const years = draft.years === null ? '' : draft.years === 0 ? '<1 yr' : `${draft.years} ${draft.years === 1 ? 'yr' : 'yrs'}`;
   const filled = look.filled;
+  // The avatar's disc: a deeper shade of a filled card; else the brand once there is a name, the card's lines before.
+  const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines;
   const spoken = `Your card: ${name || 'no name yet'}, ${town || 'no town yet'}, ${rating ? `${system} ${rating}` : 'no rating yet'}${draft.years === null ? '' : `, playing ${draft.years === 0 ? 'less than a year' : `${draft.years} ${draft.years === 1 ? 'year' : 'years'}`}`}.`;
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, draft.roomy && styles.setupRoomy, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
       <CardWash look={look} radius={corner(16)} />
       {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
       <View style={styles.setupTop}>
-        <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={draft.roomy ? 52 : 44} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines }} />
+        <SoftSwap token={`${initials(name || ' ')}|${disc}`}>
+          <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={draft.roomy ? 52 : 44} style={{ backgroundColor: disc }} />
+        </SoftSwap>
         <View style={styles.identityWords}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.setupName, { color: name ? look.ink : look.faint }]}>{name || 'Your name'}</Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.small, { color: look.muted }]}>
-            @{user.handle}<Text style={{ color: town ? look.muted : look.faint }}>{` · ${town || 'Your town'}`}</Text>
-          </Text>
-        </View>
-        <Bump token={rating}>
-          <View style={styles.setupRating}>
-            {/* Not rated yet: the same '–.–' drawn light, so it reads as an empty rating, not a glyph (round 2 review). */}
-            <Text maxFontSizeMultiplier={1.2} style={[styles.setupFigure, !rating && styles.setupFigureEmpty, { color: rating ? ratingInk : look.faint }]}>{rating || '–.–'}</Text>
-            <Text maxFontSizeMultiplier={1.2} style={[styles.setupSystem, { color: look.eyebrow }]}>{system}</Text>
+          <SoftText text={name || 'Your name'} color={name ? look.ink : look.faint} maxFontSizeMultiplier={1.3} style={styles.setupName} />
+          <View style={styles.setupHandleLine}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.small, styles.setupHandle, { color: look.muted }]}>@{user.handle}{'\u00A0·\u00A0'}</Text>
+            <SoftText text={town || 'Your town'} color={town ? look.muted : look.faint} maxFontSizeMultiplier={1.3} style={styles.small} slot={styles.setupTownSlot} />
           </View>
-        </Bump>
+        </View>
+        <View style={styles.setupRating}>
+          {/* Not rated yet: the same '–.–' drawn light, so it reads as an empty rating, not a glyph (round 2 review). */}
+          <RollRating rated={!!rating} value={p.rating} wide={system === 'UTR'} figure={styles.setupFigure} empty={styles.setupFigureEmpty} color={ratingInk} faint={look.faint} maxFontSizeMultiplier={1.2} />
+          <Text maxFontSizeMultiplier={1.2} style={[styles.setupSystem, { color: look.eyebrow }]}>{system}</Text>
+        </View>
       </View>
       {draft.game ? (
         <View style={[styles.setupGame, draft.roomy && styles.setupGameRoomy]}>
           <View style={styles.inline}>
-            <Text style={[styles.small, { color: look.muted }]}>{playStyleLabel[p.playStyle]} · </Text>
-            <Swatch surface={p.preferredSurface} look={look} />
-            <Text numberOfLines={1} style={[styles.small, styles.shrink, { color: look.muted }]}>{surfaceWord[p.preferredSurface]}</Text>
+            <GlideText text={playStyleLabel[p.playStyle]} style={[styles.small, { color: look.muted }]} />
+            <Text style={[styles.small, { color: look.muted }]}> · </Text>
+            {filled ? <Swatch surface={p.preferredSurface} look={look} /> : <EaseSwatch color={colors[surfaceSlot(p.preferredSurface)]} style={styles.setupSwatch} />}
+            <SoftText text={surfaceWord[p.preferredSurface]} color={look.muted} style={styles.small} slot={styles.setupTownSlot} />
           </View>
-          <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>{handsLine(p)}</Text>
+          <SoftText text={handsLine(p)} color={look.muted} style={styles.small} />
         </View>
       ) : null}
       <SetupFacts look={look} roomy={draft.roomy} cells={[{ key: 'years', figure: years, empty: '– yrs', label: 'Playing' }, { key: 'level', figure: level, empty: '–', label: 'Level', wide: true }]} />
@@ -245,27 +252,12 @@ function SetupFacts({ look, cells, roomy }: { look: CardLook; cells: { key: stri
     <View style={[styles.setupFacts, roomy && styles.setupFactsRoomy, { borderTopColor: look.lines }]}>
       {cells.map((c, i) => (
         <View key={c.key} style={[styles.cell, c.wide ? styles.setupWide : styles.setupNarrow, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[styles.setupFact, styles.tabular, { color: c.figure ? look.figure : look.faint }]}>{c.figure || c.empty}</Text>
+          <SoftText text={c.figure || c.empty} color={c.figure ? look.figure : look.faint} maxFontSizeMultiplier={1.25} style={[styles.setupFact, styles.tabular]} />
           <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.label, look.plain && styles.capsLabel, { color: look.muted }]}>{c.label}</Text>
         </View>
       ))}
     </View>
   );
-}
-
-/** One small scale-up when `token` becomes something (a rating typed in full): no fade, then still. */
-function Bump({ token, children }: { token: string; children: React.ReactNode }) {
-  const reduced = useReducedMotion();
-  const s = useSharedValue(1);
-  const [last, setLast] = useState(token);
-  useEffect(() => {
-    if (token === last) return;
-    setLast(token);
-    if (!token || reduced) return;
-    s.value = withSequence(withTiming(1.14, { duration: 140, easing: Easing.out(Easing.cubic) }), withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) }));
-  }, [token, last, reduced, s]);
-  const anim = useAnimatedStyle(() => ({ transform: [{ scale: s.value }] }));
-  return <Reanimated.View style={anim}>{children}</Reanimated.View>;
 }
 
 /** A player's tournaments still to come, soonest first. Whatever the data layer shares: other players' only reach here when they may be seen. */
@@ -393,5 +385,11 @@ const styles = StyleSheet.create({
   setupGameRoomy: { marginTop: 12 },
   setupFactsRoomy: { marginTop: 16, paddingTop: 16 },
   setupNarrow: { flexGrow: 0, flexBasis: 96 },
+  // The handle and its dot, then the town in the rest of the line (cut short there, never the handle).
+  setupHandleLine: { flexDirection: 'row', alignItems: 'baseline', minWidth: 0 },
+  setupHandle: { flexShrink: 0 },
+  setupTownSlot: { flex: 1, alignSelf: 'auto' },
+  // Swatch's own square (9pt, a 2pt corner, 5pt before the word), its colour easing.
+  setupSwatch: { width: 9, height: 9, borderRadius: 2, marginRight: 5 },
   setupWide: { flexGrow: 1 },
 });

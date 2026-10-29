@@ -25,6 +25,8 @@ import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
+/** When the sample card's count starts, from the page's first frame: once its entry (enter(1), 160 + 420ms) has settled. */
+const COUNT_AFTER = 80 + 80 + 420;
 
 /** How long the page waits to hear the server's switches before moving on without them. */
 const WAIT_MS = 3000;
@@ -46,9 +48,10 @@ export default function AutoLog() {
   const auto = useAutoLog();
   const { currentUser, currentUserId, autoLogSharing, posts, users, blockedIds, blockedMeIds } = useApp();
   const win = useWindowDimensions();
-  // The sample card counts up once, a beat after the page lands.
-  const [play, setPlay] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setPlay(true), 300); return () => clearTimeout(t); }, []);
+  // The sample card counts up once (owner, Oct 29: "5 should have the counting up animation"), as a Feed card does:
+  // on from its first frame, so its numbers wait at zero while the card rises (never shown in full first, then
+  // falling back to 0), and the count starts as the card's own entry settles (COUNT_AFTER). Nothing on this page
+  // ever turns it off and on again, so a redraw (the card's measured height, the consent line arriving) never re-counts.
   // Who already logs this way (round 2): the people behind the tennis that logged itself in posts this player can
   // already see (the server's audience rules, teen rules included, already applied to what was loaded), newest
   // first, never anyone blocked either way. Fewer than two: no row (never a count, never stand-in faces).
@@ -123,7 +126,7 @@ export default function AutoLog() {
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>Connect once. Your past week comes in first, then every hit logs itself.</Text>
           </Animated.View>
           <Animated.View entering={enter(1)} style={styles.v2Card} onLayout={(e) => setRoom(e.nativeEvent.layout.height)}>
-            <SessionCard session={sample} width={contentW} height={cardH} author={firstName} eyebrow="EXAMPLE · TODAY" showSource play={play} people={[]} accessibilityHint="An example, not a real session" />
+            <SessionCard session={sample} width={contentW} height={cardH} author={firstName} eyebrow="EXAMPLE · TODAY" showSource play countDelay={COUNT_AFTER - 120} people={[]} accessibilityHint="An example, not a real session" />
           </Animated.View>
           {loggers.length ? (
             <Animated.View entering={enter(2)} style={styles.v2Faces} accessible accessibilityLabel={facesLine}>
