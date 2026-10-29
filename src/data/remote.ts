@@ -693,6 +693,8 @@ export interface UserState {
   pushHitNudges?: boolean;
   /** "Partner streak reminders" (migration 180). Undefined on a database without it: the switch is not shown. */
   pushPartnerStreak?: boolean;
+  /** "Catch-up alerts" (migration 201). Undefined on a database without it: the switch is not shown. */
+  pushCatchUp?: boolean;
   /** "Log tennis automatically" (migration 185). Undefined on a database without it: the switch is not shown. */
   autoLog?: boolean;
   /** "Questions you could answer" (migration 170). Undefined on a database without it: the switch is not shown. */
@@ -813,7 +815,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
 /** One pin from map_players (migration 63; `mutual` since 98; `until`, your own check-in's end, since 189). */
 interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
-interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; auto_log?: boolean | null; auto_log_audience?: string | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
+interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; push_catch_up?: boolean | null; auto_log?: boolean | null; auto_log_audience?: string | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
   age_group?: string | null;
   /** Your birthday, readable only by you (migration 13). */
@@ -880,6 +882,7 @@ const toUserState = (r: UserStateRow): UserState => ({
   pushStreak: typeof r.push_streak === 'boolean' ? r.push_streak : undefined,
   pushHitNudges: typeof r.push_hit_nudges === 'boolean' ? r.push_hit_nudges : undefined,
   pushPartnerStreak: typeof r.push_partner_streak === 'boolean' ? r.push_partner_streak : undefined,
+  pushCatchUp: typeof r.push_catch_up === 'boolean' ? r.push_catch_up : undefined,
   autoLog: typeof r.auto_log === 'boolean' ? r.auto_log : undefined,
   pushQuestions: typeof r.push_questions === 'boolean' ? r.push_questions : undefined,
   cityBoards: typeof r.city_boards === 'boolean' ? r.city_boards : undefined,
@@ -1735,6 +1738,8 @@ let userStateLacksAlertSwitches = false;
 let userStateLacksPushHitNudges = false;
 /** Set once a settings save finds no push_partner_streak column (a database before migration 180). */
 let userStateLacksPushPartnerStreak = false;
+/** Set once a settings save finds no push_catch_up column (a database before migration 201). */
+let userStateLacksPushCatchUp = false;
 /** Set once a settings save finds no auto_log column (a database before migration 185). */
 let userStateLacksAutoLog = false;
 /** Set once a settings save finds no push_questions column (a database before migration 170). */
@@ -2083,6 +2088,8 @@ export const remote = {
       ...(s.pushHitNudges !== undefined && !userStateLacksPushHitNudges ? { push_hit_nudges: s.pushHitNudges } : {}),
       // "Partner streak reminders" (migration 180).
       ...(s.pushPartnerStreak !== undefined && !userStateLacksPushPartnerStreak ? { push_partner_streak: s.pushPartnerStreak } : {}),
+      // "Catch-up alerts" (migration 201).
+      ...(s.pushCatchUp !== undefined && !userStateLacksPushCatchUp ? { push_catch_up: s.pushCatchUp } : {}),
       // "Log tennis automatically" (migration 185).
       ...(s.autoLog !== undefined && !userStateLacksAutoLog ? { auto_log: s.autoLog } : {}),
       // "Questions you could answer" (migration 170).
@@ -2091,6 +2098,7 @@ export const remote = {
     let { error } = await send();
     for (let tries = 0; error && tries < 12; tries += 1) {
       if (/push_partner_streak/.test(error.message) && !userStateLacksPushPartnerStreak) userStateLacksPushPartnerStreak = true;
+      else if (/push_catch_up/.test(error.message) && !userStateLacksPushCatchUp) userStateLacksPushCatchUp = true;
       else if (/auto_log/.test(error.message) && !userStateLacksAutoLog) userStateLacksAutoLog = true;
       else if (/push_hit_nudges/.test(error.message) && !userStateLacksPushHitNudges) userStateLacksPushHitNudges = true;
       else if (/push_questions/.test(error.message) && !userStateLacksPushQuestions) userStateLacksPushQuestions = true;
