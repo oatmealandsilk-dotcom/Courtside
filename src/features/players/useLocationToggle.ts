@@ -201,7 +201,18 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
       const landing = swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null;
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
-      const say = () => { if (turn.current === tap) showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' }); };
+      const say = () => {
+        if (turn.current !== tap) return;
+        const span = litSpan();
+        showToast({
+          title: litLine(span),
+          body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.',
+          // The one-line look's words, should he pick it (theme/look TOAST_LOOK): "Up to hit till 10pm · friends can see you".
+          line: court ? `Up to hit ${span} · ${court} shows you too` : `Up to hit ${span} · friends can see you`,
+          about: 'up-to-hit',
+          icon: 'checkmark-circle-outline',
+        });
+      };
       const tip = () => { if (first) void showHideTip(opened ? 'map' : where); };
       if (landing) {
         void landing.then(() => { setTimeout(say, TOAST_AFTER_MS); tip(); });

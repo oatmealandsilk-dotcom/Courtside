@@ -92,3 +92,28 @@ export const LESS_AI_SESSIONS: boolean = true;
  * Everything else from round 1 he did not pick stays behind LESS_AI (off).
  */
 export const LESS_AI_ROUND2: boolean = true;
+
+/**
+ * TOAST_LOOK (Oct 28, owner: "when you turn on location. the top notirfication
+ * that drops down looks super ai"). How the quick note that drops in at the top
+ * is drawn (components/Toast.tsx). 'now' is the app exactly as it is: nothing
+ * changes until he picks one.
+ *
+ *   'now'     today's: a glass capsule, an outlined glyph beside the words,
+ *             the second line cut with "…"
+ *   'banner'  A, an iPhone notification banner: a wide rounded rectangle (not
+ *             a capsule), the small CourtSide mark, the title in semibold and
+ *             the words under it in regular on up to two lines, never cut;
+ *             the page's own solid surface, a hairline edge, a small shadow
+ *   'line'    B, one compact line, as Instagram's quick notes: a short rounded
+ *             rectangle, centred, no icon, the words said short enough for one
+ *             line ("Up to hit till 10pm · friends can see you"). A note with a
+ *             number or a session's mark (Logged, Tennis detected) keeps today's.
+ *
+ * TOAST_LOOK_FOR is which notes wear it: 'up-to-hit' only the one after Up to
+ * hit (useCheckIn), 'all' every quick note. The drop in and lift away, and the
+ * "How was the hit?" card, never change here.
+ */
+export type ToastLook = 'now' | 'banner' | 'line';
+export const TOAST_LOOK: ToastLook = 'now';
+export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';

@@ -56,6 +56,14 @@ export interface ToastMessage {
   /** Whose picture the `look` card shows. */
   person?: { name: string; seed: string; uri?: string };
   /**
+   * The same said short, for the one-line look (theme/look TOAST_LOOK 'line'):
+   * "Up to hit till 10pm · friends can see you". Without it that look shows
+   * the title, then the words after it.
+   */
+  line?: string;
+  /** Which note this is, for a look tried on one note first (theme/look TOAST_LOOK_FOR): 'up-to-hit', the one after Up to hit. */
+  about?: 'up-to-hit';
+  /**
    * Told once how it went, and how long it was up: it stayed its full time,
    * was tapped, its button was used, it was flicked away, another toast took
    * its place first ('replaced'), or the caller took it back ('withdrawn').

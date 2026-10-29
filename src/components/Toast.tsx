@@ -1,5 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
@@ -14,6 +14,7 @@ import { FullWindowOverlay } from 'react-native-screens';
 import { Glass } from '@/components/ui/Glass';
 import { Avatar } from '@/components/ui/Avatar';
 import { HitGlyph } from '@/components/HitGlyph';
+import { BrandMark } from '@/components/BrandMark';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
 import { RECORD_ICON } from '@/features/records/records';
@@ -23,6 +24,7 @@ import { goHome } from '@/lib/goBack';
 import { closed, onWithdraw, useToast, type ToastClosed, type ToastMessage } from '@/lib/toast';
 import { colors, font, spacing, typography, buttonShape } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { TOAST_LOOK, TOAST_LOOK_FOR, type ToastLook } from '@/theme/look';
 
 const SHOW_MS = 2800;
 // A toast with a button ("Undo") waits longer: long enough to read it,
@@ -167,9 +169,22 @@ export function Toast() {
   }
   const icon = toast.icon ?? 'checkmark';
   const action = toast.action;
+  const open = () => {
+    // A long note with nowhere to go is put away by a tap, once read.
+    if (!toast.href) { if (toast.long) hide('tap'); return; }
+    hide('tap');
+    // Home is a tab, not a page to push: go there and put the feed at the top.
+    // (goHome, never '/': that is also the splash screen's address.)
+    if (toast.href === '/') { goHome(); requestScrollToTop('/'); }
+    else router.push(toast.href as never);
+  };
+  // A look picked in theme/look.ts (TOAST_LOOK), on the notes that wear it; today's capsule otherwise.
+  const look = lookOf(toast);
   const card = (
     <GestureDetector gesture={flick}>
       <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slide]}>
+        {look === 'banner' ? <Banner toast={toast} open={open} hide={hide} />
+          : look === 'line' ? <Line toast={toast} open={open} hide={hide} /> : (
         <View style={styles.shadow}>
           <Glass behind radius={22} style={[styles.card, styles.solid]}>
             <View style={styles.row}>
@@ -177,15 +192,7 @@ export function Toast() {
                 accessibilityRole={toast.href ? 'link' : 'text'}
                 accessibilityLiveRegion="polite"
                 accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
-                onPress={() => {
-                  // A long note with nowhere to go is put away by a tap, once read.
-                  if (!toast.href) { if (toast.long) hide('tap'); return; }
-                  hide('tap');
-                  // Home is a tab, not a page to push: go there and put the feed at the top.
-                  // (goHome, never '/': that is also the splash screen's address.)
-                  if (toast.href === '/') { goHome(); requestScrollToTop('/'); }
-                  else router.push(toast.href as never);
-                }}
+                onPress={open}
                 style={[styles.info, action && styles.infoBeforeAction]}
               >
                 {/* 'hit' is the app's own hit mark, as on the map and the hit cards; a session's marks sit in a brand disc. */}
@@ -199,35 +206,11 @@ export function Toast() {
                   {toast.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body} numberOfLines={toast.long ? 4 : toast.stat ? 2 : 1}>{toast.body}</Text> : null}
                 </View>
               </Pressable>
-              {toast.stat ? <Stat value={toast.stat.value} from={toast.stat.from} label={toast.stat.label} token={toast.id} /> : null}
-              {/* Its own button beside the words, not part of them, so a tap on
-                  the words still only opens what the toast is about. A question
-                  with two answers has a quieter one first ("Keep going · Finish"). */}
-              {action && toast.secondary ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${toast.secondary.label}: ${toast.title}`}
-                  hitSlop={{ top: 6, bottom: 6 }}
-                  onPress={() => { hide('action'); toast.secondary?.onPress(); }}
-                  style={({ pressed }) => [styles.secondary, pressed && styles.actionPressed]}
-                >
-                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.secondaryLabel}>{toast.secondary.label}</Text>
-                </Pressable>
-              ) : null}
-              {action ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${action.label}: ${toast.title}`}
-                  hitSlop={{ top: 6, bottom: 6, right: 6 }}
-                  onPress={() => { hide('action'); action.onPress(); }}
-                  style={({ pressed }) => [styles.action, toast.secondary && styles.actionAfterSecondary, pressed && styles.actionPressed]}
-                >
-                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.actionLabel}>{action.label}</Text>
-                </Pressable>
-              ) : null}
+              <Trailing toast={toast} hide={hide} />
             </View>
           </Glass>
         </View>
+        )}
       </Animated.View>
     </GestureDetector>
   );
@@ -245,6 +228,118 @@ export function Toast() {
     );
   }
   return card;
+}
+
+/** How this note is drawn: a look picked in theme/look.ts (TOAST_LOOK) on the notes it is for (TOAST_LOOK_FOR), today's capsule otherwise. */
+function lookOf(toast: ToastMessage): ToastLook {
+  const picked = TOAST_LOOK as ToastLook;
+  if (picked === 'now') return 'now';
+  if (TOAST_LOOK_FOR !== 'all' && toast.about !== TOAST_LOOK_FOR) return 'now';
+  // A note with a number or a session's mark (Logged, Tennis detected) is not a one-line note: it keeps today's.
+  if (picked === 'line' && (toast.stat || toast.glyph)) return 'now';
+  return picked;
+}
+
+/**
+ * Look A ('banner'): drawn as the iPhone draws a notification. A wide rounded
+ * rectangle, not a capsule; the small CourtSide mark where the phone puts an
+ * app's icon (a session's own mark in its disc, if it has one); the title in
+ * semibold and the words under it in regular, on two lines where they need
+ * them, never cut. The page's own solid surface with a hairline edge and a
+ * small neutral shadow: no glass, no glow.
+ */
+function Banner({ toast, open, hide }: { toast: ToastMessage; open: () => void; hide: (how?: ToastClosed) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.bannerShadow}>
+      <View style={styles.banner}>
+        <Pressable
+          accessibilityRole={toast.href ? 'link' : 'text'}
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
+          onPress={open}
+          style={[styles.bannerInfo, toast.action && styles.infoBeforeAction]}
+        >
+          {toast.glyph ? <Disc glyph={toast.glyph} token={toast.id} /> : <BrandMark size={26} color={colors.brand} />}
+          <View style={styles.bannerWords}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bannerTitle}>{toast.title}</Text>
+            {toast.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bannerBody}>{toast.body}</Text> : null}
+          </View>
+        </Pressable>
+        <Trailing toast={toast} hide={hide} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * Look B ('line'): one short line, centred, as Instagram's quick notes. No
+ * icon; the words said short (`line`: "Up to hit till 10pm · friends can see
+ * you"), or the title then the words for a note with no short version. Dark
+ * with light words on every court: the page's ink on a light one, a raised
+ * shade of the page on a dark one. Too long for the line, it wraps rather
+ * than being cut.
+ */
+function Line({ toast, open, hide }: { toast: ToastMessage; open: () => void; hide: (how?: ToastClosed) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { dark } = useTheme();
+  const words = toast.line ?? (toast.body ? `${toast.title} · ${toast.body}` : toast.title);
+  return (
+    <View style={styles.lineShadow}>
+      <View style={[styles.line, dark && styles.lineOnDark]}>
+        <Pressable
+          accessibilityRole={toast.href ? 'link' : 'text'}
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={toast.body ? `${toast.title}. ${toast.body}` : toast.title}
+          onPress={open}
+          style={[styles.lineInfo, toast.action && styles.infoBeforeAction]}
+        >
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.lineWords, dark && styles.lineWordsOnDark]}>{words}</Text>
+        </Pressable>
+        <Trailing toast={toast} hide={hide} onLine={!dark} />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * What sits to the right of the words: a number ("10 day streak") and the
+ * note's buttons ("Undo"; "Keep going · Finish"). The same in every look;
+ * on the one-line look ('line') the buttons take the line's own ink.
+ */
+function Trailing({ toast, hide, onLine = false }: { toast: ToastMessage; hide: (how?: ToastClosed) => void; onLine?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const action = toast.action;
+  return (
+    <>
+      {toast.stat ? <Stat value={toast.stat.value} from={toast.stat.from} label={toast.stat.label} token={toast.id} /> : null}
+      {/* Its own button beside the words, not part of them, so a tap on
+          the words still only opens what the toast is about. A question
+          with two answers has a quieter one first ("Keep going · Finish"). */}
+      {action && toast.secondary ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${toast.secondary.label}: ${toast.title}`}
+          hitSlop={{ top: 6, bottom: 6 }}
+          onPress={() => { hide('action'); toast.secondary?.onPress(); }}
+          style={({ pressed }) => [styles.secondary, pressed && styles.actionPressed]}
+        >
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.secondaryLabel, onLine && styles.lineSecondaryLabel]}>{toast.secondary.label}</Text>
+        </Pressable>
+      ) : null}
+      {action ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${action.label}: ${toast.title}`}
+          hitSlop={{ top: 6, bottom: 6, right: 6 }}
+          onPress={() => { hide('action'); action.onPress(); }}
+          style={({ pressed }) => [styles.action, toast.secondary && styles.actionAfterSecondary, pressed && styles.actionPressed]}
+        >
+          <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.actionLabel, onLine && styles.lineActionLabel]}>{action.label}</Text>
+        </Pressable>
+      ) : null}
+    </>
+  );
 }
 
 /** The hit's mark, small, on the corner of the other player's picture. */
@@ -427,6 +522,22 @@ const styleDefinitions = StyleSheet.create({
   fillLabel: { ...typography.smallStrong, color: colors.brandInk, letterSpacing: -0.1 },
   holdTrack: { position: 'absolute', left: 14, right: 14, bottom: 0, height: 2, borderRadius: 1, overflow: 'hidden' },
   holdRun: { flex: 1, backgroundColor: colors.brand, opacity: 0.55 },
+  // Look A, the iPhone banner: as wide as the phone's own (8 from each edge), its corner not a capsule's.
+  bannerShadow: { alignSelf: 'stretch', marginHorizontal: -spacing.sm, maxWidth: 440, borderRadius: 16, ...buttonShape.curve, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  banner: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 16, ...buttonShape.curve, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  bannerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 14, paddingRight: 16 },
+  bannerWords: { flex: 1 },
+  bannerTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
+  bannerBody: { ...typography.body, lineHeight: 20, color: colors.text },
+  // Look B, one line: short, centred, dark with light words.
+  lineShadow: { maxWidth: 360, borderRadius: 12, ...buttonShape.curve, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
+  line: { flexDirection: 'row', alignItems: 'center', minHeight: 40, borderRadius: 12, ...buttonShape.curve, overflow: 'hidden', backgroundColor: colors.text },
+  lineOnDark: { backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  lineInfo: { flexShrink: 1, paddingVertical: 10, paddingHorizontal: 16 },
+  lineWords: { fontSize: 14, lineHeight: 19, ...font('500'), letterSpacing: -0.1, color: colors.surface, textAlign: 'center' },
+  lineWordsOnDark: { color: colors.text },
+  lineActionLabel: { color: colors.surface, textDecorationLine: 'underline' },
+  lineSecondaryLabel: { color: colors.surface, opacity: 0.75 },
   title: { ...typography.smallStrong, color: colors.text, letterSpacing: -0.1 },
   body: { ...typography.caption, fontSize: 12, letterSpacing: 0, color: colors.textMuted, marginTop: 1 },
 });
