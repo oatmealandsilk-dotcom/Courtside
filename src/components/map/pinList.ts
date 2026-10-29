@@ -87,6 +87,30 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       if (id && (!hitAt.has(id) || h.hit.startsAt < hitAt.get(id)!)) hitAt.set(id, h.hit.startsAt);
     }
   }
+  // How many open hits are scheduled at each court, for the "+2" on its corner (Oct 29, owner): the hits
+  // you may see (model.hits: the Open hits list's own filters, called off, past, blocked, muted, who may
+  // see it). Each hit counts on one court only: the court it was made at when that court is on the map,
+  // else the nearest court within 0.15 mi (the court card's sameCourt distance), so two courts side by
+  // side in one park never both count the same hit.
+  const hitsAt = new Map<string, number>();
+  let pickedAt: string | undefined;
+  if (expanded && model.courts.length) {
+    const ids = new Set(model.courts.map((c) => c.id));
+    for (const h of model.hits) {
+      let id = h.hit.place.id && ids.has(h.hit.place.id) ? h.hit.place.id : undefined;
+      if (!id) {
+        let best = 0.15;
+        for (const c of model.courts) {
+          const miles = milesBetween(h.at, c);
+          if (miles < best) { best = miles; id = c.id; }
+        }
+      }
+      if (id) hitsAt.set(id, (hitsAt.get(id) ?? 0) + 1);
+      // A picked hit's flag stands over its court's top edge (HIT_LIFT), so that court's badge steps aside
+      // while it is picked: the flag and its card say it.
+      if (id && h.hit.id === selectedHitId) pickedAt = id;
+    }
+  }
   const drawn = new Set<string>();
   // The court someone exactly placed is standing on (within about 20 m of its pin), if any: the nearest. Only exact spots (you,
   // friends who follow each other with you): a rough spot is nudged about, so it never puts anyone at a court.
@@ -115,6 +139,8 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     const tag = glow ? g?.label ?? (hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined) : yours ? (n ? `You + ${n} playing` : 'You’re playing') : n ? `${n} playing` : hit ? `Hit ${hitShort(hit).replace(/^Today /, '')}` : undefined;
     // Your pin standing on it already says so: the court only glows under it, no words beside.
     const underYou = (yours || !!g?.you) && !on && !!meAt && milesBetween(meAt, c) < 0.05;
+    const hits = c.id === pickedAt ? 0 : hitsAt.get(c.id) ?? 0;
+    const hitsSaid = hits ? `${hits} open ${hits === 1 ? 'hit' : 'hits'}` : null;
     if (g) {
       // A lit court (Oct 27 review; Oct 28, three looks to pick from: LIT_LOOK): big, its light moving, who is
       // there on it (one or two: their circles, no number; more: two circles and "+5"; friends' faces, you when
@@ -125,14 +151,14 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       const half = litHalf(g.level, on, faces.length + others > 0);
       return {
         id: `c:${c.id}`, lat: c.lat, lng: c.lng,
-        html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live }),
+        html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live, hits }),
         z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, n: c.count, cw: half, g: 'c' as const,
-        role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, g.label].filter(Boolean).join(', '),
+        role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, g.label, hitsSaid].filter(Boolean).join(', '),
       };
     }
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag, hits), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag, hitsSaid].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).

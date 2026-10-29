@@ -6,8 +6,9 @@ import { cleanZones, hardMinutes } from './zones';
 /*
  * "Share health data" on a tracker session's post (owner, Oct 3): one switch,
  * and a Choose sheet with a tick for each number the tracker has. The same
- * for every age and account type. On by default for someone known to be an
- * adult, off for everyone else (who can still switch it on). The server
+ * for every age and account type, and on by default for everyone, under 18
+ * too (owner, Oct 29: "Even under 18 should show heart rate for everyone");
+ * anyone can switch it off on any post. The server
  * reads the list and adds only those numbers, from the author's own tracker
  * (migration 72).
  */
@@ -66,8 +67,8 @@ export function healthValue(a: HealthNumbers, k: HealthShareKey): string {
  */
 export interface HealthChoice { on: boolean; off: HealthShareKey[] }
 
-/** On for someone known to be an adult, off for everyone else. */
-export const defaultHealthChoice = (adult: boolean): HealthChoice => ({ on: adult, off: [] });
+/** On for everyone, whatever their age (Oct 29; it was on for adults only). */
+export const defaultHealthChoice = (): HealthChoice => ({ on: true, off: [] });
 
 /** The numbers that go on the post: none with the switch off. */
 export const chosenShare = (choice: HealthChoice, available: HealthShareKey[]): HealthShareKey[] =>

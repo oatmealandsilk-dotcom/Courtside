@@ -1,4 +1,4 @@
--- CourtSide · migration 20261029000199: "Show your tennis to friends?", one
+-- CourtSide · migration 20261029000200: "Show your tennis to friends?", one
 -- phone alert, once, to a player who never chose who sees the tennis that
 -- logs itself.
 --
@@ -8,7 +8,7 @@
 -- only once that update is out. An app without the card opens Notifications
 -- from the alert instead (harmless: its "Tennis logged" rows are there).
 -- All-or-nothing: if a check fails, it stops and nothing at all changes.
--- Safe to run more than once. Undo: supabase/rollback/199_undo.sql.
+-- Safe to run more than once. Undo: supabase/rollback/200_undo.sql.
 --
 -- The owner, Oct 29: "Can you somehow push them to pick friends", then
 -- "Show to friends should be emphasized and pushed hard".
@@ -60,14 +60,14 @@ begin
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'auto_logged')
      or to_regprocedure('private.nudge_ok(uuid, timestamp with time zone)') is null
      or to_regprocedure('private.send_nudge(uuid, text, text, text, text, timestamp with time zone)') is null then
-    raise exception 'Migration 20261029000199 stopped before changing anything: migration 193 (sessions that log themselves) and the reminders (170) have to run first.';
+    raise exception 'Migration 20261029000200 stopped before changing anything: migration 193 (sessions that log themselves) and the reminders (170) have to run first.';
   end if;
   for r in select k.key as fn, k.value #>> '{}' as ok,
                   (select max(md5(p.prosrc)) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                     where n.nspname = split_part(k.key, '.', 1) and p.proname = split_part(k.key, '.', 2)) as now_is
              from jsonb_each(want) k loop
     if r.now_is is distinct from r.ok then
-      raise exception 'Migration 20261029000199 stopped before changing anything: % changed since it was read on Oct 29. This file must be brought up to date with that change first.', r.fn;
+      raise exception 'Migration 20261029000200 stopped before changing anything: % changed since it was read on Oct 29. This file must be brought up to date with that change first.', r.fn;
     end if;
   end loop;
 end $$;
@@ -153,7 +153,7 @@ begin
   if to_regprocedure('public.send_auto_log_asks(timestamp with time zone, boolean)') is null
      or has_function_privilege('anon', 'public.send_auto_log_asks(timestamp with time zone, boolean)', 'execute')
      or has_function_privilege('authenticated', 'public.send_auto_log_asks(timestamp with time zone, boolean)', 'execute') then
-    raise exception 'Migration 20261029000199 stopped: the result was not as planned; nothing was changed.';
+    raise exception 'Migration 20261029000200 stopped: the result was not as planned; nothing was changed.';
   end if;
 end $$;
 

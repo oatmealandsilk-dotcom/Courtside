@@ -1393,6 +1393,13 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
 }
 
 /**
+ * The court card's "More open hits (N)" row (Oct 29, owner: "Wdym court card only list 2 hits"): when a court
+ * has more open hits than the card lists (two, or one beside clips), a last row says how many more and opens
+ * the court's page, which lists them all. false: the card as it is, its first one or two hits only.
+ */
+export const COURT_CARD_MORE_HITS: boolean = false;
+
+/**
  * A court, picked on the map: what OpenStreetMap knows, who may play there,
  * how it is right now, what players say, the people you follow who play
  * there, what was posted there, and the open hits there. Directions, Play
@@ -1431,7 +1438,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   const { posts: here, more } = useCourtPosts(place);
   const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
   // Open hits here, the same ones the court's page lists: one beside the clips, two without them.
-  const hits = useCourtHits(place).slice(0, strip.length ? 1 : 2);
+  const allHits = useCourtHits(place);
+  const hits = allHits.slice(0, strip.length ? 1 : 2);
+  // The ones the card has no room for (COURT_CARD_MORE_HITS): its last row says how many, and opens the page.
+  const moreHits = COURT_CARD_MORE_HITS ? allHits.length - hits.length : 0;
   const hitLine = (h: HitRequest) => {
     const left = Math.max(0, h.spots - joinedCount(h));
     const who = h.authorId === currentUserId ? 'You' : users.find((u) => u.id === h.authorId)?.name.split(' ')[0];
@@ -1504,6 +1514,13 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
               <Ionicons name="chevron-forward" size={14} color={colors.textFaint} />
             </Pressable>
           ))}
+          {moreHits > 0 ? (
+            <Pressable accessibilityRole="link" accessibilityLabel={`More open hits at ${court.name}: ${moreHits}`} onPress={() => openCourt(place)} style={({ pressed }) => [styles.hitRow, styles.hitMore, pressed && styles.postedPressed]}>
+              <View style={styles.hitMoreGap} />
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.hitMoreText} numberOfLines={1}>More open hits ({moreHits})</Text>
+              <Ionicons name="chevron-forward" size={14} color={colors.brand} />
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
       </GHScrollView>
@@ -2135,6 +2152,10 @@ const styleDefinitions = StyleSheet.create({
   hitRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.sm, paddingVertical: 6, borderRadius: radius.md, backgroundColor: colors.bgElevated },
   hitTile: { width: 28, height: 28, borderRadius: 8, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   hitText: { ...typography.smallStrong, color: colors.text, flex: 1, minWidth: 0 },
+  // "More open hits (2)" (COURT_CARD_MORE_HITS): a quieter last row, its words in line with the hits' above.
+  hitMore: { backgroundColor: 'transparent', paddingVertical: 2 },
+  hitMoreGap: { width: 28 },
+  hitMoreText: { ...typography.smallStrong, color: colors.brand, flex: 1, minWidth: 0 },
   hitSheetCard: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   cityless: { borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, gap: 4 },
   citylessDisc: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },

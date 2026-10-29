@@ -117,7 +117,7 @@ export function listenForPushTaps(): () => void {
   const open = async (response: Notifications.NotificationResponse | null) => {
     const sent = response?.notification.request.content.data?.href;
     if (typeof sent !== 'string' || !sent.startsWith('/')) return;
-    // "Show your tennis to friends?"'s one alert (migration 199) opens its card in this version.
+    // "Show your tennis to friends?"'s one alert (migration 200) opens its card in this version.
     const href = foundListFor(sent) ?? askFromAlert(sent) ?? sent;
     // One tap is its alert's name plus when that alert arrived. The name alone
     // is not enough: training-plan reminders reuse theirs every week

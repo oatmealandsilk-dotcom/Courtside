@@ -38,8 +38,8 @@ import { colors, font } from '@/theme';
  * this never happens") still gets the design: the time, the calories and the
  * heart-rate line, with no bars at all rather than made-up ones. The post
  * carries only the numbers its author chose under
- * "Share health data", off by default for anyone not known to be an adult
- * (healthShare.ts, migration 72), so nothing here can show more than the
+ * "Share health data" (on by default for every age since Oct 29;
+ * healthShare.ts, migration 72), so nothing here can show more than the
  * post does. Calories only when the post shares them too.
  *
  * Every shadow is one the saved picture keeps: text shadows (each word set

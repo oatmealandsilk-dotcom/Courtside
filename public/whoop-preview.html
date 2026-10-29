@@ -108,7 +108,7 @@
   <header>
     <div class="eyebrow">CourtSide · WHOOP integration preview</div>
     <h1>Tennis sessions from WHOOP, logged and shared on CourtSide</h1>
-    <p>CourtSide is a social app for tennis players. When a member's WHOOP records a workout with the sport Tennis, CourtSide asks them to log it. Logging adds time on court to their private practice log and streak. Sharing the session in a post is a separate, optional step, and heart rate appears on a post only if the member switches it on for that post.</p>
+    <p>CourtSide is a social app for tennis players. When a member's WHOOP records a workout with the sport Tennis, CourtSide asks them to log it. A tennis session of 20 minutes or more logs itself, adding time on court to their practice log and streak. It shows its heart rate, heart-rate zones, calories and Strain only to the audience the member chose: friends who follow each other, anyone who can see their posts, or only them (for members under 18, friends who follow each other at most, never public). On a post the member makes, at any age, those numbers show unless the member switches them off for that post.</p>
     <p class="note">These are design previews of screens in development (October 2026). Numbers shown are examples.</p>
   </header>
 
@@ -129,8 +129,8 @@
           <p>When WHOOP records tennis, we'll ask if you want to log it. WHOOP will ask you to allow workouts.</p>
           <ul class="ticks">
             <li>We read the sport, start and end time, and heart rate of each workout</li>
-            <li>Sessions stay private to you</li>
-            <li>Nothing is shared unless you post it</li>
+            <li>Tennis of 20 minutes or more logs itself</li>
+            <li>Friends who follow you back see it, with its heart rate and calories. Change who in Settings</li>
           </ul>
           <div class="btn primary">Continue to WHOOP</div>
           <div class="btn ghost">Not now</div>
@@ -187,7 +187,7 @@
           <div class="attrib"><span>Data by WHOOP</span><span>♡ 12 · 3 comments</span></div>
         </div>
       </div></div>
-      <figcaption><span class="step">Step 4 · optional</span><b>The member chooses to share</b><span>A post shows time on court. Heart rate appears only when the member switches on "Show heart rate" for that post, and never for members under 18. Strain and calories are never published.</span></figcaption>
+      <figcaption><span class="step">Step 4 · optional</span><b>The member chooses to share</b><span>A post shows time on court. At any age, its heart rate, heart-rate zones, calories and Strain show to everyone who can see the post unless the member switches "Share health data" off for that post. A session that logged itself shows the same numbers only to the audience the member chose (friends who follow each other at most for members under 18).</span></figcaption>
     </figure>
   </div>
 
@@ -203,8 +203,8 @@
     <div class="card">
       <h2>How it's protected</h2>
       <ul>
-        <li>Sessions are private to the member by default</li>
-        <li>Shown to others only through a post the member chooses to publish</li>
+        <li>A session that logged itself is seen only by the audience the member chose; until they choose, only by them</li>
+        <li>Members under 18: friends who follow each other at most, never public</li>
         <li>No advertising use, no selling data, no AI model training</li>
         <li>Disconnecting deletes the member's WHOOP tokens; deleting the account deletes WHOOP-derived data</li>
       </ul>

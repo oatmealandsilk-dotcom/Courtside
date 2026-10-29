@@ -12,7 +12,7 @@ import { friendsAtMost } from '@/features/activity/autoLogSharing';
  * Health player, have never chosen who sees the tennis that logs itself
  * (autoLogSharing null), so those sessions stay with them alone. This asks
  * them once: in the app, the next time it is open (components/AutoLogAsk,
- * the card at app/auto-log-ask), and once by phone alert (migration 199,
+ * the card at app/auto-log-ask), and once by phone alert (migration 200,
  * which opens the same card). "Show to friends" is the big green button;
  * "Keep private" is a plain, one-tap answer under it (Apple's 5.1.3: health
  * data goes to others only on a clear yes, with a real no beside it). Each
@@ -23,7 +23,7 @@ import { friendsAtMost } from '@/features/activity/autoLogSharing';
 export const AUTO_LOG_ASK = '/auto-log-ask';
 
 /**
- * The server's one alert opens Notifications with this (migration 199): an
+ * The server's one alert opens Notifications with this (migration 200): an
  * address every version of the app can open. This version opens the card.
  */
 export const AUTO_LOG_ASK_ALERT = '/notifications?ask=auto-log';

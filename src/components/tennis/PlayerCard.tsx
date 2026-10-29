@@ -56,8 +56,10 @@ export function PlayerCard({ user, variant, onPress }: {
   // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
   // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
   // On the other courts but Night both cards are the quiet box near the page (Oct 25, owner: "I meant the tennis
-  // profile card and the activity cards"), as the session boxes are: boxLook. Clean's full card and Night's keep their own.
-  const look = (variant === 'banner' && LESS_AI_ROUND2) || quietBox(theme) ? boxLook(theme) : cardLook(theme);
+  // profile card and the activity cards"), as the session boxes are: boxLook. Night's full card keeps its own. Clean's
+  // full card (the Tennis profile page) now matches its banner (Oct 29, owner: "This needs to match the other card on
+  // clean theme").
+  const look = (LESS_AI_ROUND2 && (variant === 'banner' || theme === 'clean')) || quietBox(theme) ? boxLook(theme) : cardLook(theme);
   // The rating in the court's accent on a light card drawn as the stats sheet (the quiet box; Clean's banner below);
   // London's in its purple (look.touch, Oct 25).
   const ratingInk = look.plain ? look.touch ?? colors.brand : look.figure;
@@ -109,6 +111,8 @@ export function PlayerCard({ user, variant, onPress }: {
 
   const items = stripItems(user, 4, week);
   const facts = factsList(p, items);
+  // Clean's full card wears the banner's own wash (BANNER_POP A or D), so the Tennis profile page matches the Profile tab.
+  const fullPop = look.plain && theme === 'clean' && (BANNER_POP === 'A' || BANNER_POP === 'D');
   const spoken = [
     `${user.name}, ${system} ${ratingText(p)}.`,
     `${playStyleLabel[p.playStyle]}, ${surfaceWord[p.preferredSurface].toLowerCase()}, ${handsLine(p).replace(' · ', ', ').toLowerCase()}.`,
@@ -116,8 +120,10 @@ export function PlayerCard({ user, variant, onPress }: {
     items.length ? `${items.map((i) => i.spoken).join(', ')}.` : '',
   ].filter(Boolean).join(' ');
   return (
-    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered]}>
-      <CardWash look={look} radius={corner(20)} />
+    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, fullPop && [{ borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: corner(16) }, lift, styles.popLift]]}>
+      <CardWash look={look} radius={fullPop ? corner(16) : corner(20)} />
+      {/* Clean: the same soft wash as the Profile tab's banner, so the two cards match (Oct 29, owner). */}
+      {fullPop ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
       <View style={styles.identity}>
         {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
             a deeper shade of the card instead (a brand disc would vanish into it). */}
@@ -149,7 +155,7 @@ export function PlayerCard({ user, variant, onPress }: {
         ) : null}
       </View>
 
-      {items.length ? <Strip items={items} look={look} size={24} filled={filled} /> : null}
+      {items.length ? <Strip items={items} look={look} size={24} filled={filled} caps={fullPop} /> : null}
     </View>
   );
 }
