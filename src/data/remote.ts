@@ -4376,6 +4376,18 @@ export const remote = {
     return ((data ?? []) as { user_id: ID }[]).map((r) => r.user_id);
   },
   /**
+   * A new teen's "People you may know" (migration 202, teens_to_suggest):
+   * other teens, as the server decides (asked by a known teen in their first
+   * week only; public, findable teens, never anyone blocked or muted either
+   * way), your town first, at most 6. Only ids: never a town, a spot or an
+   * age. Empty on a database without it, or a failed ask.
+   */
+  async fetchTeensToSuggest(): Promise<ID[]> {
+    const { data, error } = await need().rpc('teens_to_suggest');
+    if (error) { if (!missingFunction(error)) fail('teens to suggest')(error); return []; }
+    return ((data ?? []) as { user_id: ID }[]).map((r) => r.user_id);
+  },
+  /**
    * Check in (migration 189): your spot, read once when you tapped Check in,
    * for friends who follow each other with you until `until` (the server
    * holds it to 15 minutes .. 16 hours from now). Resolves when it ends, or

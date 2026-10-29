@@ -17,7 +17,7 @@ import { useSetupCount } from '@/features/onboarding/setupCount';
 import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
-import type { User } from '@/data/types';
+import type { ID, User } from '@/data/types';
 import { canReadContacts } from '@/features/contacts/phoneContacts';
 import { inviteLink } from '@/features/invite/referral';
 import { CONTACTS_LABEL, CONTACTS_NOTE, FRIENDS_LINE, FRIENDS_TITLE } from '@/features/invite/friendsWords';
@@ -25,6 +25,7 @@ import { useInviteCourt } from '@/features/invite/useInviteCourt';
 import { useInviterToFollow } from '@/features/activity/nearYou';
 import { useFindable } from '@/features/people/findable';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
+import { levelBadge } from '@/lib/badges';
 import { notKnownAdult } from '@/features/players/age';
 import { formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
@@ -57,12 +58,14 @@ const LOOK_MS = 2500;
 const MOST = 8;
 
 /**
- * A teen's verified coaches on "People you may know" (round 2). OFF until the owner says Yes: today's
- * suggestions never show a teen someone they don't know, and coaches are adult strangers (public, professional
- * accounts, the ones the Coaching tab already shows them, never with a town or distance). Off, a teen with
- * nobody to suggest gets the contacts row, @courtside and Search.
+ * A teen's verified coaches on "People you may know" (round 2). OFF (owner, Oct 29: "no coaches for teens for
+ * now, if they are teens we could suggest them other teens"): a teen's list is filled with other teens instead
+ * (teens_to_suggest, migration 202; see below).
  */
 const TEEN_COACHES: boolean = false;
+
+/** A teen row's line: their level, or nothing about them at all. */
+const levelLine = (u: User) => (u.profile && Number.isFinite(u.profile.rating) && u.profile.rating > 0 ? levelBadge(u.profile).label : 'On CourtSide');
 
 /** One person offered, with the line under their name ("Invited you", "Followed by Om", "2 mi away"); a filled row names its group. */
 interface Pick { user: User; meta: string; section?: 'city' | 'coaches' }
@@ -117,8 +120,20 @@ export default function FirstMove() {
   const homeCityName = cityBoard.board?.me.cityName ?? null;
   const cityPage = useCityPage(homeCityId, cityBoard.month);
   const cityFill = useCityFill(homeCityId ? cityPage.page : null, []);
-  // Still hearing about the city (never past LOOK_MS): the list waits, so it is decided once.
-  const fillPending = fills && adult && (cityBoard.status === 'loading' || (!!homeCityId && cityPage.status === 'loading'));
+  // A teen (owner, Oct 29: "if they are teens we could suggest them other teens"): other teens, as the server
+  // picks them (migration 202: asked by a known teen in their first week only; public, findable teens, never
+  // anyone blocked or muted either way, their town first). Only ids come back; each row shows a name, a face and
+  // a level, never a town, a distance or anything about where they are. Asked once, on this run only.
+  const [teens, setTeens] = useState<ID[] | null>(null);
+  const teenAsk = fills && !!currentUser && !adult;
+  useEffect(() => {
+    if (!teenAsk) return undefined;
+    let on = true;
+    actions.loadTeensToSuggest().then((ids) => { if (on) setTeens(ids); }, () => { if (on) setTeens([]); });
+    return () => { on = false; };
+  }, [teenAsk, actions]);
+  // Still hearing about the city, or a teen's teens (never past LOOK_MS): the list waits, so it is decided once.
+  const fillPending = fills && (adult ? (cityBoard.status === 'loading' || (!!homeCityId && cityPage.status === 'loading')) : teenAsk && teens === null);
 
   // Who plays round your city: that part of the map, asked for once, the
   // same ask the full map makes when it looks there (an adult only).
@@ -198,14 +213,19 @@ export default function FirstMove() {
         // verified coaches, from any town, by what they teach, never with a town or distance (the teen rows' look).
         verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; })
           .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
-      } else if (TEEN_COACHES) {
+      } else {
+        // A teen: other teens (above), public accounts only, by name, face and level, never by where they are.
+        (teens ?? []).map((id) => byId.get(id)).filter((u): u is User => fits(u) && !u.isPrivate)
+          .forEach((u) => { if (list.length < MOST) list.push({ user: u, meta: levelLine(u) }); });
+      }
+      if (!adult && TEEN_COACHES) {
         // A teen: the coaches the Coaching tab already shows them, by what they teach, never by where they are.
         verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; }).slice(0, 3)
           .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
       }
     }
     setPicks(list);
-  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter, overApp, fills, fillPending, cityFill, coaches, users, blockedIds, blockedMeIds, currentUserId, findable]);
+  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter, overApp, fills, fillPending, cityFill, teens, coaches, users, blockedIds, blockedMeIds, currentUserId, findable]);
   const empty = !!picks && !picks.length;
 
   const nearCourts = useNearCourts(empty && adult ? city : null);

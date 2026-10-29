@@ -350,6 +350,28 @@ export function playersInTown({ me, users: everyone, posts: all, followingIds, f
     .map((u) => u.id);
 }
 
+/**
+ * The demo's stand-in for teens_to_suggest() (migration 202): a new teen's
+ * "People you may know" suggests other teens. Asked by a teen only (the
+ * server also wants their first week; the demo's teens all joined long ago, so
+ * here that is left out); lists teens only (fixtures by their own age), public accounts
+ * only, never you, anyone you follow, anyone blocked or muted either way, or a
+ * suspended account. Your town first (the town on both profiles), then the
+ * rest, newest to the app first; at most 6. Only ids: never a town or an age.
+ */
+export function teensToSuggest({ me, users: everyone, followingIds, blockedIds, blockedMeIds, mutedIds }: { me: ID; users: User[]; followingIds: ID[]; blockedIds: ID[]; blockedMeIds: ID[]; mutedIds: ID[] }): ID[] {
+  const viewer = everyone.find((u) => u.id === me);
+  if (!viewer || viewer.ageGroup !== 'teen' || viewer.suspended) return [];
+  const mine = townKey(viewer.location);
+  const inTown = (u: User) => (viewer.cityAt && u.cityAt ? milesBetween(viewer.cityAt, u.cityAt) <= 30 : !!mine && townKey(u.location) === mine);
+  const left = new Set([...followingIds, ...blockedIds, ...blockedMeIds, ...mutedIds]);
+  return everyone
+    .filter((u) => u.id !== me && u.ageGroup === 'teen' && !u.isPrivate && !u.suspended && !left.has(u.id))
+    .sort((a, b) => Number(inTown(b)) - Number(inTown(a)) || b.joinedAt.localeCompare(a.joinedAt) || a.id.localeCompare(b.id))
+    .slice(0, 6)
+    .map((u) => u.id);
+}
+
 /* ------------------------------------------- Session tags (migration 62) */
 
 /*

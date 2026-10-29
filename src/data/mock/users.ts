@@ -581,6 +581,52 @@ export const users: User[] = [
       fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 3, yearsPlaying: 3, goals: [], constraints: [], tournaments: [],
     },
   },
+  /*
+   * Two public teen accounts, so the demo shows a new teen's People you may
+   * know (migration 202's stand-in): other teens, by name, face and level.
+   * Nobody's map pin, no posts; both joined long ago, so New on CourtSide stays
+   * as it was, and the teen rule keeps them off every adult's suggestions.
+   */
+  {
+    id: 'u-maya',
+    handle: 'mayarallies',
+    name: 'Maya Ortiz',
+    bio: 'JV doubles. Practice after school.',
+    location: 'Los Angeles, CA',
+    joinedAt: isoDaysAgo(120),
+    avatarSeed: 'maya-ortiz',
+    ageGroup: 'teen',
+    isPrivate: false,
+    isCoach: false,
+    followers: 18,
+    following: 24,
+    achievementIds: ['ach-first-serve'],
+    stats: { sessionsLogged: 9, matchesPlayed: 2, matchesWon: 1, hoursOnCourt: 10, currentStreakDays: 1, longestStreakDays: 3 },
+    profile: {
+      skillSystem: 'UTR', rating: 4.5, playStyle: 'all-court', handedness: 'right', backhand: 'two-handed',
+      fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 3, yearsPlaying: 3, goals: [], constraints: [], tournaments: [],
+    },
+  },
+  {
+    id: 'u-ben',
+    handle: 'benaces',
+    name: 'Ben Okafor',
+    bio: 'Lefty. Learning the kick serve.',
+    location: 'Pasadena, CA',
+    joinedAt: isoDaysAgo(150),
+    avatarSeed: 'ben-okafor',
+    ageGroup: 'teen',
+    isPrivate: false,
+    isCoach: false,
+    followers: 12,
+    following: 19,
+    achievementIds: ['ach-first-serve'],
+    stats: { sessionsLogged: 6, matchesPlayed: 1, matchesWon: 0, hoursOnCourt: 7, currentStreakDays: 0, longestStreakDays: 2 },
+    profile: {
+      skillSystem: 'NTRP', rating: 3.0, playStyle: 'aggressive-baseliner', handedness: 'left', backhand: 'two-handed',
+      fitnessLevel: 'recreational', preferredSurface: 'hard', sessionsPerWeek: 2, yearsPlaying: 2, goals: [], constraints: [], tournaments: [],
+    },
+  },
   {
     id: 'u-diego',
     handle: 'diegoloops',
