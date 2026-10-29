@@ -51,7 +51,7 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useCreateMenuState } from '@/features/compose/createMenu';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { useGrowPending, useGrowUnderWay } from '@/features/players/mapGrow';
+import { useGrowUnderWay } from '@/features/players/mapGrow';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -295,16 +295,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // hide it everywhere.
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
-  // The check-in zoom's full map on a phone (v6, mapGrow), opened early and hidden while you are found: Community is still
-  // the page you see, under it, so its bar stays until the push-in starts (it then goes with the grow, as before).
-  const mapPending = useGrowPending() && pathname === '/map';
-  const phoneOnlyHide = !mapPending && (['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/'));
+  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // The page the phone's bar sits over: the one on show, or, while a page that takes the bar away is
   // up (the Create box and a clip's comments among them, which leave the bar under them), the one it
   // was over. The quiet pill turns dark over a clip only on the Feed itself (TabBarLooks): a page
   // opened from a clip (its player, its court) is a light page, and the bar there is too.
   const barOver = useRef(pathname);
-  if (!phoneOnlyHide && !mapPending) barOver.current = pathname;
+  if (!phoneOnlyHide) barOver.current = pathname;
   // Arriving from the password-reset email is its own calm page, with no app around it yet.
   // (The comments' own address says which clip they are about, for the stage below.)
   const { reset, kind: routeKind, id: routeId, stage: routeStage } = useGlobalSearchParams<{ reset?: string; kind?: string; id?: string; stage?: string }>();

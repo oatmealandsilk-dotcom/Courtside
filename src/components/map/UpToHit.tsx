@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Svg, { Path } from 'react-native-svg';
@@ -11,7 +11,7 @@ import { useRestKey, useRestLength } from '@/components/ui/restMotion';
 import { LIGHT_UP, litLine } from '@/features/places/lightUp';
 import { useTipShowing } from '@/features/tips/tips';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
-import { GrowAwayContext, PILL_QUICK_MS, growArmed, useGrowAway, useGrowWaiting } from '@/features/players/mapGrow';
+import { PILL_QUICK_MS, growArmed, useGrowAway } from '@/features/players/mapGrow';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { TextScale, colors, font, typography, withAlpha } from '@/theme';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -164,16 +164,9 @@ function FindingBand({ width, radius }: { width: number; radius: number }) {
  * "Up to hit · till 10pm" on green. Its width glides between the two, laid out from unseen copies
  * of both, so the words never squeeze; while it shuts, the green keeps its words until it has gone.
  */
-export function UpToHitPill({ control: given }: { control: CheckInControl }) {
+export function UpToHitPill({ control }: { control: CheckInControl }) {
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
-  // The check-in zoom on a phone (v6, mapGrow): found before the full map behind it has drawn, the Community card's pill
-  // keeps finding you a moment longer (its light still running), so the wait reads as finding, never as a stop; its
-  // green and tick then come with the push-in (or as ever, if nothing opens).
-  const growWaiting = useGrowWaiting();
-  const onGrowCard = useContext(GrowAwayContext);
-  const waiting = growWaiting && onGrowCard;
-  const control = waiting && given.on ? { ...given, on: false, busy: true } : given;
   // Slipping out with the check-in zoom's grow: its quick moment (mapGrow).
   const m = useUpToHitMotion(control, false, growArmed);
   const onWords = litLine(control.span);

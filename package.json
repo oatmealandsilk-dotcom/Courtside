@@ -12,7 +12,6 @@
     "build:web": "expo export --platform web --output-dir dist",
     "smoke": "node scripts/smoke.mjs",
     "rank-check": "node scripts/rank-check.mjs",
-    "hidden-map-check": "node scripts/hidden-map-check.cjs",
     "update": "node scripts/publish-update.mjs",
     "postinstall": "patch-package"
   },

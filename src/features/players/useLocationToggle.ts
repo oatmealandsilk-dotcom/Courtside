@@ -79,10 +79,9 @@ const FAIL_TOAST_AFTER_MS = 280;
 export interface CheckInZoomHooks {
   /**
    * Told where you are the moment you are up (never before both questions, never on a refusal or a failure, never on
-   * turning it off); true when it opened the full map (the tip then points at the full map's round arrow). A promise
-   * when that is only known a moment later (the phone: its full map may still be drawing, mapGrow v6).
+   * turning it off); true when it opened the full map (the tip then points at the full map's round arrow).
    */
-  up: (at: LatLng) => boolean | Promise<boolean>;
+  up: (at: LatLng) => boolean;
   /**
    * You said yes to "Who can see you on the map?" (or had before) and finding you starts: the card asks for the streets
    * of the full map's first view ahead (its own town, the one it shows: nothing of where you are), so it draws sooner.
@@ -90,7 +89,7 @@ export interface CheckInZoomHooks {
   finding?: () => void;
   /**
    * You said yes to "Who can see you on the map?" and the phone to its own question (or both had before), and it is
-   * finding you now: the card readies its grow (the phone opens its full map hidden meanwhile, mapGrow v6). Never before both.
+   * finding you now: the card readies its grow (mapGrow's pictures, taken while you wait). Never before both.
    */
   allowed?: () => void;
   /** The tap is over, however it went: anything readied and not used is let go. */
@@ -172,11 +171,7 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
     const zooming = !!zoomRef.current;
     if (zooming) { swoopFinding(); zoomRef.current?.finding?.(); }
-    // Both questions said yes before (who can see you, and the phone's own, looked up quietly ahead of the tap): the card
-    // readies its grow at the tap itself, not after the phone's permission round trip, so the full map has every moment
-    // there is to draw before you are found (v6 review). Told again below as the phone answers; the second time is nothing.
-    if (zooming && !first && allowed.current) zoomRef.current?.allowed?.();
-    // Said yes to both before, and no check-in zoom to play (its push-in waits for where you are): on at once.
+    // Said yes to both before, and no check-in zoom to play (its own pictures wait for where you are): on at once.
     const instant = !first && !zooming && allowed.current;
     if (instant) { setInstantOn(true); haptics.commit(); }
     setBusy(true);
@@ -200,14 +195,14 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
       const spot: { lat: number; lng: number } | null = at;
       // The check-in zoom: the full map swoops down to you (opening first, from the card).
       const asks = swoopAsks();
-      const opened = Promise.resolve(spot && turn.current === tap ? zoomRef.current?.up(spot) ?? false : false);
+      const opened = spot && turn.current === tap ? zoomRef.current?.up(spot) ?? false : false;
       // A swoop set off: the toast and the one tip wait for your pin to land, so nothing slides in over the top mid-swoop.
       // Listened for now, before the court below is looked up: a short swoop can land first.
       const landing = swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null;
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
       const say = () => { if (turn.current === tap) showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' }); };
-      const tip = () => { if (first) void opened.then((o) => showHideTip(o ? 'map' : where)); };
+      const tip = () => { if (first) void showHideTip(opened ? 'map' : where); };
       if (landing) {
         void landing.then(() => { setTimeout(say, TOAST_AFTER_MS); tip(); });
         return;
