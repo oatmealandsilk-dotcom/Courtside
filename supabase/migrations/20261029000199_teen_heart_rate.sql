@@ -2,10 +2,23 @@
 -- age, under 18 too.
 --
 -- NOT APPLIED. Run it in the Supabase SQL editor as one piece, after 193
--- (live). It needs no app update first: the server already shows whatever
--- numbers a post's list names, at any age (migration 72). The app update on
--- the same branch only changes what "Share health data" starts as on a new
--- post, and the words that said under-18s' numbers never show.
+-- (live). Ship order, as 193's: first the app update on the same branch, as
+-- an over-the-air update on the "production" channel (never "store"); this
+-- runs only once that update is out. The server would show the numbers
+-- without it (it shows whatever a post's list names, at any age, migration
+-- 72), but the app before that update tells an under-18 that friends see
+-- only "when you played and for how long" (the consent lines on the Health
+-- page, setup, the Activities card, "Tennis logged" and Settings), so an
+-- under-18 choosing Friends on those words would have heart rate shown
+-- without being told (Apple 5.1.1 / 5.1.3). The update brings the true words,
+-- and "Share health data" starting on for every age.
+-- Build 22 (channel "store", frozen) never gets the update and keeps the old
+-- words: merge this branch before the next store build is cut (the 5.1.2(i)
+-- resubmission), so the build Apple and the public get says it, and never
+-- release build 22 to the public while this is live (accepted only while
+-- Apple's reviewer is the one on it). On Oct 29 no under-18 or unknown-age
+-- player had chosen who sees them, so all 5 of their server posts were seen
+-- by nobody but themselves.
 -- All-or-nothing: if a check fails, it stops and nothing at all changes.
 -- Safe to run more than once. Undo: supabase/rollback/199_undo.sql.
 --

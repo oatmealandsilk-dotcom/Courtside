@@ -12,9 +12,11 @@
 -- One whose record is gone (30 days after the session) cannot be redone by
 -- the posts trigger without losing its tracker link, so it keeps the numbers
 -- 199 gave it (counted in the notice). Posts players made themselves are not
--- touched. The app needs no change either way: "Share health data" starting
+-- touched. The app keeps working either way: "Share health data" starting
 -- on for every age is the app's own default, and a post's list is still read
--- at any age (72).
+-- at any age (72). After this undo the updated app's words say an under-18's
+-- sessions that log themselves show heart rate when they no longer do (they
+-- show less than said, never more); put the old words back in the app too.
 
 begin;
 
