@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -14,7 +14,6 @@ import { FullWindowOverlay } from 'react-native-screens';
 import { Glass } from '@/components/ui/Glass';
 import { Avatar } from '@/components/ui/Avatar';
 import { HitGlyph } from '@/components/HitGlyph';
-import { BrandMark } from '@/components/BrandMark';
 import { ZoneGlyph } from '@/components/session/ZoneGlyph';
 import { DrawnTick } from '@/components/session/DrawnTick';
 import { RECORD_ICON } from '@/features/records/records';
@@ -46,6 +45,12 @@ const LONG_SCREEN_READER_MS = 15000;
 const PILL_TOP = 2;
 /** Past the screen's edge by at least this much, so the card slides in from out of sight. */
 const OFF_MIN = 120;
+/** Where a look picked in theme/look.ts (TOAST_LOOK) waits, well out of sight, for its height before it slides in. */
+const HOLD_OFF = 1000;
+/** If its height never comes, it comes in anyway after this long, from the usual distance. */
+const HOLD_MAX_MS = 250;
+/** The app's own icon (app.config.js, the store icon), as the iPhone shows it on a notification: look A ('banner'). */
+const APP_ICON = require('../../assets/icon-a.png');
 const IN = Easing.out(Easing.cubic);
 const OUT = Easing.in(Easing.cubic);
 
@@ -96,9 +101,34 @@ export function Toast() {
   // fading, as glass must never sit under a fade (Oct 17: the iPhone drew it see-through; Oct 21: the
   // plain toast too, "Your hit is up" with the Community title showing through it).
   const away = useSharedValue(OFF_MIN);
+  // A look picked in theme/look.ts can be taller than today's capsule (the banner's words are never
+  // cut, and grow with the phone's Text Size): it waits out of sight until its height is known, so it
+  // slides in, and later away, from fully above the top edge, never with its foot showing. Which
+  // toast is waiting (its id), and the fallback that brings it in if its height never comes.
+  const waiting = useRef<number | null>(null);
+  const holdMax = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const arrive = () => {
+    waiting.current = null;
+    if (holdMax.current) { clearTimeout(holdMax.current); holdMax.current = null; }
+    y.value = -away.value;
+    y.value = withTiming(0, { duration: 320, easing: IN });
+    shown.value = withTiming(1, { duration: 260, easing: IN });
+  };
+  // Its height, when laid out (again when it changes): the way out is as far as it is tall, never less than OFF_MIN.
+  const measured = (height: number) => {
+    away.value = insets.top + below + Math.max(OFF_MIN, Math.ceil(height) + 24);
+    if (waiting.current !== null && waiting.current === toastRef.current?.id) arrive();
+  };
   const hide = (how: ToastClosed = 'timeout') => {
     settle(how);
     if (timer.current) clearTimeout(timer.current);
+    // Put away before it came in (still out of sight, waiting for its height): just gone.
+    if (waiting.current !== null) {
+      waiting.current = null;
+      if (holdMax.current) { clearTimeout(holdMax.current); holdMax.current = null; }
+      setToast(null);
+      return;
+    }
     const note = !!(toastRef.current?.look && toastRef.current.person);
     y.value = withTiming(-away.value, { duration: note ? 240 : 220, easing: OUT });
     shown.value = withTiming(0, { duration: note ? 240 : 220, easing: OUT }, (done) => { if (done) runOnJS(setToast)(null); });
@@ -115,16 +145,28 @@ export function Toast() {
     // From above the clock: far enough to start out of sight (and clear of a message banner it sits under).
     away.value = insets.top + OFF_MIN + below;
     if (timer.current) clearTimeout(timer.current);
+    if (holdMax.current) { clearTimeout(holdMax.current); holdMax.current = null; }
+    waiting.current = null;
     y.value = -away.value;
     shown.value = 0;
-    y.value = withTiming(0, { duration: note ? 380 : 320, easing: IN });
-    shown.value = withTiming(1, { duration: 260, easing: IN });
+    if (!note && lookOf(incoming) !== 'now') {
+      // A picked look: held well out of sight until it is laid out (measured), then it slides in the same way.
+      waiting.current = incoming.id;
+      y.value = -(away.value + HOLD_OFF);
+      holdMax.current = setTimeout(() => { if (waiting.current === incoming.id) arrive(); }, HOLD_MAX_MS);
+    } else {
+      y.value = withTiming(0, { duration: note ? 380 : 320, easing: IN });
+      shown.value = withTiming(1, { duration: 260, easing: IN });
+    }
     const reader = screenReader.current;
     // VoiceOver doesn't read a toast that slides in, so one that says why
     // something was refused is spoken on an iPhone (TalkBack reads it by itself).
     if (incoming.long && Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(incoming.body ? `${incoming.title}. ${incoming.body}` : incoming.title);
     timer.current = setTimeout(() => hide('timeout'), incoming.holdMs ?? (incoming.long ? (reader ? LONG_SCREEN_READER_MS : LONG_MS) : incoming.action ? (reader ? ACTION_SCREEN_READER_MS : ACTION_MS) : SHOW_MS));
-    return () => { if (timer.current) clearTimeout(timer.current); };
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (holdMax.current) clearTimeout(holdMax.current);
+    };
   }, [incoming]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Taken back by whoever put it up, if it is still the one showing.
@@ -183,8 +225,9 @@ export function Toast() {
   const card = (
     <GestureDetector gesture={flick}>
       <Animated.View pointerEvents="box-none" style={[styles.wrap, { top: insets.top + spacing.xs }, slide]}>
-        {look === 'banner' ? <Banner toast={toast} open={open} hide={hide} />
-          : look === 'line' ? <Line toast={toast} open={open} hide={hide} /> : (
+        {/* One per toast (key), so each is laid out afresh and says its height (measured) before it comes in. */}
+        {look === 'banner' ? <Banner key={toast.id} toast={toast} open={open} hide={hide} onHeight={measured} />
+          : look === 'line' ? <Line key={toast.id} toast={toast} open={open} hide={hide} onHeight={measured} /> : (
         <View style={styles.shadow}>
           <Glass behind radius={22} style={[styles.card, styles.solid]}>
             <View style={styles.row}>
@@ -235,23 +278,28 @@ function lookOf(toast: ToastMessage): ToastLook {
   const picked = TOAST_LOOK as ToastLook;
   if (picked === 'now') return 'now';
   if (TOAST_LOOK_FOR !== 'all' && toast.about !== TOAST_LOOK_FOR) return 'now';
-  // A note with a number or a session's mark (Logged, Tennis detected) is not a one-line note: it keeps today's.
-  if (picked === 'line' && (toast.stat || toast.glyph)) return 'now';
+  // Not one-line notes, so they keep today's: one with a number or a session's mark (Logged, Tennis
+  // detected), and a long one that has to be read (why a post was refused), which as one centred
+  // line would be a paragraph of several centred lines.
+  if (picked === 'line' && (toast.stat || toast.glyph || toast.long)) return 'now';
   return picked;
 }
 
+type LookProps = { toast: ToastMessage; open: () => void; hide: (how?: ToastClosed) => void; onHeight: (height: number) => void };
+
 /**
  * Look A ('banner'): drawn as the iPhone draws a notification. A wide rounded
- * rectangle, not a capsule; the small CourtSide mark where the phone puts an
- * app's icon (a session's own mark in its disc, if it has one); the title in
- * semibold and the words under it in regular, on two lines where they need
- * them, never cut. The page's own solid surface with a hairline edge and a
- * small neutral shadow: no glass, no glow.
+ * rectangle, not a capsule; the app's own icon where the phone puts it, a
+ * small filled rounded square, the same on every court (a session's own mark
+ * in its disc, if it has one); the title in semibold and the words under it
+ * in regular, on two lines where they need them, never cut. The page's own
+ * solid surface with a hairline edge and a small neutral shadow: no glass, no
+ * glow.
  */
-function Banner({ toast, open, hide }: { toast: ToastMessage; open: () => void; hide: (how?: ToastClosed) => void }) {
+function Banner({ toast, open, hide, onHeight }: LookProps) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.bannerShadow}>
+    <View style={styles.bannerShadow} onLayout={(e) => onHeight(e.nativeEvent.layout.height)}>
       <View style={styles.banner}>
         <Pressable
           accessibilityRole={toast.href ? 'link' : 'text'}
@@ -260,7 +308,11 @@ function Banner({ toast, open, hide }: { toast: ToastMessage; open: () => void; 
           onPress={open}
           style={[styles.bannerInfo, toast.action && styles.infoBeforeAction]}
         >
-          {toast.glyph ? <Disc glyph={toast.glyph} token={toast.id} /> : <BrandMark size={26} color={colors.brand} />}
+          {toast.glyph ? <Disc glyph={toast.glyph} token={toast.id} /> : (
+            <View style={styles.appIcon}>
+              <Image source={APP_ICON} style={styles.appIconArt} accessibilityIgnoresInvertColors />
+            </View>
+          )}
           <View style={styles.bannerWords}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bannerTitle}>{toast.title}</Text>
             {toast.body ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.bannerBody}>{toast.body}</Text> : null}
@@ -280,12 +332,12 @@ function Banner({ toast, open, hide }: { toast: ToastMessage; open: () => void; 
  * shade of the page on a dark one. Too long for the line, it wraps rather
  * than being cut.
  */
-function Line({ toast, open, hide }: { toast: ToastMessage; open: () => void; hide: (how?: ToastClosed) => void }) {
+function Line({ toast, open, hide, onHeight }: LookProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { dark } = useTheme();
   const words = toast.line ?? (toast.body ? `${toast.title} · ${toast.body}` : toast.title);
   return (
-    <View style={styles.lineShadow}>
+    <View style={styles.lineShadow} onLayout={(e) => onHeight(e.nativeEvent.layout.height)}>
       <View style={[styles.line, dark && styles.lineOnDark]}>
         <Pressable
           accessibilityRole={toast.href ? 'link' : 'text'}
@@ -526,6 +578,9 @@ const styleDefinitions = StyleSheet.create({
   bannerShadow: { alignSelf: 'stretch', marginHorizontal: -spacing.sm, maxWidth: 440, borderRadius: 16, ...buttonShape.curve, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 4 },
   banner: { flexDirection: 'row', alignItems: 'center', minHeight: 56, borderRadius: 16, ...buttonShape.curve, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   bannerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 14, paddingRight: 16 },
+  // The app icon's tile: filled, its corner the phone's own for an icon this size (about 22% of it).
+  appIcon: { width: 28, height: 28, borderRadius: 6.5, ...buttonShape.curve, overflow: 'hidden' },
+  appIconArt: { width: 28, height: 28 },
   bannerWords: { flex: 1 },
   bannerTitle: { ...typography.bodyStrong, lineHeight: 20, color: colors.text },
   bannerBody: { ...typography.body, lineHeight: 20, color: colors.text },

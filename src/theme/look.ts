@@ -102,17 +102,23 @@ export const LESS_AI_ROUND2: boolean = true;
  *   'now'     today's: a glass capsule, an outlined glyph beside the words,
  *             the second line cut with "…"
  *   'banner'  A, an iPhone notification banner: a wide rounded rectangle (not
- *             a capsule), the small CourtSide mark, the title in semibold and
- *             the words under it in regular on up to two lines, never cut;
- *             the page's own solid surface, a hairline edge, a small shadow
+ *             a capsule), the app's own icon (a small filled rounded square,
+ *             as the phone shows it), the title in semibold and the words
+ *             under it in regular on as many lines as they need, never cut;
+ *             the page's own solid surface, a hairline edge, a small shadow.
+ *             Taller than today's (three lines for Up to hit), so for its few
+ *             seconds it covers the top of the map's filter chips.
  *   'line'    B, one compact line, as Instagram's quick notes: a short rounded
  *             rectangle, centred, no icon, the words said short enough for one
  *             line ("Up to hit till 10pm · friends can see you"). A note with a
- *             number or a session's mark (Logged, Tennis detected) keeps today's.
+ *             number or a session's mark (Logged, Tennis detected), or a long
+ *             one that has to be read (why a post was refused), keeps today's.
  *
  * TOAST_LOOK_FOR is which notes wear it: 'up-to-hit' only the one after Up to
- * hit (useCheckIn), 'all' every quick note. The drop in and lift away, and the
- * "How was the hit?" card, never change here.
+ * hit (useCheckIn), 'all' every quick note (with 'line', all but the ones just
+ * named). The drop in and lift away (the same time and easing; a taller note
+ * starts from further up, so it is always out of sight), and the "How was the
+ * hit?" card, never change here.
  */
 export type ToastLook = 'now' | 'banner' | 'line';
 export const TOAST_LOOK: ToastLook = 'now';
