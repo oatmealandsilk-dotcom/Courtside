@@ -172,6 +172,10 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
     const zooming = !!zoomRef.current;
     if (zooming) { swoopFinding(); zoomRef.current?.finding?.(); }
+    // Both questions said yes before (who can see you, and the phone's own, looked up quietly ahead of the tap): the card
+    // readies its grow at the tap itself, not after the phone's permission round trip, so the full map has every moment
+    // there is to draw before you are found (v6 review). Told again below as the phone answers; the second time is nothing.
+    if (zooming && !first && allowed.current) zoomRef.current?.allowed?.();
     // Said yes to both before, and no check-in zoom to play (its push-in waits for where you are): on at once.
     const instant = !first && !zooming && allowed.current;
     if (instant) { setInstantOn(true); haptics.commit(); }

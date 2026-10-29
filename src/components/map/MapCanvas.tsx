@@ -11,7 +11,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { CLOSE_ZOOM_NAMES, FAR_ZOOM, GROW_CLEAR_CSS, MAP_PIN_CSS, SHORT_ZOOM } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type CanvasMarker, type ClusterTemplates } from '@/components/map/pinEngine';
 import { SWOOP_JS, WARM_JS, type SwoopAsk, type SwoopStats } from '@/components/map/swoop';
-import { PUSH_JS, REVEAL_MS } from '@/features/players/mapGrow';
+import { GROW_CAM_JS, PUSH_JS, REVEAL_MS, type GrowFollow } from '@/features/players/mapGrow';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
 
@@ -53,15 +53,28 @@ export interface MapCanvasHandle {
    */
   lens: (started: number | null, scale?: number) => void;
   /**
-   * The phone's hidden full map (v6, `hidden`) takes over from the pushed-in card, all in one go on its page: its camera
-   * set exactly where the card is looking now, its pins shown at once and its streets in over REVEAL_MS (inside its own
-   * page: never an opacity on anything of the app's), and the dive (`swoop`) begun from there.
+   * The phone's hidden full map (v6, `hidden`) takes over from the pushed-in card, told ahead (as the push-in starts) and
+   * done by its own page on the frame its clock reaches `arm.at`, all in one go: its camera set exactly where the card is
+   * looking on that frame (worked out there: GROW_CAM_JS on PUSH_JS), its pins shown at once and its streets in over
+   * REVEAL_MS (inside its own page: never an opacity on anything of the app's), and the dive begun from there. It says
+   * so (onHanded), and again once that frame is on the screen (onUnveiled). Kept until then: a page made afresh meanwhile
+   * (the phone stopped the old one) is told again as soon as it is ready, and takes over at once.
    */
-  handOver: (cam: { center: LatLng; zoom: number }, swoop: Omit<SwoopAsk, 'up'> | null) => void;
+  armHandOver: (arm: HandOverArm) => void;
   /** The card, once the full map over it has shown its own pins (v6): its pins go at once (and its lens with them). */
   handed: () => void;
   /** The card's pins back, as they were (the grow over, out of sight). */
   pinsBack: () => void;
+}
+
+/** The phone's hand-over, told ahead (handle.armHandOver). */
+export interface HandOverArm {
+  /** When the map takes over (Date.now(), the phone's one clock): the pushed-in card just covering the screen. */
+  at: number;
+  /** growFollow's numbers for the grow: where the pushed-in card is looking at any moment. */
+  follow: GrowFollow;
+  /** The dive, begun on that same frame (null: none asked for yet). */
+  swoop: Omit<SwoopAsk, 'up'> | null;
 }
 
 interface Props {
@@ -117,6 +130,10 @@ interface Props {
   onSwooped?: (arrived: boolean, id: number, stats?: SwoopStats) => void;
   /** The page's map is up (its style is in), the first time on each try: the check-in zoom's timing log. */
   onUp?: () => void;
+  /** The phone's hidden full map has taken over (armHandOver), `late` ms after it was due (its own clock), at `at`; `sw` the dive it began (SwoopAsk.id), if any. */
+  onHanded?: (late: number, at: number, sw: number | null) => void;
+  /** And that frame (its pins showing, its streets coming in) is on the screen: the card's own pins may go. */
+  onUnveiled?: () => void;
   style?: StyleProp<ViewStyle>;
   /** On screen: off (a page over it, a hidden pager page, another tab), its load clocks wait (useMapLoad). */
   active?: boolean;
@@ -146,7 +163,7 @@ const HIDE_CSS = `html.cs-veil,html.cs-veil body,html.cs-veil #m{background:tran
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, hidden = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, onUp, style, active = true }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, hidden = false, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, onUp, onHanded, onUnveiled, style, active = true }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
@@ -155,8 +172,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
   useEffect(() => { ready.current = false; styled.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onUp });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onUp };
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onUp, onHanded, onUnveiled });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onUp, onHanded, onUnveiled };
   // A fresh page (a retry, or one the phone stopped) starts where the map is meant to be now, not where it first was.
   const centerNow = useRef(center);
   centerNow.current = center;
@@ -178,6 +195,10 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     pendingSwoop.current = null;
     return p && Date.now() - p.at < 9000 ? p.js : null;
   };
+  // The phone's hand-over (armHandOver), kept until a page says it has taken over (`armDone`): told again to a fresh page.
+  const arm = useRef<HandOverArm | null>(null);
+  const armDone = useRef(false);
+  const armJs = (a: HandOverArm) => `window.__cs&&window.__cs.arm(${JSON.stringify(a)})`;
 
   useImperativeHandle(ref, () => ({
     flyTo: (to, z, ms = 500, offsetY = 0, exact = false) => {
@@ -193,14 +214,14 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
     clearPins: (clear) => send(`document.getElementById('m').classList.toggle('cs-clear',${clear ? 'true' : 'false'})`),
     warm: (at, z) => send(`window.__cs.warm(${JSON.stringify({ lat: at.lat, lng: at.lng, zoom: z })})`),
     lens: (started, scale = 1) => send(`window.__cs.lens(${started === null ? 'null' : Math.round(started)},${scale})`),
-    // One message, so the camera, the reveal and the dive start in the same moment on the page.
-    handOver: (cam, swoop) => {
+    // Told ahead, done by the page itself on the frame it is due: the camera, the reveal and the dive in the same moment.
+    // Told again if asked again before it has happened (the dive known only now): the page keeps the latest.
+    armHandOver: (a) => {
+      if (armDone.current) return;
       pendingMove.current = null;
       pendingSwoop.current = null;
-      // Shown from now on: a fresh page after this (the phone stopped this one) is an ordinary full map, never hidden again.
-      hiddenNow.current = false;
-      const go = swoop ? `window.__cs.swoop(${JSON.stringify(swoop)});` : '';
-      web.current?.injectJavaScript(`if(window.__cs){window.__cs.fly(${cam.center.lat},${cam.center.lng},${cam.zoom},0,0,true);window.__cs.unveil();${go}}true;`);
+      arm.current = a;
+      send(armJs(a));
     },
     handed: () => send(`document.getElementById('m').classList.add('cs-gone');window.__cs.lens(null)`),
     pinsBack: () => send(`document.getElementById('m').classList.remove('cs-gone')`),
@@ -254,7 +275,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
 <style>html,body,#m{margin:0;height:100%;background:${hiddenNow.current ? 'transparent' : look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}${GROW_CLEAR_CSS}${HIDE_CSS}</style></head>
 <body><div id="m"></div><script>
 var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
-var PUSH=${full ? PUSH_JS : 'null'},LENS=null,LZ=0,HIDE=${hiddenNow.current ? 'true' : 'false'};
+var PUSH=${full || hiddenNow.current ? PUSH_JS : 'null'},LENS=null,LZ=0,HIDE=${hiddenNow.current ? 'true' : 'false'};
+var CAM=${hiddenNow.current ? GROW_CAM_JS : 'null'},HAND=null,HANDED=false;
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
 function start(){
@@ -290,6 +312,18 @@ map.on('moveend',function(){if(HIDE)return;var c=map.getCenter(),b=map.getBounds
 var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},full:${full ? 'true' : 'false'},now:${now ? 'true' : 'false'},box:${JSON.stringify(interactive || full ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 // The check-in zoom's push-in, on the card (v5): its pins keep their size on the screen as the page grows round them, on this page's own clock.
 function lensTick(){if(!LENS)return;var s=Math.pow(LENS.S,Math.max(0,PUSH(Date.now()-LENS.t0)));try{engine.lens(s)}catch(e){}LZ=Math.log(s)/Math.LN2;zoomClass();LENS.raf=requestAnimationFrame(lensTick)}
+// The phone's hidden full map taking over (v6, __cs.arm): waits on its own clock for the moment it is due, then on that
+// frame puts its camera exactly where the pushed-in card is looking (the push-in's curve from its start, PUSH, and
+// growCamera, CAM), shows itself and begins the dive; says so, and again two frames on (that frame is on the screen).
+function handWait(){var a=HAND;if(!a)return;var left=a.at-Date.now();if(left>40){a.t=setTimeout(handWait,left-30);return}a.r=requestAnimationFrame(handFrame)}
+function handFrame(){var a=HAND;if(!a)return;var tn=Date.now();if(tn<a.at-8){a.r=requestAnimationFrame(handFrame);return}
+HAND=null;HANDED=true;var late=tn-a.at,s=Math.pow(a.f.S,Math.max(0,PUSH(tn-a.f.t0))),c=CAM(a.f,s);MOVES++;
+try{map.jumpTo({center:[c.lng,c.lat],zoom:c.zoom})}catch(e){}
+window.__cs.unveil();
+// Very late (a page made afresh after it was due): no dive from where the card was long ago, it is simply there.
+if(a.swoop){if(late>1500)a.swoop.still=true;window.__cs.swoop(a.swoop)}
+post({type:'handed',late:late,at:tn,sw:a.swoop?a.swoop.id:null});
+requestAnimationFrame(function(){requestAnimationFrame(function(){post({type:'unveiled'})})})}
 window.__cs={
   set:function(p){INIT=p;engine.set(p)},
   hold:function(on){engine.hold(on)},
@@ -301,6 +335,7 @@ window.__cs={
   swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok,st){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok,sw:a.id,st:st||null})});if(!fin)SWOOP=s},
   shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}},
   warm:function(a){try{(${WARM_JS})(map,a,{})}catch(e){}},
+  arm:function(a){if(HANDED||!CAM||!PUSH)return;if(HAND){clearTimeout(HAND.t);cancelAnimationFrame(HAND.r)}HAND={at:a.at,f:a.follow,swoop:a.swoop,t:0,r:0};handWait()},
   lens:function(t0,S){if(LENS&&LENS.raf)cancelAnimationFrame(LENS.raf);if(t0==null||!PUSH){LENS=null;LZ=0;try{engine.lens(1)}catch(e){}zoomClass();return}LENS={t0:t0,S:S};lensTick()},
   // The hidden full map shows itself (v6): its pins at once, its streets in over REVEAL_MS; solid again after.
   unveil:function(){var root=document.documentElement;HIDE=false;root.classList.remove('cs-hide');setTimeout(function(){root.classList.remove('cs-veil')},${REVEAL_MS + 60})}
@@ -333,7 +368,7 @@ ${ENGINE_JS}
         onContentProcessDidTerminate={lost}
         onRenderProcessGone={lost}
         onMessage={(e) => {
-          let msg: { type: string; ok?: boolean; sw?: number; st?: SwoopStats | null; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
+          let msg: { type: string; ok?: boolean; sw?: number; st?: SwoopStats | null; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string; late?: number; at?: number };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
@@ -362,9 +397,19 @@ ${ENGINE_JS}
             if (swoop) send(swoop);
             // All of it is on the page now: its first drawing may be reported.
             send('window.__cs.synced()');
+            // A hand-over told to a page that has gone since (the phone stopped it): this one takes over (at once, if due).
+            if (arm.current && !armDone.current) send(armJs(arm.current));
           }
           // A frame later, so what the page drew is on the phone's screen too.
           else if (msg.type === 'painted') requestAnimationFrame(() => latest.current.onPainted?.());
+          else if (msg.type === 'handed') {
+            armDone.current = true;
+            arm.current = null;
+            // Shown from now on: a fresh page after this (the phone stopped this one) is an ordinary full map, never hidden again.
+            hiddenNow.current = false;
+            latest.current.onHanded?.(msg.late ?? 0, msg.at ?? Date.now(), typeof msg.sw === 'number' ? msg.sw : null);
+          }
+          else if (msg.type === 'unveiled') latest.current.onUnveiled?.();
           else if (msg.type === 'tap' && msg.id) latest.current.onTap?.(msg.id);
           else if (msg.type === 'gathered') haptics.tap();
           else if (msg.type === 'swooped' && typeof msg.sw === 'number') latest.current.onSwooped?.(!!msg.ok, msg.sw, msg.st ?? undefined);

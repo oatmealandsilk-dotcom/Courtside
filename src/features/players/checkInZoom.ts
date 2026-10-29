@@ -23,8 +23,8 @@ import { useApp } from '@/store/AppContext';
  *    they always have (Apple 5.1.2(i)): the zoom only ever starts after both.
  *  - A teen: the same, on themselves.
  *  - Reduce Motion (the system's own setting): in a browser the full map opens straight onto you, close in, no swoop.
- *    On an iPhone (v6) the Community card does not zoom at all with it on: nothing opens, you are simply up (one place
- *    decides it, NearbyMap, so the push-in and the dive can never disagree about it).
+ *    On an iPhone (v6) the Community card's zoom ignores it, as every other move in the app does (Oct 5, owner: "all
+ *    animation should look like the one on my phone"): the push-in and the dive both play (SwoopAsk.force).
  *
  * How close it comes: zoom 15¼, just past the street level a court opened from a post uses (15). On a
  * phone that is about 1.3 km across and 2.8 km top to bottom (ten or so city blocks each way): your

@@ -62,6 +62,11 @@ export interface SwoopAsk extends SwoopShape {
    * what is on screen and the move is already under way, so waiting for the rest held the camera still a moment (v4).
    */
   now?: boolean;
+  /**
+   * Make the move whatever the phone's Reduce Motion says (the phone's check-in zoom grow, mapGrow v6: the push-in before
+   * it ignores the setting, as every move in the app does, so the dive must too or it would jump where the push-in played).
+   */
+  force?: boolean;
 }
 
 /**
@@ -111,7 +116,8 @@ return function(map,o,done){
   var over=false,started=false,D=o.ms,t0=0,waitT=0,seen={},nF=0,gap=0,lastF=0,w0=0;
   // Its streets asked for now; on a map just made, as soon as its list of streets has come (or as it starts, at the latest).
   function warmSoon(e){if(e&&e.sourceDataType!=='metadata')return;if(over||warm(map,o,seen))map.off('sourcedata',warmSoon)}
-  if(!o.still&&!less()&&!warm(map,o,seen))map.on('sourcedata',warmSoon);
+  function calm(){return !o.force&&less()}
+  if(!o.still&&!calm()&&!warm(map,o,seen))map.on('sourcedata',warmSoon);
   function end(arrived){if(over)return;over=true;clearTimeout(waitT);map.off('load',begin);map.off('sourcedata',warmSoon);hook(map,null);map.off('moveend',onEnd);
     // Stopped part way: once the map has come to rest (a finger let go), it lies flat and north up again.
     if(started&&!arrived){var flat=function(){try{if(map.isMoving()){map.once('moveend',flat);return}if(Math.abs(map.getPitch())>0.5||Math.abs(map.getBearing())>0.5)map.easeTo({pitch:0,bearing:0,duration:300})}catch(e){}};setTimeout(flat,0)}
@@ -119,7 +125,7 @@ return function(map,o,done){
   function onEnd(){end(now()-t0>=D-2)}
   function begin(){
     if(over||started)return;started=true;clearTimeout(waitT);map.off('load',begin);
-    if(o.still||less()||!(D>0)){map.jumpTo({center:[o.lng,o.lat],zoom:o.zoom,pitch:0,bearing:0});end(true);return}
+    if(o.still||calm()||!(D>0)){map.jumpTo({center:[o.lng,o.lat],zoom:o.zoom,pitch:0,bearing:0});end(true);return}
     warm(map,o,seen);
     var ease=bez(o.ease[0],o.ease[1],o.ease[2],o.ease[3]);
     // The tilt and the turn, and the takeoff's pull back, laid over the flyTo's own path on the same clock.
@@ -139,7 +145,7 @@ return function(map,o,done){
   // A map just opened starts once it has drawn where it is (its first full drawing, 'load'), or after o.wait at most: a
   // slow street far off the way down is not worth waiting for, as the streets close in are about to be fetched anyway.
   // Reduce Motion has no move to start from, so it goes there at once: the first streets drawn are yours, not the town's.
-  if(o.up||o.now||o.still||less())begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
+  if(o.up||o.now||o.still||calm())begin();else{map.once('load',begin);waitT=setTimeout(begin,o.wait>0?o.wait:700)}
   return {stop:function(){if(over)return;if(started){try{map.stop()}catch(e){}}end(false)}};
 };
 })()`;

@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/ui';
 import { takeHandedPlace } from '@/features/places/geocode';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
-import { cancelGrow, endGrow, growEarly, growMapGone, growMapMounted, setGrowLeaving, takeGrowPlan, useGrowEarly } from '@/features/players/mapGrow';
+import { cancelGrow, endGrow, exitW, exitX, growEarly, growMapGone, growMapMounted, setGrowLeaving, takeGrowPlan, useGrowEarly } from '@/features/players/mapGrow';
 import { zoomPath } from '@/features/players/zoomTiming';
 
 const NATIVE = Platform.OS !== 'web';
@@ -63,7 +63,7 @@ export default function MapScreen() {
     return () => { offBlur(); growMapGone(earlyId); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Let go before the push-in started (mapGrow's cancelGrow: you were not found, the server said no, it never drew in
-  // time, or 12 s went by): it closes itself.
+  // time, or 5 s went by: mapGrow EARLY_MAX_MS): it closes itself.
   useGrowEarly();
   const early = earlyId ? growEarly() : null;
   // Once the push-in has started it is the grow's own map (it lands, and stays): only a let-go before then closes it.
@@ -97,11 +97,11 @@ export default function MapScreen() {
   const holdPins = sheetUp || (mapLive === null && !waited);
   const grownExit = NATIVE && !!growFrom;
   const exitRef = useRef<() => void>(back);
-  const map = currentUser ? (
-    <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={grownExit ? () => exitRef.current() : back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} focusUser={params.user ?? null} focusSpot={focusSpot} focusPlace={focusPlace} holdPins={holdPins} growFrom={growFrom} onGrown={() => setGrown(true)} />
+  const map = (edge?: React.ReactNode) => (currentUser ? (
+    <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={grownExit ? () => exitRef.current() : back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} focusUser={params.user ?? null} focusSpot={focusSpot} focusPlace={focusPlace} holdPins={holdPins} growFrom={growFrom} onGrown={() => setGrown(true)} edge={edge} />
   ) : (
     <EmptyState title="Sign in to see who is around" />
-  );
+  ));
   if (grownExit) {
     return <GrownExit grown={grown} onBack={back} exitRef={exitRef}>{map}</GrownExit>;
   }
@@ -110,7 +110,7 @@ export default function MapScreen() {
   if (NATIVE && params.grow) return <View pointerEvents="none" style={styles.fill} />;
   return (
     <View style={{ flex: 1, backgroundColor: grown ? colors.bgElevated : 'transparent' }}>
-      {map}
+      {map()}
     </View>
   );
 }
@@ -130,18 +130,22 @@ const EXIT_EASE = Easing.bezier(0.2, 0.8, 0.25, 1);
  * The phone's grown full map (v6): a see-through page over Community (mapGrow), which iOS would otherwise close by sliding
  * it down, or with no movement at all. So Back slides it off to the right, as any page goes, and a drag from the left edge
  * does the same under the finger (past a third of the way, or a flick, it goes; sooner, it springs back): the Community
- * page is under it all along, so it is what is uncovered. Not taking touches until it has fully come in (`grown`); until
- * then the page under it is what is seen.
+ * page is under it all along, so it is what is uncovered, coming back from a little to the left as it is, the way a page
+ * under iOS's own back does (mapGrow's exitX: transforms only). Not taking touches until it has fully come in (`grown`);
+ * until then the page under it is what is seen.
+ *
+ * The edge swipe starts only on a strip along the left edge laid over the map (`edge`, given to the map to put between
+ * its map and its buttons): a finger there never reaches the map, so the map never pans under a swipe that is taking the
+ * page away, and the map's own buttons near the edge keep their taps.
  */
-function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBack: () => void; exitRef: React.MutableRefObject<() => void>; children: React.ReactNode }) {
+function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBack: () => void; exitRef: React.MutableRefObject<() => void>; children: (edge: React.ReactNode) => React.ReactNode }) {
   const { width } = useWindowDimensions();
-  const x = useSharedValue(0);
-  const w = useSharedValue(width);
+  // The page under it follows this one (useGrowHostStyle): mapGrow's own values, back to rest as this map goes.
+  const x = exitX;
+  const w = exitW;
   useEffect(() => { w.value = width; }, [width]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { x.value = 0; return () => { x.value = 0; }; }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const leaving = useSharedValue(false);
-  const sx = useSharedValue(0);
-  const sy = useSharedValue(0);
-  const fromEdge = useSharedValue(false);
   const latestBack = useRef(onBack);
   latestBack.current = onBack;
   const gone = () => latestBack.current();
@@ -155,6 +159,8 @@ function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBac
     going();
     x.value = withTiming(width, { duration: EXIT_MS, easing: EXIT_EASE }, (done) => { if (done) runOnJS(gone)(); });
   };
+  const sx = useSharedValue(0);
+  const sy = useSharedValue(0);
   const pan = useMemo(() => Gesture.Pan()
     .manualActivation(true)
     .onTouchesDown((e, state) => {
@@ -163,8 +169,6 @@ function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBac
       if (!t || e.numberOfTouches > 1 || leaving.value) { state.fail(); return; }
       sx.value = t.absoluteX;
       sy.value = t.absoluteY;
-      fromEdge.value = t.absoluteX <= EDGE;
-      if (!fromEdge.value) state.fail();
     })
     .onTouchesMove((e, state) => {
       'worklet';
@@ -178,11 +182,12 @@ function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBac
     })
     .onUpdate((e) => {
       'worklet';
-      x.value = Math.max(0, e.translationX);
+      // The screen's own coordinates (the strip moves with the page it is on).
+      x.value = Math.max(0, e.absoluteX - sx.value);
     })
     .onEnd((e, success) => {
       'worklet';
-      const travel = Math.max(0, e.translationX);
+      const travel = Math.max(0, e.absoluteX - sx.value);
       const go = success && (travel > w.value * COMMIT_AT || (e.velocityX > FLICK && travel > 24));
       if (go) {
         leaving.value = true;
@@ -192,21 +197,27 @@ function GrownExit({ grown, onBack, exitRef, children }: { grown: boolean; onBac
         const ms = Math.max(140, Math.min(EXIT_MS, e.velocityX > 0 ? (left / e.velocityX) * 1000 : EXIT_MS));
         x.value = withTiming(w.value, { duration: ms, easing: Easing.out(Easing.cubic) }, (done) => { if (done) runOnJS(gone)(); });
       } else {
-        x.value = withSpring(0, { damping: 26, stiffness: 260, mass: 0.9 });
+        // Back to rest without passing it (past it, a sliver of the page under it would show at the right edge).
+        x.value = withSpring(0, { damping: 26, stiffness: 260, mass: 0.9, overshootClamping: true });
       }
     })
     // Only once it has fully come in (before, the page under it is what is seen, and nothing of it takes a touch).
     .enabled(grown), [grown]); // eslint-disable-line react-hooks/exhaustive-deps
   const slide = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
-  return (
+  const edge = (
     <GestureDetector gesture={pan}>
-      <View collapsable={false} pointerEvents={grown ? 'auto' : 'none'} style={styles.fill}>
-        <Animated.View style={[styles.fill, { backgroundColor: grown ? colors.bgElevated : 'transparent' }, slide]}>{children}</Animated.View>
-      </View>
+      <View collapsable={false} pointerEvents={grown ? 'auto' : 'none'} style={styles.edge} />
     </GestureDetector>
+  );
+  return (
+    <View collapsable={false} pointerEvents={grown ? 'auto' : 'none'} style={styles.fill}>
+      <Animated.View style={[styles.fill, { backgroundColor: grown ? colors.bgElevated : 'transparent' }, slide]}>{children(edge)}</Animated.View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   fill: { flex: 1 },
+  // The edge swipe's strip, over the map and under its buttons (NearbyMap's `edge`).
+  edge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: EDGE },
 });

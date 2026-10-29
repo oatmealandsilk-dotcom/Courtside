@@ -13,19 +13,23 @@ import { growPushGap } from '@/features/players/mapGrow';
  * the same message once a minute) never drop one.
  *
  * A row reads, e.g.:
- *   [zoom-timing] grown early | allowed 410 preopen 412 up 980 painted 1620 found 2140 push 2143 hand 2492 swoop 2495
- *   settle 3800 | swoop 78f max 34ms | push max 17ms
+ *   [zoom-timing] grown early | allowed 12 preopen 14 up 560 painted 1220 found 1740 push 1743 arm 1745 hand 2090
+ *   unveiled 2120 swoop 2090 settle 3400 | hand late 6ms | swoop 78f max 34ms | push max 17ms
  * Every time is milliseconds from the tap. `grown` or `none` (with why: forYou the For you card, notSeen the card out of
- * view, rm Reduce Motion, keepNone Only me, measure the card could not be measured, notReady the hidden map had not drawn
- * in time, cancelled let go (a page opened over it, or 12 s), server the check-in itself did not go through); `early` the
- * hidden map opened while you were found, `found` only once you were.
+ * view, keepNone Only me, measure the card could not be measured, notReady the hidden map had not drawn in time,
+ * cancelled let go (a page opened over it, or 5 s), server the check-in itself did not go through); `early` the hidden map
+ * opened while you were found, `found` only once you were. `hand late`: how long after it was due the full map's own
+ * page took over (its clock: the frame it did it on), the one gap the web never has. A row with DEFECT in it is one the
+ * phone should never show: `notReady` (found before the hidden map had drawn, so no zoom), or a hand-over 50 ms or more late.
  *
  * The phone only: the website's demo has no crash table, and the web path is unchanged.
  */
 
-type Mark = 'finding' | 'allowed' | 'preopen' | 'up' | 'painted' | 'found' | 'push' | 'hand' | 'swoop' | 'settle';
+type Mark = 'finding' | 'allowed' | 'preopen' | 'up' | 'painted' | 'found' | 'push' | 'arm' | 'hand' | 'unveiled' | 'swoop' | 'settle';
 export type ZoomReason = 'forYou' | 'notSeen' | 'rm' | 'keepNone' | 'measure' | 'notReady' | 'cancelled' | 'server';
-const ORDER: Mark[] = ['finding', 'allowed', 'preopen', 'up', 'painted', 'found', 'push', 'hand', 'swoop', 'settle'];
+const ORDER: Mark[] = ['finding', 'allowed', 'preopen', 'up', 'painted', 'found', 'push', 'arm', 'hand', 'unveiled', 'swoop', 'settle'];
+/** A hand-over this late (ms, on the page's own clock) is a defect: the camera may jump by more than a frame. */
+const LATE_DEFECT_MS = 50;
 
 interface Tap {
   t0: number;
@@ -34,6 +38,8 @@ interface Tap {
   reason: ZoomReason | null;
   preopen: 'early' | 'found' | null;
   swoop: SwoopStats | null;
+  /** How late the full map's page took over (ms past due, its own clock). */
+  late: number | null;
   filed: boolean;
   timer: ReturnType<typeof setTimeout> | null;
 }
@@ -46,7 +52,7 @@ const FILE_BY_MS = 20000;
 export function zoomTap() {
   if (!ON) return;
   if (tap && !tap.filed) zoomFile();
-  const t: Tap = { t0: Date.now(), marks: {}, path: null, reason: null, preopen: null, swoop: null, filed: false, timer: null };
+  const t: Tap = { t0: Date.now(), marks: {}, path: null, reason: null, preopen: null, swoop: null, late: null, filed: false, timer: null };
   t.timer = setTimeout(() => { if (tap === t) zoomFile(); }, FILE_BY_MS);
   tap = t;
 }
@@ -68,6 +74,13 @@ export function zoomPath(path: 'grown' | 'none', reason?: ZoomReason) {
 export function zoomPreopen(when: 'early' | 'found') {
   if (!tap || tap.filed || tap.preopen) return;
   tap.preopen = when;
+}
+
+/** The full map's page has taken over, `late` ms after it was due (its own clock). */
+export function zoomHand(late: number) {
+  zoomMark('hand');
+  if (!tap || tap.filed || tap.late !== null) return;
+  tap.late = Math.round(late);
 }
 
 /** The dive has come to rest: its frames, and the row goes. */
@@ -95,5 +108,7 @@ export function zoomFile() {
   const swoop = t.swoop ? ` | swoop ${t.swoop.n}f max ${t.swoop.gap}ms` : '';
   const gap = path === 'grown' ? Math.round(growPushGap()) : 0;
   const push = gap > 0 ? ` | push max ${gap}ms` : '';
-  void reportError(new Error(`[zoom-timing] ${path}${why} ${t.preopen ?? '-'} | ${times || 'no marks'}${swoop}${push}`), { where: 'checkin-zoom' });
+  const late = t.late !== null ? ` | hand late ${t.late}ms` : '';
+  const defect = t.reason === 'notReady' || (t.late !== null && t.late >= LATE_DEFECT_MS) ? ' DEFECT' : '';
+  void reportError(new Error(`[zoom-timing]${defect} ${path}${why} ${t.preopen ?? '-'} | ${times || 'no marks'}${late}${swoop}${push}`), { where: 'checkin-zoom' });
 }

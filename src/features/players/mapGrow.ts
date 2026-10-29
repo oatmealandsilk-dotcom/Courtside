@@ -1,6 +1,6 @@
-import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react';
 import { Platform, type View } from 'react-native';
-import { Easing, cancelAnimation, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useFrameCallback, withSequence, withTiming } from 'react-native-reanimated';
+import { Easing, cancelAnimation, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useFrameCallback, withSequence, withTiming, type FrameInfo } from 'react-native-reanimated';
 
 import type { LatLng } from '@/features/players/positions';
 import type { Court } from '@/features/players/courts';
@@ -75,9 +75,17 @@ import type { Court } from '@/features/players/courts';
  * see-through modal: Back and the left-edge swipe slide it off to the right (app/map.tsx), and a page opened from it
  * comes up from the bottom (an iOS sheet). iPhone only, admins only (checkInZoom); Android keeps the plain way.
  *
- * Only the Community tab's card grows (it is the page that pushes in); the For you copy of the card,
- * Reduce Motion (on a phone), and Only me keep the plain way: nothing opens, the check-in is as it
- * always was. Admins first, with the rest of the zoom (checkInZoom's CHECKIN_ZOOM_FOR_EVERYONE).
+ * v6, review (Oct 28, before the owner's first try on his iPhone): one clock for every part of the move. The push-in is
+ * run on the UI thread off the wall clock (useGrowPush, pushAt), the exact curve the map pages follow (PUSH_JS), and the
+ * hidden map is told as the push-in starts when to take over: its own page does it on that frame (MapCanvas armHandOver),
+ * working out the camera there (GROW_CAM_JS), so nothing reaches it late; the card's pins go once it says its pins are
+ * on the screen. The hidden map is opened at the tap itself when both yeses were given before; the Community page stays
+ * the page on show until the dive has landed (useGrowKeepsPage), so nothing of it stands down mid-move; and the hidden
+ * stage is at most EARLY_MAX_MS (the screen under it takes no touches meanwhile).
+ *
+ * Only the Community tab's card grows (it is the page that pushes in); the For you copy of the card and Only me keep the
+ * plain way: nothing opens, the check-in is as it always was. Reduce Motion changes nothing, as with every move in the app
+ * (Oct 5, owner). Admins first, with the rest of the zoom (checkInZoom's CHECKIN_ZOOM_FOR_EVERYONE).
  */
 
 export interface Rect { x: number; y: number; w: number; h: number }
@@ -114,6 +122,7 @@ export interface GrowPlan {
 export const GROW_MS = 680;
 const GROW_CURVE: [number, number, number, number] = [0.25, 0, 0.15, 1];
 const GROW_EASE = Easing.bezier(...GROW_CURVE);
+const [GX1, GY1, GX2, GY2] = GROW_CURVE;
 const OVER = 0.2;
 /** Not drawn yet when the push-in is done: it keeps creeping in, slowly, so the screen never stands still. */
 const CREEP = 0.08;
@@ -144,8 +153,12 @@ const SLIP_PX = 60;
  * after that nothing opens (you are simply up, as with the zoom off), never a stop mid-move.
  */
 export const PAINT_WAIT_MS = 1500;
-/** The phone: the hidden full map is never left waiting longer than this (an invisible page would block every touch). */
-export const EARLY_MAX_MS = 12000;
+/**
+ * The phone: the hidden full map is never left waiting longer than this. While it is open the screen under it takes no
+ * touches (iOS's see-through page still catches them), so it is kept short: a find slower than this would lose the race
+ * to the map anyway, and a tap that takes longer simply opens nothing (you are still put up).
+ */
+export const EARLY_MAX_MS = 5000;
 
 /** 0 → 1 as the page pushes in (1: the card covers the screen; past it as it carries on). */
 export const growT = makeMutable(0);
@@ -233,23 +246,46 @@ function pushRate(ms: number): number {
  * past the plan) and the swoop's ease, whose start runs at exactly the speed the push-in has then, so the push-in and the
  * dive are one move, never a slow-down and a speed-up (v4). Then the same long soft landing as ever.
  */
-export function growHandOver(p: GrowPlan, targetZoom: number, t?: number): { zoom: number; ease: [number, number, number, number] } {
+export function growHandOver(p: GrowPlan, targetZoom: number, t?: number, ms?: number): { zoom: number; ease: [number, number, number, number] } {
   const levels = Math.log2(Math.max(1.001, p.scale));
   // `t`: how far the push-in has come, worked out on the phone's clock (growTAt); the website reads the live value.
+  // `ms`: the phone's planned moment (from the push-in's start), worked out ahead; the website: now.
   const zoom = p.zoom + ((t ?? growT.value) - 1) * levels;
-  const zoomPerSec = pushRate(Date.now() - p.started) * levels * 1000;
+  const zoomPerSec = pushRate(ms ?? Date.now() - p.started) * levels * 1000;
   const left = targetZoom - zoom;
   // The swoop's starting slope (its ease's first point at x 0.3): matched, within a quick enough start and a gentle one.
   const slope = left > 0.25 ? (zoomPerSec * (GROW_SWOOP_MS / 1000)) / left : 0.5;
   return { zoom, ease: [0.3, 0.3 * Math.min(1.6, Math.max(0.3, slope)), 0.16, 1] };
 }
 
-/** The push-in's progress `ms` after it started (growT's own curve, worked out rather than read): the phone's clocks. */
-export function growTAt(ms: number): number {
+/**
+ * The push-in's progress `ms` after it started: growT's own curve (the same bezier withTiming draws, then the creep's
+ * quad ease out), worked out rather than read. A worklet, so the phone's UI thread runs the push-in from it frame by frame
+ * (useGrowPush) on the same clock (Date.now()) the map pages use (PUSH_JS, below): the native push-in and the pages can
+ * never drift apart (v6 review: a push-in timed by withTiming starts a frame after `started`, and the hand-over's camera
+ * was worked out on the JS thread and reached the page one to three frames later).
+ */
+function pushAt(ms: number): number {
+  'worklet';
   if (ms <= 0) return 0;
-  if (ms < GROW_MS) return (1 + OVER) * GROW_C.y(ms / GROW_MS);
+  if (ms < GROW_MS) {
+    const x = ms / GROW_MS;
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 40; i++) {
+      const m = (lo + hi) / 2;
+      const bx = ((1 - 3 * GX2 + 3 * GX1) * m + (3 * GX2 - 6 * GX1)) * m * m + 3 * GX1 * m;
+      if (bx < x) lo = m; else hi = m;
+    }
+    const m = (lo + hi) / 2;
+    return (1 + OVER) * (((1 - 3 * GY2 + 3 * GY1) * m + (3 * GY2 - 6 * GY1)) * m * m + 3 * GY1 * m);
+  }
   const u = Math.min(1, (ms - GROW_MS) / CREEP_MS);
   return 1 + OVER + CREEP * (1 - (1 - u) * (1 - u));
+}
+/** The push-in's progress `ms` after it started (growT's own curve, worked out rather than read): the phone's clocks. */
+export function growTAt(ms: number): number {
+  return pushAt(ms);
 }
 
 /**
@@ -260,6 +296,15 @@ export const PUSH_JS = `(function(){var G=${GROW_MS},X1=${GROW_CURVE[0]},Y1=${GR
 function bz(t,a,b){return ((1-3*b+3*a)*t+(3*b-6*a))*t*t+3*a*t}
 function y(x){if(x<=0)return 0;if(x>=1)return 1;var lo=0,hi=1;for(var i=0;i<40;i++){var m=(lo+hi)/2;if(bz(m,X1,X2)<x)lo=m;else hi=m}return bz((lo+hi)/2,Y1,Y2)}
 return function(ms){if(ms<=0)return 0;if(ms<G)return (1+O)*y(ms/G);var u=Math.min(1,(ms-G)/CM);return 1+O+C*(1-(1-u)*(1-u))}})()`;
+
+/**
+ * growCamera for a map's own page (the phone's hidden full map, v6): `CAM(f, s)` with growFollow's numbers and how much
+ * bigger the page is drawn, gives {lat, lng, zoom}, exactly where the pushed-in card is looking then. The page works it
+ * out on the frame it takes over (PUSH_JS for `s`, from the push-in's start), so nothing worked out on the app's side
+ * arrives late.
+ */
+export const GROW_CAM_JS = `function(f,s){var k=Math.max(1e-3,s),x=f.w0x+f.ax+f.bx/k,y=f.w0y+f.ay+f.by/k,W=512*Math.pow(2,f.z0),n=Math.PI-2*Math.PI*y/W;
+return {lng:x/W*360-180,lat:180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n))),zoom:f.z0+Math.log(k)/Math.LN2}}`;
 
 /** The fixed point the page grows round (page coordinates), the card's middle, and the screen's middle in the page: aimGrow's geometry. */
 function growGeometry(p: Pick<GrowPlan, 'page' | 'card' | 'screen' | 'scale'>) {
@@ -383,6 +428,14 @@ export function startGrow(still: boolean): number {
   pushGap.value = 0;
   pushLast.value = 0;
   slip.value = withTiming(1, { duration: SLIP_MS, easing: SLIP_EASE });
+  if (!WEB && clocks.size > 0) {
+    // The phone (v6): the push-in read off the wall clock on the UI thread, every frame, from this very moment (useGrowPush),
+    // the same clock and the same curve the map pages follow: the native push-in and the full map's camera are one move.
+    const started = Date.now();
+    pushT0.value = started;
+    clocks.forEach((go) => go(true));
+    return started;
+  }
   growT.value = withSequence(
     withTiming(1 + OVER, { duration: GROW_MS, easing: GROW_EASE }),
     withTiming(1 + OVER + CREEP, { duration: CREEP_MS, easing: Easing.out(Easing.quad) }),
@@ -409,6 +462,9 @@ export function takeGrowPlan(): GrowPlan | null {
 /** Over (or let go before the full map opened): the page goes back to how it was (out of sight by then), the tab bar to the page. */
 export function endGrow() {
   cancelAnimation(growT);
+  // The phone's push-in clock stops first, so no frame of it puts the page back where it was pushed to.
+  pushT0.value = 0;
+  clocks.forEach((go) => go(false));
   growT.value = 0;
   cancelAnimation(slip);
   slip.value = 0;
@@ -418,8 +474,9 @@ export function endGrow() {
   armedAt = 0;
   setBarAway(false);
   if (barTimer) { clearTimeout(barTimer); barTimer = null; }
-  // The phone's early opening that grew: done with (one still waiting is left to its own map).
-  if (early?.started) { early = null; emitEarly(); }
+  // The phone's early opening that grew: done with (one still waiting is left to its own map). The Community page under
+  // the now solid map stays the page on show until the dive has landed (growLanded), so nothing of it stands down mid-move.
+  if (early?.started) { early = null; holdLanding(); emitEarly(); }
 }
 
 /* ------------------------------------------------- the phone (v6): the full map opened early, hidden */
@@ -457,6 +514,7 @@ export const growEarly = (): GrowEarly | null => early;
 /** The phone, while you are being found: the full map opens hidden (the card pushes it once the page is on top). Its id. */
 export function openGrow(p: GrowPlan): number {
   if (earlyTimer) clearTimeout(earlyTimer);
+  stopLanding();
   const id = ++earlyIds;
   early = { id, plan: { ...p, early: id, started: 0, at: Date.now() }, started: 0, cancelled: false, mounted: false, pushed: false, status: 'none' };
   // The Community page stays the live page under it (tabFocus), as it is still the page you see.
@@ -469,11 +527,42 @@ export function openGrow(p: GrowPlan): number {
 }
 
 /**
- * Whether the page under the phone's grown full map is the one being shown: while that map is open, hidden, and not going
- * yet, and again as it slides away (leaving). That page then stays the page on show (tabFocus), its tab bar with it (AppShell).
+ * The tab bar's side (AppShell): whether the page under the phone's grown full map is the one being shown with its bar:
+ * while that map is open, hidden, and not going yet, and again as it slides away (leaving). From the push-in's first frame
+ * the bar goes (useGrowUnderWay), so this turns false then.
  */
 export function useGrowPending(): boolean {
   return useSyncExternalStore(subscribeEarly, () => leaving || (!!early && !early.started), () => false);
+}
+/**
+ * The Community page's side (tabFocus): whether it stays the page on show under the phone's full map. All through the grow
+ * (hidden, the push-in, the streets coming in), and on until the dive has landed (landing), and again as the map slides
+ * away. Only then does anything of it stand down (its card's map, the court pictures' hidden web view, the tips): never in
+ * the moments the push-in, the hand-over and the dive need the phone's threads clear (v6 review: it stood down on the
+ * push-in's first frame, or 500 ms in, mid-reveal).
+ */
+export function useGrowKeepsPage(): boolean {
+  return useSyncExternalStore(subscribeEarly, () => leaving || landing || !!early, () => false);
+}
+/** After a grow, until its dive has landed (growLanded), or this long at most (a dive that never says it landed). */
+const LANDING_KEEP_MS = 3200;
+let landing = false;
+let landingTimer: ReturnType<typeof setTimeout> | null = null;
+function holdLanding() {
+  if (WEB) return;
+  landing = true;
+  if (landingTimer) clearTimeout(landingTimer);
+  landingTimer = setTimeout(() => { landingTimer = null; if (!landing) return; landing = false; emitEarly(); }, LANDING_KEEP_MS);
+}
+function stopLanding(): boolean {
+  if (landingTimer) { clearTimeout(landingTimer); landingTimer = null; }
+  if (!landing) return false;
+  landing = false;
+  return true;
+}
+/** The phone's grown full map: its dive has come to rest; the page under it may now stand down. */
+export function growLanded() {
+  if (stopLanding()) emitEarly();
 }
 /** The phone's grown full map is sliding away (app/map.tsx): the page under it, and its tab bar, are being uncovered. */
 let leaving = false;
@@ -577,20 +666,39 @@ export function whenGrowPainted(ms: number): Promise<boolean> {
 const pushGap = makeMutable(0);
 const pushLast = makeMutable(0);
 export const growPushGap = (): number => pushGap.value;
+/** The phone (v6): when the push-in started (Date.now()), read by its UI-thread clock (useGrowPush); 0 when there is none. */
+const pushT0 = makeMutable(0);
+/** The push-in clocks up (useGrowPush): startGrow turns them on, endGrow off, straight away (no redraw in between). */
+const clocks = new Set<(on: boolean) => void>();
 /**
- * Counts the push-in's frames on the UI thread (Reanimated's frame clock), only while a grow is under way: the longest gap
- * between two is what the timing log reports. Nothing is drawn by it.
+ * The phone's push-in (v6), on the UI thread: every frame while a grow is going, growT is set from the wall clock
+ * (Date.now() - started, through pushAt), so the page is exactly where the map pages (which follow PUSH_JS on that same
+ * clock) expect it, whatever frame it started on and however busy the JS thread is. And its frames are counted: the
+ * longest gap between two is what the timing log reports. On only for the card that grows (`on`), and only while a
+ * push-in is going (startGrow to endGrow). The website keeps its withTiming push-in (startGrow), so this does nothing there.
  */
-export function useGrowPushStats(on: boolean) {
-  const going = useGrowUnderWay();
-  const frames = useFrameCallback((f) => {
+export function useGrowPush(on: boolean) {
+  // One worklet for the card's life: useFrameCallback registers it again whenever it changes, and a card redrawn mid-push
+  // must never drop a frame of it.
+  const tick = useCallback((f: FrameInfo) => {
     'worklet';
-    const t = growT.value;
-    if (t <= 0 || t >= 1 + OVER) { pushLast.value = 0; return; }
+    const t0 = pushT0.value;
+    if (t0 <= 0) { pushLast.value = 0; return; }
+    const t = pushAt(Date.now() - t0);
+    growT.value = t;
+    if (t >= 1 + OVER) { pushLast.value = 0; return; }
     if (pushLast.value > 0) { const gap = f.timestamp - pushLast.value; if (gap > pushGap.value) pushGap.value = gap; }
     pushLast.value = f.timestamp;
-  }, false);
-  useEffect(() => { frames.setActive(on && going); }, [on, going]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
+  const frames = useFrameCallback(tick, false);
+  useEffect(() => {
+    if (!on || WEB) return undefined;
+    const go = (active: boolean) => frames.setActive(active);
+    clocks.add(go);
+    // Mounted mid-push (a page drawn again): it carries on.
+    if (pushT0.value > 0) frames.setActive(true);
+    return () => { clocks.delete(go); };
+  }, [on]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -636,11 +744,26 @@ export const growHost = (): View | null => hosts[hosts.length - 1]?.current ?? n
 
 const WEB = Platform.OS === 'web';
 /**
+ * The phone's grown full map sliding away (app/map.tsx, GrownExit): how far it has gone (`exitX`, points) of the screen's
+ * width (`exitW`). The Community page under it comes back from a little to the left as it goes, as a page does under
+ * iOS's own back (EXIT_PARALLAX of the width): a transform only, never a fade.
+ */
+export const exitX = makeMutable(0);
+export const exitW = makeMutable(0);
+const EXIT_PARALLAX = 0.3;
+/**
  * The push-in on the page itself (a preview copy of the page is never touched). Never anything but a transform: the
  * page's glass stays glass.
  */
 export function useGrowHostStyle(on = true) {
-  return useAnimatedStyle(() => (!on ? {} : growT.value > 0 ? { transform: placeAt(growT.value, geo.value) } : { transform: [] }));
+  return useAnimatedStyle(() => {
+    if (!on) return {};
+    if (growT.value > 0) return { transform: placeAt(growT.value, geo.value) };
+    const x = exitX.value;
+    const w = exitW.value;
+    if (!WEB && w > 0 && x > 0 && x < w) return { transform: [{ translateX: -EXIT_PARALLAX * (w - x) }] };
+    return { transform: [] };
+  });
 }
 
 /** A ref that always holds the latest value (for timers set up once). */

@@ -4,7 +4,7 @@ import { useIsFocused as useRouteFocused } from 'expo-router';
 // The router's own navigation hook, as useIsFocused (src/lib) reads it: asked on demand, it never redraws anything.
 import { useNavigation } from 'expo-router/build/react-navigation/core/useNavigation';
 import { AppStateLater } from '@/store/AppContext';
-import { useGrowPageLive, useGrowPending } from '@/features/players/mapGrow';
+import { useGrowKeepsPage, useGrowPageLive } from '@/features/players/mapGrow';
 import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
@@ -41,10 +41,12 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   useLayoutEffect(() => { box.active = active; }, [box, active]);
   const quick = usePressV2();
   // The check-in zoom on a phone (v6, mapGrow): its full map opens hidden over the tabs while you are found, see-through.
-  // The router calls the tab covered; it is still the page you see (and the one that pushes in), so it stays on show
-  // until the push-in starts: its card's place held, its pill live, nothing standing down under your eyes.
-  const growPending = useGrowPending();
-  const onShow = (routeFocused || growPending) && active;
+  // The router calls the tab covered; it is still the page you see (and the one that pushes in), so it stays on show all
+  // through the grow and the dive (useGrowKeepsPage), until the full map has landed: its card's place held, its pill live,
+  // and nothing of it standing down (a hidden web view taken down, the card's map paused) in the moments the push-in,
+  // the hand-over and the dive need the phone's threads clear.
+  const growKeeps = useGrowKeepsPage();
+  const onShow = (routeFocused || growKeeps) && active;
   // The parts that only stand down when covered (the map, court pictures, tips: useIsFocusedLater) hear
   // "covered" once the page opened over the tab has slid in, not in the tap that opens it. Before, the
   // map card, the court cards and their hidden picture-taker all redrew (the last one taken down) in that
