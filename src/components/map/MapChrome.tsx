@@ -8,6 +8,7 @@ import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react
 import { useGrowAway, useGrowLabels } from '@/features/players/mapGrow';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
@@ -1144,10 +1145,12 @@ function LockNote({ lock, onUnlock }: { lock: 'location' | 'hidden'; onUnlock?: 
  * down from where the finger left it, at speed (sheetFling), so the
  * swipe, the card sliding away and what was under it settling back are one motion.
  */
-function useDragToClose(onClose: () => void) {
+function useDragToClose(onClose: () => void, sideways = false) {
   const y = useSharedValue(0);
-  const gesture = Gesture.Pan()
-    .activeOffsetY(8)
+  const pan = Gesture.Pan().activeOffsetY(8);
+  // Over a row that swipes side to side (the court card's hit boxes, COURT_CARD_HIT_BOXES), a finger
+  // that goes sideways first is the row's, never the card's: the pull gives way after 12pt across.
+  const gesture = (sideways ? pan.failOffsetX([-12, 12]) : pan)
     .onUpdate((e) => { y.value = Math.max(0, e.translationY); })
     .onEnd((e) => {
       if (e.translationY > 60 || e.velocityY > 600) { sheetFling.value = 1; runOnJS(onClose)(); }
@@ -1435,11 +1438,14 @@ function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
       style={[styles.hitBoxes, !one && Platform.OS === 'web' ? styles.hitBoxesSnapWeb : null]}
       contentContainerStyle={styles.hitBoxesRow}
     >
-      {hits.map((h) => (
-        <View key={h.id} style={[{ width: cardW }, Platform.OS === 'web' ? styles.hitBoxSnapWeb : null]}>
-          <HitCard hit={h} miles={miles} fill />
-        </View>
-      ))}
+      {/* Pressed the way Community's boxes are: a finger that starts a sideways swipe never dims the box under it. */}
+      <SwipeArea on={!one}>
+        {hits.map((h) => (
+          <View key={h.id} style={[{ width: cardW }, Platform.OS === 'web' ? styles.hitBoxSnapWeb : null]}>
+            <HitCard hit={h} miles={miles} fill />
+          </View>
+        ))}
+      </SwipeArea>
     </ScrollView>
   );
 }
@@ -1457,7 +1463,6 @@ function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
  */
 export function CourtSheet({ court, miles, ringed = false, onClose }: { court: Court; miles: number; /** Played on this week: the disc wears the story ring. */ ringed?: boolean; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
-  const pull = useDragToClose(onClose);
   const { height: windowH } = useWindowDimensions();
   const { currentUserId, users, actions, courtFacts, courtExtras } = useApp();
   // Only a court OpenStreetMap knows can carry facts, follows and tags; a place sent without one
@@ -1486,6 +1491,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   const allHits = useCourtHits(place);
   // As Community's boxes (COURT_CARD_HIT_BOXES): every one of them, in a row that swipes.
   const hits = COURT_CARD_HIT_BOXES ? allHits : allHits.slice(0, strip.length ? 1 : 2);
+  // With the boxes' row showing, a sideways swipe moves the row, never the card (useDragToClose).
+  const pull = useDragToClose(onClose, COURT_CARD_HIT_BOXES && hits.length > 1);
   // The ones the card has no room for (COURT_CARD_MORE_HITS): its last row says how many, and opens the page.
   const moreHits = COURT_CARD_MORE_HITS ? allHits.length - hits.length : 0;
   const hitLine = (h: HitRequest) => {
