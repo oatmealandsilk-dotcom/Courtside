@@ -58,9 +58,11 @@ const POP_SHOWN = { opacity: 1, transform: [{ scale: 1 }] };
 /**
  * How long a clip on screen may still be fetching before the loading disc shows over its cover.
  * Until then its cover stands in for it, as on Instagram (Oct 25, owner: "I don't ever hit a video
- * that's not loaded"); a clip with no cover shows the disc at once, as before.
+ * that's not loaded"); a clip with no cover shows the disc at once, as before. 2.2 s since Oct 28
+ * (owner: "Also rn scrolling fast on the feed I almost immediatly get hit with loading screen"):
+ * a clip that is a second or two behind reads as its cover, still, not as a loading page.
  */
-const SPIN_AFTER_MS = 1000;
+const SPIN_AFTER_MS = 2200;
 /** The cover leaves as the clip's own first frame takes its place: a short fade, never a cut. */
 const POSTER_OUT = FadeOut.duration(160);
 

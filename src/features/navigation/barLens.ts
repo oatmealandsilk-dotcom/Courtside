@@ -1,4 +1,5 @@
-import { Easing, cancelAnimation, makeMutable, withSpring, withTiming } from 'react-native-reanimated';
+import { Platform } from 'react-native';
+import { Easing, ReduceMotion, cancelAnimation, makeMutable, withSpring, withTiming } from 'react-native-reanimated';
 
 import { useApp } from '@/store/AppContext';
 
@@ -20,9 +21,8 @@ import { useApp } from '@/store/AppContext';
  *     TabsPager, the browser's swipe), and lands with the page. Picked up mid-slide, it eases onto
  *     the row from where it stands instead of jumping.
  *
- * Not built (yet): a finger sliding along the bar dragging the lens, as iOS 26's own bar does. It
- * would have to share the finger with the Feed tab's hold (the windows, where the finger then slides
- * between the cards) and with the tabs lighting at the touch.
+ * On the quiet pill, not built: a finger sliding along the bar dragging the lens, as iOS 26's own bar
+ * does. The new bar has it (BAR_SLIDE, below).
  *
  * None of it can be seen on an iPhone before it ships (no simulator here), so admins
  * (@oatmealandsilk, @mrdinosaur62) get it first. Turned on for everyone by setting this to true and
@@ -36,6 +36,34 @@ export const BAR_LENS_FOR_EVERYONE = false;
 export function useBarLens(): boolean {
   const { currentUser } = useApp();
   return BAR_LENS_FOR_EVERYONE || !!currentUser?.isAdmin;
+}
+
+/**
+ * The new bar (tabBarLook's NEW_BAR; Oct 28, owner: "Also the Liquid Glass tab the bottom Should look
+ * better look at Instagram and stravas", then "We just want our bar to look more like there's not exact
+ * replica. Also the animation is inportant for tab switching"): a full capsule on lighter glass, the lit
+ * tab in the brand's colour on a soft capsule of its own, and the capsule travelling between tabs as
+ * iOS 26's own does (it lifts at the touch, stretches as it goes, settles without a wobble).
+ *
+ * Admins first, as the lens: nobody can see it on an iPhone before it ships. Turned on for everyone by
+ * setting this to true and shipping an over-the-air update (no database change, no new native code).
+ * Off, everyone else's bar is exactly today's.
+ */
+export const BAR_IG_FOR_EVERYONE = false;
+
+/**
+ * The new bar's press and slide (TabBarLooks' `slide`): a finger that comes down on the bar and moves
+ * along it drags the lens across the tabs and lifting opens the one it is on, as iOS 26's own bar. It
+ * starts only after 12 points sideways inside the Feed tab's hold time, so the hold that opens the
+ * Feed's windows (a still finger for 400 ms) keeps the finger whenever it is the one that starts.
+ * Off here: the new bar without it, everything else the same.
+ */
+export const BAR_SLIDE = true;
+
+/** Whether this person's bar is the new one (it always has the lens). */
+export function useBarIg(): boolean {
+  const { currentUser } = useApp();
+  return BAR_IG_FOR_EVERYONE || !!currentUser?.isAdmin;
 }
 
 /**
@@ -62,6 +90,77 @@ export function lensPlace(route: string | undefined): number {
  * however it is moving when a second tap retargets it.
  */
 const LENS_SPRING = { dampingRatio: 1, duration: 420, overshootClamping: true } as const;
+/**
+ * How the new bar's capsule travels between tabs (Oct 28, owner, after the first video: "The new bottom is
+ * better, still could be better animation"). Three, one line apart (TabBarLooks' StretchLens draws them):
+ *
+ *   'liquid'  its two ends ride two springs, the leading one quicker (about 250 ms) than the trailing one
+ *             (about 330 ms): it stretches like a drop of liquid toward the tab, a touch flatter while
+ *             stretched, and the back catches up as it lands. No bounce, never past the tab.
+ *   'lens'    at the touch it swells into a glassier lens (bigger, a brighter rim, a highlight riding on
+ *             it), travels a little stretched, and shrinks back as it lands, as iOS 26's own tab bar.
+ *   'tuned'   the first version made snappier (about 240 ms, a short stretch, a small lift): the baseline.
+ *
+ * In all three the lit colour follows the capsule (a tab tints by how near it is), a soft tap as it lands
+ * (on a phone), and Reduce Motion is a quick plain slide.
+ */
+export type LensMotion = 'liquid' | 'lens' | 'tuned';
+export const LENS_MOTION = 'liquid' as LensMotion;
+const MOTIONS: readonly LensMotion[] = ['tuned', 'liquid', 'lens'];
+let motionChosen: LensMotion | null = null;
+/**
+ * The motion in use: LENS_MOTION, or in the web demo one picked with ?barmotion=liquid|lens|tuned (kept for
+ * the visit), so the three can be filmed side by side from one build.
+ */
+export function lensMotion(): LensMotion {
+  if (motionChosen) return motionChosen;
+  motionChosen = LENS_MOTION;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    try {
+      const asked = new URLSearchParams(window.location.search).get('barmotion') as LensMotion | null;
+      if (asked && MOTIONS.includes(asked)) { window.sessionStorage.setItem('courtside-barmotion', asked); motionChosen = asked; }
+      else {
+        const kept = window.sessionStorage.getItem('courtside-barmotion') as LensMotion | null;
+        if (kept && MOTIONS.includes(kept)) motionChosen = kept;
+      }
+    } catch { /* no storage: the default */ }
+  }
+  return motionChosen;
+}
+/** The motion as a number the animation thread reads (MOTIONS' order: 0 tuned, 1 liquid, 2 lens). Set by the bar on show. */
+export const lensKind = makeMutable(1);
+export function lensKindOf(motion: LensMotion): number {
+  return MOTIONS.indexOf(motion);
+}
+/** Each motion's leading spring (critically damped: no bounce, never past the tab). */
+const NEW_SPRINGS = [
+  { dampingRatio: 1, duration: 240, overshootClamping: true },
+  { dampingRatio: 1, duration: 250, overshootClamping: true },
+  { dampingRatio: 1, duration: 320, overshootClamping: true },
+] as const;
+/** 1 from the moment a tap or a slide along the bar sends the new bar's lens to a tab until it lands there (its soft tap on landing). */
+export const lensLanding = makeMutable(0);
+/** Reduce Motion (lensFeel 2): a quick plain slide, no stretch, no lift. Run even with the setting on (it is the calm version already). */
+const CALM_SLIDE = { duration: 160, easing: Easing.out(Easing.cubic), reduceMotion: ReduceMotion.Never } as const;
+
+/** How the lens moves: 0 today's (the quiet pill's lens), 1 the new bar's, 2 the new bar's with Reduce Motion. Set by the bar on show. */
+export const lensFeel = makeMutable(0);
+/**
+ * The new bar's trailing edge, as a place in the row (-1 not placed): it chases where the lens is drawn,
+ * so the capsule stretches toward where it is going and gathers up as it lands (TabBarLooks' StretchLens).
+ */
+export const lensTrail = makeMutable(-1);
+/** The new bar's lift, 0 to 1: up at the touch, back down once the finger is up and the lens has landed. */
+export const lensLift = makeMutable(0);
+/** 1 while a finger is down on one of the new bar's tabs. */
+export const lensPress = makeMutable(0);
+
+/** The lens on its way to `to`, on the bar's own move. */
+function lensMove(to: number) {
+  'worklet';
+  const feel = lensFeel.value;
+  return feel === 2 ? withTiming(to, CALM_SLIDE) : withSpring(to, feel === 1 ? NEW_SPRINGS[lensKind.value] ?? NEW_SPRINGS[1] : LENS_SPRING);
+}
 /** Picked up by a finger mid-slide: how long it takes to ease onto the row from where it stood. */
 const CATCH_MS = 200;
 
@@ -127,7 +226,7 @@ export function lensLand(to: number) {
   lensLag.value = 0;
   lensGoal.value = to;
   lensAt.value = shown;
-  if (Math.abs(shown - to) > 0.001) lensAt.value = withSpring(to, LENS_SPRING);
+  if (Math.abs(shown - to) > 0.001) lensAt.value = lensMove(to);
 }
 
 /**
@@ -164,7 +263,9 @@ export function lensTo(to: number, tap = false) {
     lensAt.value = shown;
   }
   lensGoal.value = to;
-  lensAt.value = withSpring(to, LENS_SPRING);
+  // A tap on the bar: a soft tap when it lands (the new bar's; never for a tab lit any other way).
+  if (tap && lensFeel.value !== 0) lensLanding.value = 1;
+  lensAt.value = lensMove(to);
 }
 
 /** The bar went away: the next one places its lens afresh. */
@@ -178,6 +279,12 @@ export function lensReset() {
   lensRides.value = 0;
   lensHeld.value = 0;
   lensLag.value = 0;
+  cancelAnimation(lensTrail);
+  cancelAnimation(lensLift);
+  lensTrail.value = -1;
+  lensLift.value = 0;
+  lensPress.value = 0;
+  lensLanding.value = 0;
 }
 
 /** The row's own curve as it settles after a swipe (TabsPager's EASE, the browser swipe's cubic-bezier). */

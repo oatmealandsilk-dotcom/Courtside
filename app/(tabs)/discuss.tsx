@@ -23,6 +23,7 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { useGrowHost, useGrowHostStyle } from '@/features/players/mapGrow';
 import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { UpToday, useUpToday } from '@/components/UpToday';
@@ -41,6 +42,10 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
+import { CityBoardPreview } from '@/components/CityBoardPreview';
+import { PeopleYouMayKnow, usePeopleYouMayKnow } from '@/features/people/PeopleYouMayKnow';
+import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
+import { useCityFill } from '@/features/cityBoard/fill';
 import { FollowPill } from '@/components/FollowPill';
 import { takeInviteCourt } from '@/features/invite/referral';
 import { useInviteCourt } from '@/features/invite/useInviteCourt';
@@ -255,6 +260,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     playersRef.current?.scrollTo({ y: pageTop, animated: true });
   };
   const location = useLocationToggle();
+  // The check-in zoom (mapGrow): this page is what pushes in toward the map card as it grows into the full map.
+  // A picture of it on the phone (taken from this view); in a browser the page itself moves, by a transform only.
+  const growRef = useRef<View | null>(null);
+  // The page itself only: never a preview copy of it (a tab swipe's, or a thread's swipe back).
+  useGrowHost(growRef, !previewSection);
+  const growStyle = useGrowHostStyle(!previewSection);
   // Check in (migration 189), for the Open to hit row's note: your ring is on the map only for friends, and only once you check in.
   const checkIn = useCheckIn();
   // (No ask on opening any more, migration 189: "Who can see you on the map?" comes only when you tap Check in.)
@@ -502,7 +513,23 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Only for a known adult: a teen sees only friends who follow each other
   // with them (migration 78; before it, nobody), so an empty list says nothing
   // about the town for them.
-  const early = !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // City boards (migration 196; owner, Oct 28: "New rank city sessions is good"), admins first
+  // (CITY_BOARD_FOR_EVERYONE): this month's board takes the invite card's place, fading into Open to hit,
+  // while there is a board to show (on its way, or your city on it or waiting for players). Off, not open
+  // to you, or not loaded: the page is exactly as before.
+  const cityBoard = useCityBoard();
+  // People you may know (admins first, PYMK_FOR_EVERYONE): null when off, resting or with nobody to show.
+  const pymk = usePeopleYouMayKnow();
+  // With every board city listed (the ones not ranked at 0), there is always a list; with your town it leads it,
+  // even in a month with none ranked yet. With no town and none ranked, only an A to Z of zeros: "You're early" keeps its place.
+  const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
+  const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home
+  // city's regulars (by the town on their profile, never where they are), as the server picked them for you.
+  const homeCityId = boardShown ? cityBoard.board?.me.cityId ?? null : null;
+  const homeCityName = homeCityId ? cityBoard.board?.me.cityName ?? null : null;
+  const homePage = useCityPage(homeCityId, cityBoard.month).page;
+  const upFill = useCityFill(homeCityId ? homePage : null, upToday.map((p) => p.user.id));
   // The same moment for a teen, or anyone not known to be an adult (Oct 5,
   // owner: "Do all"): no friend on their map yet, which for them says only
   // that their friends are not here yet. "Bring your friends" takes the
@@ -701,7 +728,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
           // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
-          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} hitCount={openHits.length} inviting={early} /></View>
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
@@ -717,9 +744,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
-            <UpToday me={currentUser} people={upToday} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+            <UpToday me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
           </View></FirstReveal>
         ) : null}
+        {/* People you may know (admins first, Oct 28): people who follow you to follow back, then people you may know.
+            People first: under Up to hit / "Most active in <city>", above the city board. */}
+        {!search && pymk ? <FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal> : null}
+        {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
+            People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
+        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
@@ -832,7 +865,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           <View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends checked in, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends checked in within 30 miles'}</Text>}
+              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends up to hit, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends up to hit within 30 miles'}</Text>}
             </View>
             {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
               <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
@@ -1023,6 +1056,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
   const column = isPhone ? undefined : LAYOUT.soloColumn;
   return (
+    <Reanimated.View style={[styles.growHost, growStyle]}>
+    <View ref={growRef} collapsable={false} style={styles.growHost}>
     <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
       title="Community"
       right={isGuest ? <GuestSignIn /> :
@@ -1079,6 +1114,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
     </Screen>
+    </View>
+    </Reanimated.View>
   );
 }
 
@@ -1126,6 +1163,8 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
 }
 
 const styleDefinitions = StyleSheet.create({
+  // The page, as one view the check-in zoom can photograph (phone) or push in (browser).
+  growHost: { flex: 1 },
   hits: { gap: spacing.md },
   courtsPair: { gap: 16 },
   hitsHead: { gap: 3, paddingTop: spacing.sm },

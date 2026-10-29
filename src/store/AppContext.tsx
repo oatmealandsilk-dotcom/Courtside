@@ -26,6 +26,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
+import { cityBoardOn } from '@/features/cityBoard/flag';
 import { BLOCKED_WORDS_NOTE, CHAT_PHOTO_UNREADABLE, REVIEW_NOTE_MAX, auth as remoteAuth, fetchRemote, isLocalMedia, onWordsRefused, queueFeedSignal, remote, uploadChatPhoto, uploadMedia, emptyProfile, type GroupRefusal, type AdminReport, type ModerationResult, type ReviewAskResult, type ReportedChat, type ReportedItem, type ReportedItemKind, type ReportEvidence, type FeedSignal, type SiteFeedback, type WaitlistEntry, type BetaInviteStatus, type FirstDayStats, type FirstMove, type NewPlayer, type PinnedQuestion, type HandleStatus, type InviteCodeResult, type MyInviter, type RemoteData, type UserState, standInName } from '@/data/remote';
 import { clearCardShots, dropPeopleShots, forgetPlaces } from '@/components/map/cardShot';
 import { clearSnapshot, markSnapshotOpened, markSnapshotOpening, readMapCopy, readSnapshot, saveMapCopy, saveSnapshot, snapshotFailedBefore } from '@/data/snapshot';
@@ -57,7 +58,7 @@ import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getPosition } from '@/lib/geo';
+import { getPosition, recentPosition } from '@/lib/geo';
 import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import { smallCoverOf } from '@/lib/smallCover';
@@ -138,7 +139,7 @@ import type {
   Story,
   User,
   PlayerProfile,
-  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, CourtSurfaceAnswer, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
+  MediaCrop, Tip, TaggedCourt, TrackerId, Invitee, AffiliateStats, ContactMatch, HealthShareKey, HeadToHead, PartnerStreak, CourtKings, CityBoard, CityPage, CourtSurfaceAnswer, FlybyPerson, FriendStreak, MatchSet, Removed, RemovedItem, DemotedPost, DemoteResult, ReviewRequest, ReviewStatus, TakedownKind, TakedownReason, TournamentEntry, HiddenWords, HiddenWordsKind, FoundVia } from '@/data/types';
 import { notePlayerSurface } from '@/features/players/courts';
 import type { VotedSurface } from '@/features/places/courtSurface';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
@@ -329,6 +330,48 @@ function readAsked(key: string): boolean | null {
 }
 
 /**
+ * The phone's own Location switch (courts near you, where the map opens; never
+ * shared), and whose it is (Oct 28, owner: "Middle"): the account that turned it
+ * on here. The same account signing back in finds it on; a different account
+ * signing in on this device starts with it off. Turned on while signed out (or
+ * left on by an older version, which kept no owner): the first account in takes it.
+ */
+const LOCATION_KEY = 'courtside-location';
+const LOCATION_OWNER_KEY = 'courtside-location-owner';
+function rememberLocation(on: boolean, owner: ID | null) {
+  try {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(LOCATION_KEY, on ? 'on' : 'off');
+      if (on && owner) localStorage.setItem(LOCATION_OWNER_KEY, owner);
+      else if (on) localStorage.removeItem(LOCATION_OWNER_KEY);
+    } else if (on && owner) {
+      void AsyncStorage.multiSet([[LOCATION_KEY, 'on'], [LOCATION_OWNER_KEY, owner]]).catch(() => {});
+    } else {
+      void AsyncStorage.setItem(LOCATION_KEY, on ? 'on' : 'off').catch(() => {});
+      if (on) void AsyncStorage.removeItem(LOCATION_OWNER_KEY).catch(() => {});
+    }
+  } catch {}
+}
+/** A different account signed in: the switch goes off here, and is nobody's until it is turned on again. */
+function forgetLocationOwner() {
+  try {
+    if (Platform.OS === 'web') { localStorage.setItem(LOCATION_KEY, 'off'); localStorage.removeItem(LOCATION_OWNER_KEY); }
+    else void AsyncStorage.setItem(LOCATION_KEY, 'off').then(() => AsyncStorage.removeItem(LOCATION_OWNER_KEY)).catch(() => {});
+  } catch {}
+}
+/** The switch as this device keeps it ('on', 'off', or null: never chosen) and its owner. Throws when storage cannot be read. */
+async function readLocation(): Promise<{ flag: string | null; owner: string | null }> {
+  if (Platform.OS === 'web') return { flag: localStorage.getItem(LOCATION_KEY), owner: localStorage.getItem(LOCATION_OWNER_KEY) };
+  const [[, flag], [, owner]] = await AsyncStorage.multiGet([LOCATION_KEY, LOCATION_OWNER_KEY]);
+  return { flag, owner };
+}
+
+/** The longest signing out waits for your check-in to end on the server (endCheckInFor); the request goes on after. */
+const SIGN_OUT_CHECK_OUT_MS = 3000;
+/** Up to hit's instant pin (checkInOnMap): where the phone last was counts as where you are for this long, until the new reading lands. */
+const EARLY_PIN_MS = 2 * 60_000;
+
+/**
  * A Location off that has not reached the server yet: the account whose spot
  * still needs forgetting, kept on this device until a forget goes through.
  */
@@ -381,6 +424,21 @@ function readDemoAutoLogSharing(): AutoLogAudience | null {
 }
 
 /** The switches in Settings, kept with the account. */
+/** A city board as last asked (migration 196). `key`: your own sessions when it was asked, so logging one asks again. */
+export interface CityBoardEntry { board: CityBoard | null; at: number; failed: boolean; key: string }
+/** A city's page as last asked (migration 196). */
+export interface CityPageEntry { page: CityPage | null; at: number; failed: boolean; key: string }
+/** How long a board (15 minutes, the server's refresh) and a city's page (5 minutes) are kept before asking again. */
+const CITY_BOARD_KEEP_MS = 15 * 60_000;
+const CITY_PAGE_KEEP_MS = 5 * 60_000;
+/** Your sessions, in one short key: a new one (or one taken back) changes it. */
+const mySessionsKey = (sessions: PracticeSession[], me: ID | null) => {
+  let n = 0;
+  let last = '';
+  for (const x of sessions) if (x.userId === me) { n += 1; if (x.createdAt > last) last = x.createdAt; }
+  return `${n}|${last}`;
+};
+
 export interface Prefs {
   showActivity: boolean; pushLikes: boolean; pushCoach: boolean; pushMessages: boolean; pushActivity: boolean;
   /** The four map alerts (migration 60): a friend up for a hit, new hits near you, new players near you, courts you follow. */
@@ -538,6 +596,17 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
    */
   townPlayers: ID[] | null;
   /**
+   * City boards (migration 196), as last asked, by month ('YYYY-MM-01'):
+   * `board` null with `failed` false means the boards are not open to you
+   * (or the database has none yet); `failed` means the last ask did not
+   * come back (offline), and `board` is the one before it, if any.
+   */
+  cityBoards: Record<string, CityBoardEntry>;
+  /** City pages, as last asked, by "month|city". */
+  cityPages: Record<string, CityPageEntry>;
+  /** "Show me on city boards" (Privacy center; migration 196). Null on a database without it: the switch is not shown. */
+  cityBoardsVisible: boolean | null;
+  /**
    * The Question of the week (Oct 20 sweep, R5; migration 169): the thread an
    * admin pinned to the top of Discussions, and when. Null when none is
    * pinned (a pin lasts 7 days). A guest's comes with guest mode's own data.
@@ -671,7 +740,8 @@ function freshAccountSettings(): Partial<AppState> {
 function signedOut(prev: AppState): AppState {
   return {
     ...prev, currentUserId: null, onboardingComplete: false, healthIsReal: false, healthHistory: [], detectedActivities: [],
-    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
+    // Friends' pins on the map go too: the next account never sees the last one's friends (Oct 28 review).
+    ...emptyCourtLife, ...emptyFeedGroups, ...emptyLiveSession, lastSeen: {}, lastSeenLoaded: false, sessionTags: [], partnerStreaks: null, newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, reviewRequests: null, reviewsOff: false, reviewsFailed: false,
     mapVisibility: isSupabaseConfigured ? undefined : prev.mapVisibility, teenMap: isSupabaseConfigured ? 'off' : prev.teenMap,
     autoLogSharing: isSupabaseConfigured ? undefined : prev.autoLogSharing,
     ...freshAccountSettings(),
@@ -698,8 +768,17 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * Check in (migration 189): reads the phone's location once and shows your
    * pin to friends who follow each other with you until 10pm (2 hours after
    * 8pm). Never called on its own. Resolves with a message to show, or null.
+   * `onFix` hears where the phone was found, once it went through (Light up
+   * at a court lights the court up too, features/places/lightUp). `onAllowed`
+   * hears that the phone said yes to its own location question (or had
+   * before), as it starts finding you (the check-in zoom readies its pictures).
    */
-  checkInOnMap: () => Promise<string | null>;
+  /**
+   * `instant` (Up to hit for someone who has said yes before, useCheckIn): the button is already on, and its tap already
+   * felt; your pin goes down at once where the phone last was when that is under 2 minutes old, then moves to the new
+   * reading. A failure takes that early pin away again (the button says why).
+   */
+  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant?: boolean) => Promise<string | null>;
   /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
@@ -849,6 +928,19 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * no board yet), so the card stays away.
    */
   courtKings: (courtId: string) => Promise<CourtKings | null>;
+  /**
+   * City boards (migration 196): the month's board ('YYYY-MM-01', the
+   * phone's own month), kept in `cityBoards` and asked again after 15
+   * minutes, after you log a session, or when `force`. Null when the boards
+   * are not open to you (CITY_BOARD_FOR_EVERYONE / the server's flag) or the
+   * database has none yet; throws only when it could not be asked and there
+   * is no earlier board to keep.
+   */
+  loadCityBoard: (month: string, force?: boolean) => Promise<CityBoard | null>;
+  /** One city's page, the same way (kept 5 minutes, in `cityPages`). */
+  loadCityPage: (cityId: string, month: string, force?: boolean) => Promise<CityPage | null>;
+  /** "Show me on city boards" (Privacy center). Resolves false when it did not go through (the switch goes back). */
+  setCityBoardsVisible: (on: boolean) => Promise<boolean>;
   /**
    * "What surface?" at a court the map says nothing about (migration 186):
    * your own answer and what the court registered. Null when it could not be
@@ -2093,6 +2185,8 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
       partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
       autoLogLive: data.userState?.autoLog !== undefined ? true : prev.autoLogLive,
+      // The settings row carries city_boards only once migration 196 has run.
+      cityBoardsVisible: data.userState?.cityBoards ?? (data.userState ? null : prev.cityBoardsVisible),
       // The saved copy shows the app; only the server's answer counts as loaded (live updates, settings sync and retries wait for it).
       remoteLoaded: fromSnapshot ? prev.remoteLoaded : true,
       snapshotShown: fromSnapshot ? true : prev.snapshotShown,
@@ -2454,13 +2548,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     teenMap: isSupabaseConfigured ? 'off' : 'on',
     newOnCourtside: null,
     townPlayers: null,
+    cityBoards: {},
+    cityPages: {},
+    // The demo has no server to ask: its switch shows, on.
+    cityBoardsVisible: isSupabaseConfigured ? null : true,
     pinnedQuestion: null,
     ...emptyCourtLife,
     ...emptyFeedGroups,
     ...emptyLiveSession,
     hitRequests: [],
-    locationEnabled: readFlag('courtside-location'),
-    locationAsked: readAsked('courtside-location'),
+    locationEnabled: readFlag(LOCATION_KEY),
+    locationAsked: readAsked(LOCATION_KEY),
     detectedLocation: null,
     detectedCoords: null,
   });
@@ -3276,6 +3374,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  // Counts every account arriving on screen (a sign-in, a switch, the same account again), so a
+  // Log out still finishing never takes away the login of whoever signed in after it (signOut).
+  const signInTurn = useRef(0);
+  const lastSignedIn = useRef(state.currentUserId);
+  if (state.currentUserId !== lastSignedIn.current) {
+    if (state.currentUserId) signInTurn.current += 1;
+    lastSignedIn.current = state.currentUserId;
+  }
   /** Unpaid bookings already re-checked with Stripe this run (see refreshCoaching). */
   const askedAboutPayment = useRef<Set<ID>>(new Set());
 
@@ -3605,12 +3711,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
   const changeEmail = useCallback((email: string) => remoteAuth.updateEmail(email), []);
   const linkGoogle = useCallback(() => remoteAuth.linkGoogle(), []);
+  /**
+   * Signing out ends your Up to hit first (Oct 28; the owner was told "signing out will end your
+   * check-in (no one sees you once you're signed out)"): the server takes your pin off friends' maps
+   * and you out of any court, as Turn off does (checkOutOfMap), while the login can still ask it to.
+   * Only when something of yours may be showing: a pin, a court, a live session checked in, or a map
+   * not loaded yet (a check-in from another phone). Never in the way of signing out: it waits at most
+   * a few seconds and lets a failure go. Switching accounts (Add account too) keeps it: the same
+   * person is still on this phone, still signed in to that account.
+   */
+  const endCheckInFor = (me: ID | null): Promise<void> => {
+    const s = stateRef.current;
+    if (!live(me) || s.currentUserId !== me) return Promise.resolve();
+    const showing = !s.lastSeenLoaded || !!s.lastSeen[me!] || !!s.liveSession?.checkedIn
+      || Object.values(s.courtNow).some((row) => row.youHere) || !!s.followedCourts?.some((c) => c.youHere);
+    if (!showing) return Promise.resolve();
+    return Promise.race([
+      remote.checkOutOfMap().then(() => undefined, () => undefined),
+      new Promise<void>((resolve) => { setTimeout(resolve, SIGN_OUT_CHECK_OUT_MS); }),
+    ]);
+  };
+
   const signOutEverywhere = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     void forgetLinkPreviews();
     if (isSupabaseConfigured) {
-      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does).
-      await forgetPushToken();
+      // This phone stops getting the account's alerts while the session can still take its address off (as Log out does),
+      // and your Up to hit ends (endCheckInFor).
+      await Promise.all([endCheckInFor(me), forgetPushToken()]);
       try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
     }
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
@@ -3703,6 +3831,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback((options: { keepLogin?: boolean } = {}) => {
     // Nothing of this account stays on the device for the next person.
     const leaving = stateRef.current.currentUserId;
+    // Your Up to hit ends on the server first, while the login still exists (endCheckInFor); Add account keeps it.
+    const checkedOut = options.keepLogin ? Promise.resolve() : endCheckInFor(leaving);
     if (leaving) void clearSnapshot(leaving);
     // Nor the pictures of its map card, or where that card was (cardShot).
     clearCardShots();
@@ -3714,8 +3844,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // (keepLogin), so switching back stays a tap; a phone keeps its logins
     // in its keychain, as before.
     const endLogin = Platform.OS === 'web' && !options.keepLogin && !!leaving;
-    // This phone stops getting the account's alerts before the session ends (the removal needs it).
-    if (isSupabaseConfigured) void forgetPushToken().finally(() => (endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
+    // This phone stops getting the account's alerts before the session ends (the removal needs it), and your check-in ends.
+    // Someone signed in while those were still going (the sign-in screen is quick): the login on this
+    // device is theirs by then, so it is left alone rather than ended in their place.
+    const turnAt = signInTurn.current;
+    if (isSupabaseConfigured) void Promise.all([checkedOut, forgetPushToken()]).finally(() => (signInTurn.current !== turnAt ? undefined : endLogin ? remoteAuth.endSession() : remoteAuth.signOut()));
     if (endLogin && leaving) void forgetAccount(leaving).catch(() => undefined);
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch): only signing out
     // stops them, never an open that merely could not read the session (useWorkoutWatch).
@@ -4164,39 +4297,75 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return seenByLine(shownTo(s.autoLogSharing, a.source, s.users.find((u) => u.id === s.currentUserId), held));
   }, []);
 
+  /**
+   * Counts every turn of the Location switch (on, off, or on with a check-in), so a sign-in's
+   * look at whose the switch is (see "Location belongs to") never undoes a turn made meanwhile.
+   */
+  const locationTurn = useRef(0);
+
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
-  const checkInOnMap = useCallback(async (): Promise<string | null> => {
+  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant = false): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
-    if (!me) return 'Sign in to check in.';
-    const fix = await getPosition();
+    if (!me) return 'Sign in first.';
+    const ends = checkInEnds().toISOString();
+    const placeMine = (at: { lat: number; lng: number }, until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
+      ...prev,
+      lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: at.lat, lng: at.lng, place: 'exact', city: nearestPlace(at.lat, at.lng).name.split(',')[0], seenAt: new Date().toISOString(), until } },
+    }));
+    // Instant: your pin at once where the phone last was, if that is fresh (under 2 minutes), until the new reading
+    // lands; what was there before comes back if it does not go through.
+    const before = stateRef.current.lastSeen[me];
+    let read = false;
+    let early = false;
+    if (instant) {
+      void recentPosition(EARLY_PIN_MS).then((at) => {
+        if (!at || read || stateRef.current.currentUserId !== me) return;
+        early = true;
+        placeMine(at, ends);
+      });
+    }
+    const undoEarly = () => {
+      if (!early) return;
+      setState((prev) => {
+        if (prev.currentUserId !== me) return prev;
+        const rest = Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== me));
+        return { ...prev, lastSeen: before ? { ...rest, [me]: before } : rest };
+      });
+    };
+    // onAllowed: the phone said yes to its location question (or had before), and is finding you now (the check-in zoom's pictures).
+    const fix = await getPosition({ onAllowed });
+    read = true;
     if (!fix.ok) {
+      undoEarly();
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
         : fix.reason === 'unavailable' ? 'Location isn’t available on this device.' : 'Couldn’t find you. Try again.';
     }
     if (stateRef.current.currentUserId !== me) return null;
     const place = nearestPlace(fix.lat, fix.lng);
-    const ends = checkInEnds().toISOString();
     // The phone may use where it is for courts near you from now on, as Location on does (never sent on its own).
+    // Yours on this device, as Location on is (rememberLocation).
+    locationTurn.current += 1;
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
-    try { if (Platform.OS === 'web') localStorage.setItem('courtside-location', 'on'); else void AsyncStorage.setItem('courtside-location', 'on').catch(() => {}); } catch {}
-    const placeMine = (until: string) => setState((prev) => (prev.currentUserId !== me ? prev : {
-      ...prev,
-      lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: fix.lat, lng: fix.lng, place: 'exact', city: place.name.split(',')[0], seenAt: new Date().toISOString(), until } },
-    }));
+    rememberLocation(true, me);
     if (!live(me)) {
-      haptics.commit();
-      placeMine(ends);
+      if (!instant) haptics.commit();
+      placeMine(fix, ends);
+      onFix?.({ lat: fix.lat, lng: fix.lng });
       return null;
     }
+    // Instant: the pin moves to the new reading now, while the server is told.
+    if (instant) placeMine(fix, ends);
     const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
     if ('error' in got) {
-      return got.error === 'ask_first' ? 'Say yes to friends seeing your check-ins first.'
-        : got.error === 'missing' ? 'Check in isn’t available yet. Update the app and try again.'
+      if (instant) { early = true; undoEarly(); }
+      return got.error === 'ask_first' ? 'Say yes to friends seeing you on the map first.'
+        : got.error === 'missing' ? 'Up to hit isn’t available yet. Update the app and try again.'
           : 'That didn’t go through. Try again.';
     }
-    haptics.commit();
-    placeMine(got.until);
+    if (!instant) haptics.commit();
+    placeMine(fix, got.until);
     void loadLastSeen();
+    onFix?.({ lat: fix.lat, lng: fix.lng });
     return null;
   }, [loadLastSeen]);
 
@@ -4219,7 +4388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!live(me)) return;
     spotGen.current += 1;
     if (!(await remote.checkOutOfMap().catch(() => false))) {
-      showToast({ title: 'Couldn’t check you out yet', body: 'Friends may still see your pin. Try again.', icon: 'cloud-offline-outline' });
+      showToast({ title: 'Couldn’t turn it off yet', body: 'Friends may still see your pin. Try again.', icon: 'cloud-offline-outline' });
       return;
     }
     void loadLastSeen();
@@ -4811,6 +4980,85 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (live(me)) return remote.fetchCourtKings(courtId);
     const self = s.users.find((u) => u.id === me);
     return demoApi.courtKings({ courtId, me, sessions: s.sessions, ranked: !self?.isPrivate });
+  }, []);
+
+
+  // ---- City boards (migration 196) ----
+  // One ask at a time for each board and page; a second caller waits for the same answer.
+  const cityAsks = useRef(new Map<string, Promise<unknown>>());
+  const loadCityBoard = useCallback(async (month: string, force = false): Promise<CityBoard | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const self = s.users.find((u) => u.id === me);
+    if (!me || !cityBoardOn(self)) return null;
+    const key = mySessionsKey(s.sessions, me);
+    const kept = s.cityBoards[month];
+    if (kept && !force && !kept.failed && kept.key === key && Date.now() - kept.at < CITY_BOARD_KEEP_MS) return kept.board;
+    const askKey = `board|${month}|${key}`;
+    const asking = cityAsks.current.get(askKey) as Promise<CityBoard | null> | undefined;
+    if (asking) return asking;
+    const ask = (async () => {
+      try {
+        const board = live(me)
+          ? await remote.fetchCityBoard(month)
+          : await demoApi.cityBoard({ month, me, users: stateRef.current.users, sessions: stateRef.current.sessions });
+        setState((prev) => ({ ...prev, cityBoards: { ...prev.cityBoards, [month]: { board, at: Date.now(), failed: false, key } } }));
+        return board;
+      } catch (err) {
+        // Offline: keep the last board there was, marked, so the page keeps it and can say so.
+        const was = stateRef.current.cityBoards[month]?.board ?? null;
+        setState((prev) => ({ ...prev, cityBoards: { ...prev.cityBoards, [month]: { board: was, at: Date.now(), failed: true, key } } }));
+        if (was) return was;
+        throw err;
+      } finally {
+        cityAsks.current.delete(askKey);
+      }
+    })();
+    cityAsks.current.set(askKey, ask);
+    return ask;
+  }, []);
+  const loadCityPage = useCallback(async (cityId: string, month: string, force = false): Promise<CityPage | null> => {
+    const s = stateRef.current;
+    const me = s.currentUserId;
+    const self = s.users.find((u) => u.id === me);
+    if (!me || !cityBoardOn(self)) return null;
+    const key = mySessionsKey(s.sessions, me);
+    const at = `${month}|${cityId}`;
+    const kept = s.cityPages[at];
+    if (kept && !force && !kept.failed && kept.key === key && Date.now() - kept.at < CITY_PAGE_KEEP_MS) return kept.page;
+    const askKey = `page|${at}|${key}`;
+    const asking = cityAsks.current.get(askKey) as Promise<CityPage | null> | undefined;
+    if (asking) return asking;
+    const ask = (async () => {
+      try {
+        const now = stateRef.current;
+        const page = live(me)
+          ? await remote.fetchCityPage(cityId, month)
+          : await demoApi.cityPage({ cityId, month, me, users: now.users, posts: now.posts, sessions: now.sessions, followingIds: now.followingIds, followEdges: now.followEdges, blockedIds: now.blockedIds, mutedIds: now.mutedIds });
+        // The clip's post, so the page can play it (it may be older than anything the feed holds).
+        if (page?.clip && live(me)) void loadPost(page.clip.postId);
+        setState((prev) => ({ ...prev, cityPages: { ...prev.cityPages, [at]: { page, at: Date.now(), failed: false, key } } }));
+        return page;
+      } catch (err) {
+        const was = stateRef.current.cityPages[at]?.page ?? null;
+        setState((prev) => ({ ...prev, cityPages: { ...prev.cityPages, [at]: { page: was, at: Date.now(), failed: true, key } } }));
+        if (was) return was;
+        throw err;
+      } finally {
+        cityAsks.current.delete(askKey);
+      }
+    })();
+    cityAsks.current.set(askKey, ask);
+    return ask;
+  }, []);
+  const setCityBoardsVisible = useCallback(async (on: boolean): Promise<boolean> => {
+    const me = stateRef.current.currentUserId;
+    if (!me) return false;
+    const was = stateRef.current.cityBoardsVisible;
+    setState((prev) => ({ ...prev, cityBoardsVisible: on }));
+    const ok = live(me) ? await remote.setCityBoardsVisible(me, on) : await demoApi.setCityBoardsVisible(on);
+    if (!ok) setState((prev) => ({ ...prev, cityBoardsVisible: was }));
+    return ok;
   }, []);
 
   // The same court and day asked again within a minute (the toast, the pill, the sheet) is answered from here.
@@ -8356,12 +8604,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * to show, or null when everything went fine.
    */
   const setLocationEnabled = useCallback(async (enabled: boolean): Promise<string | null> => {
-    const remember = (on: boolean) => {
-      try {
-        if (Platform.OS === 'web') localStorage.setItem('courtside-location', on ? 'on' : 'off');
-        else void AsyncStorage.setItem('courtside-location', on ? 'on' : 'off').catch(() => {});
-      } catch {}
-    };
+    // On, it is yours on this device: the same account finds it on next time, another starts with it off.
+    const remember = (on: boolean) => rememberLocation(on, stateRef.current.currentUserId);
+    locationTurn.current += 1;
     if (!enabled) {
       remember(false);
       // Location off: kept pictures of the map card with people on them go (cardShot).
@@ -8443,13 +8688,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   // The phone keeps the Location switch too (the browser reads it at start),
   // so the map opens where you are instead of forgetting on every launch.
+  // Another account's on stays off for whoever is signed in by the time it is read.
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    AsyncStorage.getItem('courtside-location')
-      .then((flag) => { setState((prev) => ({ ...prev, locationAsked: flag !== null, locationEnabled: prev.locationEnabled || flag === 'on' })); })
+    readLocation()
+      .then(({ flag, owner }) => { setState((prev) => ({ ...prev, locationAsked: flag !== null, locationEnabled: prev.locationEnabled || (flag === 'on' && (!owner || !prev.currentUserId || owner === prev.currentUserId)) })); })
       // Unreadable counts as chosen: never an ask set off by a storage hiccup.
       .catch(() => { setState((prev) => ({ ...prev, locationAsked: true })); });
   }, []);
+
+  // Location belongs to whoever turned it on here (Oct 28, owner: "Middle"; rememberLocation): the
+  // same account signing back in finds it on, a different account signing in on this device (a sign-in,
+  // Switch account, the demo) starts with it off, with nothing of where the phone was last found. An on
+  // with no owner (turned on while signed out, or by an older version) is taken by the first account in.
+  useEffect(() => {
+    const me = state.currentUserId;
+    if (!me) return;
+    const turn = locationTurn.current;
+    readLocation().then(({ flag, owner }) => {
+      if (stateRef.current.currentUserId !== me || locationTurn.current !== turn || owner === me) return;
+      if (!owner) { if (flag === 'on') rememberLocation(true, me); return; }
+      forgetLocationOwner();
+      setState((prev) => (prev.currentUserId !== me ? prev : { ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null }));
+    }).catch(() => undefined);
+  }, [state.currentUserId]);
 
   // Someone who left Location on last time gets the city refreshed quietly.
   useEffect(() => {
@@ -8457,7 +8719,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getPosition().then((result) => {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
-        setState((prev) => ({ ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
+        // Turned off meanwhile (by hand, or another account signed in): the answer is dropped.
+        setState((prev) => (!prev.locationEnabled ? prev : { ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
       } else if (result.reason === 'denied') {
         // Taken away in the device's settings since: the switch says so.
         setState((prev) => ({ ...prev, locationEnabled: false }));
@@ -9712,6 +9975,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      loadCityBoard,
+      loadCityPage,
+      setCityBoardsVisible,
       courtSurface,
       voteCourtSurface,
       flyby,
@@ -9965,6 +10231,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       loadPartnerStreaks,
       seenPartnerStreak,
       courtKings,
+      loadCityBoard,
+      loadCityPage,
+      setCityBoardsVisible,
       courtSurface,
       voteCourtSurface,
       flyby,
@@ -10352,7 +10621,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     answers: guest?.answers ?? [], coaches: guest?.coaches ?? [],
     hitRequests: [], lastSeen: {}, followingIds: [], followEdges: [], followRequests: [], tips: [], sessions: [], sessionTags: [],
     saved: { postIds: [], questionIds: [] }, mutedIds: [], reportedIds: [], blockedIds: [], blockedMeIds: [], alertIds: [],
-    newOnCourtside: null, townPlayers: null, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
+    newOnCourtside: null, townPlayers: null, cityBoards: {}, cityPages: {}, openness: {}, courtShown: {}, feed: { cursor: null, more: guest?.more ?? false },
   } satisfies Partial<AppState>), [isGuest, guest]);
   const value = useMemo<AppContextValue>(
     () => (guestValue

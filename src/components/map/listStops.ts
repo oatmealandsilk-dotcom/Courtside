@@ -285,6 +285,11 @@ export function useListStops({ rows, room, windowH, windowW, openTall, onTall, o
     if (topV.value <= floorV.value + 1) return;
     runOnUI(goTo)(stop.value !== 1, 0);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  /** Back to the tray, if it is up (a chip changed under the full list). */
+  const collapse = useCallback(() => {
+    if (stop.value !== 1) return;
+    runOnUI(goTo)(false, 0);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   /** See all: up to the full list. */
   const expand = useCallback(() => {
     if (topV.value <= floorV.value + 1 || stop.value === 1) return;
@@ -386,6 +391,7 @@ export function useListStops({ rows, room, windowH, windowW, openTall, onTall, o
     canTall,
     toggle,
     expand,
+    collapse,
     headGesture,
     stripGesture,
     listGesture,

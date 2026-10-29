@@ -991,7 +991,7 @@ const STEPS = [
       await page.tap({ text: 'Find Players' });
       await page.waitFor({ text: 'Open hits' });
       await page.waitFor({ text: 'Use my location' });
-      if (await page.find({ label: 'Map of courts, open hits and friends who checked in', any: true })) throw new Error('a guest sees the players map');
+      if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
       if (await page.find({ text: 'Open to hit', any: true })) throw new Error('a guest sees who is open to hit');
       await guestShowsOnlyAdults(page);
     },
@@ -1025,7 +1025,7 @@ const STEPS = [
     name: 'community-map',
     title: 'Community: the map card',
     async run(page) {
-      await page.waitFor({ label: 'Map of courts, open hits and friends who checked in' });
+      await page.waitFor({ label: 'Map of courts, open hits and friends up to hit' });
       // Either the map draws (its canvas appears), or the app shows its own
       // "Map didn’t load" card. Never stuck on "Loading map…".
       const { index } = await page.waitForAny([{ css: 'canvas.maplibregl-canvas', any: true }, { text: 'Map didn’t load', any: true }], MAP_TIMEOUT);
@@ -1039,10 +1039,15 @@ const STEPS = [
       } else {
         throw new Error('the map card says "Map didn’t load", though the map server answered');
       }
+      // Oct 28: with People you may know and the city board for everyone, Open hits sits further down: check what is
+      // on screen first (Open to hit, the card's Up to hit), then scroll to Open hits.
+      await page.waitFor({ text: 'Open to hit' }, 20000);
+      await page.waitFor({ label: /^Up to hit\. Friends who follow you back see you / }, 20000);
+      await page.reveal({ text: 'Open hits' }, 20000);
     },
     // Open hits sits further down since the map card grew to 400 (Oct 25): on the page, maybe below the bar.
-    // Check in (migration 189, Apple 5.1.2(i)): the card's own button and the one-tap ask over the map; never shared on its own.
-    expect: [{ text: 'Open to hit' }, { text: 'Open hits', any: true }, { label: /^Check in\. Friends who follow you back see you / }],
+    // Up to hit (was Check in, then Light up; migration 189, Apple 5.1.2(i)): the card's own button; never shared on its own.
+    expect: [{ text: 'Open hits' }],
   },
   {
     // Oct 22, owner: "The map blips in". A search hides the map card rather than taking it down, so
@@ -1051,10 +1056,12 @@ const STEPS = [
     title: 'Community: a search keeps the map card',
     async run(page) {
       const marked = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); if (!c) return false; c.dataset.smokeKept = '1'; return true; })()`);
+      // The step before scrolled down to Open hits: back up to the search box first.
+      await page.reveal({ label: 'Search players, courts or places' }, 20000);
       await page.tap({ label: 'Search players, courts or places' });
       await page.type('zz');
       await page.tap({ label: 'Cancel search' });
-      await page.waitFor({ label: 'Map of courts, open hits and friends who checked in' });
+      await page.waitFor({ label: 'Map of courts, open hits and friends up to hit' });
       // The card shows its map, its picture or its own "didn't load": never an empty box.
       const shown = await page.eval(`(() => { const c = document.querySelector('canvas.maplibregl-canvas'); return { canvas: !!c, kept: !!(c && c.dataset.smokeKept === '1'), failed: document.body.innerText.includes('Map didn’t load') }; })()`);
       if (!shown.canvas && !shown.failed) throw new Error('after a search, the map card has neither its map nor "Map didn’t load"');
@@ -1211,7 +1218,9 @@ const STEPS = [
       await page.eval(`(() => { document.querySelector('${players}').scrollTop = 0; document.querySelector('${threads}').scrollTop = 0; return true; })()`);
       await sleep(400);
     },
-    expect: [{ text: 'Find Players' }, { text: 'Open hits', any: true }],
+    // Oct 28: with People you may know and the city board for everyone, Open hits is below the screen at the top of
+    // Find Players; Open to hit (just under the map) shows the page came back.
+    expect: [{ text: 'Find Players' }, { text: 'Open to hit', any: true }],
   },
   {
     name: 'feed',
@@ -1690,6 +1699,87 @@ const STEPS = [
     expect: [{ text: 'How did you find CourtSide?' }, { text: 'Optional' }, { label: 'Instagram' }, { label: 'A friend' }, { label: 'App Store' }, { text: 'Finish' }],
     // Finish with whatever is picked (or nothing): setup closes and the app opens.
     after: async (page) => { await page.tap({ text: 'Finish' }); await page.gone({ text: 'How did you find CourtSide?' }); },
+  },
+  {
+    // City boards (migration 196; owner, Oct 28: "New rank city sessions is good"), admins first
+    // (CITY_BOARD_FOR_EVERYONE is off, so every step above saw Find Players exactly as before). The demo's
+    // player made an admin (?admin=1): Find Players shows the month's board in the invite card's place,
+    // "See all cities" opens the whole board, and a city on it opens its page with Top players. The demo's
+    // numbers come through api.ts in the server's own shapes (city_board, city_page).
+    name: 'city-board',
+    title: 'City boards (admin): Find Players card, the board and a city page',
+    async run(page) {
+      // The app opened again as an admin: the demo reads ?admin=1 as it opens. Still signed in from the steps
+      // above, it goes straight to Find Players; signed out, it signs in to the demo first.
+      await page.goto('/sign-in?admin=1');
+      const opened = await page.waitForAny([{ text: 'Find Players' }, { label: 'Log in' }], 45000);
+      if (opened.index === 1) {
+        // (A signed-in visit can show the sign-in page for a moment before it moves on by itself.)
+        try { await page.tap({ label: 'Log in' }, 5000); } catch { /* it went on to the app by itself */ }
+        const next = await page.waitForAny([{ text: /^Demo build — no accounts, no database/ }, { text: 'Find Players' }], 45000);
+        // (Still signed in, the demo's sheet can show for a moment and the app go on by itself: Enter is then gone.)
+        if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
+      }
+      await page.waitFor({ text: 'Find Players' }, 45000);
+      // "Cities this month" (or, on the 1st, last month's final board: "Cities in October").
+      await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      await page.waitFor({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      await page.reveal({ label: /See all cities$/ }, 20000);
+      await page.tap({ label: /See all cities$/ });
+      // Every city the boards know, the ones not ranked at 0 under the ranked ones (owner, Oct 28: "Also add the
+      // other cities on the list. You can just put them at 0"): "214 cities · 15 ranked".
+      await page.waitFor({ text: /^\d+ cities · \d+ ranked$/ }, 20000);
+      await page.waitFor({ label: 'Rank, City, Sessions' });
+      // A city at 0 (nearest Los Angeles first: Riverside) opens its own quiet page, then back to the board.
+      await page.reveal({ label: 'Not ranked, Riverside, 0 sessions' }, 20000);
+      await page.tap({ label: 'Not ranked, Riverside, 0 sessions' });
+      await page.waitFor({ text: 'Not ranked yet' }, 20000);
+      await page.waitFor({ text: 'Visiting Riverside?' }, 20000);
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ label: 'Rank, City, Sessions' }, 20000);
+      await page.reveal({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ }, 20000);
+      await page.tap({ label: /^\d+(st|nd|rd|th), Los Angeles(, your city)?, \d+ sessions?(\. .+)?$/ });
+      await page.waitFor({ text: /^of \d+ ranked$/ }, 20000);
+      await page.reveal({ text: 'Top players' }, 20000);
+      await page.waitFor({ label: 'Rank, Player, Sessions' }, 20000);
+      // Most active courts, right under Top players (migration 198; owner, Oct 28: "Under here should be most active courts").
+      await page.reveal({ text: 'Most active courts' }, 20000);
+    },
+    // As court cards (owner, Oct 28: "should be like the rectangles"): the top one says its visits and place.
+    expect: [{ text: 'Most active courts' }, { label: /^.+, \d+ visits? this month, number 1\. Open court$/ }],
+    after: async (page) => {
+      // Admin no more for anything after this: the next visit starts as everyone else does.
+      await page.eval("sessionStorage.removeItem('courtside-demo-admin')");
+    },
+  },
+  {
+    // A month with no city ranked yet (?board=none: the first days of a month; your city has too few players).
+    // Every city is still listed at 0 (owner, Oct 28: "Also add the other cities on the list. You can just put
+    // them at 0"): on the Find Players card yours leads them, and the whole board says "214 cities · 0 ranked".
+    name: 'city-board-none',
+    title: 'City boards: a month with none ranked still lists every city at 0',
+    async run(page) {
+      await page.goto('/sign-in?board=none');
+      const opened = await page.waitForAny([{ text: 'Find Players' }, { label: 'Log in' }], 45000);
+      if (opened.index === 1) {
+        try { await page.tap({ label: 'Log in' }, 5000); } catch { /* it went on to the app by itself */ }
+        const next = await page.waitForAny([{ text: /^Demo build — no accounts, no database/ }, { text: 'Find Players' }], 45000);
+        if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
+      }
+      await page.waitFor({ text: 'Find Players' }, 45000);
+      await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      // The card: your city first (a dash: not ranked yet), then the nearest at 0.
+      await page.waitFor({ label: /Not ranked, Los Angeles, your city\. Not ranked, [^.]+, 0 sessions\..* See all cities$/ }, 20000);
+      await page.reveal({ label: /See all cities$/ }, 20000);
+      await page.tap({ label: /See all cities$/ });
+      await page.waitFor({ text: /^\d+ cities · 0 ranked$/ }, 20000);
+      await page.waitFor({ label: /^Not ranked, Los Angeles, your city\. Needs / }, 20000);
+    },
+    expect: [{ text: /^\d+ cities · 0 ranked$/ }, { label: 'Rank, City, Sessions' }],
+    after: async (page) => {
+      // The full month again for anything after this.
+      await page.eval("sessionStorage.removeItem('courtside-demo-board')");
+    },
   },
   {
     // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).

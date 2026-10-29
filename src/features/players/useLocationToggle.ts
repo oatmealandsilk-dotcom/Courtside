@@ -1,11 +1,19 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState } from 'react-native';
 import type { MapVisibility } from '@/data/types';
+import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { show as showToast } from '@/lib/toast';
 import { confirm } from '@/lib/confirm';
+import { noteDeclined } from '@/features/players/noOneReask';
 import { askWhoSeesYou, dismissHideTip, onTeenMap, saidYes, showHideTip, type TipSpot } from '@/features/players/mapPrivacy';
-import { checkInSpan, liveCheckIn, untilWords } from '@/features/players/checkIn';
+import { liveCheckIn } from '@/features/players/checkIn';
+import { lightUpCourtHere, litLine, litSpan, litTill } from '@/features/places/lightUp';
 import { useOpenClock } from '@/features/players/useOpenClock';
+import { learned } from '@/features/tips/tips';
+import { afterLanding, swoopAsks, swoopFinding, swoopFound } from '@/features/players/checkInZoom';
+import type { LatLng } from '@/features/players/positions';
+import { locationAllowed } from '@/lib/geo';
 
 /**
  * Location on this phone (Settings, "Use my location"): where you are, for
@@ -40,15 +48,52 @@ export function useLocationToggle() {
   return { locationOn: locationEnabled, locating, toggle };
 }
 
-/** What a Check in button shows and does (MapTopBar, the Find Players card). */
+/** What the Up to hit button shows and does (MapTopBar, the Find Players card). */
 export interface CheckInControl {
-  /** Checked in right now. */
+  /** Lit up right now. */
   on: boolean;
   /** Asking the phone where it is, or the server. */
   busy: boolean;
-  /** "until 10pm" (how long a check-in now would last, or how long yours still does). */
+  /** "till 10pm" (how long a light-up now would last, or how long yours still does). */
   span: string;
+  /** When yours ends, while you are up to hit. */
+  until: string | null;
+  /** Counts the taps that could not put you up (location refused, the server said no): each one shakes the button once. */
+  failed: number;
   press: () => void;
+}
+
+/**
+ * How long the "Up to hit · till 10pm" toast waits after you are up, so the button's own moment
+ * (UpToHit: the green sweeping in, the tick, the arrow's bounce, your pin landing, about 400 ms) is
+ * seen first, before the toast slides in over the top of the map (Oct 28, owner: "be more gratifying").
+ */
+const TOAST_AFTER_MS = 450;
+/**
+ * And "Couldn't put you up to hit" waits out the button's shake (UpToHit, 280 ms): on the full map the toast
+ * comes down over the round arrow, which would hide the shake (the warning tap on the hand comes at once).
+ */
+const FAIL_TOAST_AFTER_MS = 280;
+
+/** What the check-in zoom (checkInZoom) hears from a tap of Up to hit, when it is on for you. */
+export interface CheckInZoomHooks {
+  /**
+   * Told where you are the moment you are up (never before both questions, never on a refusal or a failure, never on
+   * turning it off); true when it opened the full map (the tip then points at the full map's round arrow).
+   */
+  up: (at: LatLng) => boolean;
+  /**
+   * You said yes to "Who can see you on the map?" (or had before) and finding you starts: the card asks for the streets
+   * of the full map's first view ahead (its own town, the one it shows: nothing of where you are), so it draws sooner.
+   */
+  finding?: () => void;
+  /**
+   * You said yes to "Who can see you on the map?" and the phone to its own question (or both had before), and it is
+   * finding you now: the card readies its grow (mapGrow's pictures, taken while you wait). Never before both.
+   */
+  allowed?: () => void;
+  /** The tap is over, however it went: anything readied and not used is let go. */
+  over?: () => void;
 }
 
 /**
@@ -62,44 +107,114 @@ export interface CheckInControl {
  * button is the round arrow, which also reads as "find me": after the first
  * time a one-line question comes first (Oct 27 audit #11), so a tap meant to
  * recentre never shows you to anyone.
+ *
+ * `zoom`: the check-in zoom (checkInZoom), when it is on for you (CheckInZoomHooks).
  */
-export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
-  const { actions, mapVisibility, lastSeen, currentUserId } = useApp();
+export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): CheckInControl {
+  const { actions, mapVisibility, lastSeen, currentUserId, currentUser, courtFacts } = useApp();
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(0);
+  // Each tap's turn: a toast still waiting says nothing once a later tap (Up to hit off again) has come.
+  const turn = useRef(0);
+  // The latest, read when you are up (seconds after the tap, maybe).
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const mine = currentUserId ? lastSeen[currentUserId]?.until : undefined;
   // Looks again the moment your check-in ends, so the button says Check in again by itself.
   const now = useOpenClock(mine ? [mine] : []);
   const until = liveCheckIn(lastSeen, currentUserId, now);
+  // Instant (Oct 28, owner: "there is a lag when I click the up to hit button too. Should instantanious"): for someone
+  // who has said yes to both questions before (who can see you, and the phone's own), the button is on the moment the
+  // finger lifts, its green and tick running at once, while the phone finds you and the server is told behind it. If
+  // that fails it goes back off, with the shake and the toast. The first time stays as it was: nothing is on before
+  // both yeses. Whether the phone already allows it is looked up quietly ahead of the tap (never a prompt).
+  const [instantOn, setInstantOn] = useState(false);
+  const allowed = useRef(false);
+  const yes = saidYes(mapVisibility);
+  useEffect(() => {
+    if (!yes) { allowed.current = false; return undefined; }
+    let live = true;
+    const look = () => { void locationAllowed().then((ok) => { if (live) allowed.current = ok; }); };
+    look();
+    // Looked at again whenever the app comes back: a permission taken away in Settings (or an "Allow Once" run out)
+    // must not light the button before the phone's own prompt says yes again.
+    const sub = AppState.addEventListener('change', (s) => { if (s === 'active') { allowed.current = false; look(); } });
+    return () => { live = false; sub.remove(); };
+  }, [yes]);
 
   const pressNow = async () => {
     if (busy) return;
+    const tap = ++turn.current;
     dismissHideTip();
+    // Tapped once: Up to hit's tip (upToHitTip) has nothing left to tell them.
+    learned('up-to-hit');
     if (until) { await actions.checkOutOfMap(); return; }
     let first = false;
     if (!saidYes(mapVisibility)) {
       // Not now, or closed: nothing is shared, and it asks again next time.
       const chose = await askWhoSeesYou('first');
-      if (!saidYes(chose)) return;
+      // Said no for now: the re-ask (noOneReask) may come back to it, much later.
+      if (!saidYes(chose)) { if (chose !== 'none') noteDeclined(currentUserId); return; }
       first = true;
     } else if (where === 'map') {
-      // The round arrow: "Check in?" first, every time (the first time, the question above was it).
+      // The round arrow: "Up to hit?" first, every time (the first time, the question above was it).
       const yes = await new Promise<boolean>((resolve) => confirm({
-        title: 'Check in?',
-        message: `Friends who follow you back see where you are ${checkInSpan()}.`,
-        confirmLabel: 'Check in',
+        title: 'Up to hit?',
+        message: `Friends who follow you back see where you are ${litSpan()}.`,
+        confirmLabel: 'Up to hit',
         cancelLabel: 'Not now',
         onConfirm: () => resolve(true),
         onCancel: () => resolve(false),
       }));
       if (!yes) return;
     }
+    // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
+    const zooming = !!zoomRef.current;
+    if (zooming) { swoopFinding(); zoomRef.current?.finding?.(); }
+    // Said yes to both before, and no check-in zoom to play (its own pictures wait for where you are): on at once.
+    const instant = !first && !zooming && allowed.current;
+    if (instant) { setInstantOn(true); haptics.commit(); }
     setBusy(true);
     try {
-      const problem = await actions.checkInOnMap();
-      if (problem) { showToast({ title: 'Not checked in', body: problem, icon: 'navigate-outline' }); return; }
-      showToast({ title: `Checked in ${checkInSpan()}`, body: 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' });
-      if (first) void showHideTip(where);
+      let at: { lat: number; lng: number } | null = null;
+      // Both questions said yes and the phone finding you: the card readies its grow meanwhile (never before).
+      const allowedNow = () => { if (turn.current === tap) zoomRef.current?.allowed?.(); };
+      const problem = await actions.checkInOnMap((fix) => { at = fix; }, zooming ? allowedNow : undefined, instant);
+      // It could not put you up: the button shakes once (UpToHit), the hand feels the same, and the toast says why.
+      if (problem) {
+        // Instant: back off again first (the green going back out), so the shake reads as "that didn't take".
+        if (instant) setInstantOn(false);
+        if (problem.startsWith('Location is blocked')) allowed.current = false;
+        setFailed((n) => n + 1);
+        haptics.reject();
+        setTimeout(() => { if (turn.current === tap) showToast({ title: 'Couldn’t put you up to hit', body: problem, icon: 'navigate-outline' }); }, FAIL_TOAST_AFTER_MS);
+        return;
+      }
+      allowed.current = true;
+      const upAt = Date.now();
+      const spot: { lat: number; lng: number } | null = at;
+      // The check-in zoom: the full map swoops down to you (opening first, from the card).
+      const asks = swoopAsks();
+      const opened = spot && turn.current === tap ? zoomRef.current?.up(spot) ?? false : false;
+      // A swoop set off: the toast and the one tip wait for your pin to land, so nothing slides in over the top mid-swoop.
+      // Listened for now, before the court below is looked up: a short swoop can land first.
+      const landing = swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null;
+      // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
+      const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
+      const say = () => { if (turn.current === tap) showToast({ title: litLine(litSpan()), body: court ? `${court} shows you’re here too.` : 'Friends who follow you back can see you on the map.', icon: 'checkmark-circle-outline' }); };
+      const tip = () => { if (first) void showHideTip(opened ? 'map' : where); };
+      if (landing) {
+        void landing.then(() => { setTimeout(say, TOAST_AFTER_MS); tip(); });
+        return;
+      }
+      const wait = TOAST_AFTER_MS - (Date.now() - upAt);
+      if (wait > 0) setTimeout(say, wait);
+      else say();
+      tip();
     } finally {
+      if (zooming) { swoopFound(); zoomRef.current?.over?.(); }
+      // Up for real by now (your own check-in says so), or back off after a failure.
+      setInstantOn(false);
       setBusy(false);
     }
   };
@@ -107,7 +222,7 @@ export function useCheckIn(where: TipSpot = 'card'): CheckInControl {
   ref.current = pressNow;
   const press = useCallback(() => { void ref.current(); }, []);
 
-  return { on: !!until, busy, span: until ? untilWords(until) : checkInSpan(), press };
+  return { on: !!until || instantOn, busy, span: until ? litTill(until) : litSpan(), until, failed, press };
 }
 
 /**

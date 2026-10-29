@@ -9,10 +9,10 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
  * doing the thing first counts as knowing it, and that tip never shows. At
  * most one tip per visit to the app, never stacked.
  */
-export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows';
+export type TipKey = 'map-who-sees' | 'activities' | 'double-tap' | 'see-stats' | 'share-session' | 'hold-to-record' | 'who-liked' | 'chat-times' | 'hold-to-edit' | 'ask-coach' | 'messages' | 'join-hit' | 'hit-posted' | 'theme' | 'feed-windows' | 'up-to-hit' | 'no-one-reask';
 
 export const TIP_WORDS: Record<TipKey, string> = {
-  'map-who-sees': 'Tap Check in to show friends where you are, until 10pm.',
+  'map-who-sees': 'Tap Up to hit to show friends where you are, till 10pm.',
   activities: 'Your friends’ matches and practices show up here.',
   'double-tap': 'Double-tap a clip to like it.',
   'see-stats': 'Tap for the full stats.',
@@ -39,6 +39,12 @@ export const TIP_WORDS: Record<TipKey, string> = {
   // The Feed's windows (features/feed/feedWindows), pointing up at the top row; the Feed tab's hold
   // opens them too (Oct 26, owner: "Tip both").
   'feed-windows': 'Hold here or the Feed tab to see all your feeds.',
+  // The Up to hit pill on the Find Players card, once, for someone who has never tapped it (upToHitTip; Oct 28, owner:
+  // "give them a tip at some point to click the button"). The card says how long ("till 10pm", late on "for 2 hours").
+  'up-to-hit': 'Tap Up to hit · friends see you on the map till 10pm.',
+  // For someone on No one (or who tapped Not now), later, with Turn on and Not now (noOneReask; Oct 28, owner:
+  // "as I use it more and trust it I will want to share if prompted"). It may come again, so it is never "done".
+  'no-one-reask': 'Friends can see you when you tap Up to hit · only people you both follow, till 10pm.',
 };
 
 /** A tip's words on this device: in a computer's browser a clip is liked with a double-click, not a double-tap. */
@@ -121,13 +127,26 @@ const ALL_TIPS = Object.keys(TIP_WORDS) as TipKey[];
  * them and never turn Settings → Tips back On by being new. Empty since Oct 26: the Feed's windows
  * are for everyone, and the players who learned every tip are the most active ones, the ones the
  * owner most wants to find them ("This feature is kind of hidden"). Turning Tips off in Settings
- * still keeps every tip away, this one included (turnOffTips).
+ * still keeps every tip away, this one included (turnOffTips). Up to hit's tip (Oct 28) is late: someone
+ * who has learned every other tip has found the pill too, and Settings → Tips should not turn On for it.
  */
-const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>([]);
-const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k));
+const LATE_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['up-to-hit']);
+/**
+ * Tips that may come again (the No one re-ask, noOneReask, keeps its own count of when): never "done" by being
+ * shown or closed (releaseTip lets go of them), never counted for Settings → Tips, and quiet only when Tips are off.
+ */
+const REPEAT_TIPS: ReadonlySet<TipKey> = new Set<TipKey>(['no-one-reask']);
+const BASE_TIPS = ALL_TIPS.filter((k) => !LATE_TIPS.has(k) && !REPEAT_TIPS.has(k));
 const baseAllDone = () => BASE_TIPS.every((k) => done.has(k));
 /** This tip will not show: Tips are off, it is done, or it came later than everything they had learned. */
 const quiet = (key: TipKey) => off || done.has(key) || (LATE_TIPS.has(key) && baseAllDone());
+
+/** A tip that may come again has gone (answered, or out of view): another may have the screen, it is not done. */
+export function releaseTip(key: TipKey) {
+  if (showing !== key) return;
+  showing = null;
+  emit();
+}
 
 /** Settings → Tips, when they are on: every tip counts as known, so none shows (Oct 5, owner). */
 export function turnOffTips() {
@@ -196,4 +215,9 @@ export function useTip(key: TipKey, ready: boolean, answers = false): { shown: b
   }, [settled, key, snapshot, answers]);
   useEffect(() => () => { if (showing === key) { showing = null; emit(); } }, [key]);
   return { shown: showing === key && !quiet(key), close: () => learned(key) };
+}
+
+/** Whether this tip is on screen now, for something beside it (the Up to hit pill's one pulse as its tip shows); never claims it. */
+export function useTipShowing(key: TipKey): boolean {
+  return useSyncExternalStore(subscribe, () => showing === key && !quiet(key));
 }

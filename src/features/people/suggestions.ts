@@ -41,14 +41,14 @@ const ASK_AT_MOST = 24;
  * with no birthday yet) is suggested only the people who follow them. The
  * app never learns anyone's age to do this, only that yes or no.
  */
-export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf = [] }: { keep?: string[]; near?: string; exclude?: string[]; /** People whose follows come first, "Followed by Om" (setup's People you may know: whoever invited you, then those you follow). Who may be shown is unchanged. */ friendsOf?: string[] } = {}): Suggestion[] {
+export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf = [], off = false }: { keep?: string[]; near?: string; exclude?: string[]; /** People whose follows come first, "Followed by Om" (setup's People you may know: whoever invited you, then those you follow). Who may be shown is unchanged. */ friendsOf?: string[]; /** Nothing to show (a list behind a flag that is off, or resting): works nothing out and asks the server about nobody. */ off?: boolean } = {}): Suggestion[] {
   const { users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions } = useApp();
   const { findable } = useFindable();
   const keepKey = keep.join(',');
   const excludeKey = exclude.join(',');
   const friendsKey = friendsOf.join(',');
   return useMemo(() => {
-    if (!currentUserId) return [];
+    if (off || !currentUserId) return [];
     const me = users.find((u) => u.id === currentUserId);
     const following = new Set(followingIds);
     const followsMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
@@ -112,5 +112,5 @@ export function useSuggestedPlayers({ keep = [], near, exclude = [], friendsOf =
     return shown;
     // agesOnProfiles: canAddToGroup reads it, so the list is worked out again
     // when the first load says which database this is.
-  }, [users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions, findable, keepKey, excludeKey, friendsKey, near]);
+  }, [users, posts, comments, conversations, currentUserId, followingIds, followEdges, openness, agesOnProfiles, actions, findable, keepKey, excludeKey, friendsKey, near, off]);
 }

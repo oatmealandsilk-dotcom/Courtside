@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { Platform, View } from 'react-native';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 
 import { NearbyMap } from '@/components/NearbyMap';
@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/ui';
 import { takeHandedPlace } from '@/features/places/geocode';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
+import { endGrow, takeGrowPlan } from '@/features/players/mapGrow';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
@@ -27,7 +28,21 @@ export default function MapScreen() {
   // From an alert: on a player (?user=…, their card once their pin is in) or a spot (?lat=…&lng=…).
   // From Find Players' search: on a place (?place=1), with its courts listed. The place itself
   // is handed over in memory (handPlace), so an address searched for never sits in the page's address or history.
-  const params = useLocalSearchParams<{ court?: string; lat?: string; lng?: string; name?: string; hit?: string; user?: string; place?: string }>();
+  const params = useLocalSearchParams<{ court?: string; lat?: string; lng?: string; name?: string; hit?: string; user?: string; place?: string; grow?: string }>();
+  // Opened by the Community card growing into it (the check-in zoom, mapGrow): it opened with no slide, starting
+  // exactly where the grown card shows, and (in a browser) see-through over the page pushing in until it has drawn.
+  // Once it has taken over it is the ordinary full map again: Back (and the edge swipe) slide it away as always.
+  const [growFrom] = useState(() => (params.grow ? takeGrowPlan() : null));
+  // Opened to grow, but the grow was not there to take (too late): nothing of it is left waiting (the tab bar, the page).
+  useEffect(() => { if (params.grow && !growFrom) endGrow(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [grown, setGrown] = useState(!growFrom);
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (!params.grow || !grown) return;
+    navigation.setOptions(Platform.OS === 'web'
+      ? { presentation: 'card', animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } }
+      : { animation: 'slide_from_right' });
+  }, [grown]); // eslint-disable-line react-hooks/exhaustive-deps
   const lat = Number(params.lat); const lng = Number(params.lng);
   const spotKnown = !!params.lat && !!params.lng && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   const focusCourt = useMemo(
@@ -48,9 +63,9 @@ export default function MapScreen() {
   useEffect(() => { const t = setTimeout(() => setWaited(true), 2500); return () => clearTimeout(t); }, []);
   const holdPins = sheetUp || (mapLive === null && !waited);
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bgElevated }}>
+    <View style={{ flex: 1, backgroundColor: grown ? colors.bgElevated : 'transparent' }}>
       {currentUser ? (
-        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} focusUser={params.user ?? null} focusSpot={focusSpot} focusPlace={focusPlace} holdPins={holdPins} />
+        <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} focusUser={params.user ?? null} focusSpot={focusSpot} focusPlace={focusPlace} holdPins={holdPins} growFrom={growFrom} onGrown={() => setGrown(true)} />
       ) : (
         <EmptyState title="Sign in to see who is around" />
       )}

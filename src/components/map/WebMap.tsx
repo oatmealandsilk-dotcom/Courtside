@@ -3,11 +3,14 @@ import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
+import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import { isDesktopBrowser } from '@/lib/browserDevice';
+import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, REVEAL_MAX_MS, REVEAL_MS, aimGrow, armGrow, endGrow, growCamera, growHandOver, growHanded, growHost, growPlan, growScaleNow, labelsOut, setGrowPlan, startGrow, useGrowClear, useGrowHanded, useGrowLens, type Rect } from '@/features/players/mapGrow';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as maplibregl from 'maplibre-gl';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, MapCredit, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { CardCredit, ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
@@ -16,6 +19,13 @@ import { milesBetween } from '@/features/players/geo';
 import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players/mapModel';
 import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
 import { useCheckIn, useOpenToHitToggle } from '@/features/players/useLocationToggle';
+import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/upToHitTip';
+import { useNoOneReaskDue } from '@/features/players/noOneReask';
+import { tipWaiting } from '@/features/tips/tips';
+import { useTourOpen } from '@/features/tour/tourStore';
+import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
+import type { LatLng } from '@/features/players/positions';
+import { SWOOP_JS, WARM_JS, type SwoopFn } from '@/components/map/swoop';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -27,9 +37,10 @@ import { levelBadge } from '@/lib/badges';
 import { useWeather } from '@/features/players/useWeather';
 import { colors, radius, spacing, typography } from '@/theme';
 import { STYLE, applyLook, cardLook, lookFor } from '@/components/map/look';
-import { CLOSE_ZOOM_NAMES, FAR_ZOOM, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, GROW_CLEAR_CSS, MAP_PIN_CSS, SHORT_ZOOM, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { CARD_BOX, FULL_MAP_BOX, PIN_ENGINE_JS, type PinEngine, type PinEngineFactory } from '@/components/map/pinEngine';
-import { mapMarkers } from '@/components/map/pinList';
+import { mapMarkers, onTheCard } from '@/components/map/pinList';
+import { glowKey, useCourtGlow } from '@/features/places/lightUp';
 import { livePin } from '@/features/activity/liveSession';
 import { PAINT_WATCH_JS } from '@/components/map/engineLoader';
 import { MAP_LOADING, softShotAllowed, MAP_REVEAL_CSS, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
@@ -54,10 +65,28 @@ const START_ZOOM = 11.5;
  * gather, split and cascade their pins the same way.
  */
 const makePins = new Function(`return ${PIN_ENGINE_JS}`)() as PinEngineFactory;
+/** The check-in zoom's camera move: the very text the phone's page runs too (swoop.ts). */
+const runSwoop = new Function(`return ${SWOOP_JS}`)() as SwoopFn;
+/** The streets round a spot, asked for ahead (swoop's WARM_JS). */
+const warmTiles = new Function(`return ${WARM_JS}`)() as (map: unknown, at: { lat: number; lng: number; zoom: number }, seen: Record<string, number>) => boolean;
+/** Where an element is on the screen, or null when it is not laid out. */
+const rectOf = (v: unknown): Rect | null => {
+  const el = v as { getBoundingClientRect?: () => DOMRect } | null;
+  const r = el?.getBoundingClientRect?.();
+  return r && r.width > 0 && r.height > 0 ? { x: r.left, y: r.top, w: r.width, h: r.height } : null;
+};
+/** A full map just opened for a swoop starts it once it has drawn, or this long at most (as the phone's page, from its style arriving). */
+const SWOOP_WAIT_MS = 800;
 /** When a map is up and has first drawn, fetching again any streets that failed: the very text the phone's page runs (engineLoader). */
 const watchPaint = new Function(`return ${PAINT_WATCH_JS}`)() as (map: maplibregl.Map, tell: (what: 'up' | 'painted' | 'fail' | 'tiles' | 'retry', why?: string) => void) => { stop: () => void };
 /** Close enough to read street names, when the map goes to someone. */
 const CLOSE_ZOOM = 13.5;
+/**
+ * The check-in zoom's hand-over (v5, mapGrow): the full map a card grew into keeps its streets and pins hidden ('cs-wait')
+ * until it takes over; then its streets fade in ('cs-shown') and its pins are just there, on the card's, which go in that
+ * same moment ('cs-gone').
+ */
+const GROW_WAIT_CSS = `.cs-wait .maplibregl-canvas{opacity:0}.cs-wait .maplibregl-marker,.cs-gone .maplibregl-marker{visibility:hidden}.cs-shown .maplibregl-canvas{transition:opacity ${REVEAL_MS}ms cubic-bezier(.2,.7,.3,1)}`;
 
 /**
  * Once every face on the pins in `el` has loaded (or 0.8 s at most), and two frames on: what the
@@ -140,7 +169,70 @@ export function NearbyMap(props: NearbyMapProps) {
   // Since migration 98 you share to see: what keeps "Players nearby" from you
   // (Location off, or Only me), said by the players pill, their list and the still card, with the tap that changes it.
   // The Check in button on the card and the full map (migration 189): the only way your spot is shared.
-  const checkIn = useCheckIn(expanded ? 'map' : 'card');
+  // With the check-in zoom on (admins first, checkInZoom), once you are up the full map swoops down to you:
+  // from the card it opens first (the card's own tap, onExpand), only while the card is still in view (as on the phone).
+  const zoomOn = useCheckInZoom();
+  const swoopOnUp = (here: LatLng): boolean => {
+    if (expanded) { swoopTo(here, false); return false; }
+    if (!onExpand || !inViewNow()) return false;
+    swoopTo(here, true);
+    // On the Community tab the card grows into the full map (mapGrow): the page itself pushes in, under a full map that
+    // opens see-through with no slide, starting exactly where the grown card shows. A computer's wide page keeps the plain way.
+    if (props.grow && !still && !isDesktopBrowser() && growOpen()) return true;
+    onExpand();
+    return true;
+  };
+  // The Community tab's card grows into the full map (mapGrow); what sits on it slips out of it as it does.
+  const growsHere = !!props.grow && !expanded;
+  // With the zoom on (admins first), that card draws the full map's own pins (v5, mapGrow): its courts (lit ones too), open
+  // hits, friends up to hit and you, laid out as the full map lays them out, so the push-in is into exactly what opens.
+  // Everyone else's card is as it was (faces only).
+  const fullCard = growsHere && zoomOn;
+  // As you are found: on the card that draws the full map's pins they all stay but yours (it lands on you at the end of
+  // the dive); on any other, its pins step aside with its words (a quick fade). Back after.
+  const [meOut, setMeOut] = useState(false);
+  useGrowClear(growsHere, (clear) => { if (fullCard) { setMeOut(clear); if (!clear) host.current?.classList.remove('cs-gone'); } else host.current?.classList.toggle('cs-clear', clear); });
+  // The full map has taken over, its pins on these very ones: these go in the same moment (never two of a pin).
+  useGrowHanded(fullCard, () => { host.current?.classList.add('cs-gone'); });
+  // Through the push-in its pins keep their size on the screen and stand on their spots, gathering and splitting as the
+  // full map's would at the zoom the card is showing then (the pin engine's lens), in the same frame the page moves.
+  const lensZ = useRef(0);
+  const zoomClassNow = useRef<() => void>(() => undefined);
+  useGrowLens(fullCard, (s) => { pinsOn.current?.lens(s); lensZ.current = Math.log2(s); zoomClassNow.current(); });
+  /**
+   * The grow, from the card, the moment you are found (v4: nothing waits): the page starts pushing in this very frame,
+   * the card's words and pins fading and what sits on it slipping out (the pill playing its quick moment as it goes),
+   * and the full map opens over it at once, see-through, with no slide, starting exactly where the grown card will be;
+   * it shows itself once it has drawn. False (the plain way in) if the card could not be measured.
+   */
+  const growOpen = (): boolean => {
+    const page = rectOf(growHost());
+    const card = rectOf(spot.ref.current);
+    if (!page || !card || typeof window === 'undefined' || card.y + card.h <= 0 || card.y >= window.innerHeight) return false;
+    // The card's map as it is now (its own camera), or where it was put.
+    const m = map.current;
+    const c = m?.getCenter();
+    const center = c ? { lat: c.lat, lng: c.lng } : view.center;
+    const plan = growPlan({ page, card, screen: { w: window.innerWidth, h: window.innerHeight }, center, zoom: m?.getZoom() ?? view.zoom });
+    armGrow();
+    aimGrow(plan);
+    const started = startGrow(still);
+    labelsOut();
+    setGrowPlan({ ...plan, started, courts: fullCard ? model.courtPool : undefined });
+    router.push({ pathname: '/map', params: { grow: '1' } });
+    return true;
+  };
+  // The full map's first view (the card grown), its streets asked for while you are found, so it draws sooner.
+  const growWarm = () => {
+    const m = map.current;
+    const page = rectOf(growHost());
+    const card = rectOf(spot.ref.current);
+    if (!growsHere || still || isDesktopBrowser() || !m || !page || !card || typeof window === 'undefined') return;
+    const c = m.getCenter();
+    const grown = growPlan({ page, card, screen: { w: window.innerWidth, h: window.innerHeight }, center: { lat: c.lat, lng: c.lng }, zoom: m.getZoom() });
+    warmTiles(m, { lat: grown.center.lat, lng: grown.center.lng, zoom: grown.zoom }, {});
+  };
+  const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomOn ? { up: swoopOnUp, finding: growWarm } : undefined);
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
   const unlock = lock === 'hidden' ? () => { void askWhoSeesYou('manage'); } : onToggleLocation;
   // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
@@ -177,6 +269,15 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (!cardShown) return undefined; const t = setTimeout(() => setLoaderGone(true), MAP_REVEAL_MS + 30); return () => clearTimeout(t); }, [cardShown]);
   // Off screen, the map's load clocks wait (useMapLoad).
   const onScreen = useIsFocusedLater();
+  // Up to hit's one tip (upToHitTip): the Community card counts its visits, and on the 2nd or 3rd, to someone who has
+  // never tapped Up to hit (nor been on the map), not on No one, not in the tutorial, it points at the pill.
+  const tourOpen = useTourOpen();
+  const uthVisit = useFindPlayersVisit(growsHere && onScreen && props.visible !== false && !tourOpen);
+  const uthTip = growsHere && upToHitTipOn(me) && tipVisit(uthVisit) && onScreen && props.visible !== false && !tourOpen
+    && mapVisibility !== 'none' && !settingsUnknown && !lastSeen[me.id] && tipWaiting('up-to-hit');
+  // The No one re-ask (noOneReask): for someone on No one (or who said Not now), later, as trust builds; same card, same rules.
+  const reaskDue = useNoOneReaskDue(me, settingsUnknown || !canChooseVisibility(mapLive, me, teenMap) ? undefined : mapVisibility);
+  const reask = growsHere && reaskDue && onScreen && props.visible !== false && !tourOpen && tipWaiting('no-one-reask');
   // Scrolled off the screen (reading the list under it) counts as out of view too.
   const spot = useCardOnScreen();
   outOfView.current = () => !onScreen || props.visible === false || props.inView?.() === false || !spot.onScreen();
@@ -191,7 +292,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const shotsVersion = useCardShots();
   const hint = useRef<CardHint | null>(null);
   if (!expanded && !cardShown && !photoIn) hint.current = cardHint(me.id);
-  const model = useMapModel(me, players, place.at, focusCourt, !expanded, focusHit, focusUser, focusSpot, place.locationOn, focusPlace, hint.current);
+  const model = useMapModel(me, players, place.at, focusCourt, !expanded, focusHit, focusUser, focusSpot, place.locationOn, focusPlace, hint.current, { full: fullCard, seed: expanded ? props.growFrom?.courts : null });
+  // The full map's side of the check-in zoom: your pin waits, and lands as the camera settles on you.
+  const swoop = useMapSwoop(expanded && zoomOn, !!model.mePos);
   // A fix held back while the card is seen (cardHold): what the card says comes from the place it shows, not the new fix,
   // so the card and the place it shows never disagree (its open hits, and the "You're early" line under it, wait too).
   const holding = !expanded && (place.locationOn !== !!locationOn || place.at?.lat !== at?.lat || place.at?.lng !== at?.lng);
@@ -205,7 +308,9 @@ export function NearbyMap(props: NearbyMapProps) {
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit || model.place) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit, model.place]);
   const { home, start } = model;
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
-  const view = expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  // Opened by the card growing into it (mapGrow): exactly where the grown card shows, so the hand-over cannot be seen.
+  const growFrom = expanded ? props.growFrom ?? null : null;
+  const view = growFrom ? { center: growFrom.center, zoom: growFrom.zoom } : expanded ? { center: start.center, zoom: start.zoom ?? START_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   // The still card's "N players around" counts only the faces on it (onCard, as on the phone), so the number and the map agree.
   const { width: windowW } = useWindowDimensions();
   const [cardW, setCardW] = useState(0);
@@ -279,6 +384,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // The card's pins as they are now, for a map made afresh to have them from its first frame.
   const pinsNow = useRef<{ items: ReturnType<typeof mapMarkers>; tpl: ReturnType<typeof clusterTemplates> } | null>(null);
   const map = useRef<maplibregl.Map | null>(null);
+  // Whether this map has its first full drawing ('load'), when a swoop may start from it.
+  const mapUp = useRef(false);
   // Whether this map has said it drew once; and which showing of it a reveal on its way is for (a move before it
   // lands starts a new one, so a card is never shown on a place whose streets have not drawn yet).
   const paintedOnce = useRef(false);
@@ -301,8 +408,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const pinsOn = useRef<PinEngine | null>(null);
   const cascaded = useRef(false);
   // Held while "Who can see you on the map?" is over the map, read when a map is made.
-  const holdNow = useRef(expanded && holdPins);
-  holdNow.current = expanded && holdPins;
+  const holdNow = useRef(expanded && holdPins && !props.growFrom);
+  holdNow.current = expanded && holdPins && !props.growFrom;
   // Room kept clear when zooming to fit a "+N": the top's two rows (PIN_FIT_TOP) under the status bar, as on the phone (Oct 11; it was
   // 130 from the window's top). One object the pins read as they zoom, so a status bar measured after the map was made still counts.
   const fitPad = useRef({ top: PIN_FIT_TOP, bottom: 260, left: 60, right: 60 });
@@ -349,6 +456,8 @@ export function NearbyMap(props: NearbyMapProps) {
       return undefined;
     }
     load.heard('boot');
+    mapUp.current = false;
+    instance.once('load', () => { mapUp.current = true; });
     // First of all, before anything else listens: when the map is up, when it has drawn
     // (the curtain over the start page may lift onto it, and the card fades in), or that it failed.
     const watch = watchPaint(instance, (what, why) => {
@@ -368,9 +477,12 @@ export function NearbyMap(props: NearbyMapProps) {
     // flash on a dark theme.
     instance.on('style.load', () => applyLook(instance, expanded ? lookFor(themes[theme]) : cardLook(lookFor(themes[theme]))));
     // The pins' shared styles, once per page, and the zoom classes they answer to.
-    if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS; document.head.appendChild(css); }
+    if (!document.getElementById('cs-pin-css')) { const css = document.createElement('style'); css.id = 'cs-pin-css'; css.textContent = MAP_PIN_CSS + GROW_CLEAR_CSS + GROW_WAIT_CSS; document.head.appendChild(css); }
+    // Opened by the card growing into it: streets and pins hidden until it takes over (GROW_WAIT_CSS).
+    if (growFrom && growing.current) el.classList.add('cs-wait');
     const zoomClass = () => {
-      const z = instance.getZoom();
+      // Under the push-in (lens), the zoom the card is showing.
+      const z = instance.getZoom() + (expanded ? 0 : lensZ.current);
       el.classList.toggle('cs-close', z >= CLOSE_ZOOM_NAMES); el.classList.toggle('cs-far', z < FAR_ZOOM); el.classList.toggle('cs-short', z < SHORT_ZOOM);
       const isFar = z < COURTS_MIN_ZOOM;
       if (expanded && isFar !== farNow.current) { farNow.current = isFar; setFar(isFar); }
@@ -378,6 +490,7 @@ export function NearbyMap(props: NearbyMapProps) {
     // The still card: its pins only show who is there; the card itself takes the tap.
     el.classList.toggle('cs-quiet', !expanded);
     zoomClass();
+    zoomClassNow.current = zoomClass;
     instance.on('zoom', zoomClass);
     // A tap on the map puts away whatever is up (the list of players too), back to the bare map.
     instance.on('click', () => { latest.current.select(null); latest.current.selectCourt(null); latest.current.selectHit(null); setMeOpen(false); setListOpen(false); });
@@ -434,11 +547,14 @@ export function NearbyMap(props: NearbyMapProps) {
     el.addEventListener('wheel', onWheel, { passive: false });
     // Every pin, through the same engine as the phone's map. A tap on one does what a tap does there.
     pinsOn.current = makePins(instance, maplibregl, {
-      popIn: expanded && !cascaded.current,
+      // Opened by the card growing into it: its pins are the card's, there from the start (hidden with it until it takes over), never a wave.
+      popIn: expanded && !cascaded.current && !growFrom,
+      now: !!growFrom,
       hold: holdNow.current,
       cascaded: () => { cascaded.current = true; },
       quiet: !expanded,
-      box: expanded ? FULL_MAP_BOX : CARD_BOX,
+      full: fullCard,
+      box: expanded || fullCard ? FULL_MAP_BOX : CARD_BOX,
       pad: fitPad.current,
       tap: (id: string) => {
         const now = latest.current;
@@ -487,18 +603,19 @@ export function NearbyMap(props: NearbyMapProps) {
       map.current = null;
       inMapPhoto.current = null;
     };
-  }, [expanded, theme, !expanded && !model.city, load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [expanded, theme, !expanded && !model.city, load.attempt, fullCard]); // eslint-disable-line react-hooks/exhaustive-deps
   // Given up on: the opening curtain stops waiting for the card's map, and the card says so.
   useEffect(() => { if (!expanded && load.status === 'failed') painted(); }, [load.status]); // eslint-disable-line react-hooks/exhaustive-deps
   // The sheet over the map has gone: the first pins come in.
-  useEffect(() => { pinsOn.current?.hold(expanded && holdPins); }, [expanded, holdPins, mapGen]);
+  useEffect(() => { pinsOn.current?.hold(holdNow.current); }, [expanded, holdPins, mapGen]);
   // A fix arriving after the map is up moves the map to it (as on the phone);
   // opened on a tagged court, a hit or a spot, or looking at a place searched for, the map stays there.
   const lastHome = useRef(home);
   useEffect(() => {
     if (lastHome.current.lat === home.lat && lastHome.current.lng === home.lng) return;
     lastHome.current = home;
-    if (expanded && model.homeKnown && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
+    // Up to hit finding you with the zoom on: the swoop is the move (one move, never this one first).
+    if (expanded && model.homeKnown && !swoop.busy && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) map.current?.flyTo({ center: [home.lng, home.lat], zoom: START_ZOOM, duration: 600 });
   }, [home]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card follows a change of city on the profile.
   // Out of view once it has drawn (the only time a held move lands, cardHold), it is covered again and
@@ -582,7 +699,8 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // Pins: the same list the phone's map draws (pinList), handed to the engine, which keeps
   // each pin between changes and gathers, splits and fades them (pinEngine).
-  const shown = expanded ? model.shown : cardPlayers;
+  // The card drawing the full map's pins: everyone the full map places (its own list, unfiltered as it opens).
+  const shown = expanded ? model.shown : fullCard ? model.ranked : cardPlayers;
   const selectedId = model.selected?.user.id ?? null;
   const selectedCourtId = model.selectedCourt?.id ?? null;
   const selectedHitId = model.selectedHit?.hit.id ?? null;
@@ -590,9 +708,16 @@ export function NearbyMap(props: NearbyMapProps) {
   // moves a hit's "Tomorrow" to "Today") by itself. The player list is kept while unchanged, so the
   // pins are no longer rebuilt on every redraw of the tab under them and need telling when time passes.
   const pinClock = useOpenClock(shown.map((p) => p.user.openToHitUntil));
+  // Courts light up by what is on there right now (Light up, admins first; null: as before).
+  const glow = useCourtGlow(model, expanded, shown, playing?.courtId, fullCard ? { full: true, seen: inViewNow } : undefined);
+  const glowNow = glowKey(glow);
   const markers = useMemo(
-    () => mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing }),
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock], // eslint-disable-line react-hooks/exhaustive-deps
+    () => {
+      if (!fullCard) return mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: swoop.meHold, land: swoop.land });
+      // The card drawing the full map's pins: the full map's own list, nothing picked; your pin out once the push-in starts.
+      return onTheCard(mapMarkers({ model, expanded: true, me, shown, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: meOut ? 'out' : null }));
+    },
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, night, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow, swoop.meHold, swoop.land, fullCard, meOut], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme, night]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -624,6 +749,89 @@ export function NearbyMap(props: NearbyMapProps) {
     return () => clearTimeout(t);
   }, [model.place]);
 
+  // You are up, with the zoom on: down to street level over you, once the map has drawn where it starts, and a beat
+  // after a new map's own settling (its jump back to the middle), so the swoop is not undone. The pins come in as it lands.
+  const swoopDone = useRef(swoop.done);
+  swoopDone.current = swoop.done;
+  // Opened by the card growing into it: the swoop waits for the grown card to hand over (below), then starts at once, shorter.
+  const [growWait, setGrowWait] = useState(!!growFrom);
+  const grownSwoop = useRef(false);
+  useEffect(() => {
+    const m = map.current;
+    const run = swoop.run;
+    if (!expanded || !m || !run || growWait) return undefined;
+    let gone = false;
+    let going: { stop: () => void } | null = null;
+    const grown = grownSwoop.current && growFrom ? growFrom : null;
+    grownSwoop.current = false;
+    const go = () => {
+      if (gone) return;
+      // Once the map has drawn where it starts (or very nearly: SwoopAsk's wait).
+      // Ending, it lands your pin for this swoop only: one stopped by a newer one (the cleanup below) never lands the newer one's early.
+      const shape = swoopShape();
+      // After a grow: from as close as the pushed-in card is now (it carries on past covering the screen), diving on at once
+      // (now) at the push-in's own speed (growHandOver): the push-in was its start, and the map has drawn what is on screen.
+      const hand = grown ? growHandOver(grown, CHECKIN_ZOOM) : null;
+      // Exactly where the pushed-in card is looking now (growCamera: the page keeps going past covering the screen, so not
+      // the card's own middle), so its pins sit on the card's.
+      if (grown && hand) { const cam = growCamera(grown, growScaleNow()); m.jumpTo({ center: [cam.center.lng, cam.center.lat], zoom: cam.zoom }); }
+      going = runSwoop(m, { ...shape, ...(hand ? { ms: GROW_SWOOP_MS, ease: hand.ease, now: true } : null), id: run.id, lat: run.to.lat, lng: run.to.lng, zoom: CHECKIN_ZOOM, still, up: mapUp.current, wait: SWOOP_WAIT_MS }, () => { going = null; pinsOn.current?.wake(); swoopDone.current(run.id); });
+    };
+    const t = setTimeout(go, grown ? 0 : 90);
+    return () => { gone = true; clearTimeout(t); going?.stop(); };
+  }, [swoop.run?.id, mapGen, growWait]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The grow's hand-over (mapGrow), on the full map it opened: the Community page pushes in under this map, which opened
+  // see-through and stays hidden while it loads; once the card covers the screen and the map has drawn, the map
+  // dissolves in over the grown card as its camera dives on at the push-in's speed (one move), and its buttons slide in (never fade: they are
+  // glass) as it comes in to land. Then the page under it is put back as it was, out of sight.
+  const growing = useRef(!!growFrom);
+  // See-through until the map has fully dissolved in (an opaque page behind it any sooner would show as a blank flash).
+  const [growSeeThrough, setGrowSeeThrough] = useState(!!growFrom);
+  const [growDue, setGrowDue] = useState(false);
+  const [growLate, setGrowLate] = useState(false);
+  const chromeIn = useSharedValue(growFrom ? 0 : 1);
+  const topAway = -(insets.top + 150);
+  const bottomAway = insets.bottom + 170;
+  const topSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * topAway }] }));
+  const bottomSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * bottomAway }] }));
+  // The push-in started on the page itself the moment you were found (the card, growOpen): timed from then, never started again.
+  useEffect(() => {
+    if (!growFrom) return undefined;
+    const since = Date.now() - growFrom.started;
+    const due = setTimeout(() => setGrowDue(true), Math.max(0, COVER_MS - since));
+    const late = setTimeout(() => setGrowLate(true), Math.max(0, REVEAL_MAX_MS - since));
+    return () => { clearTimeout(due); clearTimeout(late); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!growFrom || !growing.current || !growDue || (load.status === 'loading' && !growLate)) return undefined;
+    growing.current = false;
+    // The map dissolves in over the page, which keeps moving under it (never a still layer), its camera diving on from as
+    // close as the page is by then (the swoop above).
+    const cam = growCamera(growFrom, growScaleNow());
+    map.current?.jumpTo({ center: [cam.center.lng, cam.center.lat], zoom: cam.zoom });
+    grownSwoop.current = true;
+    setGrowWait(false);
+    // Its pins now, exactly on the card's (which go in this same moment), and its streets coming in over the card's.
+    const el = host.current;
+    if (el) { el.classList.add('cs-shown'); el.classList.remove('cs-wait'); }
+    growHanded();
+    chromeIn.value = withDelay(CHROME_AFTER_MS, withTiming(1, { duration: CHROME_MS, easing: Easing.out(Easing.cubic) }));
+    // Held by a ref, not this effect: a change of the map's status meanwhile must not cancel it.
+    growEndTimer.current = setTimeout(() => { growEndTimer.current = null; if (!growEnd()) return; setGrowSeeThrough(false); props.onGrown?.(); }, REVEAL_MS + 40);
+    return undefined;
+  }, [growDue, growLate, load.status]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Over once (the dissolve done, or the page left part way, mid-dissolve too): the page under it back as it was, the tab bar to it.
+  const growOver = useRef(!growFrom);
+  const growEndTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const growEnd = () => {
+    if (growOver.current) return false;
+    growOver.current = true;
+    endGrow();
+    return true;
+  };
+  useEffect(() => () => { if (growEndTimer.current) clearTimeout(growEndTimer.current); growEnd(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Given up on: "Map didn't load", fading in over whatever the card shows (its picture stays under it);
   // after "Tap to try again" its words stay until it has faded off, so nothing goes in one frame.
   const failed = !expanded && load.status === 'failed' && !cardShown;
@@ -634,13 +842,16 @@ export function NearbyMap(props: NearbyMapProps) {
     return () => clearTimeout(t);
   }, [failed]);
   // On the still card the pins say nothing a screen reader needs (the card says it all, and takes the tap).
-  const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: colors.bg }} />;
+  // Opened by the grow: hidden (see-through over the page pushing in) until it takes over, then dissolving in.
+  // Its streets fade in (GROW_WAIT_CSS), its pins are simply there, on the card's; see-through until then.
+  const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: growFrom && growSeeThrough ? 'transparent' : colors.bg }} />;
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
     return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
+    const openTap = onExpand;
     // The picture is up (loaded, not yet handed over to the drawn map): the card shows from the first frame.
     // It stays up if the map never comes: "Map didn't load" fades in over it.
     const photoUp = !!photo && photoIn && !photoGone;
@@ -652,8 +863,8 @@ export function NearbyMap(props: NearbyMapProps) {
         {!cardShown ? (
           <Pressable
             accessibilityRole={failed || onExpand ? 'button' : undefined}
-            accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends who checked in'}
-            onPress={failed ? load.restart : onExpand}
+            accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
+            onPress={failed ? load.restart : openTap}
             disabled={!failed && !onExpand}
             style={StyleSheet.absoluteFill}
           />
@@ -663,9 +874,11 @@ export function NearbyMap(props: NearbyMapProps) {
           {/* The picture over all of the map until the copy inside the map itself (under the pins) has loaded. */}
           {photo && !photoGone && !photoInMap ? <img src={photo} alt="" onLoad={() => { takePhoto.current(); }} onError={() => setPhoto(null)} style={{ position: 'absolute', left: 0, top: 0, width: '100%', height: '100%', pointerEvents: 'none' }} /> : null}
           {/* A still card: the tap goes to the full map, not to the tiles. */}
-          <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends who checked in" onPress={onExpand} disabled={!onExpand} style={StyleSheet.absoluteFill} />
-          <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} />
-          <MapCredit align="right" style={{ position: 'absolute', right: 10, bottom: 10 }} />
+          <Pressable accessibilityRole={onExpand ? 'button' : undefined} accessibilityLabel="Map of courts, open hits and friends up to hit" onPress={openTap} disabled={!onExpand} style={StyleSheet.absoluteFill} />
+          <GrowAwayContext.Provider value={growsHere}>
+            <PreviewOverlay cityName={cityName} count={onCardCount} placeCount={model.cardCourts.length} hitCount={hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length} weather={weather} checkIn={onToggleLocation ? checkIn : undefined} lock={lock} inviting={invitingShown.current} uthTip={uthTip} reask={reask} chip={fullCard} />
+            <CardCredit />
+          </GrowAwayContext.Provider>
         </View>
         {/* Given up on: "Map didn't load", fading in over everything under it (the loading look, or the card's picture). */}
         {!loaderGone ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.failCover, { opacity: failed ? 1 : 0, transition: `opacity ${MAP_REVEAL_MS}ms ${MAP_REVEAL_CSS}` } as object]}>{failed || failShown ? <MapCardFailed /> : null}</View> : null}
@@ -702,9 +915,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // Near me (Oct 27, owner: "Near me should show people that have their location set in the area, like the city")
   // opens the players list: its town's players are listed there by their town, never put on the map (Apple
   // 5.1.2(i): pins stay friends only). Whatever card was up gives way to the list.
+  // Every people chip does the same (Oct 28, owner: "The near me my level coaches etc. should be the same sideways
+  // icons like following currently is"): Following, Open to hit, Near me, My level and Coaches each open the tray of
+  // faces at rest, the full list a pull or See all away; All keeps the bare map and its pill.
   const pickFilter = (next: MapFilter) => {
     model.setFilter(next);
-    if (next !== 'near') return;
+    if (next === 'all') return;
     setMeOpen(false);
     model.select(null);
     model.selectCourt(null);
@@ -718,24 +934,25 @@ export function NearbyMap(props: NearbyMapProps) {
   // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
   const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
-    <View style={styles.fill} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
+    <View style={[styles.fill, growSeeThrough ? styles.seeThrough : null]} onLayout={(e) => setMapH(Math.round(e.nativeEvent.layout.height))}>
       {canvas}
-      <View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }]}>
+      <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? checkIn : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key === 'near') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key !== 'all') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
         </View>
         {/* Only while zoomed out: "Zoom in to see courts", under the chips (as on the phone). */}
         <ChipsNoteLine>
           {zoomNote ? <CourtsZoomNote /> : null}
         </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you (as on the phone). */}
-        <MapLoadPill status={load.status} onRetry={load.restart} />
+        {/* The check-in zoom on its way down: the map is up, its streets come as it lands, so no "Loading map…" meanwhile. */}
+        <MapLoadPill status={swoop.busy && load.status === 'loading' ? 'painted' : load.status} onRetry={load.restart} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
-      </View>
-      <View pointerEvents="box-none" style={styles.bottom}>
+      </Reanimated.View>
+      <Reanimated.View pointerEvents="box-none" style={[styles.bottom, growFrom ? bottomSlide : null]}>
         {/* What is up along the bottom (a card, or nothing) glides in and out, the map's buttons riding on top of it: CardStage. */}
         <CardStage
           cardKey={stageKey}
@@ -761,7 +978,7 @@ export function NearbyMap(props: NearbyMapProps) {
             <PlaceSheet place={model.place} rows={model.placeRows} loading={model.placeLoading} failed={model.placeFailed} onPickCourt={model.pickCourt} onRetry={model.retryPlace} onClose={model.clearPlace} played={model.ringFor} />
           ) : null)}
         </CardStage>
-      </View>
+      </Reanimated.View>
     </View>
   );
 }
@@ -773,6 +990,8 @@ const styleDefinitions = StyleSheet.create({
   // "Map didn't load" over the loading look, in the card's own colour.
   failCover: { backgroundColor: colors.bgElevated },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },
+  // The full map opened by the grow, before it takes over: the page pushing in shows through.
+  seeThrough: { backgroundColor: 'transparent' },
   top: { position: 'absolute', left: 0, right: 0, top: 0, gap: 2, zIndex: 10 },
   checkInBar: { marginHorizontal: spacing.md, marginTop: spacing.sm },
   // The map's buttons, riding on whatever is up along the bottom.

@@ -23,10 +23,11 @@ export const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
  * York's navy), with two warnings each time; nearly solid also keeps the
  * labels readable over a busy clip.
  */
-export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, behind = false, dark: darkGlass }: {
+export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, light = false, behind = false, dark: darkGlass }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean;
   /** A hint of colour in the glass; the theme's ground by default. */ tint?: string;
   /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean;
+  /** With `clear`: lighter still, the page's colours coming through (the new tab bar, Oct 28: LIGHT_GLASS_ALPHA). */ light?: boolean;
   /** The glass a layer of its own behind what it holds (a toast's tick drawing itself in). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
   /** Dark glass whatever the court (the tab bar over a clip on the Feed, with a dark `tint`); the court's own by default. */ dark?: boolean;
 }) {
@@ -35,12 +36,12 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
   const dark = darkGlass ?? darkPage;
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
-  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? 'B3' : 'CC'}` };
+  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? (light ? alphaHex(LIGHT_GLASS_ALPHA) : 'B3') : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
     // Answering a touch (Apple's glass swelling and shimmering under the finger) only when asked
     // for: the tab bar's `clear` glass did it too, so every tap wobbled the whole bar with every
     // icon in it, and the icons went soft while it was scaled (Oct 25 audit).
-    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: clear && tint ? `${tint.slice(0, 7)}BF` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
+    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: clear && tint ? `${tint.slice(0, 7)}${light ? alphaHex(LIGHT_GLASS_ALPHA) : 'BF'}` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
     if (behind) {
       // Out under the hairline edge too, as when it held what it shows: no ring of bare page inside the edge.
       const edge = -(StyleSheet.flatten(style)?.borderWidth ?? 0);
@@ -68,6 +69,19 @@ export function Glass({ children, style, radius = 999, interactive = false, tint
  * (the tab bar's look as a clip goes), so it reads as the glass, not a slab.
  */
 export const CLEAR_GLASS_ALPHA = liquidGlass ? 0xbf / 255 : Platform.OS === 'android' ? 0xe6 / 255 : 0xb3 / 255;
+
+/**
+ * The same for `light` glass, the new tab bar's (Oct 28: Instagram's and Strava's bars are Apple's own
+ * glass with next to no tint, the page's colours coming through): about half its tint on an iPhone,
+ * Apple's glass doing the rest; a frosted blur a little lighter than today's on older iPhones and in a
+ * browser. Android has no blur behind it to show, so it stays as solid as `clear`.
+ */
+export const LIGHT_GLASS_ALPHA = liquidGlass ? 0.45 : Platform.OS === 'android' ? CLEAR_GLASS_ALPHA : 0.6;
+
+/** 0 to 1 as two hex digits, for the end of a colour. */
+function alphaHex(a: number): string {
+  return Math.round(Math.max(0, Math.min(1, a)) * 255).toString(16).padStart(2, '0').toUpperCase();
+}
 
 /**
  * The fades a piece of glass sits under (1 shown, 0 gone): a clip's words

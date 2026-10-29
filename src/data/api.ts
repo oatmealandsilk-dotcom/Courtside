@@ -28,6 +28,9 @@ import { demoLastSeen } from './mock/presence';
 import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLife';
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
+import { DEMO_BOARD_CITIES, DEMO_BOARD_EVENTS, DEMO_BOARD_PLACES, DEMO_ACTIVE_COURTS, DEMO_CITY_CLIPS, DEMO_PLAYER_SESSIONS, DEMO_PLAY_LOG, type DemoBoardCity } from './mock/cityBoard';
+import { FILL_TO, MIN_PLAYERS, monthAfter, rankRows } from '@/features/cityBoard/board';
+import { isOpenToHit } from '@/features/players/openToHit';
 import { localDay } from '@/features/practice/stats';
 import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
 import { notKnownAdult } from '@/features/players/age';
@@ -48,6 +51,10 @@ import type {
   CoachReview,
   Comment,
   Conversation,
+  CityBoard,
+  CityBoardCity,
+  CityPage,
+  CityPageFill,
   CourtKings,
   CourtSurfaceAnswer,
   DailyHealth,
@@ -496,6 +503,244 @@ export async function courtKings({ courtId, me, sessions, ranked = true }: { cou
   const regulars = DEMO_COURT_REGULARS[courtId] ?? [];
   if (regulars.length) return { courtId, mode: 'regulars', top: clone(regulars.slice(0, 3)), me: { wins: 0, ranked: false } };
   return { courtId, mode: 'none', top: [], me: { wins: 0, ranked: false } };
+}
+
+/* ------------------------------------------- City boards (migration 196) */
+
+export type DemoBoardScenario = 'full' | 'one' | 'unranked' | 'none' | 'nocity' | 'slow' | 'error';
+const BOARD_SCENARIOS: readonly DemoBoardScenario[] = ['full', 'one', 'unranked', 'none', 'nocity', 'slow', 'error'];
+
+/**
+ * Which made-up month the demo's city boards show. Only in the demo (never
+ * with a database), and only when the address asks, kept for the visit like
+ * ?admin=1: ?board=one (only your city is ranked), unranked (your city needs
+ * more players), none (no city ranked yet), nocity (no town the boards
+ * know), slow (still loading), error (could not be loaded). It changes the
+ * demo's data only; the screens draw whatever comes, as from the server.
+ */
+export function demoBoardScenario(): DemoBoardScenario {
+  if (supabase) return 'full';
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return 'full';
+    const asked = new URLSearchParams(window.location.search).get('board');
+    if (asked && (BOARD_SCENARIOS as readonly string[]).includes(asked)) window.sessionStorage.setItem('courtside-demo-board', asked);
+    const kept = window.sessionStorage.getItem('courtside-demo-board');
+    return kept && (BOARD_SCENARIOS as readonly string[]).includes(kept) ? kept as DemoBoardScenario : 'full';
+  } catch {
+    return 'full';
+  }
+}
+// Read as the app opens, while the address still says ?board=… (signing in moves to another page).
+demoBoardScenario();
+
+/** "Pasadena, CA" → 'los-angeles-ca': the board city a demo profile's town counts for (the server's board_city_places), or null. */
+export function demoBoardCityOf(location: string | null | undefined): string | null {
+  const [town, state] = (location ?? '').split(',').map((x) => x.trim().toLowerCase());
+  return town && state ? DEMO_BOARD_PLACES[`${town}|${state.slice(0, 2)}`] ?? null : null;
+}
+
+const BOARD_TENNIS = new Set<PracticeSession['kind']>(['practice', 'match', 'drills']);
+
+/**
+ * Your own counted sessions in a month, by the server's rules (tennis, at
+ * most 2 a day, logged within 7 days and not for a later day): `now` with
+ * today's, `inTotal` up to yesterday and logged before today (what your
+ * city's total holds of yours).
+ */
+function demoMySessions(sessions: PracticeSession[], me: ID, month: string): { now: number; inTotal: number } {
+  const end = monthAfter(month);
+  const today = localDay(Date.now());
+  const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
+  const byDay = new Map<string, PracticeSession[]>();
+  for (const s of sessions) {
+    if (s.userId !== me || !BOARD_TENNIS.has(s.kind) || s.day < month || s.day >= end || s.day > today) continue;
+    byDay.set(s.day, [...(byDay.get(s.day) ?? []), s]);
+  }
+  let now = 0;
+  let inTotal = 0;
+  for (const list of byDay.values()) {
+    for (const s of [...list].sort((a, b) => a.createdAt.localeCompare(b.createdAt)).slice(0, 2)) {
+      now += 1;
+      if (s.day < today && Date.parse(s.createdAt) < dayStart.getTime()) inTotal += 1;
+    }
+  }
+  return { now, inTotal };
+}
+
+/** "Needs N more players" without saying whether exactly one other is there (city_board_needs). */
+const demoPlayersNeeded = (players: number, countedMe: boolean) => {
+  const me = countedMe ? 1 : 0;
+  const others = Math.max(0, players - me);
+  return Math.max(1, MIN_PLAYERS - me - (others >= 2 ? others : 0));
+};
+
+/** The demo month's cities (as of yesterday), shaped by the picture asked for, with you in your city's totals. */
+function demoBoardRows(scenario: DemoBoardScenario, myCity: string | null, myIn: number): DemoBoardCity[] {
+  let rows = DEMO_BOARD_CITIES.map((c) => ({ ...c }));
+  if (scenario === 'one') rows = rows.map((c) => (c.id === myCity ? { ...c, weekAgoRank: 0, run: 0 } : { ...c, players: Math.min(c.players, 3) }));
+  if (scenario === 'unranked') rows = rows.map((c) => (c.id === myCity ? { ...c, sessions: 9, players: 2, weekAgoRank: 0, run: 0 } : c));
+  if (scenario === 'none') rows = rows.map((c) => ({ ...c, players: Math.min(c.players, c.id === myCity ? 2 : 3), weekAgoRank: 0, run: 0 }));
+  if (myCity && myIn > 0) {
+    const mine = rows.find((c) => c.id === myCity);
+    if (mine) { mine.sessions += myIn; mine.players += 1; }
+  }
+  return rows;
+}
+
+/** The ranked ones, as refresh_city_board ranks them: 5+ players, by sessions (ties share), and by sessions per player. */
+function demoRanked(rows: DemoBoardCity[]): CityBoardCity[] {
+  const per = (c: DemoBoardCity) => Math.round((c.sessions / c.players) * 10) / 10;
+  const on = rows.filter((c) => c.players >= MIN_PLAYERS);
+  const bySessions = rankRows(on.map((c) => ({ id: c.id, sessions: c.sessions })));
+  const byPer = rankRows(on.map((c) => ({ id: c.id, sessions: per(c) })));
+  return on
+    .map((c) => ({
+      id: c.id, name: c.name, region: c.region, sessions: c.sessions, players: c.players,
+      rank: bySessions.find((x) => x.id === c.id)!.rank, perValue: per(c), perRank: byPer.find((x) => x.id === c.id)!.rank,
+      weekAgoRank: c.weekAgoRank || null, run: c.run ?? 0,
+    }))
+    .sort((a, b) => a.rank - b.rank || b.players - a.players || a.name.localeCompare(b.name));
+}
+
+/**
+ * The demo's city_board(): the made-up month (mock/cityBoard.ts) with your
+ * own sessions from your demo log, in the server's shape. Your city is the
+ * town on your profile (never where you are).
+ */
+export async function cityBoard({ month, me, users: everyone, sessions }: { month: string; me: ID; users: User[]; sessions: PracticeSession[] }): Promise<CityBoard> {
+  const scenario = demoBoardScenario();
+  await delay(null, scenario === 'slow' ? 600_000 : 260);
+  if (scenario === 'error') throw new Error('The demo board could not be loaded (?board=error).');
+  const viewer = everyone.find((u) => u.id === me);
+  const myCity = scenario === 'nocity' ? null : demoBoardCityOf(viewer?.location);
+  const mine = demoMySessions(sessions, me, month);
+  const rows = demoBoardRows(scenario, myCity, mine.inTotal);
+  const cities = demoRanked(rows);
+  const ranked = new Set(cities.map((c) => c.id));
+  const city = myCity ? DEMO_BOARD_CITIES.find((c) => c.id === myCity) ?? null : null;
+  const row = myCity ? rows.find((c) => c.id === myCity) ?? null : null;
+  return clone({
+    month,
+    refreshedAt: new Date().toISOString(),
+    openUntil: `${monthAfter(month).slice(0, 8)}03`,
+    cities,
+    events: DEMO_BOARD_EVENTS.filter((e) => ranked.has(e.who) && ranked.has(e.passed)).map((e) => ({ who: e.who, passed: e.passed, at: new Date(Date.now() - e.daysAgo * 86_400_000).toISOString() })),
+    me: {
+      cityId: myCity, cityName: city?.name ?? null, region: city?.region ?? null,
+      countsFor: mine.now > 0 ? myCity : null,
+      ranked: !!myCity && ranked.has(myCity),
+      sessions: mine.now, inTotal: myCity ? mine.inTotal : 0,
+      playersNeeded: myCity && !ranked.has(myCity) ? demoPlayersNeeded(row?.players ?? 0, mine.inTotal > 0) : null,
+    },
+  });
+}
+
+/** "Usually …" from a demo player's log, by the server's rule (6 of the last 10, at least 4), and the last day they played (never today). */
+function demoPlayWords(id: ID): Pick<CityPageFill, 'habit' | 'lastDay'> {
+  const log = DEMO_PLAY_LOG[id];
+  if (!log) return { habit: null, lastDay: null };
+  const ten = log.sessions.slice(0, 10);
+  const share = (test: (s: [number, number]) => boolean) => ten.filter(test).length / ten.length;
+  const habits: [CityPageFill['habit'], number][] = ten.length >= 4
+    ? [['weekends', share(([d]) => d === 0 || d === 6)], ['evenings', share(([, h]) => h >= 17)], ['mornings', share(([, h]) => h < 11)]]
+    : [];
+  const best = habits.filter(([, v]) => v >= 0.6).sort((a, b) => b[1] - a[1])[0];
+  const lastDay = log.lastDaysAgo >= 1 && log.lastDaysAgo <= 6 ? localDay(Date.now() - log.lastDaysAgo * 86_400_000) : null;
+  return { habit: best ? best[0] : null, lastDay };
+}
+
+/**
+ * The demo's city_page(): one city's Top players, Up to hit (ringed, then
+ * filled), Most active courts and clip, by the server's rules, for you:
+ *   - named: adults only (never a teen, to anyone), not suspended; never you,
+ *     anyone blocked either way or muted; a private account only once you
+ *     follow it; a teen viewer sees friends who follow each other only;
+ *   - Top players at most players - 2 (- 1 when you are counted there), and
+ *     fewer when the rest's total would say each of them played once;
+ *   - your place among the rows shown and you, never among people not shown;
+ *   - the fill carries a number only for someone also on Top players;
+ *   - Up to hit, ringed: your city, the Find Players rule; another city,
+ *     friends who follow each other with you only (decision 4);
+ *   - a city not ranked opens only for its own players.
+ */
+export async function cityPage({ cityId, month, me, users: everyone, posts: all, sessions, followingIds, followEdges, blockedIds, mutedIds }: {
+  cityId: string; month: string; me: ID; users: User[]; posts: Post[]; sessions: PracticeSession[];
+  followingIds: ID[]; followEdges: { followerId: ID; followingId: ID }[]; blockedIds: ID[]; mutedIds: ID[];
+}): Promise<CityPage> {
+  const scenario = demoBoardScenario();
+  await delay(null, scenario === 'slow' ? 600_000 : 280);
+  if (scenario === 'error') throw new Error('The demo city page could not be loaded (?board=error).');
+  const viewer = everyone.find((u) => u.id === me);
+  const myCity = scenario === 'nocity' ? null : demoBoardCityOf(viewer?.location);
+  const mine = demoMySessions(sessions, me, month);
+  const rows = demoBoardRows(scenario, myCity, mine.inTotal);
+  const ranked = demoRanked(rows);
+  const row = rows.find((c) => c.id === cityId) ?? null;
+  const r = ranked.find((c) => c.id === cityId) ?? null;
+  const isMine = cityId === myCity;
+  const empty: CityPage = { month, refreshedAt: new Date().toISOString(), city: null, top: [], me: null, fill: [], up: [], activeCourts: [], clip: null };
+  const known = DEMO_BOARD_CITIES.find((c) => c.id === cityId);
+  if (!known || (!r && !isMine)) return clone(empty);
+
+  const byId = new Map(everyone.map((u) => [u.id, u]));
+  const following = new Set(followingIds);
+  const followsMe = new Set(followEdges.filter((e) => e.followingId === me).map((e) => e.followerId));
+  const mutual = (id: ID) => following.has(id) && followsMe.has(id);
+  const off = new Set([...blockedIds, ...mutedIds]);
+  // Named: a known adult (the demo's fixtures by their own age, as everywhere in the demo), not suspended.
+  const named = (u: User) => !notKnownAdult(u) && !u.suspended;
+  const viewerAdult = !!viewer && !notKnownAdult(viewer);
+  const count = (id: ID) => DEMO_PLAYER_SESSIONS[id] ?? 0;
+  const cands = everyone
+    .filter((u) => u.id !== me && count(u.id) > 0 && demoBoardCityOf(u.location) === cityId && named(u) && !off.has(u.id))
+    .filter((u) => (!u.isPrivate || following.has(u.id)) && (viewerAdult || mutual(u.id)))
+    .sort((a, b) => count(b.id) - count(a.id) || a.id.localeCompare(b.id));
+
+  const up = isMine
+    ? playersInTown({ me, users: everyone, posts: all, followingIds, followEdges, blockedIds }).filter((id) => { const u = byId.get(id); return !!u && isOpenToHit(u) && !mutedIds.includes(id); })
+    : everyone.filter((u) => u.id !== me && isOpenToHit(u) && mutual(u.id) && !off.has(u.id) && named(u) && demoBoardCityOf(u.location) === cityId)
+      .sort((a, b) => (b.openToHitUntil ?? '').localeCompare(a.openToHitUntil ?? '')).map((u) => u.id);
+
+  // You are one of its players (its totals hold you) from yesterday's count.
+  const member = isMine && mine.inTotal > 0;
+  const cap = r ? Math.min(5, Math.max(0, r.players - 2 - (member ? 1 : 0))) : 0;
+  let top = cands.slice(0, cap);
+  while (top.length && row) {
+    const restN = row.players - top.length - (member ? 1 : 0);
+    const restS = row.sessions - (member ? mine.inTotal : 0) - top.reduce((n, u) => n + count(u.id), 0);
+    if (restS > restN) break;
+    top = top.slice(0, -1);
+  }
+  const placed = rankRows([
+    ...top.map((u) => ({ userId: u.id, sessions: count(u.id) })),
+    ...(r && isMine && mine.now > 0 ? [{ userId: me, sessions: mine.now }] : []),
+  ]);
+  const onTop = new Set(top.map((u) => u.id));
+  const ringed = new Set(up);
+  const fill = cands.filter((u) => !ringed.has(u.id)).slice(0, Math.max(0, FILL_TO - up.length))
+    .map((u) => ({ userId: u.id, ...demoPlayWords(u.id), sessions: onTop.has(u.id) ? count(u.id) : null }));
+  const clip = (DEMO_CITY_CLIPS[cityId] ?? []).find((k) => {
+    const a = byId.get(k.authorId);
+    return !!a && named(a) && !a.isPrivate && !off.has(a.id) && all.some((p) => p.id === k.postId);
+  }) ?? null;
+
+  return clone({
+    ...empty,
+    city: r
+      ? { id: r.id, name: r.name, region: r.region, rank: r.rank, of: ranked.length, sessions: r.sessions, players: r.players, perValue: r.perValue, perRank: r.perRank, weekAgoRank: r.weekAgoRank, run: r.run }
+      : { id: known.id, name: known.name, region: known.region, rank: null, of: ranked.length, playersNeeded: demoPlayersNeeded(row?.players ?? 0, member) },
+    top: placed.filter((p) => p.userId !== me),
+    me: isMine ? { rank: placed.find((p) => p.userId === me)?.rank ?? null, sessions: mine.now, inTotal: mine.inTotal } : null,
+    fill,
+    up,
+    activeCourts: (DEMO_ACTIVE_COURTS[cityId] ?? []).slice(0, 5).map((k, i) => ({ courtId: `demo-${cityId}-${i}`, name: k.name, lat: k.lat, lng: k.lng, visits: k.visits })),
+    clip,
+  });
+}
+
+/** The demo's "Show me on city boards": kept on this phone by the store (there is no server); always goes through. */
+export async function setCityBoardsVisible(_on: boolean): Promise<boolean> {
+  return delay(true, 120);
 }
 
 /* ------------------------------------------- What surface? (migration 186) */

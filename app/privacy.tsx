@@ -11,12 +11,20 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
 import { AUDIENCE_LABEL, friendsAtMost } from '@/features/activity/autoLogSharing';
+import { cityBoardOn } from '@/features/cityBoard/flag';
+import { notKnownAdult } from '@/features/players/age';
 import { colors, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 
 export default function PrivacyCentre() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, autoLogSharing } = useApp();
+  const { currentUser, blockedIds, mutedIds, actions, mapLive, mapVisibility, teenMap, prefs, contactsFindableLive, cityBoardsVisible, cityBoards, autoLogSharing } = useApp();
+  // City boards (migration 196), admins first, once the database has the switch. Your sessions count for your city
+  // either way; off, nobody sees your name or clips there. A teen too (migration 197; owner, Oct 28: "Ok it shows
+  // mutual"): a teen is named only to friends who follow each other with them, never to anyone else, and can say no.
+  const teenBoards = !!currentUser && notKnownAdult(currentUser);
+  const showCityBoards = cityBoardOn(currentUser) && !!currentUser && cityBoardsVisible !== null;
+  const boardCity = Object.values(cityBoards).find((e) => e.board?.me.cityName)?.board?.me.cityName ?? null;
   const receipts = currentUser?.readReceiptsEnabled !== false;
   const link = (icon: keyof typeof Ionicons.glyphMap, label: string, value: string | undefined, onPress: () => void) => (
     <Pressable key={label} accessibilityRole="link" onPress={onPress} style={({ pressed }) => [styles.row, styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}>
@@ -55,6 +63,20 @@ export default function PrivacyCentre() {
             <Toggle value={prefs.contactsFindable} onChange={(v) => actions.setPref('contactsFindable', v)} accessibilityLabel="Let people find me from their contacts" />
           </View>
         ) : null}
+        {showCityBoards ? (
+          <View style={[styles.row, styles.rowBorder]}>
+            <Ionicons name="podium-outline" size={19} color={colors.textMuted} />
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={styles.rowLabel}>Show me on city boards</Text>
+              <Text style={styles.rowDetail}>
+                {teenBoards
+                  ? `Only friends who follow each other with you see your name there. Your sessions always count for ${boardCity ?? 'your city'}. Off: friends don't see you either.`
+                  : `Your sessions always count for ${boardCity ?? 'your city'}. Off: your name and clips stay off the boards.`}
+              </Text>
+            </View>
+            <Toggle value={cityBoardsVisible !== false} onChange={(v) => { void actions.setCityBoardsVisible(v); }} accessibilityLabel="Show me on city boards" />
+          </View>
+        ) : null}
         {/* Who sees your check-ins on the map (migration 189): Friends or No one. A teen too (78, 119). */}
         {canChooseVisibility(mapLive, currentUser, teenMap) ? link('location-outline', 'Who can see you on the map', visibilityLabel(mapVisibility, onTeenMap(currentUser, teenMap)), () => { void askWhoSeesYou('manage'); }) : null}
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
@@ -70,8 +92,8 @@ export default function PrivacyCentre() {
         <View style={styles.row}>
           <Ionicons name="people-outline" size={19} color={colors.textMuted} />
           <View style={{ flex: 1, gap: 1 }}>
-            <Text style={styles.rowLabel}>Check-ins are kept for 2 days</Text>
-            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, or No one on the map, it’s gone; activity status off, it isn’t shown.</Text>
+            <Text style={styles.rowLabel}>“I’m playing here” is kept for 2 days</Text>
+            <Text style={styles.rowDetail}>So friends who were at the same court that day can see you in Flyby. Never a time, only morning, afternoon or evening. Location off, or No one on the map, it’s gone; activity status off, it isn’t shown. After that, a court’s visit count on city boards may hold one more, with no name.</Text>
           </View>
         </View>
       </View>

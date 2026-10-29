@@ -5,6 +5,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
+import { useGrowAway, useGrowLabels } from '@/features/players/mapGrow';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 
@@ -29,6 +30,10 @@ import { isMapCourtId, labelOf } from '@/features/places/courtName';
 import { useCourtHits } from '@/features/places/useCourtHits';
 import { directionsTo } from '@/features/players/openInMaps';
 import { useApp } from '@/store/AppContext';
+import { TipBubble } from '@/components/TipBubble';
+import { releaseTip, useTip } from '@/features/tips/tips';
+import { REASK_SHOW_MS, noteReaskNotNow, noteReaskShown, noteReaskYes } from '@/features/players/noOneReask';
+import { TIP_SHOW_MS as UTH_TIP_SHOW_MS } from '@/features/players/upToHitTip';
 import { router } from 'expo-router';
 import { Image as ExpoImage } from 'expo-image';
 import { formatMiles } from '@/features/players/geo';
@@ -56,8 +61,9 @@ import { LIST_PAD_BOTTOM, TRAY_FACE, TRAY_GAP, TRAY_ITEM_W, TRAY_PAD, listHeadro
 import { OpenRing } from '@/components/map/OpenRing';
 import { mix } from '@/components/map/look';
 import { notKnownAdult } from '@/features/players/age';
-import { dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
+import { askWhoSeesYou, dismissHideTip, saidYes, useHideTip, useHideTipText, visibilityLabel, type NearbyLock, type TipSpot } from '@/features/players/mapPrivacy';
 import type { CheckInControl } from '@/features/players/useLocationToggle';
+import { UpToHitPill, UpToHitRound } from '@/components/map/UpToHit';
 import { formatSpotMiles } from '@/features/players/geo';
 import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
@@ -142,19 +148,6 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
   const say = city ? `Search ${city}` : 'Search a place or park';
   const short = city || 'Search places';
   const hint = focused ? 'Players, courts or places' : fieldW && sayW > fieldW ? short : say;
-  // One lit value for the Check in button's green and its edge.
-  const locLit = useLit(!!checkIn?.on);
-  const locV = locLit.v;
-  // The edge's two colours for the animation thread, kept to the theme now (the button is rebuilt in a new one).
-  const edgeOff = useInk(`${colors.borderStrong}55`, locLit.bump);
-  const edgeOn = useInk(colors.brand, locLit.bump);
-  const locEdge = useAnimatedStyle(() => ({ borderColor: interpolateColor(locV.value, [0, 1], [edgeOff.value, edgeOn.value]) }));
-  // Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
-  // arrow. On the map cover it was fine"): outlined while you are hidden, filled on green while you are
-  // checked in; a tap checks in or out. The Find Players card keeps its "Check in" pill.
-  const locationIcon = !checkIn ? null : checkIn.busy ? <ActivityIndicator size="small" color={checkIn.on ? colors.brandInk : colors.text} /> : (
-    <TwoTone v={locLit.v} off={<Ionicons name="navigate-outline" size={18} color={colors.text} />} lit={<Ionicons name="navigate" size={18} color={colors.brandInk} />} />
-  );
   // The list under the bar: courts, then places, or why there are none.
   const listUp = !!(found.length || placeRows.length || placeNote || searching);
   return (
@@ -216,13 +209,11 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
       {checkIn ? (
         <View>
           <TipPulse where="map" size={44} />
-          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} onPress={checkIn.press} style={({ pressed }) => [styles.barRoundHit, pressed && styles.barPressed]}>
-            {/* The green fill fades in over the see-through one and out again (only the fill, never the glass: Oct 22 sweep). */}
-            <MapGlass key={locLit.key} radius={22} style={[styles.barRound, locEdge]}>
-              <GreenFill v={locLit.v} radius={22} />
-              {locationIcon}
-            </MapGlass>
-          </Pressable>
+          {/* Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
+              arrow. On the map cover it was fine"): outlined while you are not up to hit, filled on green while you
+              are; a tap turns it on or off (UpToHit: it fills from the middle and bounces once). The Find Players
+              card keeps its pill. */}
+          <UpToHitRound control={checkIn} />
           <HideTip where="map" style={{ top: 52, right: 0 }} />
         </View>
       ) : null}
@@ -368,7 +359,7 @@ function ChipLabel({ label, x, w, spot, style }: { label: string; x: SharedValue
   return <Animated.Text maxFontSizeMultiplier={TextScale.TITLE} style={[style, tint]}>{label}</Animated.Text>;
 }
 
-export function FilterChips({ filter, onFilter, onAgain, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; /** The chip already on, tapped again (Near me opens its list again). */ onAgain?: (key: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
+export function FilterChips({ filter, onFilter, onAgain, courtsOn, onCourts, courtsLoading }: { filter: MapFilter; onFilter: (next: MapFilter) => void; /** The chip already on, tapped again (a people chip opens its tray again). */ onAgain?: (key: MapFilter) => void; courtsOn: boolean; onCourts: () => void; courtsLoading: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   // Where each chip sits, so one filled pill can slide from the old choice to the new, the way a segmented control does.
   const spots = useRef<Partial<Record<MapFilter, { x: number; w: number }>>>({});
@@ -485,26 +476,6 @@ function useLitText(v: SharedValue<number>, rebuild?: () => void) {
  * A control's green, laid over its see-through fill and faded in and out on its own: only this fill is ever
  * faded, never the see-through one under it (MapGlass) nor anything holding it.
  */
-/** What a Check in button says to a screen reader: what a tap does, and for how long. */
-const checkInLabel = (c: CheckInControl) => (c.on ? `Checked in, friends see you ${c.span}. Check out` : `Check in. Friends who follow you back see you ${c.span}`);
-
-/**
- * The Check in button's own words (migration 189): "Check in", or while you
- * are checked in, how long for ("Until 10pm"; a tap checks you out).
- */
-function CheckInWords({ control, size }: { control: CheckInControl; size: number }) {
-  const styles = useThemedStyles(styleDefinitions);
-  const ink = control.on ? colors.brandInk : colors.text;
-  return (
-    <View pointerEvents="none" style={styles.checkInRow}>
-      {control.busy ? <ActivityIndicator size="small" color={ink} /> : <Ionicons name={control.on ? 'checkmark-circle' : 'navigate-outline'} size={size} color={ink} />}
-      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.checkInWord, { color: ink }]}>
-        {control.on ? control.span.charAt(0).toUpperCase() + control.span.slice(1) : 'Check in'}
-      </Text>
-    </View>
-  );
-}
-
 function GreenFill({ v, radius: r, edge = 0 }: { v: SharedValue<number>; radius: number; /** The control's border, which the green covers too (so its edge never switches on its own). */ edge?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = useAnimatedStyle(() => ({ opacity: v.value }));
@@ -620,6 +591,19 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
   );
 }
 
+/**
+ * The Find Players card's credit (bottom right). With the check-in zoom's grow (mapGrow) it slips down out of the card at
+ * its own size as the page pushes in, like the weather opposite it.
+ */
+export function CardCredit() {
+  const away = useGrowAway('bottom');
+  return (
+    <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10, zIndex: 20 }, away]}>
+      <MapCredit align="right" />
+    </Animated.View>
+  );
+}
+
 /*
  * Scrolling lists inside the map's sheets. On a phone, the gesture library's
  * own scroll view, so a list scrolling and its sheet being pulled down never
@@ -657,11 +641,14 @@ function listTitle(items: Listed[], query: string, filter: MapFilter, courts: Co
   const q = query.trim();
   const n = items.length;
   // "you" is the map's own stand-in for a town not named yet: "near you".
-  const place = (filter === 'near' && nearTown) || cityName || 'you';
-  if (!n) return !q && filter === 'all' && courts.length ? `${courts.length} ${courts.length === 1 ? 'court' : 'courts'} near ${place}` : `Players near ${place}`;
+  const place = ((filter === 'near' || filter === 'level' || filter === 'coaches' || filter === 'open') && nearTown) || cityName || 'you';
+  if (!n) return !q && filter === 'all' && courts.length ? `${courts.length} ${courts.length === 1 ? 'court' : 'courts'} near ${place}` : `${filter === 'coaches' && !q ? 'Coaches' : 'Players'} near ${place}`;
   const who = n === 1 ? '1 player' : `${n} players`;
   if (q) return `${who} matching “${q}”`;
   if (filter === 'following') return `${who} you follow`;
+  if (filter === 'level') return nearTown ? `${who} at your level in ${nearTown}` : `${who} at your level`;
+  if (filter === 'coaches') return `${n === 1 ? '1 coach' : `${n} coaches`} near ${place}`;
+  if (filter === 'open') return `${who} open to hit near ${place}`;
   return `${who} near ${place}`;
 }
 
@@ -670,11 +657,14 @@ function emptyLine(query: string, filter: MapFilter, courts: CourtRow[], locked:
   if (query.trim()) return `No players named “${query.trim()}”`;
   if (locked === 'location') return 'Turn on Location to see players';
   if (locked === 'hidden') return 'On Only me, players are hidden';
-  if (filter === 'following') return 'Nobody you follow is checked in';
+  if (filter === 'following') return 'You don’t follow anyone yet';
+  if (filter === 'level') return nearTown ? `No one at your level in ${nearTown} yet` : 'Add your city to see players';
   if (filter === 'near') return nearTown ? `No players in ${nearTown} yet` : 'Add your city to see players';
+  if (filter === 'coaches') return nearTown ? `No coaches in ${nearTown} yet` : 'Add your city to see coaches';
+  if (filter === 'open') return nearTown ? `No one open to hit in ${nearTown} yet` : 'Add your city to see players';
   if (filter !== 'all') return 'Nobody matches that';
-  // The map's people are friends who checked in, at any age (migration 189; Oct 27 audit wording).
-  return courts.length ? `No friends checked in · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends checked in yet';
+  // The map's people are friends who are up to hit, at any age (migration 189; Oct 27 audit wording; Oct 28 "Up to hit").
+  return courts.length ? `No friends up to hit · ${courts.length} ${courts.length === 1 ? 'court' : 'courts'} nearby` : 'No friends up to hit yet';
 }
 
 /**
@@ -789,7 +779,9 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
     restored.current = true;
     if (stripAt?.current) strip.current?.scrollTo({ x: stripAt.current, animated: false });
   };
-  // A friend's check-in flies the map to their pin; a Near me row (no pin) opens their profile.
+  // Every people chip (Following, Open to hit, Near me, My level, Coaches) mixes friends up to hit with people listed by their town: the ones up to hit say so.
+  const upTag = filter !== 'all';
+  // A friend's check-in flies the map to their pin; a town row (no pin) opens their profile.
   const open = (p: Listed) => (townOf(p) !== null ? (onProfile ?? onSelect)(p.user.id) : onSelect(p.user.id));
   const pick = (p: Listed) => { if (!stops.justDragged()) { haptics.tap(); open(p); } };
   // Where the faces are scrolled to, as they go and where they come to rest (a fling's last move can fall between two scroll events).
@@ -829,6 +821,14 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
     lastSet.current = faceSet;
     if (stripAt) stripAt.current = 0;
   }, [faceSet]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A chip tapped with the full list up: back to the faces, as every chip rests (Oct 28, owner: "The near me my level
+  // coaches etc. should be the same sideways icons like following currently is"). The list is still a pull or See all away.
+  const lastFilter = useRef(filter);
+  useEffect(() => {
+    if (lastFilter.current === filter) return;
+    lastFilter.current = filter;
+    stops.collapse();
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
   // The height the faces were showing at, for the "No players" box to glide from as it takes their place.
   const lastBody = useRef(0);
   if (stops.restH > 0) lastBody.current = stops.restH;
@@ -848,7 +848,7 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
       onContentSizeChange={stops.onContentSizeChange}
     >
       {items.map((p, i) => (
-        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={townOf(p) !== null ? `${p.user.name}, ${townOf(p)}. Open profile` : `${p.user.name}, ${placedFar(p)}`} onPress={() => open(p)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
+        <Pressable key={p.user.id} accessibilityRole="button" accessibilityLabel={townOf(p) !== null ? `${[p.user.name, townOf(p)].filter(Boolean).join(', ')}. Open profile` : `${p.user.name}, ${placedFar(p)}${upTag ? ', up to hit' : ''}`} onPress={() => open(p)} style={({ pressed }) => [styles.listRow, pressed && styles.listPressed]}>
           {/* A hairline between rows, from the names across, the way a contacts list draws it. */}
           {i > 0 ? <View pointerEvents="none" style={styles.listRowRule} /> : null}
           <View style={[styles.listRing, isOpenToHit(p.user) && styles.listRingOn]}><Avatar name={p.user.name} seed={p.user.avatarSeed} size={40} ring={p.user.isCoach} /></View>
@@ -857,8 +857,8 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
               <LevelPill profile={p.user.profile} small />
             </View>
-            {/* A friend's check-in: how far and how long ago. A Near me row: only the town on their profile. */}
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            {/* A friend's check-in: how far and how long ago (on Following, My level and Near me, "Up to hit" first, as those lists hold people who are not). A town row: only the town on their profile. */}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[upTag && townOf(p) === null ? 'Up to hit' : null, townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />
         </Pressable>
@@ -929,17 +929,22 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
             // With a name typed, say only that no player has it: a court's name finds the court, and the players are still there.
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sheetEmpty} numberOfLines={2}>
               {query.trim() ? `No players named “${query.trim()}”`
-                : filter === 'following' ? 'Nobody you follow is checked in.'
+                : filter === 'following' ? 'You don’t follow anyone yet.'
+                  : filter === 'level' ? (nearTown ? `No players at your level in ${nearTown} yet.` : 'Add your city to your profile to see the players at your level.')
                   : filter === 'near' ? (nearTown ? `No players in ${nearTown} yet.` : 'Add your city to your profile to see the players in your town.')
+                  : filter === 'coaches' ? (nearTown ? `No coaches in ${nearTown} yet.` : 'Add your city to your profile to see the coaches in your town.')
+                  : filter === 'open' ? (nearTown ? `No one open to hit in ${nearTown} yet.` : 'Add your city to your profile to see who is open to hit in your town.')
                   : filter !== 'all' ? 'Nobody matches that.'
-                    // The map's people are friends who checked in, at any age (migration 189; the pill's own words, emptyLine).
-                    : 'No friends checked in yet. Tap a court to see what’s played there.'}
+                    // The map's people are friends who are up to hit, at any age (migration 189; the pill's own words, emptyLine).
+                    : 'No friends up to hit yet. Tap a court to see what’s played there.'}
+              {/* Following and My level list people, not only who is up to hit: an empty one points to where to find some. */}
+              {!query.trim() && (filter === 'following' || (filter === 'level' && nearTown)) ? <Text accessibilityRole="link" onPress={() => { haptics.tap(); router.push('/search'); }} style={styles.findLink}>{'  ·  Find players'}</Text> : null}
             </Text>
           ) : (
             // Nobody sharing yet: the nearest places to play instead, side by side like the faces, each a tap from its card.
             <View style={styles.emptyCourts}>
               {locked ? <View style={styles.lockBox}><LockNote lock={locked} onUnlock={onUnlock} /></View> : null}
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends checked in yet. The nearest courts:'}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyCourtsTitle} numberOfLines={1}>{locked ? 'The nearest courts:' : 'No friends up to hit yet. The nearest courts:'}</Text>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.courtStrip}>
                 {courts.map(({ c, miles }) => (
                   <Pressable key={c.id} accessibilityRole="button" accessibilityLabel={`${c.name}, ${formatMiles(miles)}. Show on the map`} onPress={() => { haptics.tap(); onPickCourt?.(c.id); }} style={({ pressed }) => [styles.courtChip, pressed && styles.listPressed]}>
@@ -1169,7 +1174,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they check in.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
@@ -1337,7 +1342,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
   // The map is friends only, at any age, and only on a check-in (migration 189; Oct 27 audit #8): no yes, no one.
   const ringNote = !saidYes(seenBy)
     ? 'Only you see your ring on the map.'
-    : `Friends who follow you back see your green ring ${till} while you’re checked in.`;
+    : `Friends who follow you back see your green ring ${till} while you’re up to hit.`;
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>
@@ -1643,7 +1648,10 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false }: { cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, reask = false, chip = false }: { /** The No one re-ask may come now (noOneReask: the Community card, due for this person). */ reask?: boolean; /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+  const labelsOut = useGrowLabels();
+  // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
+  const weatherAway = useGrowAway('bottom');
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   const edge = labelEdge(themes[theme].bg);
@@ -1660,14 +1668,40 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
   const line = count === 1 ? '1 friend around' : count ? `${count} friends around`
     : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play nearby`
       : hint ?? 'No one here yet';
+  // The card that draws the full map's pins (fullCard): its middle is all courts, faces and "4 here" labels, so the
+  // words sit in one small chip beside the weather, sized like it, and slip out with it as the zoom starts (Oct 28,
+  // owner: "no shit animations, not ui that looks bad"). Never near Up to hit's tip, which hangs from the top right.
+  const chipBits = chip ? [
+    count ? `${count} ${count === 1 ? 'friend' : 'friends'}` : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'}` : null,
+    hitCount ? `${hitCount} ${hitCount === 1 ? 'hit' : 'hits'}` : null,
+  ].filter(Boolean) as string[] : [];
+  const weatherChip = weather ? (
+    <View style={styles.previewChip}>
+      <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
+    </View>
+  ) : null;
   return (
     <>
+      {chip ? (
+        <Animated.View pointerEvents="none" style={[styles.previewChips, weatherAway]}>
+          {weatherChip}
+          <View style={[styles.previewChip, styles.cityChip]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.cityChipText}>
+              {cityName}
+              {chipBits.length ? <Text style={(count > 0 || placeCount > 0) ? styles.cityChipOn : styles.cityChipMuted}>{`  ·  ${chipBits.join(' · ')}`}</Text> : null}
+            </Text>
+          </View>
+        </Animated.View>
+      ) : null}
+      {chip ? null : <>
       {/* The city's name is the top layer, so a player's ring or a court never
           sits over the words however busy the middle of town gets. Each word
           wears a thin edge of the map's ground colour, the way a map's own
           labels do, so it reads over roads and pins with nothing behind it
           (Oct 25, owner: "I don't like this big glare here", of the haze that was). */}
-      <View pointerEvents="none" style={styles.cityMark}>
+      {/* The check-in zoom's grow (mapGrow): the words step out of the way as the card grows into the full map (words only, no glass). */}
+      <Animated.View pointerEvents="none" style={[styles.cityMark, labelsOut]}>
         <View style={styles.cityGlow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cityName, edge]} numberOfLines={1}>{cityName}</Text>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn, edge]}>{line}</Text>
@@ -1675,24 +1709,23 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
             : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Check in so friends see you</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
-      </View>
+      </Animated.View>
+      </>}
       {checkIn ? (
         <>
           <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
-          <Pressable accessibilityRole="button" accessibilityState={{ busy: checkIn.busy }} accessibilityLabel={checkInLabel(checkIn)} hitSlop={6} onPress={checkIn.press} style={[styles.previewSwitch, checkIn.on && styles.roundOn]}>
-            {checkIn.on ? <BrandWash /> : null}
-            <CheckInWords control={checkIn} size={14} />
-          </Pressable>
+          {/* The Up to hit pill (Oct 27, the owner's pick: "Up to hit"; migration 189): "Up to hit", or while it is on,
+              "Up to hit · till 10pm" on green (a tap turns it off). UpToHit: it springs to its words as the green sweeps in. */}
+          <UpToHitPill control={checkIn} />
           <HideTip where="card" style={{ top: 52, right: 8 }} />
+          <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
+          <NoOneReaskTip ready={reask && !checkIn.on && !checkIn.busy} span={checkIn.span} />
         </>
       ) : null}
-      {weather ? (
-        <View pointerEvents="none" style={styles.previewWeather}>
-          <Ionicons name={weather.icon as keyof typeof Ionicons.glyphMap} size={13} color={colors.text} />
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
-        </View>
+      {weatherChip && !chip ? (
+        <Animated.View pointerEvents="none" style={[styles.previewWeather, weatherAway]}>{weatherChip}</Animated.View>
       ) : null}
       {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
     </>
@@ -1753,6 +1786,73 @@ function HideTip({ where, style }: { where: TipSpot; style: object }) {
   );
 }
 
+/**
+ * Up to hit's one tip (upToHitTip), hung under the card's pill: "Tap Up to hit · friends see you on the map till
+ * 10pm." The app's own tip bubble (TipBubble), so it waits its turn like every tip; it closes itself after a few
+ * seconds and never comes back (a tap on it, or on the pill, closes it too).
+ */
+function UpToHitTip({ ready, span }: { ready: boolean; span: string }) {
+  const tip = useTip('up-to-hit', ready);
+  const close = useRef(tip.close);
+  close.current = tip.close;
+  useEffect(() => {
+    if (!tip.shown) return undefined;
+    const t = setTimeout(() => close.current(), UTH_TIP_SHOW_MS);
+    // Shown once: gone off the card meanwhile (the map opened, another tab) still counts as seen.
+    return () => { clearTimeout(t); close.current(); };
+  }, [tip.shown]);
+  return <TipBubble tip="up-to-hit" words={`Tap Up to hit · friends see you on the map ${span}.`} shown={tip.shown} onClose={tip.close} pointer="up" pointerRight={UTH_TIP_POINTER} style={{ top: 48, right: 8, left: 24, alignItems: 'flex-end' }} />;
+}
+/**
+ * The No one re-ask (noOneReask), in the same place and bubble as Up to hit's tip: "Friends can see you when you tap
+ * Up to hit · only people you both follow, till 10pm", with Turn on (our "Who can see you on the map?", its first
+ * look: Friends or Not now; Apple's prompt still only comes on the next Up to hit, after a yes) and Not now. It waits
+ * its turn like every tip, goes by itself after a while (asked, not a Not now), and comes back only as noOneReask says.
+ */
+function NoOneReaskTip({ ready, span }: { ready: boolean; span: string }) {
+  const { currentUserId } = useApp();
+  const tip = useTip('no-one-reask', ready);
+  const [gone, setGone] = useState(false);
+  const shown = tip.shown && !gone;
+  const id = useRef(currentUserId);
+  id.current = currentUserId;
+  useEffect(() => {
+    if (!tip.shown || !id.current) return undefined;
+    noteReaskShown(id.current);
+    const t = setTimeout(() => { setGone(true); releaseTip('no-one-reask'); }, REASK_SHOW_MS);
+    return () => { clearTimeout(t); releaseTip('no-one-reask'); };
+  }, [tip.shown]);
+  const notNow = () => {
+    setGone(true);
+    releaseTip('no-one-reask');
+    if (id.current) noteReaskNotNow(id.current);
+  };
+  const turnOn = () => {
+    setGone(true);
+    releaseTip('no-one-reask');
+    const who = id.current;
+    void askWhoSeesYou('first').then((v) => {
+      if (!who) return;
+      if (saidYes(v)) noteReaskYes(who);
+      else noteReaskNotNow(who);
+    });
+  };
+  return (
+    <TipBubble
+      tip="no-one-reask"
+      words={`Friends can see you when you tap Up to hit · only people you both follow, ${span}.`}
+      shown={shown}
+      onClose={notNow}
+      actions={[{ label: 'Not now', onPress: notNow }, { label: 'Turn on', onPress: turnOn, strong: true }]}
+      pointer="up"
+      pointerRight={UTH_TIP_POINTER}
+      style={{ top: 48, right: 8, left: 24, alignItems: 'flex-end' }}
+    />
+  );
+}
+/** Where the bubble's pointer sits, in from its right edge: under the middle of "Up to hit" (the pill's right edge 4 in from the bubble's). */
+const UTH_TIP_POINTER = 40;
+
 /** While the tip is up, a soft ring breathes out from the button it points at. */
 function TipPulse({ where, size }: { where: TipSpot; size: number }) {
   const shown = useHideTip(where);
@@ -1790,7 +1890,6 @@ const styleDefinitions = StyleSheet.create({
   seenLabel: { ...typography.smallStrong, color: colors.text, flex: 1 },
   seenValue: { ...typography.small, color: colors.textMuted, flexShrink: 1 },
   topRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md },
-  roundOn: { backgroundColor: colors.brand, borderColor: colors.brand },
   roundHit: { width: 42, height: 42, borderRadius: 21, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   roundGlass: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // The chips' row to the screen's edge, its 6 above and below the chips their touch's reach (44 in all).
@@ -1834,8 +1933,6 @@ const styleDefinitions = StyleSheet.create({
   // The map's top row (Oct 11): Back, the bar and Location, 44 tall, one glass, one soft lift each.
   barPillHit: { height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barPill: { height: 44, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
-  checkInRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  checkInWord: { ...typography.smallStrong, ...font('600') },
   barRoundHit: { width: 44, height: 44, borderRadius: 22, shadowColor: '#000', shadowOpacity: 0.12, shadowRadius: 10, shadowOffset: { width: 0, height: 4 } },
   barRound: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: `${colors.borderStrong}55` },
   // Pressed, a button dims rather than shrinks (a shrunk icon goes soft on an iPhone, Oct 11).
@@ -1914,6 +2011,7 @@ const styleDefinitions = StyleSheet.create({
   listName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   sheetTitle: { ...typography.heading, color: colors.text, flexShrink: 1 },
   sheetEmpty: { ...typography.small, color: colors.textMuted, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  findLink: { ...font('600'), color: colors.brand },
   // The empty tray's nearest courts: one quiet line, then the courts side by side, each the search results' tile and words.
   emptyCourts: { paddingBottom: spacing.xs },
   emptyCourtsTitle: { ...typography.small, color: colors.textMuted, paddingBottom: 6, paddingHorizontal: spacing.lg },
@@ -2043,7 +2141,13 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  previewSwitch: { position: 'absolute', right: 12, top: 12, height: 32, paddingHorizontal: 12, overflow: 'hidden', borderRadius: 16, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
-  previewWeather: { position: 'absolute', left: 12, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  previewWeather: { position: 'absolute', left: 12, bottom: 12 },
+  previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  // The full-pins card: weather and the city chip side by side along the foot (the credit keeps the corner on the right).
+  previewChips: { position: 'absolute', left: 12, right: 36, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
+  cityChip: { flexShrink: 1 },
+  cityChipText: { ...typography.smallStrong, color: colors.text, flexShrink: 1 },
+  cityChipOn: { color: colors.brand },
+  cityChipMuted: { color: colors.textMuted },
 });

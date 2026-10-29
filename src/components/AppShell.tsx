@@ -51,6 +51,7 @@ import { useStageMotion } from '@/features/feed/useStageMotion';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useCreateMenuState } from '@/features/compose/createMenu';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { useGrowUnderWay } from '@/features/players/mapGrow';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -341,7 +342,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The peek and the join page are their own pages with their own sign-up bar: no tab bar there.
   const guestOwnPage = isGuest && (pathname === '/peek' || pathname === '/join');
   const barWanted = (!!currentUserId || isGuest) && !hideEverywhere && !onSplash && !guestOwnPage;
-  const showNav = barWanted && (!(isPhone && phoneOnlyHide) || barOnStage || createBoxUp);
+  // The check-in zoom's grow (mapGrow): the Community page pushes in toward the full map from the frame you are found, a
+  // moment before the full map is the page (on the phone it opens over the push-in part way): the bar goes as it starts.
+  const growing = useGrowUnderWay();
+  const showNav = barWanted && (!(isPhone && (phoneOnlyHide || growing)) || barOnStage || createBoxUp);
   useEffect(() => { if (Platform.OS === 'web' && navLayer.current) navLayer.current.inert = barOnStage || !showNav; }, [barOnStage, showNav]);
   // And when a page does take the phone's bar away, it no longer pops: it
   // slips down a little and fades (about a fifth of a second), and comes back

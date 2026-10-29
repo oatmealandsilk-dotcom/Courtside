@@ -1710,6 +1710,146 @@ export interface FlybyPerson {
   postId?: ID;
 }
 
+/* ------------------------------------------- City boards (migration 196) */
+
+/*
+ * The two city board payloads, field for field as city_board() and
+ * city_page() send them (migration 196), in the app's camelCase: `perValue`
+ * is the server's `per_value`, `weekAgoRank` its `week_ago_rank`, and so on.
+ * Nothing in them says where anyone is: ids, counts and day names only, and
+ * never anyone's city but your own. Every number but your own is as of
+ * yesterday (in Hawaii), so what others see changes once a day.
+ */
+
+/** One ranked city on the month's board (city_board().cities: ranked cities only, best first). */
+export interface CityBoardCity {
+  /** The board's own id for the city ('raleigh-nc'): one of board_cities, never a typed town. */
+  id: string;
+  name: string;
+  /** The 2-letter US state ('NC'). */
+  region: string;
+  /** Tennis sessions counted this month for players whose profile town is here (as of yesterday). */
+  sessions: number;
+  /** Players with a counted session this month (as of yesterday). 5 or more, or the city is not ranked. */
+  players: number;
+  /** Its place by sessions; level cities share one. */
+  rank: number;
+  /** Sessions per player, to a tenth. */
+  perValue: number;
+  /** Its place by sessions per player. */
+  perRank: number | null;
+  /** Its place 7 days ago, this same month (null in a month's first week, or new to the board): "▲2". */
+  weekAgoRank: number | null;
+  /** Weeks in a row it has climbed ("climbing 3 weeks running"); 0 when not. */
+  run: number;
+}
+
+/** "Austin passed Los Angeles" (city_board().events): between two cities on the board now, the last 7 days, newest first. */
+export interface CityBoardEvent { who: string; passed: string; at: string }
+
+/** Yours on the board (city_board().me): the only line that is up to the minute. */
+export interface CityBoardMe {
+  /** The board city of the town on your profile, or null (no town, or none the boards know: "pick your town"). */
+  cityId: string | null;
+  cityName: string | null;
+  region: string | null;
+  /**
+   * The city this month's sessions of yours count for, fixed at your first
+   * counted one (null: none yet). After a move it can differ from `cityId`:
+   * your month stays where it began, unnamed.
+   */
+  countsFor: string | null;
+  /** Your city has a row on the board. */
+  ranked: boolean;
+  /** Your counted sessions this month, today's included (up to the last refresh, every 15 minutes). */
+  sessions: number;
+  /** How many of those your city's total already holds (up to yesterday): the phone adds the rest to your own city. */
+  inTotal: number;
+  /** Your city is not ranked yet: how many more players it needs ("needs 2 more players"). Never says whether 0 or 1 others are there. */
+  playersNeeded: number | null;
+}
+
+/** The month's board (city_board(p_month)). */
+export interface CityBoard {
+  /** 'YYYY-MM-01'. */
+  month: string;
+  /** When the board was last worked out (every 15 minutes); null before the first time. */
+  refreshedAt: string | null;
+  /** The last day late logs still count ('YYYY-MM-DD', the 3rd of the next month). */
+  openUntil: string;
+  cities: CityBoardCity[];
+  events: CityBoardEvent[];
+  me: CityBoardMe;
+}
+
+/** The city a page is about (city_page().city): ranked, or (your own only) not yet. */
+export interface CityPageCity {
+  id: string;
+  name: string;
+  region: string;
+  /** Null: not ranked yet (only its own players can open it). */
+  rank: number | null;
+  /** How many cities are ranked this month: "3rd of 15". */
+  of: number;
+  /** Ranked only. */
+  sessions?: number;
+  players?: number;
+  perValue?: number;
+  perRank?: number | null;
+  weekAgoRank?: number | null;
+  run?: number;
+  /** Not ranked: how many more players it needs. */
+  playersNeeded?: number;
+}
+
+/** A row of Top players (city_page().top): never you (your row is `me`), at most 5 and fewer so no one's own count can be worked out. */
+export interface CityPageTop { userId: ID; sessions: number; rank: number }
+
+/** A face after the ringed ones in Up to hit (city_page().fill). */
+export interface CityPageFill {
+  userId: ID;
+  /** "Usually weekends / evenings / mornings": 6 of their last 10, at least 4. */
+  habit: 'weekends' | 'evenings' | 'mornings' | null;
+  /** The last day they played ('YYYY-MM-DD'), never today and at most about a week back; else null. */
+  lastDay: string | null;
+  /** Their sessions this month, only when they are also on Top players; else null ("Active this month"). */
+  sessions: number | null;
+}
+
+/**
+ * One of a city's Most active courts (city_page().active_courts, migration
+ * 198): courts only, never people, days or times. A visit is one player there
+ * one day (a session logged there, an open hit posted there or "I'm playing
+ * here"), counted only for courts 3+ different players used this month, worked
+ * out once a week. `lat`/`lng`: the court's own map spot, for its page.
+ */
+export interface ActiveCourt {
+  courtId: string;
+  name: string;
+  lat: number;
+  lng: number;
+  visits: number;
+}
+
+/** The city's most watched clip this month (city_page().clip): a public adult's, checked for you. */
+export interface CityClip { postId: ID; authorId: ID; views: number }
+
+/** One city's page (city_page(p_city, p_month)). `city` null: no such city, or not one you may open. */
+export interface CityPage {
+  month: string;
+  refreshedAt: string | null;
+  city: CityPageCity | null;
+  top: CityPageTop[];
+  /** Yours, when it is your city (or the one your month counts for): your place among the rows shown and you, and your sessions. */
+  me: { rank: number | null; sessions: number; inTotal: number } | null;
+  fill: CityPageFill[];
+  /** Up to hit today, ringed: your own city's Find Players rule; another city, friends who follow each other with you only. */
+  up: ID[];
+  /** Most active courts this month, most visits first (at most 5); empty when none have 3+ different players yet. */
+  activeCourts: ActiveCourt[];
+  clip: CityClip | null;
+}
+
 /** Which personal record (features/records/records.ts). */
 export type RecordKey = 'week' | 'streak' | 'month' | 'win' | 'match';
 

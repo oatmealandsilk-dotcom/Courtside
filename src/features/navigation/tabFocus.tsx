@@ -4,6 +4,7 @@ import { useIsFocused as useRouteFocused } from 'expo-router';
 // The router's own navigation hook, as useIsFocused (src/lib) reads it: asked on demand, it never redraws anything.
 import { useNavigation } from 'expo-router/build/react-navigation/core/useNavigation';
 import { AppStateLater } from '@/store/AppContext';
+import { useGrowPageLive } from '@/features/players/mapGrow';
 import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
@@ -116,7 +117,7 @@ export function asTabRoute<P extends object>(Screen: React.ComponentType<P>, pan
     // Only props a caller passed (a preview, one person's feed) count.
     const own = Object.keys(props).filter((key) => key !== 'segment');
     if (Platform.OS !== 'web' && !inPager && own.length === 0) return null;
-    return <ThemeGate pane={pane}>{() => <OffScreenLater><Screen {...props} /></OffScreenLater>}</ThemeGate>;
+    return <ThemeGate pane={pane}>{() => <OffScreenLater pane={pane}><Screen {...props} /></OffScreenLater>}</ThemeGate>;
   }
   return React.memo(TabRoute);
 }
@@ -168,14 +169,18 @@ export function ThemeGate({ pane, children }: { pane: string; children: () => Re
  * a page in the Feed does not wait for the other tabs to redraw first. On
  * screen again, it reads the live state at once (AppStateLater).
  */
-function OffScreenLater({ children }: { children: React.ReactNode }) {
+function OffScreenLater({ pane, children }: { pane: string; children: React.ReactNode }) {
   // On show: the route on top and, in the tab row, this tab on screen (see useIsFocused).
   const onShow = useIsFocused();
+  // The check-in zoom's grow (mapGrow): Community is what you see starting to push in, under the full map opened over it at
+  // once in a browser (see-through), so for that first moment it keeps the live state: the Up to hit pill's green comes on
+  // the frame you are found, not a few frames later as background work.
+  const growing = useGrowPageLive() && pane === '/discuss';
   // Outside the phone's tab row (a browser's tabs), "covered" for the parts that can wait comes from
   // here, the same way TabFocus gives it in the row: once a page opened over the tab has slid in.
   const inRow = use(TabOnShowLaterContext) !== undefined;
   const later = useCoveredLater(onShow, usePressV2() && !inRow ? COVERED_AFTER_MS : 0);
-  const inner = <AppStateLater hidden={!onShow}>{children}</AppStateLater>;
+  const inner = <AppStateLater hidden={!onShow && !growing}>{children}</AppStateLater>;
   // Whether this tab sits in the row never changes while it is mounted.
   return inRow ? inner : <TabOnShowLaterContext.Provider value={later}>{inner}</TabOnShowLaterContext.Provider>;
 }

@@ -17,8 +17,8 @@ import { usePageHeading, usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
 
-/** How long a clip on screen may wait on its cover before the loading disc shows (the phone's ClipPlayback). */
-const SPIN_AFTER_MS = 1000;
+/** How long a clip on screen may wait on its cover before the loading disc shows (the phone's ClipPlayback: 2.2 s since Oct 28). */
+const SPIN_AFTER_MS = 2200;
 
 /** The feed's top shade (see TOP_SHADE) as a browser gradient. */
 const TOP_SHADE_CSS = `linear-gradient(${TOP_SHADE.colors.map((c, i) => `${c} ${TOP_SHADE.locations[i] * 100}%`).join(', ')})`;
@@ -132,7 +132,7 @@ function ClipPlaybackInner({ uri, poster, active: asked, onDeck = false, preload
   // The loading disc only for a wait you would notice: a clip fetched ahead to its first frame
   // asks for its next seconds as it starts, a moment's 'waiting' that is no loading page. One still
   // on its cover (the video's poster, fetched ten pages ahead: postersAhead) shows that for a
-  // second first, as on Instagram, and on a phone (SPIN_AFTER_MS).
+  // couple of seconds first, as on Instagram, and on a phone (SPIN_AFTER_MS).
   const [spin, setSpin] = useState(false);
   useEffect(() => {
     if (ready || !active) { setSpin(false); return undefined; }
