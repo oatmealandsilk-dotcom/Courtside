@@ -292,9 +292,9 @@ type LookProps = { toast: ToastMessage; open: () => void; hide: (how?: ToastClos
  * rectangle, not a capsule; the app's own icon where the phone puts it, a
  * small filled rounded square, the same on every court (a session's own mark
  * in its disc, if it has one); the title in semibold and the words under it
- * in regular, on two lines where they need them, never cut. The page's own
- * solid surface with a hairline edge and a small neutral shadow: no glass, no
- * glow.
+ * in regular, on as many lines as they need, never cut (it slides from as far
+ * up as it is tall). The page's own solid surface with a hairline edge and a
+ * small neutral shadow: no glass, no glow.
  */
 function Banner({ toast, open, hide, onHeight }: LookProps) {
   const styles = useThemedStyles(styleDefinitions);
