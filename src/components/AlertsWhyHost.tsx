@@ -14,6 +14,8 @@ import { useTourBusy } from '@/features/tour/tourStore';
 import { alertsWhyWords, markAlertsWhyShown, setAlertsWhyHost, type AlertsWhyRequest } from '@/features/push/alertsWhy';
 import { registerForPush } from '@/features/push/push';
 import { useModalOpenWhile } from '@/lib/modalOpen';
+import { isShowing as toastShowing } from '@/lib/toast';
+import { useAnyUploading } from '@/lib/uploads';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -41,7 +43,7 @@ const TITLE_ID = 'courtside-alerts-why-title';
  * Drawn once by the root layout, over everything, the way ConfirmHost is
  * (straight on the phone's window on an iPhone; a pop-up layer on Android).
  * It waits for a clear screen: no sheet being written in, no chat, no
- * tutorial. A browser has no alerts (AlertsWhyHost.web.tsx draws nothing).
+ * tutorial, no upload, no note (toast) already up. A browser has no alerts (AlertsWhyHost.web.tsx draws nothing).
  */
 export function AlertsWhyHost() {
   const styles = useThemedStyles(styleDefinitions);
@@ -49,6 +51,9 @@ export function AlertsWhyHost() {
   const pathname = usePathname();
   const touring = useTourBusy();
   const { currentUserId } = useApp();
+  const uploading = useAnyUploading();
+  // Bumped to look again a little later while a note (toast) is still up.
+  const [retry, setRetry] = useState(0);
   // Asked for, not yet shown (waiting for a clear screen).
   const [pending, setPending] = useState<(AlertsWhyRequest & { at: number }) | null>(null);
   // On screen (kept while it fades out).
@@ -71,7 +76,8 @@ export function AlertsWhyHost() {
   useEffect(() => { if (!currentUserId) setPending(null); }, [currentUserId]);
 
   // Shown once the screen is clear, a beat after; dropped if it never clears.
-  const clear = !touring && !isBusy(pathname);
+  // Clear: no tutorial, no sheet or chat, nothing uploading, and no note (toast) up.
+  const clear = !touring && !uploading && !isBusy(pathname);
   useEffect(() => {
     if (!pending || request) return undefined;
     if (Date.now() - pending.at > GIVE_UP_MS) { setPending(null); return undefined; }
@@ -80,6 +86,9 @@ export function AlertsWhyHost() {
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => {
+      // A note is up (such as "You're open to hit · Off the map until Location
+      // is on"): the card never dims it; looked at again a beat later.
+      if (toastShowing()) { setRetry((n) => n + 1); return; }
       const { moment, ask } = pending;
       setPending(null);
       live.current = true;
@@ -89,7 +98,7 @@ export function AlertsWhyHost() {
       void markAlertsWhyShown();
     }, SETTLE_MS);
     return () => clearTimeout(t);
-  }, [pending, clear, request]);
+  }, [pending, clear, request, retry]);
 
   useEffect(() => {
     if (!request) return undefined;
