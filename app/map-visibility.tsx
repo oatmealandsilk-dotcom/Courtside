@@ -1,6 +1,5 @@
-import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AccessibilityInfo, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type TextStyle } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
@@ -10,8 +9,8 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { DragSheet } from '@/components/DragSheet';
 import { POP_FROM_SCALE, POP_IN, POP_OUT, POP_SETTLE_MS, POP_SPRING } from '@/components/popMotion';
 import { Avatar } from '@/components/ui';
-import { faceTints, tintFor } from '@/components/ui/Avatar';
-import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
+import { quietTintFor, quietTints } from '@/components/ui/Avatar';
+import { SheetTitle } from '@/components/sheet/SheetForm';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import type { MapVisibility, User } from '@/data/types';
 import { CONSENT_CHOICES, FIRST_YES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
@@ -19,7 +18,7 @@ import { checkInEnds, clock } from '@/features/players/checkIn';
 import { BIRTHDAY_OPENS_IT, ageUnknown } from '@/features/players/age';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
+import { TextScale, buttonShape, colors, font, lift, radius, spacing, typography, withAlpha } from '@/theme';
 
 /**
  * "Who can see you on the map?" (migration 189, after Apple's 5.1.2(i)
@@ -28,18 +27,20 @@ import { TextScale, colors, font, lift, radius, spacing, typography, withAlpha }
  * day. Strangers never see where you are. No: nothing of yours is ever on
  * the map.
  *
- * `mode=first`: the first ask, design C2, the small pop-up card (Oct 28,
- * owner: "C is better but make it a bit more aesthetic and the whole card a
- * bit smaller"; before that, "Too many words, Too big / a whole sheet, We
- * want to encourage them to turn it on"). A small card in the middle of the
- * dimmed screen, the way every "are you sure?" in the app asks (ConfirmHost:
- * the same width, corner, shadow, dim and motion, popMotion). The faces of up
- * to three friends who follow you back and their names under them, "Sam,
- * Marcus and 3 others" (real ones; none, neither), "Let
- * friends see you're up to hit?", and one short line: only friends who follow
+ * `mode=first`: the first ask, design E2, the small pop-up card of design C
+ * made plainer (Oct 28, owner, of C: "Now card is fine just make it less
+ * ai"; before that, "Too many words, Too big / a whole sheet, We want to
+ * encourage them to turn it on"), drawn as the iPhone's own alert: Apple's
+ * proportions, as every "are you sure?" in the app (ConfirmHost: its width,
+ * its pop-up motion, popMotion). Up to three small faces of friends who
+ * follow you back (photos on a phone; real ones; none, no faces), "Let
+ * friends see you're up to hit?" in semibold 17, and one short 13pt line:
+ * only friends who follow
  * you back, only when you tap, and it ends by itself (at 10pm, or in 2 hours
- * from 8pm). "Turn on" saves the yes; then Apple's own location prompt, then
- * Up to hit. "Not now" (or a tap outside, Escape, Android's Back) saves
+ * from 8pm). Then the alert's two plain rows, each under a hairline: "Turn
+ * on", in the app's green and semibold, saves the yes; then Apple's own
+ * location prompt, then Up to hit. "Not now", in the page's ink (or a tap
+ * outside, Escape, Android's Back), saves
  * nothing and shares nothing; it asks again the next time you tap Up to hit.
  * `from` says what asked (WhoSeesFrom): only Up to hit's ask names its time.
  * I'm playing here (`court`), Show friends, a teen's Open to hit and the
@@ -69,7 +70,7 @@ const TITLE_ID = 'courtside-who-sees-title';
 const LINE_ID = 'courtside-who-sees-line';
 
 /**
- * The first ask, design C2: a small card in the middle of the dimmed screen.
+ * The first ask, design E2: a small card in the middle of the dimmed screen.
  * It comes and goes as the app's "are you sure?" card does (popMotion): the
  * dim and the card fade in, the card growing the last few percent; on an
  * answer both fade away, then the screen closes and whoever asked hears the
@@ -86,7 +87,6 @@ const LINE_ID = 'courtside-who-sees-line';
 function FirstAsk({ upToHit }: { upToHit: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const reduce = useReducedMotion();
-  const { fontScale } = useWindowDimensions();
   const { actions, currentUser, teenMap } = useApp();
   const teen = onTeenMap(currentUser, teenMap);
   const friends = useFriendsBack();
@@ -230,15 +230,23 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
           >
             {/* With no friend who follows you back yet there are simply no faces and no names: the question starts the card. */}
             {friends.length ? <Faces people={friends} /> : null}
-            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>{askTitle(upToHit, fontScale <= 1)}</Text>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>{askTitle(upToHit)}</Text>
             {/* Apple 5.1.2(i) / 5.1.1: who sees you (only friends who follow you back), only when you tap or share, and that it ends by itself. */}
             <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(upToHit, teen, ageUnknown(currentUser))}</Text>
+            {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}
           </ScrollView>
-          <View style={styles.cardActions}>
-            {error ? <Text style={[styles.error, styles.centred]}>{error}</Text> : null}
-            <Submit short label={FIRST_YES} busy={busy} busyLabel="Saving…" onPress={() => { void turnOn(); }} />
-            {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): quieter than Turn on, never hidden. */}
-            <Pressable ref={notNowRef} accessibilityRole="button" accessibilityLabel="Not now" accessibilityState={{ disabled: busy }} disabled={busy} hitSlop={4} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && { opacity: PRESS_DIM }]}>
+          {/* The alert's own rows, each under a hairline: Turn on first, in green and semibold, the answer it invites. */}
+          <View>
+            <Pressable accessibilityRole="button" accessibilityLabel={FIRST_YES} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={() => { void turnOn(); }} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
+              {busy ? (
+                <View style={styles.rowBusy}>
+                  <ActivityIndicator size="small" color={colors.brand} />
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.yesText}>Saving…</Text>
+                </View>
+              ) : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.yesText}>{FIRST_YES}</Text>}
+            </Pressable>
+            {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): a row of its own in the page's ink, never hidden. */}
+            <Pressable ref={notNowRef} accessibilityRole="button" accessibilityLabel="Not now" accessibilityState={{ disabled: busy }} disabled={busy} onPress={notNow} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
             </Pressable>
           </View>
@@ -252,13 +260,11 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
 
 /**
  * The first ask's question: Up to hit's own, or the general one for anything
- * else that asked. At the phone's usual text size it is broken in two by
- * hand, so the centred card reads in two even lines; with larger text it
- * wraps by itself (evenly: EVEN), so the hand break never leaves "see" alone.
+ * else that asked. No hand break: as an iPhone alert's title it is one line
+ * when it fits and wraps by itself (evenly: EVEN) when it does not.
  */
-function askTitle(upToHit: boolean, handBreak: boolean): string {
-  const t = upToHit ? 'Let friends see\nyou’re up to hit?' : 'Let friends see\nwhere you are?';
-  return handBreak ? t : t.replace('\n', ' ');
+function askTitle(upToHit: boolean): string {
+  return upToHit ? 'Let friends see you’re up to hit?' : 'Let friends see where you are?';
 }
 
 /**
@@ -316,18 +322,14 @@ function useFriendsBack(): User[] {
 
 /** The faces drawn: the first three. */
 const FACES = 3;
-/** Each face, its ring included: big enough that its initials read (about 10.6pt), as the app's other small faces do. */
-const FACE = 32;
-/** The card's colour round each face, so one sits cleanly over the next. */
-const FACE_RING = 2;
-/**
- * How far each face tucks under the one before: a little over the ring, so
- * the row reads as one small group while an initials-only face keeps its
- * letters clear of the next (review, Oct 28: "SO(ML(OR").
- */
-const FACE_TUCK = 6;
+/** Each face, its ring included: small, about the title's height, so it sits over the question and never above it as a picture. */
+const FACE = 28;
+/** A crisp ring in the card's own colour, so one face sits cleanly over the next. */
+const FACE_RING = 1;
+/** How far each face tucks under the one before: about a quarter, a small overlapping row, never a stack. */
+const FACE_TUCK = 7;
 
-/** Their first names, as the card says them: "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
+/** Their first names, as a screen reader says them: "Sam", "Sam and Marcus", "Sam, Marcus and Omar", "Sam, Marcus and 3 others". */
 function friendsWords(people: User[]): string {
   const first = people.map((u) => u.name.split(' ')[0]);
   if (first.length <= 1) return first[0] ?? '';
@@ -336,37 +338,34 @@ function friendsWords(people: User[]): string {
 }
 
 /**
- * Who a yes is for, made plain (design C2): a few small faces, each just
- * over the last, ringed in the card's own colour, and under them their names,
- * "Sam, Marcus and 3 others". The faces take the court's own accents, as the
- * app's other faces do (the "Played here by" faces on the court sheet right
- * behind this card), each one a different accent from the faces beside it,
- * so the row reads as three people (a photo shows as itself). Real friends
- * who follow you back only, never strangers; with none, the card has neither.
+ * Who a yes is for (design E2): up to three small faces above the question,
+ * each tucked a little under the last with a crisp ring in the card's
+ * colour, as an iPhone alert carries a small picture above its title. On a
+ * phone a face is the friend's photo; one with no photo takes a quiet tone
+ * and dark initials (Avatar `quiet`, as the Send to sheet), each face its own
+ * tone, never a cluster of bright bubbles. A screen reader hears their names.
+ * Real friends who follow you back only, never strangers; with none, no faces.
  */
 function Faces({ people }: { people: User[] }) {
   const styles = useThemedStyles(styleDefinitions);
   const shown = people.slice(0, FACES);
   const names = friendsWords(people);
-  // Each face its own accent: the seed's, unless a face already shown has it; then the next one free.
-  const accents = faceTints();
+  // Each face its own tone: the seed's, unless a face already shown has it; then the next one free.
+  const tones = quietTints();
   const used: string[] = [];
   const tints = shown.map((u) => {
-    const own = tintFor(u.avatarSeed);
-    const tint = used.includes(own) ? accents.find((a) => !used.includes(a)) ?? own : own;
+    const own = quietTintFor(u.avatarSeed);
+    const tint = used.includes(own) ? tones.find((t) => !used.includes(t)) ?? own : own;
     used.push(tint);
     return tint;
   });
   return (
-    <View style={styles.who} accessible accessibilityLabel={`${names} follow${people.length > 1 ? '' : 's'} you back`}>
-      <View style={styles.faces}>
-        {shown.map((u, i) => (
-          <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
-            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} style={{ backgroundColor: tints[i] }} />
-          </View>
-        ))}
-      </View>
-      <Text {...EVEN} style={[styles.whoNames, EVEN_WEB]}>{names}</Text>
+    <View style={styles.faces} accessible accessibilityLabel={`${names} follow${people.length > 1 ? '' : 's'} you back`}>
+      {shown.map((u, i) => (
+        <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
+          <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={FACE - FACE_RING * 2} quiet style={{ backgroundColor: tints[i] }} />
+        </View>
+      ))}
     </View>
   );
 }
@@ -497,46 +496,49 @@ function facts(): string[] {
   ];
 }
 
-/** The card's inner side margin: the words, the button and Not now share one edge. */
-const CARD_PAD = spacing.lg + spacing.xs;
+/** The alert's inner side margin, Apple's own. */
+const CARD_PAD = spacing.lg;
 
 /** ConfirmHost's own test: a computer's browser gets the wider card. */
 const desktop = isDesktopBrowser();
 
 const styleDefinitions = StyleSheet.create({
-  // The first ask: a card in the middle of the dimmed screen, ConfirmHost's own size, corner, shadow and dim.
+  // The first ask: in the middle of the dimmed screen, the app's own alert width (ConfirmHost's, Apple's proportions).
   layer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xxl, paddingVertical: spacing.xxxl },
   dim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: colors.overlay },
   box: { zIndex: 1, width: '100%', maxWidth: 300, maxHeight: '100%' },
-  // A computer's screen has the room for ConfirmHost's wider box; a phone gets the narrower one.
+  // A computer's screen has the room for ConfirmHost's wider box.
   boxWide: { maxWidth: 400 },
   card: {
     flexShrink: 1,
     backgroundColor: colors.surface,
-    borderRadius: radius.xl,
+    // A plainer corner than C's (a sheet's), the app's own card corner: less of a soft blob.
+    borderRadius: radius.lg,
+    ...buttonShape.curve,
     // The page behind is dimmed, but on a dark court the card is dark too: a faint edge keeps it a card.
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: colors.border,
     overflow: 'hidden',
-    boxShadow: '0px 10px 30px rgba(0, 0, 0, 0.2)',
+    // A short, close shadow: the dim already lifts the card, so no wide soft float under it.
+    boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.12)',
   },
   cardScroll: { flexGrow: 0, flexShrink: 1 },
-  cardWords: { alignItems: 'center', paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 6 },
-  // A step under the old card's 20, set tight the way the phone sets a short bold title.
-  cardTitle: { ...font('700'), fontSize: 18, lineHeight: 23, letterSpacing: -0.35, color: colors.text, textAlign: 'center' },
-  // ConfirmHost's own line: 14 on 19, muted.
-  cardLine: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
-  cardActions: { paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + 2, paddingBottom: 6, gap: 2 },
-  // The faces and, under them, their names: one small group above the question.
-  who: { alignItems: 'center', marginBottom: spacing.sm },
-  faces: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  // Regular weight, a step under the line below: a caption to the faces, not a third grey heading.
-  whoNames: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, textAlign: 'center', marginTop: 6 },
+  cardWords: { alignItems: 'center', paddingHorizontal: CARD_PAD, paddingTop: spacing.lg + spacing.xs, paddingBottom: spacing.lg + 2 },
+  // Apple's alert title: semibold 17, its own tight tracking.
+  cardTitle: { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.4, color: colors.text, textAlign: 'center' },
+  // Apple's alert message: 13 on 18.
+  cardLine: { ...typography.small, lineHeight: 18, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+  faces: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md - 2 },
   faceRing: { padding: FACE_RING, borderRadius: radius.pill, backgroundColor: colors.surface },
-  // Quiet but plain to read: the muted ink, semibold, a full finger's height.
-  notNow: { minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
-  notNowText: { ...typography.bodyStrong, ...font('600'), color: colors.textMuted, textAlign: 'center' },
-  centred: { textAlign: 'center', marginBottom: spacing.xs },
+  // Each answer a plain row under a hairline, as Apple's alert and the app's "are you sure?" (ConfirmHost).
+  row: { minHeight: buttonShape.height, alignItems: 'center', justifyContent: 'center', paddingHorizontal: CARD_PAD, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  rowPressed: { backgroundColor: colors.surfaceAlt },
+  rowBusy: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Turn on: the app's green, semibold, the answer it invites.
+  yesText: { ...font('600'), fontSize: 17, letterSpacing: -0.4, color: colors.brand, textAlign: 'center' },
+  // Not now: regular weight in the page's ink, plain to read, plainly the other answer.
+  notNowText: { ...font('400'), fontSize: 17, letterSpacing: -0.4, color: colors.text, textAlign: 'center' },
+  errorGap: { textAlign: 'center', marginTop: spacing.sm },
   // Settings → Privacy's sheet.
   scroll: { flexShrink: 1 },
   body: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, gap: spacing.md },
