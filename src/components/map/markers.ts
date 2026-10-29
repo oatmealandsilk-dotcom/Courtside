@@ -843,7 +843,7 @@ export const hitsCountText = (n: number) => (n > 9 ? '9+' : `+${n}`);
  * like"). false: the number alone, "+3" (the "+" small, the way the map's "+4" badges say more). true: a tiny
  * solid calendar before it and no "+", a calendar and "3" (still "9+" past nine).
  */
-export const HIT_BADGE_MARK: boolean = false;
+export const HIT_BADGE_MARK: boolean = true;
 
 /**
  * A tiny solid calendar in the badge's ink, 7 px wide and 8 tall on either badge: its two rings, its top
