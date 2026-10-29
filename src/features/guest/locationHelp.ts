@@ -9,6 +9,8 @@ export interface LocationHelp {
   /** Where they are, in a few words, for the top of the steps ("In Messenger on iPhone"). */
   where: string;
   steps: [string, string];
+  /** One short line under the steps for when they still don't work (Safari's own switch for every website). */
+  fallback?: string;
 }
 
 /** The app whose built-in browser this is, if it is one we can name. */
@@ -29,7 +31,7 @@ export function locationHelpFor(ua: string): LocationHelp {
     return {
       where: `In ${app} on iPhone`,
       steps: [
-        `Open your iPhone’s Settings, then tap Apps → ${app} → Location.`,
+        `Open your iPhone’s Settings, tap Apps (or scroll down), then ${app} → Location.`,
         'Choose While Using the App, come back here and tap Try again.',
       ],
     };
@@ -47,7 +49,7 @@ export function locationHelpFor(ua: string): LocationHelp {
     return {
       where: 'In Chrome on iPhone',
       steps: [
-        'Open your iPhone’s Settings, then tap Apps → Chrome → Location.',
+        'Open your iPhone’s Settings, tap Apps (or scroll down), then Chrome → Location.',
         'Choose While Using the App, come back here and tap Try again.',
       ],
     };
@@ -59,6 +61,7 @@ export function locationHelpFor(ua: string): LocationHelp {
         'Tap ᴀA at the left of the address bar, then Website Settings.',
         'Set Location to Allow, then tap Try again.',
       ],
+      fallback: 'Still off? Settings → Privacy & Security → Location Services → Safari Websites → While Using.',
     };
   }
   if (android) {

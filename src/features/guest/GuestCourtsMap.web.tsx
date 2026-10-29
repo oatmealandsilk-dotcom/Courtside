@@ -163,8 +163,21 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
     () => (found ? pinsFor(nearCourts ?? [], hits) : pinsFor(townCourts ?? [], hits)),
     [found, nearCourts, townCourts, hits],
   );
-  const weather = useWeather(center ?? { lat: 0, lng: 0 });
+  const weather = useWeather(center);
   const [drawn, setDrawn] = useState(false);
+  // The map engine (a megabyte) is fetched once the page has drawn and the browser is idle, so the open
+  // hits below come first on a slow in-app browser; straight away when they are already found.
+  const [engine, setEngine] = useState(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') { setEngine(true); return undefined; }
+    const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number; cancelIdleCallback?: (id: number) => void };
+    if (w.requestIdleCallback) {
+      const idle = w.requestIdleCallback(() => setEngine(true), { timeout: 1500 });
+      return () => w.cancelIdleCallback?.(idle);
+    }
+    const t = setTimeout(() => setEngine(true), 400);
+    return () => clearTimeout(t);
+  }, []);
   const [helpOpen, setHelpOpen] = useState(true);
   useEffect(() => { if (failed) setHelpOpen(true); }, [failed]);
   const help = useMemo(() => locationHelpFor(typeof navigator !== 'undefined' ? navigator.userAgent : ''), []);
@@ -181,10 +194,11 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
 
   const townName = town ? town.name.split(',')[0] : '';
   const townCourtCount = townCourts ? townCourts.reduce((n, c) => n + Math.max(1, c.count || 1), 0) : 0;
-  // Only what is true: the open hits the peek lists in that town, else the courts the map has there.
+  // Only what is true: the open hits the peek lists in that town, else the courts the map has there. Never
+  // "near you" for the town shown: the app does not know where they are until they tap.
   const headline = town && town.hits > 0
     ? `${town.hits}${townMore ? '+' : ''} open ${town.hits === 1 ? 'hit' : 'hits'} in ${townName}`
-    : town && townCourtCount > 0 ? `${townCourtCount} courts in ${townName}` : 'The courts near you';
+    : town && townCourtCount > 0 ? `${townCourtCount} courts in ${townName}` : town ? `Courts in ${townName}` : 'The courts near you';
   const sub = anyHits
     ? 'Players are looking for someone to hit with. See which courts near you have a spot.'
     : 'See every court near you, and the open hits at them.';
@@ -193,7 +207,7 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
   const nearHits = found ? (hits ?? []).filter((h) => h.km !== undefined && h.km <= NEAR_KM).length : 0;
 
   return (
-    <View accessibilityLabel="Map of courts near you" style={styles.card}>
+    <View accessibilityLabel="Map of courts near you" style={[styles.card, failed && !found && styles.cardGrow]}>
       <MapCardLoading moving={false} />
       {center ? (
         <View aria-hidden={!found} style={[StyleSheet.absoluteFill, styles.clip, { opacity: drawn ? 1 : 0, transition: 'opacity 400ms cubic-bezier(0.45, 0, 0.55, 1)' } as object]}>
@@ -202,9 +216,11 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
             transform: [{ scale: found ? 1 : 1.04 }],
             transition: 'filter 900ms cubic-bezier(.2,.7,.3,1), transform 900ms cubic-bezier(.2,.7,.3,1)',
           } as object]}>
-            <Suspense fallback={null}>
-              <Canvas center={center} zoom={found ? NEAR_ZOOM : TOWN_ZOOM} fit={fit} fly={found} pins={pins} me={found ? near : null} still={!found} onCourt={openCourt} onDrawn={() => setDrawn(true)} />
-            </Suspense>
+            {engine || near ? (
+              <Suspense fallback={null}>
+                <Canvas center={center} zoom={found ? NEAR_ZOOM : TOWN_ZOOM} fit={fit} fly={found} pins={pins} me={found ? near : null} still={!found} onCourt={openCourt} onDrawn={() => setDrawn(true)} />
+              </Suspense>
+            ) : null}
           </View>
         </View>
       ) : null}
@@ -217,7 +233,7 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
           <CardCredit />
         </>
       ) : failed ? (
-        <View style={[styles.middle, halo]}>
+        <View style={[styles.middleFlow, halo]}>
           <Pressable accessibilityRole="button" accessibilityState={{ expanded: helpOpen }} onPress={() => setHelpOpen((o) => !o)} style={({ pressed }) => [styles.offButton, pressed && styles.pressed]}>
             <Ionicons name="location-outline" size={17} color={colors.text} />
             <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.offText}>Location is off — here’s how to turn it on</Text>
@@ -231,6 +247,7 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepText}>{step}</Text>
                 </View>
               ))}
+              {help.fallback ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepsFallback}>{help.fallback}</Text> : null}
               <Pressable accessibilityRole="button" onPress={onLocate} disabled={locating} style={({ pressed }) => [styles.retry, pressed && styles.pressed]}>
                 <BrandWash radius={buttonShape.smallRadius} curve />
                 {locating ? <CourtSpinner size={15} ink={colors.brandInk} /> : null}
@@ -244,8 +261,8 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
           <View style={[styles.middle, halo]}>
             {town ? (
               <View style={styles.live}>
-                <View style={styles.liveDot} />
-                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.liveText}>{town.hits > 0 ? 'This week' : 'Near you'}</Text>
+                {town.hits > 0 ? <View style={styles.liveDot} /> : <Ionicons name="location" size={12} color={colors.textMuted} />}
+                <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.liveText}>{town.hits > 0 ? 'This week' : townName}</Text>
               </View>
             ) : null}
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.headline}>{headline}</Text>
@@ -278,9 +295,12 @@ export function GuestCourtsMap({ near, hits: listed, locating, failed, onLocate 
 const styleDefinitions = StyleSheet.create({
   // The players' card's own frame (WebMap's card): its height, corners and edge.
   card: { height: CARD_HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
+  // Denied: at least the card's height, taller when the steps need it.
+  cardGrow: { height: 'auto', minHeight: CARD_HEIGHT },
   clip: { overflow: 'hidden' },
   veil: { backgroundColor: withAlpha(colors.bg, 0.3) },
   middle: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm },
+  middleFlow: { minHeight: CARD_HEIGHT - 2, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, gap: spacing.sm },
   live: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.open },
   liveText: { ...typography.smallStrong, color: colors.text },
@@ -298,6 +318,7 @@ const styleDefinitions = StyleSheet.create({
   offText: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
   steps: { alignSelf: 'stretch', gap: 10, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   stepsWhere: { ...typography.smallStrong, color: colors.textMuted },
+  stepsFallback: { ...typography.small, color: colors.textMuted },
   step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   stepNumText: { ...typography.smallStrong, color: colors.brand },

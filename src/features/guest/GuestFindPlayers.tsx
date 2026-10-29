@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SwipePressable } from '@/components/SwipePressable';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -22,6 +22,9 @@ import { openJoinSheet } from './joinAsk';
 import { TextScale } from '@/theme/textScale';
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
+const DENIED_NOTE = 'Location is off for this site, so here are the soonest hits.';
+/** Set just before the page reloads after a second "no" in a row, so the reloaded page keeps the how-to up. */
+const RELOADED_KEY = 'cs-guest-loc-reloaded';
 
 /**
  * Community → Find Players for a guest (guest mode, Oct 17): the open hits a
@@ -42,6 +45,10 @@ export function GuestFindPlayers() {
   const [courts, setCourts] = useState<CourtRow[] | null>(null);
   // Why the last ask for their location came back empty, for the map's how-to.
   const [locFail, setLocFail] = useState<'denied' | 'unavailable' | null>(null);
+  // How many asks in a row came back "no". iPhone browsers (Safari, and the ones inside Messenger and
+  // Instagram) can keep saying no without asking again until the page reloads, even once the setting is
+  // fixed, so a second "no" in a row reloads the page: if it is allowed now, the quiet check finds them.
+  const deniedRun = useRef(0);
 
   const load = useCallback((point: { lat: number; lng: number } | null) => {
     let live = true;
@@ -55,7 +62,17 @@ export function GuestFindPlayers() {
   // question: the map shows their courts straight away. Anything else waits for a tap (owner: "ask on tap").
   useEffect(() => {
     let live = true;
-    getPosition({ quiet: true }).then((got) => { if (live && got.ok) setNear((was) => was ?? { lat: got.lat, lng: got.lng }); }).catch(() => undefined);
+    let reloaded = false;
+    try {
+      reloaded = Platform.OS === 'web' && typeof sessionStorage !== 'undefined' && sessionStorage.getItem(RELOADED_KEY) === '1';
+      if (reloaded) sessionStorage.removeItem(RELOADED_KEY);
+    } catch { /* no storage: nothing to carry over */ }
+    getPosition({ quiet: true }).then((got) => {
+      if (!live) return;
+      if (got.ok) { setNear((was) => was ?? { lat: got.lat, lng: got.lng }); return; }
+      // Reloaded after a "no" and still not allowed: the how-to stays up, as it was before the reload.
+      if (reloaded) { setLocFail('denied'); setNote(DENIED_NOTE); }
+    }).catch(() => undefined);
     return () => { live = false; };
   }, []);
 
@@ -65,9 +82,15 @@ export function GuestFindPlayers() {
     setNote(null);
     const got = await getPosition({}).catch(() => ({ ok: false as const, reason: 'unavailable' as const }));
     setLocating(false);
-    if (got.ok) { setLocFail(null); setNear({ lat: got.lat, lng: got.lng }); return; }
+    if (got.ok) { deniedRun.current = 0; setLocFail(null); setNear({ lat: got.lat, lng: got.lng }); return; }
+    deniedRun.current = got.reason === 'denied' ? deniedRun.current + 1 : 0;
+    if (deniedRun.current >= 2 && Platform.OS === 'web' && typeof window !== 'undefined') {
+      try { sessionStorage.setItem(RELOADED_KEY, '1'); } catch { /* the reloaded page just opens on the button */ }
+      window.location.reload();
+      return;
+    }
     setLocFail(got.reason === 'denied' ? 'denied' : 'unavailable');
-    setNote(got.reason === 'denied' ? 'Location is off for this site, so here are the soonest hits.' : 'Couldn’t find where you are. Here are the soonest hits.');
+    setNote(got.reason === 'denied' ? DENIED_NOTE : 'Couldn’t find where you are. Here are the soonest hits.');
   };
 
   const join = (hit: PeekHit) => openJoinSheet(hit.hostFirst ? `join ${hit.hostFirst}’s hit` : 'join this hit', {
