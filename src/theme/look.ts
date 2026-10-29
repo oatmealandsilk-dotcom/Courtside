@@ -121,5 +121,5 @@ export const LESS_AI_ROUND2: boolean = true;
  * hit?" card, never change here.
  */
 export type ToastLook = 'now' | 'banner' | 'line';
-export const TOAST_LOOK: ToastLook = 'now';
+export const TOAST_LOOK: ToastLook = 'banner';
 export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';
