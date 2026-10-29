@@ -44,13 +44,12 @@ export function FooterFade() {
   );
 }
 
-/** "Private — never on your profile", with a lock. */
+/** "Your birthday is never shown to anyone" (Oct 29, owner: "Private" read as a private account, so no lock and no "Private"). */
 export function PrivacyLine() {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <View style={styles.privacy} accessible accessibilityLabel="Private. Your birthday never shows on your profile.">
-      <Ionicons name="lock-closed" size={13} color={colors.textMuted} />
-      <Text style={styles.privacyText}>Private — never on your profile</Text>
+    <View style={styles.privacy} accessible accessibilityLabel="Your birthday is never shown to anyone.">
+      <Text style={styles.privacyText}>Your birthday is never shown to anyone</Text>
     </View>
   );
 }

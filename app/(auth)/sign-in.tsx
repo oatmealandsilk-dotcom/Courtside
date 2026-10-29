@@ -608,7 +608,7 @@ export default function SignIn() {
                   />
                   <BirthDateField month={birth.month} day={birth.day} year={birth.year} onChange={setBirth} label="Birthday (optional)" />
                   {/* Why we ask, said plainly; leaving it empty is fine (Oct 17). */}
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>Keeps younger players safe. Private, never on your profile.</Text>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>Keeps younger players safe. Never shown to anyone.</Text>
                   {/* Honest before they sign up (Oct 17): without one, the hit they tapped can't be joined yet. */}
                   {joining && birthBlank ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.birthNote}>To join the hit you picked, add your birthday: hits with players you don’t follow yet are for players 18 and over.</Text> : null}
                   {/* Under 18 on the birthday they typed (review, Oct 17): said plainly before sign-up, never "ask them to follow you back". */}
