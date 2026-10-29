@@ -1,4 +1,3 @@
-import type { CountPlay } from './countFormat';
 import React from 'react';
 import { Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
@@ -25,7 +24,7 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
   size: number;
   color: string;
   unitColor: string;
-  play?: CountPlay;
+  play?: boolean;
   delay?: number;
   duration?: number;
   style?: StyleProp<ViewStyle>;
@@ -76,7 +75,7 @@ export function Figure({ value, unit, size, color, unitColor, play = false, dela
   size: number;
   color: string;
   unitColor: string;
-  play?: CountPlay;
+  play?: boolean;
   delay?: number;
   duration?: number;
   part?: 'int' | 'dec1';

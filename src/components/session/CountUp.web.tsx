@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { countText, type CountPart, type CountPlay } from './countFormat';
+import { countText, type CountPart } from './countFormat';
 
 export type { CountPart } from './countFormat';
 
@@ -20,17 +20,16 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
   part?: CountPart;
   delay?: number;
   duration?: number;
-  play?: CountPlay;
+  play?: boolean;
   style?: StyleProp<TextStyle>;
   maxFontSizeMultiplier?: number;
 }) {
   const reduced = useReducedMotion();
-  const [shown, setShown] = useState(play !== false && !reduced ? from : value);
+  const [shown, setShown] = useState(play && !reduced ? from : value);
   const frame = useRef<number | null>(null);
   // Counts up once: a number already shown in full never falls back to 0 to count again when `play` comes on (as CountUp).
-  const settled = useRef(play === false || reduced);
+  const settled = useRef(!(play && !reduced));
   useEffect(() => {
-    if (play === 'wait' && !reduced) { setShown(settled.current ? value : from); return undefined; }
     if (!play || reduced || settled.current || typeof requestAnimationFrame !== 'function') { settled.current = true; setShown(value); return undefined; }
     settled.current = true;
     setShown(from);

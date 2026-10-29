@@ -1,5 +1,4 @@
-import type { CountPlay } from './countFormat';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
@@ -14,7 +13,7 @@ export function ZoneBar({ zones, colors, height = 10, play = false, delay = 0, d
   zones: number[];
   colors: string[];
   height?: number;
-  play?: CountPlay;
+  play?: boolean;
   delay?: number;
   duration?: number;
   /** Square ends (the foot along a photo's bottom edge). */
@@ -22,13 +21,9 @@ export function ZoneBar({ zones, colors, height = 10, play = false, delay = 0, d
   style?: StyleProp<ViewStyle>;
 }) {
   const reduced = useReducedMotion();
-  const grow = useSharedValue(play !== false && !reduced ? 0 : 1);
-  // Grows once, as the numbers count (CountUp): 'wait' holds it empty until then; shown full, it never empties to grow again.
-  const settled = useRef(play === false || reduced);
+  const grow = useSharedValue(play && !reduced ? 0 : 1);
   useEffect(() => {
-    if (play === 'wait' && !reduced) { grow.value = settled.current ? 1 : 0; return; }
-    if (!play || reduced || settled.current) { grow.value = 1; settled.current = true; return; }
-    settled.current = true;
+    if (!play || reduced) { grow.value = 1; return; }
     grow.value = 0;
     grow.value = withDelay(delay, withTiming(1, { duration, easing: Easing.out(Easing.cubic) }));
   }, [play, reduced, delay, duration, grow]);

@@ -3,9 +3,9 @@ import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-nat
 import Reanimated, { Easing, cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { countText, type CountPart, type CountPlay } from './countFormat';
+import { countText, type CountPart } from './countFormat';
 
-export type { CountPart, CountPlay } from './countFormat';
+export type { CountPart } from './countFormat';
 
 const AnimatedInput = Reanimated.createAnimatedComponent(TextInput);
 
@@ -23,21 +23,19 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
   part?: CountPart;
   delay?: number;
   duration?: number;
-  /** Off: the final number, still. Turned on: counts up from 0, once. 'wait': 0, ready to count. */
-  play?: CountPlay;
+  /** Off: the final number, still. Turned on: counts up from 0. */
+  play?: boolean;
   style?: StyleProp<TextStyle>;
   maxFontSizeMultiplier?: number;
 }) {
   const reduced = useReducedMotion();
-  const v = useSharedValue(play !== false && !reduced ? from : value);
+  const v = useSharedValue(play && !reduced ? from : value);
   // Counts up once. A number already on screen in full (shown while `play` was off, say a Feed page sliding
   // in) never drops back to 0 to count again when `play` comes on (Oct 27, owner's screen recording: the
   // stats showed, then fell and counted up again as the page landed).
-  const settled = useRef(play === false || reduced);
+  const settled = useRef(!(play && !reduced));
   useEffect(() => {
     cancelAnimation(v);
-    // Waiting to count: its starting point (unless it has already counted or shown in full).
-    if (play === 'wait' && !reduced) { v.value = settled.current ? value : from; return; }
     if (!play || reduced || settled.current) { v.value = value; settled.current = true; return; }
     settled.current = true;
     v.value = from;
@@ -54,7 +52,7 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
       importantForAccessibility="no"
       accessibilityElementsHidden
       pointerEvents="none"
-      defaultValue={countText(play !== false && !reduced ? from : value, part)}
+      defaultValue={countText(play && !reduced ? from : value, part)}
       maxFontSizeMultiplier={maxFontSizeMultiplier}
       animatedProps={animatedProps}
       style={[styles.input, style]}
