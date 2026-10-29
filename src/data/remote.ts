@@ -4379,8 +4379,10 @@ export const remote = {
    * A new teen's "People you may know" (migration 202, teens_to_suggest):
    * other teens, as the server decides (asked by a known teen in their first
    * week only; public, findable teens, never anyone blocked or muted either
-   * way), your town first, at most 6. Only ids: never a town, a spot or an
-   * age. Empty on a database without it, or a failed ask.
+   * way), your town first, at most 6. Picked once and then frozen on the
+   * server, so changing your town and asking again gives the same people.
+   * Only ids: never a town, a spot or an age. Empty on a database without
+   * it, or a failed ask.
    */
   async fetchTeensToSuggest(): Promise<ID[]> {
     const { data, error } = await need().rpc('teens_to_suggest');
