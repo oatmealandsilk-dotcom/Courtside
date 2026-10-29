@@ -19,7 +19,7 @@ import { FoodSection } from '@/features/health/FoodSection';
 import { alertsAllowed } from '@/features/health/workoutWatch';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { WHOOP_WORKOUTS_ASK, WORKOUTS_ASK, askWithSharing } from '@/features/activity/workouts';
-import { consentLine, shownTo } from '@/features/activity/autoLogSharing';
+import { consentLine, onConnect, savesOnConnect, shownTo } from '@/features/activity/autoLogSharing';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
@@ -95,9 +95,13 @@ export default function Health() {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { healthHistory, actions, currentUserId } = app;
-  // Who will see the tennis that logs itself (migration 193): said before Apple Health connects, so Continue is the yes.
+  // Who sees the tennis that logs itself (migration 193), said before a source connects. Apple Health's sheet never
+  // chooses it (Apple's 5.1.3: not chosen yet, "only you until you choose", asked on "Tennis logged" or in Settings);
+  // WHOOP's says friends will see them, and its Turn on saves that when nothing was chosen.
   const seenBy = shownTo(app.autoLogSharing, null, app.currentUser);
-  const sharing = consentLine(seenBy);
+  const sharing = consentLine(seenBy, app.currentUser, app.autoLogSharing);
+  const sharingApple = consentLine(onConnect(app.autoLogSharing, 'apple-health', app.currentUser), app.currentUser, app.autoLogSharing);
+  const sharingWhoop = consentLine(onConnect(app.autoLogSharing, 'whoop', app.currentUser), app.currentUser, app.autoLogSharing);
   // Every source always has a row: the catalog, with this account's connections laid over it.
   const integrations = withCatalog(app.integrations);
   // Food apps the Food card does not already cover (see foodCardCovers).
@@ -166,8 +170,8 @@ export default function Health() {
       }
       else if (what === 'workouts') { if (provider === 'apple-health' || provider === 'whoop') await actions.turnOnTennis(provider, { workouts: true }); }
       else if (provider === 'apple-health' || provider === 'whoop' || isTracker(provider)) await (what === 'tennis' ? actions.turnOnTennis(provider, { workouts: workouts(provider) }) : actions.turnOffTennis(provider));
-      // Connected after being told who sees the tennis that logs itself: a choice never made is saved as that (migration 193).
-      if (told && app.autoLogSharing === null) void actions.setAutoLogSharing(seenBy);
+      // Turned on after being told friends will see the tennis that logs itself (WHOOP only): a choice never made is saved as that.
+      if (told && savesOnConnect(app.autoLogSharing, provider)) void actions.setAutoLogSharing('mutuals');
     } catch (err) {
       // What failed, in its own words: a failed Sync never says "Could not connect".
       const was = integrations.find((i) => i.provider === provider)?.connected;
@@ -185,20 +189,20 @@ export default function Health() {
   // Apple Health's own permission sheet comes next, so CourtSide says why first.
   // 'workouts': someone with tennis sessions on, saying yes to every workout as well.
   const askApple = (next: 'toggle' | 'tennis' | 'workouts') => confirm(flags.workoutsApple ? {
-    ...askWithSharing(WORKOUTS_ASK, sharing),
+    ...askWithSharing(WORKOUTS_ASK, sharingApple),
     confirmLabel: 'Continue',
-    onConfirm: () => run('apple-health', next, true),
+    onConfirm: () => run('apple-health', next),
   } : {
     ...askWithSharing({
       title: 'Tennis sessions from Apple Health',
       message: 'CourtSide reads your Tennis workouts and your heart rate during them, so you can log and post them, plus sleep, HRV, resting heart rate, steps, active energy and food (calories, protein, carbs, fat) for your Health page.',
-    }, sharing),
+    }, sharingApple),
     confirmLabel: 'Continue',
-    onConfirm: () => run('apple-health', next, true),
+    onConfirm: () => run('apple-health', next),
   });
 
   // WHOOP, with tennis sessions on, saying yes to every workout as well: its own yes, though WHOOP already shares them.
-  const askWhoop = () => confirm({ ...askWithSharing(WHOOP_WORKOUTS_ASK, sharing), confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts', true) });
+  const askWhoop = () => confirm({ ...askWithSharing(WHOOP_WORKOUTS_ASK, sharingWhoop), confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts', true) });
 
   // Once WHOOP's switch is on, disconnecting it also removes what it sent (the server does), so ask first.
   // Fitbit, Oura and Polar always remove their tennis sessions on disconnect.

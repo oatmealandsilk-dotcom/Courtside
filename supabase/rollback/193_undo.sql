@@ -1,13 +1,14 @@
--- CourtSide · undo for migration 20261027000193_auto_log_mutuals.
+-- CourtSide · undo for migration 20261029000193_auto_log_mutuals (193).
 --
 -- NOT A MIGRATION (it lives outside supabase/migrations on purpose). Run it in
 -- the Supabase SQL editor as one piece only to take 193 back out. It puts
--- back, word for word, the live versions of the twelve functions 193 changed,
--- as read from the live database on Oct 27 2026 before 193 (185's
+-- back, word for word, the live versions of the fourteen functions 193
+-- changed, as read from the live database before 193 (on Oct 27: 185's
 -- auto_log_activity, send_activity_pushes and session_unposted, and
 -- mark_first_post, share_preview, group_feed, invite_first_action,
 -- invite_second_day, invite_back_at, first_day_stats, feed_post_scores,
--- admin_new_players), and takes out 193's read rules (posts, likes),
+-- admin_new_players; on Oct 28: session_minor_posts and 196/197's
+-- refresh_city_board), and takes out 193's read rules (posts, likes),
 -- triggers and new functions. All-or-nothing; safe to run more than once.
 --
 -- The posts the server made for sessions that logged themselves are DELETED
@@ -490,6 +491,367 @@ begin
     limit 200;
 end $function$;
 
+CREATE OR REPLACE FUNCTION public.session_minor_posts(who uuid)
+ RETURNS TABLE(post_id uuid, entry jsonb)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with played as (
+    -- Sessions `who` said yes to a tag on, and their side of the net.
+    select t.session_id, t.tagger_id as logger, t.role as side
+      from public.session_tags t
+      join public.practice_sessions o on o.id = t.session_id and o.user_id = t.tagger_id and o.kind in ('match', 'practice')
+     where t.tagged_id = who and t.status = 'accepted'
+       and not public.is_blocked_between(t.tagger_id, who)
+  ),
+  logged as (
+    -- Sessions `who` logged themselves: others may have posted their copies.
+    select o.id as session_id, o.user_id as logger, 'partner'::text as side
+      from public.practice_sessions o
+     where o.user_id = who and o.from_session_id is null and o.kind in ('match', 'practice')
+  ),
+  carried as (
+    -- The logger's own posts of it.
+    select p.id, p.author_id, p.created_at, pl.side as role
+      from played pl
+      join public.posts p on p.author_id = pl.logger and p.removed_at is null
+       and jsonb_typeof(p.session) = 'object' and lower(p.session->>'sessionId') = pl.session_id::text
+    union all
+    -- The posts others made from their copies of it, while `who` follows them.
+    select p.id, p.author_id, p.created_at,
+           case when c.kind = 'match' and s.side <> mine.role then 'opponent' else 'partner' end
+      from (select * from played union all select * from logged) s
+      join public.session_tags mine on mine.session_id = s.session_id and mine.tagger_id = s.logger
+       and mine.status = 'accepted' and mine.tagged_id <> who
+      join public.practice_sessions c on c.from_session_id = s.session_id and c.user_id = mine.tagged_id
+       and c.kind in ('match', 'practice')
+      join public.posts p on p.author_id = c.user_id and p.removed_at is null
+       and jsonb_typeof(p.session) = 'object' and lower(p.session->>'sessionId') = c.id::text
+     where exists (select 1 from public.follows f where f.follower_id = who and f.following_id = c.user_id)
+       and not public.is_blocked_between(c.user_id, who)
+  )
+  select x.id, jsonb_build_object('id', pr.id, 'handle', pr.handle, 'name', pr.name, 'role', x.role)
+    from carried x
+    join public.profiles pr on pr.id = who
+   where auth.uid() is not null
+     and not public.is_blocked_between(auth.uid(), who)
+     and (auth.uid() = who or x.author_id = auth.uid()
+          or exists (select 1 from public.follows v where v.follower_id = who and v.following_id = auth.uid()))
+   order by x.created_at desc
+   limit 300
+$function$;
+
+CREATE OR REPLACE FUNCTION public.refresh_city_board()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_t0 timestamptz := clock_timestamp();
+  v_at timestamptz := clock_timestamp();
+  v_rules record;
+  v_months date[];
+  v_m date;
+  v_end date;
+  v_old jsonb;
+  v_was jsonb;
+  -- "Played ..." is never today anywhere in the US: the last day before Honolulu's today.
+  v_cutoff date := (now() at time zone 'Pacific/Honolulu')::date - 1;
+  -- ...and only what was logged before Honolulu's today began: what others
+  -- see changes once a day (10:00 UTC), never 15 minutes after someone logs,
+  -- even a session logged today for an earlier day.
+  v_day_cut timestamptz := ((now() at time zone 'Pacific/Honolulu')::date)::timestamp at time zone 'Pacific/Honolulu';
+  -- Busiest courts are worked out once a week, from what was logged before this
+  -- week began (Monday 00:00 UTC): a court's number never moves with a day, a
+  -- session or one player switching off, only with a whole week.
+  v_court_cut timestamptz := date_trunc('week', now() at time zone 'UTC') at time zone 'UTC';
+  -- A court named for where people live (most courts' access is 'unknown').
+  v_home_words text := '(apartment|\mapts?\M|condo|townho|residen|estates|villas|\mhoa\M|homeowner|subdivision|backyard|back yard|\mhome\M|\mhouse\M|private|driveway|family|neighbou?rhood|club ?house|swim ?(and|&|n) ?(racquet|tennis)|\mpool\M)';
+  c record;
+  v_prev int;
+  v_now int;
+  v_day date;
+  v_run int;
+  v_n int;
+  v_events int := 0;
+  v_out jsonb := '[]'::jsonb;
+  v_mt timestamptz;
+begin
+  if not pg_try_advisory_xact_lock(hashtextextended('refresh_city_board', 196)) then
+    return jsonb_build_object('skipped', 'already running');
+  end if;
+  select * into v_rules from private.city_board_rules();
+  v_months := array(select distinct date_trunc('month', x)::date from unnest(array[current_date - 3, current_date, current_date + 1]) as x order by 1);
+
+  foreach v_m in array v_months loop
+    v_mt := clock_timestamp();
+    v_end := (v_m + interval '1 month')::date;
+
+    -- 1. Players: counted sessions, by the PROFILE town. Tennis only; logged
+    --    within 7 days of the day played and not for a later day; at most 2 a
+    --    day; not suspended. Everyone counted is in the totals. `named`: an
+    --    adult who may be named to anyone (city_board_named). `friends_only`
+    --    (197): a teen or no birthday on file, switch and activity status on,
+    --    named only to friends who follow each other with them (city_page).
+    --    Private and switched-off players: never named. `sessions` stops at
+    --    yesterday in Hawaii (what others see); `sessions_now` has today (yours
+    --    only). A player keeps the city (or no city) of their first counted
+    --    session this month; after a town change they still count there, unnamed.
+    select coalesce(jsonb_object_agg(mb.user_id::text, mb.city_id), '{}'::jsonb) into v_was
+      from public.city_board_members mb where mb.month = v_m;
+    delete from public.city_board_members where month = v_m;
+    insert into public.city_board_members (month, user_id, city_id, sessions, sessions_now, named, friends_only)
+    select v_m, x.user_id, y.city_id, x.sessions, x.sessions_now,
+           y.city_id is not null and y.city_id = x.city_now and private.city_board_named(x.user_id),
+           y.city_id is not null and y.city_id = x.city_now and private.city_board_friends_only(x.user_id)
+      from (
+        select k.user_id, count(*) filter (where k.day <= v_cutoff and k.created_at < v_day_cut)::int as sessions, count(*)::int as sessions_now,
+               private.city_board_city(p.city_lat, p.city_lng, p.location) as city_now
+          from (
+            select s.user_id, s.day, s.created_at, row_number() over (partition by s.user_id, s.day order by s.created_at, s.id) as n
+              from public.practice_sessions s
+             where s.day >= v_m and s.day < v_end
+               and s.kind in ('practice', 'match', 'drills')
+               and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+               and s.day <= (s.created_at at time zone 'UTC')::date + 1
+          ) k
+          join public.profiles p on p.id = k.user_id and p.suspended_at is null
+         where k.n <= 2
+         group by k.user_id, p.city_lat, p.city_lng, p.location
+      ) x
+      cross join lateral (select case when v_was ? x.user_id::text then v_was ->> x.user_id::text else x.city_now end as city_id) y;
+
+    -- 2. The words under a filled face, for players who may be named (to
+    --    anyone, or to friends only): "Usually
+    --    weekends / evenings / mornings" (6 of their last 10, at least 4 that
+    --    say), else the last day they played (never today, at most a week back).
+    with tzs as materialized (
+      select x.tz as name
+        from (select distinct us.tz from public.user_state us
+                join public.city_board_members mb on mb.month = v_m and mb.user_id = us.user_id and (mb.named or mb.friends_only)
+               where us.tz is not null) x
+       where private.safe_tz(x.tz) is not null
+    ), recent as (
+      select s.user_id, s.day, s.created_at, s.activity_id,
+             row_number() over (partition by s.user_id order by s.day desc, s.created_at desc, s.id) as n
+        from public.practice_sessions s
+        join public.city_board_members mb on mb.month = v_m and mb.user_id = s.user_id and (mb.named or mb.friends_only)
+       where s.kind in ('practice', 'match', 'drills')
+         and s.day <= v_cutoff and s.day > v_cutoff - 90
+         and s.created_at < v_day_cut
+         and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+    ), ten as (
+      select r.user_id, r.day, extract(isodow from r.day) >= 6 as weekend,
+             -- The hour it started: a tracker's own start in its own offset; else
+             -- when it was logged, in the player's time zone, if logged that same day.
+             coalesce(extract(hour from (a.started_at at time zone 'UTC') + make_interval(mins => a.tz_offset_min))::int,
+                      case when z.name is not null and (r.created_at at time zone z.name)::date = r.day
+                           then extract(hour from r.created_at at time zone z.name)::int end) as hour
+        from recent r
+        left join public.detected_activities a on a.id = r.activity_id and a.tz_offset_min is not null
+        left join public.user_state us on us.user_id = r.user_id
+        left join tzs z on z.name = us.tz
+       where r.n <= 10
+    ), sh as (
+      select t.user_id, max(t.day) as last_day, count(*) as n, count(t.hour) as nh,
+             count(*) filter (where t.weekend)::numeric / count(*) as wk,
+             count(*) filter (where t.hour >= 17)::numeric / nullif(count(t.hour), 0) as ev,
+             count(*) filter (where t.hour < 11)::numeric / nullif(count(t.hour), 0) as mo
+        from ten t group by t.user_id
+    )
+    update public.city_board_members mb
+       set last_day = case when sh.last_day >= v_cutoff - 5 then sh.last_day end,
+           habit = (select h.word from (values ('weekends', case when sh.n >= 4 then sh.wk end, 1),
+                                               ('evenings', case when sh.nh >= 4 then sh.ev end, 2),
+                                               ('mornings', case when sh.nh >= 4 then sh.mo end, 3)) as h(word, share, o)
+                     where h.share >= 0.6 order by h.share desc, h.o limit 1)
+      from sh
+     where mb.month = v_m and mb.user_id = sh.user_id;
+
+    -- 3. Cities: totals of everyone counted up to yesterday; ranked only with min_players.
+    select coalesce(jsonb_object_agg(cb.city_id, cb.rank), '{}'::jsonb) into v_old
+      from public.city_board_cities cb where cb.month = v_m and cb.rank is not null;
+    delete from public.city_board_cities where month = v_m;
+    insert into public.city_board_cities (month, city_id, sessions, players, rank, per_value, per_rank)
+    select v_m, x.city_id, x.sessions, x.players,
+           case when x.ranked then rank() over (partition by x.ranked order by x.sessions desc) end,
+           x.per_value,
+           case when x.ranked then rank() over (partition by x.ranked order by x.per_value desc) end
+      from (
+        select mb.city_id, sum(mb.sessions)::int as sessions, count(*)::int as players,
+               round(sum(mb.sessions)::numeric / count(*), 1) as per_value,
+               count(*) >= v_rules.min_players and bc.country = 'US' as ranked
+          from public.city_board_members mb join public.board_cities bc on bc.id = mb.city_id
+         where mb.month = v_m and mb.sessions > 0 and mb.city_id is not null
+         group by mb.city_id, bc.country
+      ) x;
+
+    -- Movement: against the snapshot 7 days ago, same month only.
+    update public.city_board_cities cb set week_ago_rank = d.rank
+      from public.city_board_daily d
+     where cb.month = v_m and cb.rank is not null
+       and d.month = v_m and d.day = current_date - 7 and d.city_id = cb.city_id and d.rank is not null;
+    -- "Climbing N weeks running": 7-day steps back in a row that each improved.
+    for c in select cb.city_id, cb.rank from public.city_board_cities cb where cb.month = v_m and cb.rank is not null loop
+      v_run := 0;
+      v_now := c.rank;
+      v_day := current_date;
+      loop
+        v_prev := null;
+        select d.rank into v_prev from public.city_board_daily d where d.month = v_m and d.city_id = c.city_id and d.day = v_day - 7;
+        exit when v_prev is null or v_now >= v_prev or v_run >= 5;
+        v_run := v_run + 1;
+        v_now := v_prev;
+        v_day := v_day - 7;
+      end loop;
+      if v_run > 0 then
+        update public.city_board_cities set run = v_run where month = v_m and city_id = c.city_id;
+      end if;
+    end loop;
+
+    -- News: every pair of ranked cities that swapped since the last refresh.
+    insert into public.city_board_events (month, at, city_id, passed_id)
+    select v_m, v_at, a.city_id, b.city_id
+      from public.city_board_cities a
+      join public.city_board_cities b on b.month = v_m and b.city_id <> a.city_id and b.rank is not null
+     where a.month = v_m and a.rank is not null
+       and v_old ? a.city_id and v_old ? b.city_id
+       and a.rank < b.rank and (v_old ->> a.city_id)::int > (v_old ->> b.city_id)::int;
+    get diagnostics v_n = row_count;
+    v_events := v_events + v_n;
+    -- Taken back within a day: neither is news.
+    with flips as (
+      select e.id as eid, f.id as fid
+        from public.city_board_events e
+        join public.city_board_events f on f.month = e.month and f.city_id = e.passed_id and f.passed_id = e.city_id
+       where e.month = v_m and e.at = v_at and f.at < v_at and f.at >= v_at - interval '24 hours'
+    )
+    delete from public.city_board_events ev where ev.id in (select eid from flips union select fid from flips);
+
+    -- One snapshot a day (the first run after 10:00 UTC, about 6am Eastern), within the month itself.
+    if extract(hour from now() at time zone 'UTC') >= 10 and current_date >= v_m and current_date < v_end
+       and not exists (select 1 from public.city_board_daily d where d.month = v_m and d.day = current_date) then
+      insert into public.city_board_daily (month, day, city_id, rank, sessions, players)
+      select v_m, current_date, cb.city_id, cb.rank, cb.sessions, cb.players from public.city_board_cities cb where cb.month = v_m;
+    end if;
+
+    -- 4. Busiest courts: parks (the app's ~250 m fold), courts only, no people.
+    --    Worked out once a week, from what was logged before Monday 00:00 UTC,
+    --    one park-week at a time, and a park-week once counted is never
+    --    changed or taken back: a court's number only ever grows, a whole week
+    --    at a time, so it never moves with a day, one session, or one player
+    --    switching off, going private or leaving (which would point at them).
+    --    Only sessions by players who may be named, with public accounts (teens,
+    --    no birthday, private accounts, switched off: never), at courts with a
+    --    name that are not anyone's home ('private', or named for an apartment,
+    --    condo, HOA, backyard...). A park-week counts only with 3+ different
+    --    players on 2+ different days (one group's one outing is not enough);
+    --    the park's city is the park's own position, not who played there.
+    if (select mo.courts_cut from public.city_board_months mo where mo.month = v_m) is distinct from v_court_cut then
+      with at_courts as (
+        select k.user_id, k.day, date_trunc('week', k.day::timestamp)::date as wk, ct.id as court_id, ct.name, ct.lat, ct.lng,
+               round(ct.lat / 0.0022)::int as gi, round(ct.lng / 0.003)::int as gj
+          from (
+            select s.user_id, s.day, s.court_id, s.created_at,
+                   row_number() over (partition by s.user_id, s.day order by s.created_at, s.id) as n
+              from public.practice_sessions s
+             where s.day >= v_m and s.day < v_end
+               and s.kind in ('practice', 'match', 'drills')
+               and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+               and s.day <= (s.created_at at time zone 'UTC')::date + 1
+          ) k
+          join public.profiles p on p.id = k.user_id and p.suspended_at is null and not p.is_private
+          join public.courts ct on ct.id = k.court_id and ct.access <> 'private'
+                               and nullif(btrim(coalesce(ct.name, '')), '') is not null
+                               and ct.name !~* v_home_words
+         where k.n <= 2 and k.court_id is not null and k.created_at < v_court_cut
+           and private.city_board_named(k.user_id)
+      ), cells as (
+        select a.gi, a.gj, a.wk, count(*)::int as sessions, count(distinct a.user_id)::int as players, avg(a.lat) as lat, avg(a.lng) as lng
+          from at_courts a
+         where a.wk < (v_court_cut at time zone 'UTC')::date          -- whole weeks only
+         group by a.gi, a.gj, a.wk
+        having count(distinct a.user_id) >= v_rules.court_min_players and count(distinct a.day) >= 2
+      ), placed as (
+        select ce.*, private.city_board_city(ce.lat, ce.lng, null) as city_id, top.court_id, top.name,
+               (select count(*)::int from public.courts ct
+                 where ct.lat between (ce.gi - 0.5) * 0.0022 and (ce.gi + 0.5) * 0.0022
+                   and ct.lng between (ce.gj - 0.5) * 0.003 and (ce.gj + 0.5) * 0.003
+                   and round(ct.lat / 0.0022)::int = ce.gi and round(ct.lng / 0.003)::int = ce.gj
+                   and ct.access <> 'private') as courts
+          from cells ce
+          cross join lateral (
+            select a.court_id, a.name from at_courts a where a.gi = ce.gi and a.gj = ce.gj and a.wk = ce.wk
+             group by a.court_id, a.name order by count(*) desc, a.court_id limit 1) top
+      )
+      insert into public.city_board_court_weeks (month, wk, park_key, city_id, court_id, name, courts, sessions, players)
+      select v_m, pl.wk, pl.gi || ':' || pl.gj, pl.city_id, pl.court_id, pl.name, greatest(pl.courts, 1), pl.sessions, pl.players
+        from placed pl where pl.city_id is not null
+      on conflict (month, wk, park_key) do nothing;
+
+      delete from public.city_board_courts where month = v_m;
+      insert into public.city_board_courts (month, city_id, park_key, court_id, name, courts, sessions, players)
+      select v_m, y.city_id, y.park_key, y.court_id, y.name, y.courts, y.sessions, y.players
+        from (select w.city_id, w.park_key,
+                     (array_agg(w.court_id order by w.sessions desc, w.wk desc))[1] as court_id,
+                     (array_agg(w.name order by w.sessions desc, w.wk desc))[1] as name,
+                     max(w.courts) as courts, sum(w.sessions)::int as sessions, max(w.players) as players,
+                     row_number() over (partition by w.city_id order by sum(w.sessions) desc, max(w.players) desc, w.park_key) as r
+                from public.city_board_court_weeks w
+               where w.month = v_m
+               group by w.city_id, w.park_key) y
+       where y.r <= 3;
+    end if;
+
+    -- 5. Clip of the month: a post that may be one (city_board_clip_ok: what
+    --    guest mode would show, a video, by a named adult, no court or place
+    --    on it, everyone on it nameable), posted that month. Top 3 per city,
+    --    one per author, by views; city_page checks each again for its viewer.
+    delete from public.city_board_clips where month = v_m;
+    insert into public.city_board_clips (month, city_id, post_id, author_id, views, place)
+    select v_m, z.city_id, z.id, z.author_id, z.views, z.place
+      from (
+        select y.*, row_number() over (partition by y.city_id order by y.views desc, y.created_at desc, y.id)::smallint as place
+          from (
+            select distinct on (po.author_id) po.id, po.author_id, po.views, po.created_at,
+                   private.city_board_city(p.city_lat, p.city_lng, p.location) as city_id
+              from public.posts po join public.profiles p on p.id = po.author_id
+             where po.created_at >= v_m::timestamp at time zone 'UTC' and po.created_at < v_end::timestamp at time zone 'UTC'
+               and po.video_url is not null and not po.archived and po.removed_at is null and po.group_id is null
+               and not p.is_private and p.suspended_at is null
+               and private.city_board_clip_ok(po)
+             order by po.author_id, po.views desc, po.created_at desc, po.id
+          ) y
+         where y.city_id is not null
+      ) z
+     where z.place <= 3;
+
+    insert into public.city_board_months (month, refreshed_at, took_ms, courts_cut)
+    values (v_m, clock_timestamp(), (extract(epoch from clock_timestamp() - v_mt) * 1000)::int, v_court_cut)
+    on conflict (month) do update set refreshed_at = excluded.refreshed_at, took_ms = excluded.took_ms, courts_cut = excluded.courts_cut;
+
+    v_out := v_out || jsonb_build_object('month', v_m,
+      'players', (select count(*) from public.city_board_members where month = v_m),
+      'cities', (select count(*) from public.city_board_cities where month = v_m),
+      'ranked', (select count(*) from public.city_board_cities where month = v_m and rank is not null));
+  end loop;
+
+  -- Keep it small.
+  delete from public.city_board_daily where day < current_date - 70;
+  delete from public.city_board_events where at < now() - interval '14 days';
+  delete from public.city_board_members where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_cities where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_courts where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_court_weeks where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_clips where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_months where month < (date_trunc('month', current_date) - interval '13 months')::date;
+
+  return jsonb_build_object('months', v_out, 'events', v_events,
+    'took_ms', (extract(epoch from clock_timestamp() - v_t0) * 1000)::int);
+end $function$;
+
 drop function if exists public.auto_post_follows_session();
 drop function if exists public.guard_auto_post();
 drop function if exists public.drop_emptied_auto_post();
@@ -521,7 +883,9 @@ declare
     "invite_back_at(uuid,timestamp with time zone)": "8e321ac7fda0998f6a61d9b25a5522dc",
     "first_day_stats()": "abbab0e1c72f2d6447867428944ed0a9",
     "feed_post_scores()": "410042789f673344c269fe682f0eae0e",
-    "admin_new_players(integer)": "326953796d896a3fd58bab643025fa02"
+    "admin_new_players(integer)": "326953796d896a3fd58bab643025fa02",
+    "session_minor_posts(uuid)": "ae903d0b92aa69a1bd364994633c71f8",
+    "refresh_city_board()": "259f5a95e81c26cf195f32a4b2425a48"
   }';
 begin
   for k in select jsonb_object_keys(want) loop

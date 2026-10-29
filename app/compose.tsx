@@ -75,7 +75,7 @@ import { goHome } from '@/lib/goBack';
 import { liveDay, liveHour, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
+import { friendsAtMost, isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -1056,7 +1056,7 @@ function Compose() {
         thumbnailUrl: media?.thumbnailUrl ?? (media?.kind === 'photo' ? media.uri : undefined),
         session,
       }, { quiet: shareAfter });
-      const firstPost = !posts.some((p) => p.authorId === currentUserId);
+      const firstPost = !posts.some((p) => p.authorId === currentUserId && !p.autoLogged);
       if (shareTo) openGroupFeed(shareTo); else landOnFeed();
       // Then the Share session screen over the feed, Strava's way (sharesAfter). It says "Posted" itself, so no note does (quiet).
       if (shareAfter) openShareAfterPost(postId);
@@ -1098,7 +1098,7 @@ function Compose() {
     }, { quiet: shareAfter });
     // The first post is the moment to ask who they hit with, but only after
     // they have seen it go up: a light nudge on the feed, not a whole screen.
-    const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    const firstPost = !posts.some((p) => p.authorId === currentUserId && !p.autoLogged);
     if (shareTo) openGroupFeed(shareTo); else landOnFeed();
     // With a session on it, the Share session screen over the feed (sharesAfter), as above.
     if (shareAfter) openShareAfterPost(postId);
@@ -1150,7 +1150,7 @@ function Compose() {
       }
     }
     liveLogged();
-    const firstPost = !posts.some((p) => p.authorId === currentUserId);
+    const firstPost = !posts.some((p) => p.authorId === currentUserId && !p.autoLogged);
     // Logged, but the server didn't keep the score (a practice's, before migration 136): the post goes
     // up without it, as the server will show it, and the note after says so.
     const scoreGone = freshLog && tookScoreNotKept(logId);
@@ -1561,10 +1561,19 @@ function Compose() {
               <Reanimated.View layout={LinearTransition.duration(220)} style={styles.logChips}>
                 <Text style={styles.autoNote}>
                   {`Logged for you · ${seenByLine(autoSeen)} `}
-                  {autoLogSharing !== undefined ? (
+                  {autoLogSharing ? (
                     <Text accessibilityRole="link" accessibilityLabel="Change who sees sessions that log themselves" onPress={() => router.push('/auto-log-sharing')} style={styles.autoNoteLink}>Change</Text>
                   ) : null}
                 </Text>
+                {/* Not chosen yet (migration 193, review Oct 28): asked here once, Friends and Only me side by side, nothing
+                    picked for them. Until they choose, only they see these; the choice is for every one, the ones logged already too. */}
+                {autoLogSharing === null ? (
+                  <View style={styles.autoAsk}>
+                    <Text style={styles.autoAskTitle}>Who sees the tennis that logs itself?</Text>
+                    <Text style={styles.autoAskLine}>{friendsAtMost(currentUser) ? 'Friends: people you follow who follow you back, with when you played and for how long.' : 'Friends: people you follow who follow you back, with its time, heart rate, zones and calories.'} Only me: nobody else. Change it in Settings.</Text>
+                    <Chips label="Who sees the tennis that logs itself" value={undefined} onChange={(v) => { if (v) void actions.setAutoLogSharing(v).then((ok) => { if (!ok) setAutoError('That didn’t save. Try again.'); }); }} options={[{ value: 'mutuals' as const, label: 'Friends' }, { value: 'private' as const, label: 'Only me' }]} />
+                  </View>
+                ) : null}
                 {/* Tennis only: Practice or Match (not Fitness; a session that wasn't tennis is removed below). */}
                 <Chips value={autoKind} onChange={(k) => { if (k) changeAutoKind(k, k === 'match' ? liveLog?.won : undefined); }} options={autoKind === 'drills' ? WITH_DRILLS.slice(0, 3) : KINDS.slice(0, 2)} />
                 {autoKind === 'match' && !liveLog?.sets?.length ? (
@@ -1984,6 +1993,9 @@ const styleDefinitions = StyleSheet.create({
   twiceNote: { ...typography.smallStrong, color: colors.text, marginTop: spacing.md },
   autoNote: { ...typography.small, color: colors.textMuted, marginBottom: spacing.sm },
   autoNoteLink: { ...typography.smallStrong, color: colors.brand },
+  autoAsk: { gap: spacing.xs, marginBottom: spacing.md },
+  autoAskTitle: { ...typography.smallStrong, color: colors.text },
+  autoAskLine: { ...typography.small, color: colors.textMuted, marginBottom: spacing.xs },
   hideItText: { ...font('600'), fontSize: 13, color: colors.textMuted },
   hitFrame: { width: '100%', aspectRatio: 4 / 3, maxHeight: 520, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: '#000', alignSelf: 'center' },
   hitMeta: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

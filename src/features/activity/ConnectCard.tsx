@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useConnectRow } from '@/features/activity/autoLog';
 import { isDemo } from '@/features/activity/flags';
+import { friendsAtMost, shownTo } from '@/features/activity/autoLogSharing';
 import { useShownAt } from '@/features/navigation/shownAt';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -39,7 +40,7 @@ const GRACE_MS = 250;
 
 export function ConnectCard() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUserId } = useApp();
+  const { currentUserId, currentUser, autoLogSharing } = useApp();
   const { auto, source, offer, close, known } = useConnectRow('profile');
   const here = Platform.OS !== 'web' || isDemo(currentUserId);
   const onShow = useShownAt('/profile');
@@ -57,16 +58,19 @@ export function ConnectCard() {
   if (!here || !decided || !offer || !source) return null;
   const both = auto.apple && auto.whoop;
   const names = both ? 'Apple Health or WHOOP' : source === 'whoop' ? 'WHOOP' : 'Apple Health';
-  // Who sees the tennis that logs itself, said before connecting (migration 193): read aloud too, as it is the yes.
-  const line = `Connect ${names}: your tennis logs itself${auto.seenBy === 'private' ? ', for you only' : auto.seenBy === 'public' ? ' to your profile, with its heart rate' : ', and friends who follow you back see it, with its heart rate'}.`;
+  // Who sees the tennis that logs itself, said before connecting (migration 193), read aloud too. One tap here never
+  // chooses it (review, Oct 28): not chosen yet, it is asked on "Tennis logged" (Friends or Only me) or in Settings.
+  const seen = shownTo(autoLogSharing, source, currentUser);
+  const numbers = friendsAtMost(currentUser) ? '' : ', with its heart rate and calories';
+  const line = `Connect ${names}: your tennis logs itself${!autoLogSharing ? ', and you choose who sees it' : seen === 'private' ? ', for you only' : seen === 'public' ? ` to your profile${numbers}` : `, and friends who follow you back see it${numbers}`}.`;
   const connect = async () => {
     if (busy) return;
     haptics.tap();
     if (both) { router.push('/health'); return; }
     setBusy(true);
     try {
-      // Its line says who sees the tennis that logs itself (migration 193): connecting is the yes to it.
-      await auto.connect(source, { told: true });
+      // Connecting here never chooses who sees the tennis that logs itself (review, Oct 28).
+      await auto.connect(source);
       showToast({ title: source === 'whoop' ? 'WHOOP connected' : 'Apple Health connected', body: 'Your past week’s workouts show up in Notifications, ready to log.', icon: 'checkmark-circle-outline' });
     } catch (err) {
       showToast({ title: 'Couldn’t connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });

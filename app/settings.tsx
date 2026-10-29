@@ -25,7 +25,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { isTracker } from '@/features/activity/flags';
 import { workoutWatchAvailable } from '@/features/health/workoutWatch';
 import { notKnownAdult } from '@/features/players/age';
-import { AUDIENCE_LABEL, friendsAtMost } from '@/features/activity/autoLogSharing';
+import { audienceValue } from '@/features/activity/autoLogSharing';
 import { HitGlyph } from '@/components/HitGlyph';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { TextScale } from '@/theme/textScale';
@@ -218,11 +218,11 @@ export default function Settings() {
           detail: autoLogSharing === undefined ? (LESS_AI ? 'Private until you post it' : 'Private until you post it · keeps your streak') : (LESS_AI ? '20 minutes or more' : '20 minutes or more · keeps your streak'),
           toggle: { value: prefs.autoLog, onChange: (v: boolean) => actions.setPref('autoLog', v) },
         }] : []),
-        // Oct 27 (migration 193; owner: "mutuals can see, no private, its just mutual or public"): who sees them. Friends unless chosen.
+        // Oct 27 (migration 193; owner: "mutuals can see, no private, its just mutual or public"): who sees them. "Not chosen": only you, until you choose.
         ...(activityAlerts && autoLogLive && autoLogSharing !== undefined && prefs.autoLog ? [{
           icon: 'people-outline' as const,
           label: 'Who sees them',
-          value: AUDIENCE_LABEL[autoLogSharing === 'public' && friendsAtMost(currentUser) ? 'mutuals' : autoLogSharing ?? 'mutuals'],
+          value: audienceValue(autoLogSharing, currentUser),
           onPress: () => router.push('/auto-log-sharing'),
         }] : []),
         { icon: 'location-outline', label: 'Location', detail: locationNote || (locationEnabled ? (detectedLocation ? `Courts near ${detectedLocation.split(',')[0]}` : 'On') : (LESS_AI ? 'Off' : 'Off. Turn on to see courts near you')), toggle: { value: locationEnabled, onChange: (next) => { void toggleLocation(next); } } },

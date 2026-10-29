@@ -1,35 +1,49 @@
--- CourtSide · migration 20261027000193: sessions that log themselves show to
+-- CourtSide · migration 20261029000193: sessions that log themselves show to
 -- friends who follow you back; Fitbit's "Sport" learns from two yeses.
 --
--- NOT APPLIED — run it in the Supabase SQL editor as one piece, AFTER 185
--- (live), and only once the app update that reads it has reached phones
--- (the OTA, and the App Store build once it carries it): an older app on the
--- player's own phone would read their auto-logged session as already posted.
+-- NOT APPLIED. Run it in the Supabase SQL editor as one piece, after 185 and
+-- 194-198 (all live). Ship order: first the app update that reads it, as an
+-- over-the-air update on the "production" channel (never "store"); this runs
+-- only once that update is out. Build 22 (channel "store", frozen, only
+-- Apple's reviewer still on it) never gets the update: there, a player's own
+-- session that logged itself reads as already posted. That is accepted.
 -- All-or-nothing: if a check fails, it stops and nothing at all changes.
 -- Safe to run more than once. Undo: supabase/rollback/193_undo.sql.
+-- Named 20261029... so it sorts after the live 195-198 (it was first written
+-- as 20261027000193, before them); it is still called migration 193.
 --
 -- The owner, Oct 27, about sessions that log themselves from an Apple Watch,
 -- WHOOP or Fitbit: "how about we make it so mutuals can see, no private, its
 -- just mutual or public", "heart rate showing is fine", then "mutuals default
--- auto log fitbit."
+-- auto log fitbit."; Oct 28, about his own WHOOP session that logged itself
+-- privately: "It should show up on the activity feed".
 --
 -- What changes:
 --   1. Who sees a session that logged itself (Settings → "Sessions that log
 --      themselves", user_state.auto_log_audience): 'mutuals' (friends who
---      follow each other with you; the default), 'public' (whoever can see
---      your posts) or 'private' (only you). Under 18 (and anyone whose age is
---      not known to be adult): friends who follow each other at most, never
---      public, whatever is stored.
+--      follow each other with you), 'public' (whoever can see your posts) or
+--      'private' (only you). Under 18 (and anyone whose age is not known to
+--      be adult): friends who follow each other at most, never public,
+--      whatever is stored. Until the player has chosen (null), nobody but
+--      them (review, Oct 28: players who connected under 185 were told "Only
+--      you see them until you post one", and builds 21/22 still say so). The
+--      app asks once, on "Tennis logged" (Friends or Only me, side by side);
+--      connecting WHOOP or another tracker from a screen that says friends
+--      will see them saves Friends; connecting Apple Health or Health Connect
+--      never chooses for them (Apple's 5.1.3: a clear yes, with a no beside it).
 --   2. Each session the server logs for a player (185's auto log) gets a
 --      post made by the server (posts.auto_logged): the session's card with
---      its time, kind, length, heart rate, zones, calories (and WHOOP's
---      Strain), no words and no picture. It shows in Activities and on the
---      profile to that audience only, and they can like and comment on it.
+--      its time, kind and length, and for an adult the heart rate, zones,
+--      calories (and WHOOP's Strain); for anyone not known to be an adult,
+--      no numbers (as a post's "Share health data" starts off for them). No
+--      words and no picture. It shows in Activities and on the profile to
+--      that audience only, and they can like and comment on it.
 --      The database decides (a restrictive read rule on posts, and the
 --      functions that hand posts out without it): anyone else never gets
 --      the row. It never goes to For you, a group's feed, a court, a guest's
---      feed or a link preview for anyone outside its audience, and it is
---      never a "first post" or an invite's first step.
+--      feed, a link preview or a tag's list (session_minor_posts) for anyone
+--      outside its audience, and it is never a "first post" or an invite's
+--      first step.
 --   3. The player can still add the score, a photo, tags and a court and
 --      post it from "Tennis logged", as before: their own post then stands
 --      for the session and the server's steps aside (kept, hidden, with its
@@ -39,19 +53,17 @@
 --      tracker and removing what it sent. Only me hides every one of them at
 --      once from everyone but the player (who still sees their own in
 --      Activities and on their profile); switching back shows them again.
---   4. Apple Health (Guideline 5.1.3, health data shown to other people only
---      with a clear yes): a session from Apple Health or Health Connect is
---      shown to anyone only once the player has made the choice in step 1
---      (the connect screens and Settings say who sees them; the app saves
---      the choice). Until then it stays private, as today. So does one
---      logged on Apple Health's word (review): a WHOOP or Fitbit copy that
---      could not log itself (under 20 minutes, or only "Sport") logged
---      because the Apple Watch's twin of it said Tennis (posts.auto_held).
---      WHOOP, Fitbit, Oura and Polar otherwise follow the default at once.
+--   4. Apple Health (Guideline 5.1.3): a session from Apple Health or Health
+--      Connect, or one logged on Apple Health's word (a WHOOP or Fitbit copy
+--      that could not log itself, under 20 minutes or only "Sport", logged
+--      because the Apple Watch's twin of it said Tennis), is marked held
+--      (posts.auto_held) and, like every one, shown to nobody else until the
+--      player has chosen in step 1.
 --   5. The alert says who can see it: "Tennis logged" / "Friends who follow
 --      you back can see it · tap to add the score or post it." ("On your
---      profile" for public, "Saved privately" for only me). Still no length
---      or numbers on the lock screen.
+--      profile" for public, "Saved privately" for only me and not chosen yet;
+--      for several at once, the widest of them). Still no length or numbers
+--      on the lock screen.
 --   6. Fitbit files tennis as "Sport" ("Was this tennis?", 185's unsure
 --      flag). Once a player answers yes, tennis, twice (logs one as
 --      practice, a match or drills), their Fitbit Sport sessions of 20
@@ -64,13 +76,21 @@
 --      one tap ("Yes, these were tennis"), and counts as that many yeses;
 --      one already logged by hand is filed as that, never logged twice (review).
 --   7. Existing sessions the server logged before this (185, none posted)
---      each get their post now, at the time they were played. They were
---      announced "Saved privately", so they stay with the player until the
---      player makes the choice in step 1 (posts.auto_held, review); every
---      session logged from now on follows the setting at once.
+--      each get their post now, at the time they were played, held for the
+--      player's choice (step 1). The owner's own account (@mrdinosaur62) is
+--      chosen here as Friends, his words above: his WHOOP session of Oct 28
+--      shows to his friends who follow him back at once, and so do his
+--      sessions from now on (Apple Health's too, if he connects it). He can
+--      change it in Settings.
 --   8. Only the people who see one can like it (a read rule on likes), and
 --      the feed's view counts (feed_post_scores) never name one to anyone
 --      else (review). Admins' "posted" for new players leaves them out.
+--   9. City boards (196/197, review): a session that logged itself and is
+--      seen by nobody but its player (Only me, or not chosen yet) never
+--      sets "Usually evenings" or "Played Saturday" under their face, and
+--      no Apple Health or Health Connect start time does for a player who
+--      has not let anyone see their sessions. It still adds to the monthly
+--      counts, as the privacy policy says.
 --
 -- Left as they are: posts and sessions the players made themselves, 185's
 -- auto log rules (20 minutes, Settings → Log tennis automatically), alerts'
@@ -80,13 +100,14 @@ begin;
 
 -- ------------------------------------------------------------------ 0. check
 -- The functions this file changes, as read from the live database on Oct 27
+-- (session_minor_posts and refresh_city_board on Oct 28)
 -- (or as this file leaves them, so a second run passes).
 do $$
 declare
   r record;
   want jsonb := '{
     "auto_log_activity": ["1798d5cf3efbfa7ae723372209347ff4", "f5061800a77fbb088e12ba2b2402540e"],
-    "send_activity_pushes": ["42d79ffd3e542dd6c7bf0d59a26e67b5", "32fe8c6289aab99ec0afb421005b7e63"],
+    "send_activity_pushes": ["42d79ffd3e542dd6c7bf0d59a26e67b5", "c07030432cc8698f53f9e8ab0646bae8"],
     "session_unposted": ["67a5c254f1a37d6c700f64fb88fa05d6", "b2f215cfec2c5bedcb2a708ce2fcd551"],
     "mark_first_post": ["8de9ff13561a56b6d1668ce5369101cb", "f91afaf25816b2cb5b0904cb15312be6"],
     "share_preview": ["766840b69cde1c289d5f906ad2d9dc6b", "de1106c76c98906fe7804b53613f13c4"],
@@ -96,7 +117,9 @@ declare
     "invite_back_at": ["8e321ac7fda0998f6a61d9b25a5522dc", "11a4ea4eefe9f84cd9c86b7fec05a76b"],
     "first_day_stats": ["abbab0e1c72f2d6447867428944ed0a9", "0c3035690a2912d05759871ed9b4fe5e"],
     "feed_post_scores": ["410042789f673344c269fe682f0eae0e", "5c47960c124d4f6941dc222921391108"],
-    "admin_new_players": ["326953796d896a3fd58bab643025fa02", "f56c6f4274e83bbcdba74c7d2befeb1a"]
+    "admin_new_players": ["326953796d896a3fd58bab643025fa02", "f56c6f4274e83bbcdba74c7d2befeb1a"],
+    "session_minor_posts": ["ae903d0b92aa69a1bd364994633c71f8", "af3c97d6d8436618e9197b830ad4cdb7"],
+    "refresh_city_board": ["259f5a95e81c26cf195f32a4b2425a48", "653b4f13594b34cff16425c59b3edc63"]
   }';
 begin
   if to_regclass('public.posts') is null or to_regclass('public.practice_sessions') is null or to_regclass('public.detected_activities') is null
@@ -106,14 +129,14 @@ begin
      or to_regprocedure('public.follow_each_other(uuid, uuid)') is null or to_regprocedure('public.known_adult(uuid)') is null
      or to_regprocedure('public.tennis_allowed(uuid, text)') is null or to_regprocedure('public.activity_day(uuid, timestamp with time zone, integer)') is null
      or to_regprocedure('public.post_session_stats()') is null or to_regprocedure('public.put_session_with(jsonb, uuid)') is null then
-    raise exception 'Migration 20261027000193 stopped before changing anything: migration 185 (the auto log) and the session posts (65, 72) have to run first.';
+    raise exception 'Migration 20261029000193 stopped before changing anything: migration 185 (the auto log) and the session posts (65, 72) have to run first.';
   end if;
   for r in select k.key as fn, (select count(*) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = k.key) as n,
                   (select max(md5(p.prosrc)) from pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = k.key) as now_is,
                   k.value as ok
              from jsonb_each(want) k loop
     if r.n <> 1 or not coalesce(r.ok @> to_jsonb(r.now_is), false) then
-      raise exception 'Migration 20261027000193 stopped before changing anything: % changed since it was read on Oct 27. This file must be brought up to date with that change first.', r.fn;
+      raise exception 'Migration 20261029000193 stopped before changing anything: % changed since it was read on Oct 27. This file must be brought up to date with that change first.', r.fn;
     end if;
   end loop;
 end $$;
@@ -125,7 +148,7 @@ alter table public.posts add column if not exists auto_logged boolean not null d
 -- on Apple Health's word, or saved privately before this file. Never set by a phone.
 alter table public.posts add column if not exists auto_held boolean not null default false;
 -- Settings → Sessions that log themselves: 'mutuals', 'public' or 'private'. Null until the player
--- chooses (read as 'mutuals', except Apple Health's: private until they choose).
+-- chooses: until then nobody but them sees any (review, Oct 28).
 alter table public.user_state add column if not exists auto_log_audience text;
 -- Fitbit's "Was this tennis?": yeses since the last no. Two or more, and Fitbit's Sport logs itself.
 alter table public.user_state add column if not exists unsure_yes integer not null default 0;
@@ -139,16 +162,17 @@ end $$;
 create index if not exists posts_auto_logged_idx on public.posts (author_id) where auto_logged;
 
 -- ------------------------------------------------------------- 2. who sees one
--- Who sees a player's sessions that log themselves: their choice, else
--- friends who follow each other with them. Never 'public' for anyone not
--- known to be an adult. From Apple Health or Health Connect (`src` as a post
--- or a tracker row names it): nobody but them until they have chosen.
+-- Who sees a player's sessions that log themselves: their choice. Never
+-- 'public' for anyone not known to be an adult. Not chosen yet: nobody but
+-- them, from any tracker (review, Oct 28: 185 promised "Only you see them
+-- until you post one"). `src` (the tracker, as a post or a tracker row names
+-- it) no longer changes the answer; it is kept so callers stay as they are.
 create or replace function public.auto_log_audience_of(u uuid, src text) returns text
 language sql stable security definer set search_path = public as $$
   select case
-    when x.aud is null and coalesce(src, '') in ('apple-health', 'apple-watch', 'health-connect') then 'private'
-    when coalesce(x.aud, 'mutuals') = 'public' and not public.known_adult(u) then 'mutuals'
-    else coalesce(x.aud, 'mutuals')
+    when x.aud is null then 'private'
+    when x.aud = 'public' and not public.known_adult(u) then 'mutuals'
+    else x.aud
   end
   from (select (select us.auto_log_audience from public.user_state us where us.user_id = u) as aud) x
 $$;
@@ -245,10 +269,13 @@ end $$;
 -- tracker recorded. Dated when it was played. Never raises: anything in the
 -- way leaves the session as it is, without a post. The new post's id, or null.
 -- Held back until the player chooses who sees them (auto_held, review): `held`
--- (a session saved privately before this file), one from Apple Health or
--- Health Connect, and one logged on Apple Health's word: a copy that could
--- not log itself (under 20 minutes, or only "Sport" not yet learned) logged
--- because its Apple Watch twin said Tennis (185's twin rule).
+-- (a session saved privately before this file), any made while the player has
+-- not chosen yet (review, Oct 28), one from Apple Health or Health Connect,
+-- and one logged on Apple Health's word: a copy that could not log itself
+-- (under 20 minutes, or only "Sport" not yet learned) logged because its Apple
+-- Watch twin said Tennis (185's twin rule). The numbers on it (`share`): heart
+-- rate, zones, Strain and calories for an adult; none for anyone not known to
+-- be an adult (review, Oct 28: as a post's "Share health data" starts off for them).
 create or replace function public.auto_post_for_session(s_id uuid, held boolean default false) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
@@ -266,13 +293,15 @@ begin
     return null;
   end if;
   v_held := coalesce(held, false) or v_a.source in ('apple-health', 'health-connect')
+    or not exists (select 1 from public.user_state us where us.user_id = v_s.user_id and us.auto_log_audience is not null)
     or ((v_a.unsure and not public.unsure_learned(v_a.user_id, v_a.source)) or v_a.minutes < 20)
        and exists (select 1 from public.detected_activities d
                     where d.user_id = v_a.user_id and d.duplicate_of = v_a.id and d.source in ('apple-health', 'health-connect'));
   begin
     perform set_config('courtside.auto_post', 'on', true);
     insert into public.posts (author_id, kind, body, session, auto_logged, auto_held)
-      values (v_s.user_id, 'note', '', jsonb_build_object('activityId', v_a.id, 'drills', '[]'::jsonb, 'share', '["hr", "zones", "strain", "kcal"]'::jsonb), true, v_held)
+      values (v_s.user_id, 'note', '', jsonb_build_object('activityId', v_a.id, 'drills', '[]'::jsonb,
+                     'share', case when public.known_adult(v_s.user_id) then '["hr", "zones", "strain", "kcal"]'::jsonb else '[]'::jsonb end), true, v_held)
       returning id into v_id;
     perform set_config('courtside.auto_post', '', true);
     -- When it was played, not when the tracker sent it (a week caught up arrives at once).
@@ -553,7 +582,9 @@ begin
     from public.detected_activities d where d.id = any(v_due || v_ones);
   perform public.send_push(u,
     v_n || case when v_auto then ' tennis sessions logged' when v_tennis then ' tennis sessions found' else ' workouts found' end,
-    case when v_auto then public.auto_log_seen_by(u, public.auto_log_src_of(u, v_go[1], (select d.source from public.detected_activities d where d.id = v_go[1])), true) || ' · tap to post one.' else 'Tap to log them on CourtSide.' end,
+    -- Who can see them: the widest of the go (193, review), so it never says fewer people than see one.
+    case when v_auto then public.auto_log_seen_by(u, (select x.src from (select public.auto_log_src_of(u, d.id, d.source) as src from public.detected_activities d where d.id = any(v_go)) x
+                                                    order by case public.auto_log_audience_of(u, x.src) when 'public' then 0 when 'mutuals' then 1 else 2 end limit 1), true) || ' · tap to post one.' else 'Tap to log them on CourtSide.' end,
     '/notifications?workouts=' || array_to_string(v_go[1:40], ','));
   update public.detected_activities set pushed_at = now(), pushed_as = case when id = v_due[1] then 'found' else 'folded' end where id = any(v_due);
   return 'pushed-found';
@@ -918,6 +949,379 @@ begin
     limit 200;
 end $function$;
 
+-- A tag's list of posts (session_minor_posts, review): a session that logged itself only to the people who see it
+-- (it carries sessionId, and its id, through author_of_post, would say whose session it was).
+CREATE OR REPLACE FUNCTION public.session_minor_posts(who uuid)
+ RETURNS TABLE(post_id uuid, entry jsonb)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  with played as (
+    -- Sessions `who` said yes to a tag on, and their side of the net.
+    select t.session_id, t.tagger_id as logger, t.role as side
+      from public.session_tags t
+      join public.practice_sessions o on o.id = t.session_id and o.user_id = t.tagger_id and o.kind in ('match', 'practice')
+     where t.tagged_id = who and t.status = 'accepted'
+       and not public.is_blocked_between(t.tagger_id, who)
+  ),
+  logged as (
+    -- Sessions `who` logged themselves: others may have posted their copies.
+    select o.id as session_id, o.user_id as logger, 'partner'::text as side
+      from public.practice_sessions o
+     where o.user_id = who and o.from_session_id is null and o.kind in ('match', 'practice')
+  ),
+  carried as (
+    -- The logger's own posts of it. A session that logged itself (193): only to the people who see it.
+    select p.id, p.author_id, p.created_at, pl.side as role
+      from played pl
+      join public.posts p on p.author_id = pl.logger and p.removed_at is null
+       and jsonb_typeof(p.session) = 'object' and lower(p.session->>'sessionId') = pl.session_id::text
+       and (not p.auto_logged or public.auto_post_shown(p.id))
+    union all
+    -- The posts others made from their copies of it, while `who` follows them.
+    select p.id, p.author_id, p.created_at,
+           case when c.kind = 'match' and s.side <> mine.role then 'opponent' else 'partner' end
+      from (select * from played union all select * from logged) s
+      join public.session_tags mine on mine.session_id = s.session_id and mine.tagger_id = s.logger
+       and mine.status = 'accepted' and mine.tagged_id <> who
+      join public.practice_sessions c on c.from_session_id = s.session_id and c.user_id = mine.tagged_id
+       and c.kind in ('match', 'practice')
+      join public.posts p on p.author_id = c.user_id and p.removed_at is null
+       and jsonb_typeof(p.session) = 'object' and lower(p.session->>'sessionId') = c.id::text
+       and (not p.auto_logged or public.auto_post_shown(p.id))
+     where exists (select 1 from public.follows f where f.follower_id = who and f.following_id = c.user_id)
+       and not public.is_blocked_between(c.user_id, who)
+  )
+  select x.id, jsonb_build_object('id', pr.id, 'handle', pr.handle, 'name', pr.name, 'role', x.role)
+    from carried x
+    join public.profiles pr on pr.id = who
+   where auth.uid() is not null
+     and not public.is_blocked_between(auth.uid(), who)
+     and (auth.uid() = who or x.author_id = auth.uid()
+          or exists (select 1 from public.follows v where v.follower_id = who and v.following_id = auth.uid()))
+   order by x.created_at desc
+   limit 300
+$function$
+;
+
+-- City boards (196/197, review): "Usually evenings" and "Played Saturday" never come from a session nobody else may see.
+CREATE OR REPLACE FUNCTION public.refresh_city_board()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_t0 timestamptz := clock_timestamp();
+  v_at timestamptz := clock_timestamp();
+  v_rules record;
+  v_months date[];
+  v_m date;
+  v_end date;
+  v_old jsonb;
+  v_was jsonb;
+  -- "Played ..." is never today anywhere in the US: the last day before Honolulu's today.
+  v_cutoff date := (now() at time zone 'Pacific/Honolulu')::date - 1;
+  -- ...and only what was logged before Honolulu's today began: what others
+  -- see changes once a day (10:00 UTC), never 15 minutes after someone logs,
+  -- even a session logged today for an earlier day.
+  v_day_cut timestamptz := ((now() at time zone 'Pacific/Honolulu')::date)::timestamp at time zone 'Pacific/Honolulu';
+  -- Busiest courts are worked out once a week, from what was logged before this
+  -- week began (Monday 00:00 UTC): a court's number never moves with a day, a
+  -- session or one player switching off, only with a whole week.
+  v_court_cut timestamptz := date_trunc('week', now() at time zone 'UTC') at time zone 'UTC';
+  -- A court named for where people live (most courts' access is 'unknown').
+  v_home_words text := '(apartment|\mapts?\M|condo|townho|residen|estates|villas|\mhoa\M|homeowner|subdivision|backyard|back yard|\mhome\M|\mhouse\M|private|driveway|family|neighbou?rhood|club ?house|swim ?(and|&|n) ?(racquet|tennis)|\mpool\M)';
+  c record;
+  v_prev int;
+  v_now int;
+  v_day date;
+  v_run int;
+  v_n int;
+  v_events int := 0;
+  v_out jsonb := '[]'::jsonb;
+  v_mt timestamptz;
+begin
+  if not pg_try_advisory_xact_lock(hashtextextended('refresh_city_board', 196)) then
+    return jsonb_build_object('skipped', 'already running');
+  end if;
+  select * into v_rules from private.city_board_rules();
+  v_months := array(select distinct date_trunc('month', x)::date from unnest(array[current_date - 3, current_date, current_date + 1]) as x order by 1);
+
+  foreach v_m in array v_months loop
+    v_mt := clock_timestamp();
+    v_end := (v_m + interval '1 month')::date;
+
+    -- 1. Players: counted sessions, by the PROFILE town. Tennis only; logged
+    --    within 7 days of the day played and not for a later day; at most 2 a
+    --    day; not suspended. Everyone counted is in the totals. `named`: an
+    --    adult who may be named to anyone (city_board_named). `friends_only`
+    --    (197): a teen or no birthday on file, switch and activity status on,
+    --    named only to friends who follow each other with them (city_page).
+    --    Private and switched-off players: never named. `sessions` stops at
+    --    yesterday in Hawaii (what others see); `sessions_now` has today (yours
+    --    only). A player keeps the city (or no city) of their first counted
+    --    session this month; after a town change they still count there, unnamed.
+    select coalesce(jsonb_object_agg(mb.user_id::text, mb.city_id), '{}'::jsonb) into v_was
+      from public.city_board_members mb where mb.month = v_m;
+    delete from public.city_board_members where month = v_m;
+    insert into public.city_board_members (month, user_id, city_id, sessions, sessions_now, named, friends_only)
+    select v_m, x.user_id, y.city_id, x.sessions, x.sessions_now,
+           y.city_id is not null and y.city_id = x.city_now and private.city_board_named(x.user_id),
+           y.city_id is not null and y.city_id = x.city_now and private.city_board_friends_only(x.user_id)
+      from (
+        select k.user_id, count(*) filter (where k.day <= v_cutoff and k.created_at < v_day_cut)::int as sessions, count(*)::int as sessions_now,
+               private.city_board_city(p.city_lat, p.city_lng, p.location) as city_now
+          from (
+            select s.user_id, s.day, s.created_at, row_number() over (partition by s.user_id, s.day order by s.created_at, s.id) as n
+              from public.practice_sessions s
+             where s.day >= v_m and s.day < v_end
+               and s.kind in ('practice', 'match', 'drills')
+               and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+               and s.day <= (s.created_at at time zone 'UTC')::date + 1
+          ) k
+          join public.profiles p on p.id = k.user_id and p.suspended_at is null
+         where k.n <= 2
+         group by k.user_id, p.city_lat, p.city_lng, p.location
+      ) x
+      cross join lateral (select case when v_was ? x.user_id::text then v_was ->> x.user_id::text else x.city_now end as city_id) y;
+
+    -- 2. The words under a filled face, for players who may be named (to
+    --    anyone, or to friends only): "Usually
+    --    weekends / evenings / mornings" (6 of their last 10, at least 4 that
+    --    say), else the last day they played (never today, at most a week back).
+    with tzs as materialized (
+      select x.tz as name
+        from (select distinct us.tz from public.user_state us
+                join public.city_board_members mb on mb.month = v_m and mb.user_id = us.user_id and (mb.named or mb.friends_only)
+               where us.tz is not null) x
+       where private.safe_tz(x.tz) is not null
+    ), recent as (
+      select s.user_id, s.day, s.created_at, s.activity_id,
+             row_number() over (partition by s.user_id order by s.day desc, s.created_at desc, s.id) as n
+        from public.practice_sessions s
+        join public.city_board_members mb on mb.month = v_m and mb.user_id = s.user_id and (mb.named or mb.friends_only)
+       where s.kind in ('practice', 'match', 'drills')
+         and s.day <= v_cutoff and s.day > v_cutoff - 90
+         and s.created_at < v_day_cut
+         and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+         -- 193: a session that logged itself counts here only once someone besides its player may see it
+         -- (not Only me, not before they chose who sees them).
+         and (not s.auto_logged or public.auto_log_audience_of(s.user_id, null) <> 'private')
+    ), ten as (
+      select r.user_id, r.day, extract(isodow from r.day) >= 6 as weekend,
+             -- The hour it started: a tracker's own start in its own offset; else
+             -- when it was logged, in the player's time zone, if logged that same day.
+             coalesce(extract(hour from (a.started_at at time zone 'UTC') + make_interval(mins => a.tz_offset_min))::int,
+                      case when z.name is not null and (r.created_at at time zone z.name)::date = r.day
+                           then extract(hour from r.created_at at time zone z.name)::int end) as hour
+        from recent r
+        left join public.detected_activities a on a.id = r.activity_id and a.tz_offset_min is not null
+              -- 193: Apple Health's (and Health Connect's) start time only for a player who lets others see their sessions.
+              and (a.source not in ('apple-health', 'health-connect') or public.auto_log_audience_of(r.user_id, null) <> 'private')
+        left join public.user_state us on us.user_id = r.user_id
+        left join tzs z on z.name = us.tz
+       where r.n <= 10
+    ), sh as (
+      select t.user_id, max(t.day) as last_day, count(*) as n, count(t.hour) as nh,
+             count(*) filter (where t.weekend)::numeric / count(*) as wk,
+             count(*) filter (where t.hour >= 17)::numeric / nullif(count(t.hour), 0) as ev,
+             count(*) filter (where t.hour < 11)::numeric / nullif(count(t.hour), 0) as mo
+        from ten t group by t.user_id
+    )
+    update public.city_board_members mb
+       set last_day = case when sh.last_day >= v_cutoff - 5 then sh.last_day end,
+           habit = (select h.word from (values ('weekends', case when sh.n >= 4 then sh.wk end, 1),
+                                               ('evenings', case when sh.nh >= 4 then sh.ev end, 2),
+                                               ('mornings', case when sh.nh >= 4 then sh.mo end, 3)) as h(word, share, o)
+                     where h.share >= 0.6 order by h.share desc, h.o limit 1)
+      from sh
+     where mb.month = v_m and mb.user_id = sh.user_id;
+
+    -- 3. Cities: totals of everyone counted up to yesterday; ranked only with min_players.
+    select coalesce(jsonb_object_agg(cb.city_id, cb.rank), '{}'::jsonb) into v_old
+      from public.city_board_cities cb where cb.month = v_m and cb.rank is not null;
+    delete from public.city_board_cities where month = v_m;
+    insert into public.city_board_cities (month, city_id, sessions, players, rank, per_value, per_rank)
+    select v_m, x.city_id, x.sessions, x.players,
+           case when x.ranked then rank() over (partition by x.ranked order by x.sessions desc) end,
+           x.per_value,
+           case when x.ranked then rank() over (partition by x.ranked order by x.per_value desc) end
+      from (
+        select mb.city_id, sum(mb.sessions)::int as sessions, count(*)::int as players,
+               round(sum(mb.sessions)::numeric / count(*), 1) as per_value,
+               count(*) >= v_rules.min_players and bc.country = 'US' as ranked
+          from public.city_board_members mb join public.board_cities bc on bc.id = mb.city_id
+         where mb.month = v_m and mb.sessions > 0 and mb.city_id is not null
+         group by mb.city_id, bc.country
+      ) x;
+
+    -- Movement: against the snapshot 7 days ago, same month only.
+    update public.city_board_cities cb set week_ago_rank = d.rank
+      from public.city_board_daily d
+     where cb.month = v_m and cb.rank is not null
+       and d.month = v_m and d.day = current_date - 7 and d.city_id = cb.city_id and d.rank is not null;
+    -- "Climbing N weeks running": 7-day steps back in a row that each improved.
+    for c in select cb.city_id, cb.rank from public.city_board_cities cb where cb.month = v_m and cb.rank is not null loop
+      v_run := 0;
+      v_now := c.rank;
+      v_day := current_date;
+      loop
+        v_prev := null;
+        select d.rank into v_prev from public.city_board_daily d where d.month = v_m and d.city_id = c.city_id and d.day = v_day - 7;
+        exit when v_prev is null or v_now >= v_prev or v_run >= 5;
+        v_run := v_run + 1;
+        v_now := v_prev;
+        v_day := v_day - 7;
+      end loop;
+      if v_run > 0 then
+        update public.city_board_cities set run = v_run where month = v_m and city_id = c.city_id;
+      end if;
+    end loop;
+
+    -- News: every pair of ranked cities that swapped since the last refresh.
+    insert into public.city_board_events (month, at, city_id, passed_id)
+    select v_m, v_at, a.city_id, b.city_id
+      from public.city_board_cities a
+      join public.city_board_cities b on b.month = v_m and b.city_id <> a.city_id and b.rank is not null
+     where a.month = v_m and a.rank is not null
+       and v_old ? a.city_id and v_old ? b.city_id
+       and a.rank < b.rank and (v_old ->> a.city_id)::int > (v_old ->> b.city_id)::int;
+    get diagnostics v_n = row_count;
+    v_events := v_events + v_n;
+    -- Taken back within a day: neither is news.
+    with flips as (
+      select e.id as eid, f.id as fid
+        from public.city_board_events e
+        join public.city_board_events f on f.month = e.month and f.city_id = e.passed_id and f.passed_id = e.city_id
+       where e.month = v_m and e.at = v_at and f.at < v_at and f.at >= v_at - interval '24 hours'
+    )
+    delete from public.city_board_events ev where ev.id in (select eid from flips union select fid from flips);
+
+    -- One snapshot a day (the first run after 10:00 UTC, about 6am Eastern), within the month itself.
+    if extract(hour from now() at time zone 'UTC') >= 10 and current_date >= v_m and current_date < v_end
+       and not exists (select 1 from public.city_board_daily d where d.month = v_m and d.day = current_date) then
+      insert into public.city_board_daily (month, day, city_id, rank, sessions, players)
+      select v_m, current_date, cb.city_id, cb.rank, cb.sessions, cb.players from public.city_board_cities cb where cb.month = v_m;
+    end if;
+
+    -- 4. Busiest courts: parks (the app's ~250 m fold), courts only, no people.
+    --    Worked out once a week, from what was logged before Monday 00:00 UTC,
+    --    one park-week at a time, and a park-week once counted is never
+    --    changed or taken back: a court's number only ever grows, a whole week
+    --    at a time, so it never moves with a day, one session, or one player
+    --    switching off, going private or leaving (which would point at them).
+    --    Only sessions by players who may be named, with public accounts (teens,
+    --    no birthday, private accounts, switched off: never), at courts with a
+    --    name that are not anyone's home ('private', or named for an apartment,
+    --    condo, HOA, backyard...). A park-week counts only with 3+ different
+    --    players on 2+ different days (one group's one outing is not enough);
+    --    the park's city is the park's own position, not who played there.
+    if (select mo.courts_cut from public.city_board_months mo where mo.month = v_m) is distinct from v_court_cut then
+      with at_courts as (
+        select k.user_id, k.day, date_trunc('week', k.day::timestamp)::date as wk, ct.id as court_id, ct.name, ct.lat, ct.lng,
+               round(ct.lat / 0.0022)::int as gi, round(ct.lng / 0.003)::int as gj
+          from (
+            select s.user_id, s.day, s.court_id, s.created_at,
+                   row_number() over (partition by s.user_id, s.day order by s.created_at, s.id) as n
+              from public.practice_sessions s
+             where s.day >= v_m and s.day < v_end
+               and s.kind in ('practice', 'match', 'drills')
+               and s.created_at < (s.day + 8)::timestamp at time zone 'UTC'
+               and s.day <= (s.created_at at time zone 'UTC')::date + 1
+          ) k
+          join public.profiles p on p.id = k.user_id and p.suspended_at is null and not p.is_private
+          join public.courts ct on ct.id = k.court_id and ct.access <> 'private'
+                               and nullif(btrim(coalesce(ct.name, '')), '') is not null
+                               and ct.name !~* v_home_words
+         where k.n <= 2 and k.court_id is not null and k.created_at < v_court_cut
+           and private.city_board_named(k.user_id)
+      ), cells as (
+        select a.gi, a.gj, a.wk, count(*)::int as sessions, count(distinct a.user_id)::int as players, avg(a.lat) as lat, avg(a.lng) as lng
+          from at_courts a
+         where a.wk < (v_court_cut at time zone 'UTC')::date          -- whole weeks only
+         group by a.gi, a.gj, a.wk
+        having count(distinct a.user_id) >= v_rules.court_min_players and count(distinct a.day) >= 2
+      ), placed as (
+        select ce.*, private.city_board_city(ce.lat, ce.lng, null) as city_id, top.court_id, top.name,
+               (select count(*)::int from public.courts ct
+                 where ct.lat between (ce.gi - 0.5) * 0.0022 and (ce.gi + 0.5) * 0.0022
+                   and ct.lng between (ce.gj - 0.5) * 0.003 and (ce.gj + 0.5) * 0.003
+                   and round(ct.lat / 0.0022)::int = ce.gi and round(ct.lng / 0.003)::int = ce.gj
+                   and ct.access <> 'private') as courts
+          from cells ce
+          cross join lateral (
+            select a.court_id, a.name from at_courts a where a.gi = ce.gi and a.gj = ce.gj and a.wk = ce.wk
+             group by a.court_id, a.name order by count(*) desc, a.court_id limit 1) top
+      )
+      insert into public.city_board_court_weeks (month, wk, park_key, city_id, court_id, name, courts, sessions, players)
+      select v_m, pl.wk, pl.gi || ':' || pl.gj, pl.city_id, pl.court_id, pl.name, greatest(pl.courts, 1), pl.sessions, pl.players
+        from placed pl where pl.city_id is not null
+      on conflict (month, wk, park_key) do nothing;
+
+      delete from public.city_board_courts where month = v_m;
+      insert into public.city_board_courts (month, city_id, park_key, court_id, name, courts, sessions, players)
+      select v_m, y.city_id, y.park_key, y.court_id, y.name, y.courts, y.sessions, y.players
+        from (select w.city_id, w.park_key,
+                     (array_agg(w.court_id order by w.sessions desc, w.wk desc))[1] as court_id,
+                     (array_agg(w.name order by w.sessions desc, w.wk desc))[1] as name,
+                     max(w.courts) as courts, sum(w.sessions)::int as sessions, max(w.players) as players,
+                     row_number() over (partition by w.city_id order by sum(w.sessions) desc, max(w.players) desc, w.park_key) as r
+                from public.city_board_court_weeks w
+               where w.month = v_m
+               group by w.city_id, w.park_key) y
+       where y.r <= 3;
+    end if;
+
+    -- 5. Clip of the month: a post that may be one (city_board_clip_ok: what
+    --    guest mode would show, a video, by a named adult, no court or place
+    --    on it, everyone on it nameable), posted that month. Top 3 per city,
+    --    one per author, by views; city_page checks each again for its viewer.
+    delete from public.city_board_clips where month = v_m;
+    insert into public.city_board_clips (month, city_id, post_id, author_id, views, place)
+    select v_m, z.city_id, z.id, z.author_id, z.views, z.place
+      from (
+        select y.*, row_number() over (partition by y.city_id order by y.views desc, y.created_at desc, y.id)::smallint as place
+          from (
+            select distinct on (po.author_id) po.id, po.author_id, po.views, po.created_at,
+                   private.city_board_city(p.city_lat, p.city_lng, p.location) as city_id
+              from public.posts po join public.profiles p on p.id = po.author_id
+             where po.created_at >= v_m::timestamp at time zone 'UTC' and po.created_at < v_end::timestamp at time zone 'UTC'
+               and po.video_url is not null and not po.archived and po.removed_at is null and po.group_id is null
+               and not p.is_private and p.suspended_at is null
+               and private.city_board_clip_ok(po)
+             order by po.author_id, po.views desc, po.created_at desc, po.id
+          ) y
+         where y.city_id is not null
+      ) z
+     where z.place <= 3;
+
+    insert into public.city_board_months (month, refreshed_at, took_ms, courts_cut)
+    values (v_m, clock_timestamp(), (extract(epoch from clock_timestamp() - v_mt) * 1000)::int, v_court_cut)
+    on conflict (month) do update set refreshed_at = excluded.refreshed_at, took_ms = excluded.took_ms, courts_cut = excluded.courts_cut;
+
+    v_out := v_out || jsonb_build_object('month', v_m,
+      'players', (select count(*) from public.city_board_members where month = v_m),
+      'cities', (select count(*) from public.city_board_cities where month = v_m),
+      'ranked', (select count(*) from public.city_board_cities where month = v_m and rank is not null));
+  end loop;
+
+  -- Keep it small.
+  delete from public.city_board_daily where day < current_date - 70;
+  delete from public.city_board_events where at < now() - interval '14 days';
+  delete from public.city_board_members where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_cities where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_courts where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_court_weeks where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_clips where month < (date_trunc('month', current_date) - interval '13 months')::date;
+  delete from public.city_board_months where month < (date_trunc('month', current_date) - interval '13 months')::date;
+
+  return jsonb_build_object('months', v_out, 'events', v_events,
+    'took_ms', (extract(epoch from clock_timestamp() - v_t0) * 1000)::int);
+end $function$
+;
+
 -- ------------------------------------------------------------- 6. triggers, the read rule, who may call what
 -- Named to come first among posts' triggers (they run in name order), so the rest see it settled.
 drop trigger if exists auto_post_guard on public.posts;
@@ -982,6 +1386,14 @@ begin
   raise notice 'Sessions that logged themselves before this: %. Posts made for them: %.', v_all, v_made;
 end $$;
 
+-- The owner's own choice, Oct 28 (his account @mrdinosaur62): "It should show up on the activity feed",
+-- with "mutuals default" before it. Friends, so his WHOOP session of today reaches his friends who follow
+-- him back at once. Only if he has not chosen already (a second run never changes his choice).
+insert into public.user_state (user_id, auto_log_audience)
+select 'a908b335-fe34-4e4f-817b-ede312b446d7'::uuid, 'mutuals'
+ where exists (select 1 from public.profiles where id = 'a908b335-fe34-4e4f-817b-ede312b446d7')
+on conflict (user_id) do update set auto_log_audience = 'mutuals' where public.user_state.auto_log_audience is null;
+
 -- ------------------------------------------------------------- 8. last check
 do $$
 declare
@@ -989,7 +1401,7 @@ declare
   k text;
   want jsonb := '{
     "auto_log_activity(uuid,uuid)": "f5061800a77fbb088e12ba2b2402540e",
-    "send_activity_pushes(uuid,uuid[])": "32fe8c6289aab99ec0afb421005b7e63",
+    "send_activity_pushes(uuid,uuid[])": "c07030432cc8698f53f9e8ab0646bae8",
     "session_unposted(uuid,uuid)": "b2f215cfec2c5bedcb2a708ce2fcd551",
     "mark_first_post()": "f91afaf25816b2cb5b0904cb15312be6",
     "share_preview(text,text)": "de1106c76c98906fe7804b53613f13c4",
@@ -998,11 +1410,11 @@ declare
     "invite_second_day(uuid,timestamp with time zone)": "dc03a465e834a74712b455327345d1fb",
     "invite_back_at(uuid,timestamp with time zone)": "11a4ea4eefe9f84cd9c86b7fec05a76b",
     "first_day_stats()": "0c3035690a2912d05759871ed9b4fe5e",
-    "auto_log_audience_of(uuid,text)": "293871d300210378c59492ba6cf530f6",
+    "auto_log_audience_of(uuid,text)": "ad0799fd238d65ffa2da74763382e815",
     "auto_log_seen_by(uuid,text,boolean)": "5bef48ae8ad986f188a8455ad5572910",
     "auto_post_shown(uuid)": "817120565ce9e19e1834f29349c68404",
     "guard_auto_post()": "7a56a8f8282dd1d7b4d54219135d3e5f",
-    "auto_post_for_session(uuid,boolean)": "a922725c8beee32d80959b8ab502067a",
+    "auto_post_for_session(uuid,boolean)": "4b66fb4ad57e0a41a0d27a218ee0028a",
     "auto_post_follows_session()": "a943542e975922638c38f9ddc7d89f20",
     "drop_emptied_auto_post()": "a157819b85b79b73af9d14d79ba5e628",
     "unsure_learned(uuid,text)": "bb9425abf3dab9ab466ad47eb65f91bf",
@@ -1012,7 +1424,9 @@ declare
     "auto_log_src_of(uuid,uuid,text)": "3400f6e57ec30e03154421addba7b022",
     "unsure_yes_taken_back()": "e0e5ad92e2f0e78054487b81e41f9cb2",
     "feed_post_scores()": "5c47960c124d4f6941dc222921391108",
-    "admin_new_players(integer)": "f56c6f4274e83bbcdba74c7d2befeb1a"
+    "admin_new_players(integer)": "f56c6f4274e83bbcdba74c7d2befeb1a",
+    "session_minor_posts(uuid)": "af3c97d6d8436618e9197b830ad4cdb7",
+    "refresh_city_board()": "653b4f13594b34cff16425c59b3edc63"
   }';
   -- Who may call it: [signed out, signed in]. Anything not listed: neither.
   callers jsonb := '{
@@ -1024,7 +1438,8 @@ declare
     "mark_first_post()": [true, true],
     "first_day_stats()": [true, true],
     "feed_post_scores()": [false, true],
-    "admin_new_players(integer)": [false, true]
+    "admin_new_players(integer)": [false, true],
+    "session_minor_posts(uuid)": [false, true]
   }';
 begin
   for k in select jsonb_object_keys(want) loop
@@ -1033,10 +1448,10 @@ begin
            has_function_privilege('authenticated', p.oid, 'execute') as signed_in
       into f from pg_proc p where p.oid = ('public.' || k)::regprocedure;
     if f.src is distinct from want->>k or not f.definer or f.config is distinct from array['search_path=public'] then
-      raise exception 'Migration 20261027000193 stopped: % is not this file''s. Nothing was changed.', k;
+      raise exception 'Migration 20261029000193 stopped: % is not this file''s. Nothing was changed.', k;
     end if;
     if f.anon is distinct from coalesce((callers->k->>0)::boolean, false) or f.signed_in is distinct from coalesce((callers->k->>1)::boolean, false) then
-      raise exception 'Migration 20261027000193 stopped: who may call % is wrong. Nothing was changed.', k;
+      raise exception 'Migration 20261029000193 stopped: who may call % is wrong. Nothing was changed.', k;
     end if;
   end loop;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'auto_logged')
@@ -1050,13 +1465,18 @@ begin
      or not exists (select 1 from pg_trigger where tgrelid = 'public.posts'::regclass and tgname = 'auto_post_emptied')
      or not exists (select 1 from pg_trigger where tgrelid = 'public.practice_sessions'::regclass and tgname = 'auto_post_follows_session')
      or not exists (select 1 from pg_trigger where tgrelid = 'public.detected_activities'::regclass and tgname = 'count_unsure_answers') then
-    raise exception 'Migration 20261027000193 stopped: a column, the read rule or a trigger is missing. Nothing was changed.';
+    raise exception 'Migration 20261029000193 stopped: a column, the read rule or a trigger is missing. Nothing was changed.';
+  end if;
+  -- The owner's choice (step 7) is saved.
+  if exists (select 1 from public.profiles where id = 'a908b335-fe34-4e4f-817b-ede312b446d7')
+     and (select us.auto_log_audience from public.user_state us where us.user_id = 'a908b335-fe34-4e4f-817b-ede312b446d7') is null then
+    raise exception 'Migration 20261029000193 stopped: the owner''s choice was not saved. Nothing was changed.';
   end if;
   -- Every session that logged itself, not posted by its player, has its post.
   if exists (select 1 from public.practice_sessions s where s.auto_logged and s.activity_id is not null
                and public.session_unposted(s.id, s.user_id)
                and not exists (select 1 from public.posts p where p.author_id = s.user_id and p.auto_logged and lower(p.session->>'sessionId') = s.id::text)) then
-    raise exception 'Migration 20261027000193 stopped: a session that logged itself did not get its post. Nothing was changed.';
+    raise exception 'Migration 20261029000193 stopped: a session that logged itself did not get its post. Nothing was changed.';
   end if;
 end $$;
 
@@ -1066,7 +1486,7 @@ commit;
 -- Read-only. Paste into the SQL editor (remove the leading "-- ").
 --
 -- (a) The server's posts, by who sees them (counts only):
--- select public.auto_log_audience_of(p.author_id, case when p.auto_held then 'apple-health' else p.session->>'source' end) as seen_by, count(*)
+-- select public.auto_log_audience_of(p.author_id, null) as seen_by, count(*)
 --   from public.posts p where p.auto_logged group by 1;
 --
 -- (b) Players whose Fitbit Sport now logs itself (count only):

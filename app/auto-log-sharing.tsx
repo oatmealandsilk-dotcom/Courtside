@@ -15,20 +15,21 @@ import { corner } from '@/theme/look';
  * Settings → "Sessions that log themselves" (migration 193; owner, Oct 27:
  * "mutuals can see, no private, its just mutual or public", then "mutuals
  * default"). Who sees the tennis your tracker logs for you: Friends (people
- * you follow who follow you back; the default), Public (whoever can see your
- * posts) or Only me. Under 18, or with no birthday given: Friends or Only me.
+ * you follow who follow you back), Public (whoever can see your posts) or
+ * Only me. Under 18, or with no birthday given: Friends or Only me.
  *
- * A tap saves at once, for the sessions already logged too. It is also the
- * clear yes Apple Health's sessions wait for (Apple's 5.1.3): until a choice
- * is made here (or on a connect screen that says who sees them), sessions
- * from Apple Health stay with you only.
+ * A tap saves at once, for the sessions already logged too. Not chosen yet
+ * (review, Oct 28): no circle is filled, and only you see them, so the tap
+ * that releases them is never one on a circle that already looked chosen. It
+ * is also the clear yes Apple Health's sessions wait for (Apple's 5.1.3).
  */
 export default function AutoLogSharing() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions, autoLogSharing, currentUser } = useApp();
   const friendsOnly = friendsAtMost(currentUser);
   const choices = AUDIENCES.filter((a) => !(friendsOnly && a === 'public'));
-  const now: AutoLogAudience = autoLogSharing === 'public' && friendsOnly ? 'mutuals' : autoLogSharing ?? 'mutuals';
+  // Not chosen yet: nothing filled (the note under the list says only you see them until you do).
+  const now: AutoLogAudience | null = autoLogSharing ? (autoLogSharing === 'public' && friendsOnly ? 'mutuals' : autoLogSharing) : null;
   const [busy, setBusy] = useState<AutoLogAudience | null>(null);
   const [error, setError] = useState('');
 
@@ -71,8 +72,8 @@ export default function AutoLogSharing() {
         })}
       </View>
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      {/* Never chosen: Friends applies, except to Apple Health's (and those saved privately before, migration 193), which wait for a tap here. */}
-      {autoLogSharing === null ? <Text style={[styles.note, styles.after]}>You haven’t chosen yet. Until you do, Friends applies, except to sessions from Apple Health and ones saved privately before, which only you see.</Text> : null}
+      {/* Never chosen: only you see them until a tap here (or on "Tennis logged") chooses (migration 193). */}
+      {autoLogSharing === null ? <Text style={[styles.note, styles.after]}>You haven’t chosen yet. Until you do, only you see them.</Text> : null}
       {friendsOnly ? <Text style={[styles.note, styles.after]}>Under 18, or with no birthday given, only people you follow who follow you back can see them.</Text> : null}
       <View style={styles.facts}>
         {FACTS.map((text) => <Text key={text} style={styles.note}>{text}</Text>)}
@@ -85,9 +86,9 @@ const ICON: Record<AutoLogAudience, keyof typeof Ionicons.glyphMap> = { mutuals:
 
 /** What is shown, said plainly before it is chosen. */
 const FACTS = [
-  'Tennis of 20 minutes or more logs itself. It shows in Activities and on your profile as a session: when, how long, and your heart rate. Never where you played.',
+  'Tennis of 20 minutes or more logs itself. It shows in Activities and on your profile as a session: when, how long, and your heart rate, heart-rate zones and calories. Under 18, or with no birthday given: only when and how long. Never where you played.',
   'Post it from “Tennis logged” to add the score, a photo or the court. That post goes to everyone who can see your posts.',
-  'Sessions from Apple Health are shown to others only after you choose here.',
+  'Connecting Apple Health never chooses this for you.',
 ];
 
 const styleDefinitions = StyleSheet.create({

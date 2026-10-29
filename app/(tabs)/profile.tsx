@@ -80,7 +80,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // "Your first week" (R7, Oct 20 sweep): follow 3, Open to hit, a first session, a first post. While it
  // is up, "Make your first move" waits: the list's first row opens that same page.
  const firstWeek = useFirstWeek();
- const hasMoved = !currentUserId || movedAfterSetup || posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
+ const hasMoved = !currentUserId || movedAfterSetup || posts.some((p) => p.authorId === currentUserId && !p.autoLogged) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId);
  // Your own posts, however far back they go: the grid and the counts are
  // yours entirely, not just whichever of them the feed happens to hold.
  useEffect(() => { if (user?.id) void actions.loadPostsOf(user.id); }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps

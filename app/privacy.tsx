@@ -10,7 +10,7 @@ import { useApp } from '@/store/AppContext';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { askWhoSeesYou, canChooseVisibility, onTeenMap, visibilityLabel } from '@/features/players/mapPrivacy';
-import { AUDIENCE_LABEL, friendsAtMost } from '@/features/activity/autoLogSharing';
+import { audienceValue } from '@/features/activity/autoLogSharing';
 import { cityBoardOn } from '@/features/cityBoard/flag';
 import { notKnownAdult } from '@/features/players/age';
 import { colors, spacing, typography } from '@/theme';
@@ -82,8 +82,8 @@ export default function PrivacyCentre() {
         {link('close-circle-outline', 'Blocked', String(blockedIds.length || 'None'), () => router.push('/blocked'))}
         {link('volume-mute-outline', 'Muted', String(mutedIds.length || 'None'), () => router.push('/muted'))}
         {link('time-outline', 'Your activity', undefined, () => router.push('/activity'))}
-        {/* Who sees the tennis your tracker logs for you (migration 193): Friends unless chosen. */}
-        {autoLogSharing !== undefined ? link('pulse-outline', 'Sessions that log themselves', AUDIENCE_LABEL[autoLogSharing === 'public' && friendsAtMost(currentUser) ? 'mutuals' : autoLogSharing ?? 'mutuals'], () => router.push('/auto-log-sharing')) : null}
+        {/* Who sees the tennis your tracker logs for you (migration 193): "Not chosen" (only you) until chosen. */}
+        {autoLogSharing !== undefined ? link('pulse-outline', 'Sessions that log themselves', audienceValue(autoLogSharing, currentUser), () => router.push('/auto-log-sharing')) : null}
       </View>
 
       {/* Flyby (migration 130): what "I'm playing here" leaves behind, said plainly. */}

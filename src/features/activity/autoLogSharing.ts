@@ -6,18 +6,23 @@ import type { AutoLogAudience, DetectedActivity, Post, User } from '@/data/types
  * public", "heart rate showing is fine").
  *
  * Settings → "Sessions that log themselves": Friends (people you follow who
- * follow you back; the default), Public (whoever can see your posts) or Only
- * me. Under 18, or with no birthday given: Friends or Only me, never Public
- * (the server keeps it to friends whatever is stored).
+ * follow you back), Public (whoever can see your posts) or Only me. Under 18,
+ * or with no birthday given: Friends or Only me, never Public (the server
+ * keeps it to friends whatever is stored).
+ *
+ * Not chosen yet: only the player sees them, from any tracker (review, Oct
+ * 28: players who connected before 193 were told "Only you see them until you
+ * post one"). The choice is asked once, on "Tennis logged" (Friends or Only
+ * me, side by side), and in Settings. Connecting WHOOP from a screen that says
+ * friends will see them saves Friends (the owner's "mutuals default");
+ * connecting Apple Health (or Android's Health Connect) never chooses for the
+ * player (Apple's 5.1.3: a clear yes, with a no beside it).
  *
  * The server makes each one a post of its own, its card only (time, kind,
- * length, heart rate and the rest the tracker recorded), shown in Activities
- * and on the profile to that audience; nobody else ever gets it. Posting the
- * session from "Tennis logged" puts the player's own post in its place.
- *
- * Apple Health (and Android's Health Connect): shown to anyone only once the
- * player has made the choice, which the connect screens and Settings ask for
- * in so many words (Apple's 5.1.3). Until then, only them.
+ * length, and for an adult the heart rate, zones and calories the tracker
+ * recorded; none of those for anyone else), shown in Activities and on the
+ * profile to that audience; nobody else ever gets it. Posting the session
+ * from "Tennis logged" puts the player's own post in its place.
  *
  * The words here are the server's own (auto_log_seen_by), so the alert, the
  * Notifications row and the session's page say the same thing.
@@ -25,24 +30,42 @@ import type { AutoLogAudience, DetectedActivity, Post, User } from '@/data/types
 
 export const AUDIENCES: AutoLogAudience[] = ['mutuals', 'public', 'private'];
 
-/** Kept by the server only from Apple Health's (and Health Connect's): shown once the player has chosen. */
-const askFirst = (source: string | undefined | null) => source === 'apple-health' || source === 'apple-watch' || source === 'health-connect';
+/** Apple Health's (and Health Connect's): connecting one never chooses who sees them (Apple's 5.1.3). */
+export const askFirst = (source: string | undefined | null) => source === 'apple-health' || source === 'apple-watch' || source === 'health-connect';
 
 /** Not known to be an adult: Friends at most. */
 export const friendsAtMost = (user: Pick<User, 'ageGroup'> | null | undefined) => user?.ageGroup !== 'adult';
 
 /**
- * Who sees one from `source` right now, by the player's setting (`chosen`,
- * null if never chosen), exactly as the server decides (auto_log_audience_of).
- * Undefined: a database before migration 193 (or not heard yet), where they
- * stay with the player only (185). `held`: the server's post of it is held
- * back until the player chooses (Post.autoHeld), as Apple Health's are.
+ * Who sees one right now, by the player's setting (`chosen`, null if never
+ * chosen), exactly as the server decides (auto_log_audience_of): not chosen
+ * yet, only them. Undefined: a database before migration 193 (or not heard
+ * yet), where they stay with the player only (185). `source` and `held` no
+ * longer change the answer (every one waits for the choice); kept so callers
+ * read the same.
  */
-export function shownTo(chosen: AutoLogAudience | null | undefined, source: string | undefined | null, user: Pick<User, 'ageGroup'> | null | undefined, held = false): AutoLogAudience {
-  if (chosen === undefined) return 'private';
-  if (!chosen && (held || askFirst(source))) return 'private';
-  const v = chosen ?? 'mutuals';
-  return v === 'public' && friendsAtMost(user) ? 'mutuals' : v;
+export function shownTo(chosen: AutoLogAudience | null | undefined, _source?: string | null, user?: Pick<User, 'ageGroup'> | null, _held = false): AutoLogAudience {
+  if (!chosen) return 'private';
+  return chosen === 'public' && friendsAtMost(user) ? 'mutuals' : chosen;
+}
+
+/**
+ * Who will see the tennis that logs itself once `source` is connected, for
+ * the line said before connecting: the choice made; not chosen yet, Friends
+ * for WHOOP or another tracker (connecting it from that screen saves Friends,
+ * see `savesOnConnect`), only them for Apple Health until they choose.
+ */
+export function onConnect(chosen: AutoLogAudience | null | undefined, source: string | undefined | null, user: Pick<User, 'ageGroup'> | null | undefined): AutoLogAudience {
+  if (chosen) return shownTo(chosen, source, user);
+  return chosen === null && !askFirst(source) ? 'mutuals' : 'private';
+}
+
+/** Connecting `source` from a screen that said friends will see them saves Friends (never for Apple Health or Health Connect). */
+export const savesOnConnect = (chosen: AutoLogAudience | null | undefined, source: string | undefined | null) => chosen === null && !askFirst(source);
+
+/** Settings' and the Privacy center's value for the row: "Friends", or "Not chosen" (only you, until you choose). */
+export function audienceValue(chosen: AutoLogAudience | null | undefined, user: Pick<User, 'ageGroup'> | null | undefined): string {
+  return chosen ? AUDIENCE_LABEL[shownTo(chosen, null, user)] : 'Not chosen';
 }
 
 /** The choice as Settings names it. */
@@ -64,13 +87,19 @@ export function seenByLine(aud: AutoLogAudience, many = false): string {
 
 /**
  * Said before connecting (Apple Health's sheet, setup's card, the Health
- * page): who will see the tennis that logs itself, and that the choice is
- * theirs. For `aud` (what the player chose, or the default).
+ * page): who will see the tennis that logs itself, and what of it. For `aud`
+ * (onConnect); `chosen`: the player's setting (null: not chosen yet). An adult's
+ * shows its time, heart rate, zones and calories; anyone else's only when and
+ * how long (the server's share list, migration 193).
  */
-export function consentLine(aud: AutoLogAudience): string {
-  if (aud === 'private') return 'Tennis of 20 minutes or more logs itself, and only you see it until you post it.';
+export function consentLine(aud: AutoLogAudience, user: Pick<User, 'ageGroup'> | null | undefined, chosen: AutoLogAudience | null | undefined = aud): string {
+  if (aud === 'private') {
+    return chosen ? 'Tennis of 20 minutes or more logs itself, and only you see it until you post it.'
+      : 'Tennis of 20 minutes or more logs itself. Only you see it until you choose who can.';
+  }
   const who = aud === 'public' ? 'anyone who can see your posts' : 'friends who follow you back';
-  return `Tennis of 20 minutes or more logs itself, and ${who} can see it, with its time and heart rate. Change who in Settings.`;
+  const what = friendsAtMost(user) ? 'when you played and for how long' : 'with its time, heart rate, zones and calories';
+  return `Tennis of 20 minutes or more logs itself, and ${who} can see it, ${what}. Change who in Settings.`;
 }
 
 /** A post the server made for one of your sessions that logged itself, for the session on it (its tracker row, or its log entry). */

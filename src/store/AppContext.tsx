@@ -574,7 +574,7 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   mapVisibility: MapVisibility | null | undefined;
   /**
    * Who sees your sessions that log themselves (Settings, migration 193): null
-   * never chosen (Friends; Apple Health's only you until you choose);
+   * never chosen (only you until you choose, from any tracker);
    * undefined not known, or a database before 193 (nothing to choose yet).
    */
   autoLogSharing: AutoLogAudience | null | undefined;

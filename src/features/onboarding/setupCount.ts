@@ -37,7 +37,7 @@ export function useSetupCount(page: SetupPage, inSetup: boolean): SetupCount | n
   const throughSetup = page === 'about' || page === 'game' || !onboardingComplete || passed.has('about');
   if (!inSetup || !throughSetup) return null;
   const here = (p: SetupPage) => p === page || passed.has(p);
-  const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
+  const hasPosted = !!currentUserId && (posts.some((p) => p.authorId === currentUserId && !p.autoLogged) || questions.some((q) => q.authorId === currentUserId) || answers.some((a) => a.authorId === currentUserId));
   // The automatic-logging page steps past itself when there is nothing to connect, or it is already connected.
   const autoOffer = !auto.connected && !(auto.known && !auto.apple && !auto.whoop);
   // Someone who has posted, or joined from a shared link, goes straight into the app after Your game.
