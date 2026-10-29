@@ -21,6 +21,7 @@ import { useTennisFlags } from '@/features/activity/useTennisFlags';
 import { WHOOP_WORKOUTS_ASK, WORKOUTS_ASK, askWithSharing } from '@/features/activity/workouts';
 import { consentLine, onConnect, savesOnConnect, shownTo } from '@/features/activity/autoLogSharing';
 import { isTracker, useTrackerStatus } from '@/features/activity/trackers';
+import { WATCH_TIP, useWatchTip } from '@/features/activity/watchTip';
 import { confirm } from '@/lib/confirm';
 import { withCatalog } from '@/lib/integrations';
 import { agoInWords, hoursAndMinutes } from '@/lib/format';
@@ -125,6 +126,8 @@ export default function Health() {
   const what = (i: Integration) => (workouts(i.provider) && (!i.connected || !i.readsWorkouts || i.readsAllWorkouts) ? 'workouts' : 'tennis sessions');
   // Fitbit, Oura and Polar: open once the server has their keys and their switch is on.
   const trackers = useTrackerStatus();
+  // "Start a Tennis workout on your Apple Watch and it logs itself" (or Fitbit's): under its row until a tennis session comes in.
+  const watchTip = useWatchTip();
   const open = (provider: Integration['provider']) => !isTracker(provider) || (trackers[provider] && flags[provider]);
   const apple = integrations.find((i) => i.provider === 'apple-health');
   // The phone's own "Workout detected" alert (from build 15, features/health/workoutWatch): the card
@@ -357,6 +360,16 @@ export default function Health() {
               </Reanimated.View>
             )
           ) : null}
+          {/* Connected, no tennis session in from it yet (Oct 28): how to make one log itself. Got it puts it away for a few days, everywhere. */}
+          {i.connected && watchTip.due && watchTip.source === i.provider ? (
+            <View style={styles.tip}>
+              <Ionicons name="watch-outline" size={16} color={colors.brand} style={styles.tipIcon} />
+              <Text style={styles.tipText}>{WATCH_TIP[watchTip.source]}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Got it: watch tip" hitSlop={10} onPress={() => { haptics.tap(); watchTip.gotIt(); }} style={({ pressed }) => pressed && styles.pressedDim}>
+                <Text style={styles.smallGhostText}>Got it</Text>
+              </Pressable>
+            </View>
+          ) : null}
         </Words>
         {/* The tennis pill shows its own "Turning on…"; a second spinner beside it would be one too many. */}
         {loading && !(tennisCard && !i.readsWorkouts) && !offerBusy ? (
@@ -523,4 +536,8 @@ const styleDefinitions = StyleSheet.create({
   connectText: { ...typography.smallStrong, fontSize: buttonShape.smallLabel, color: colors.brandInk },
   connectTextOff: { color: colors.textFaint },
   foot: { ...typography.small, color: colors.textFaint, lineHeight: 18, paddingTop: spacing.lg },
+  // The watch tip under a connected row: a quiet line on the page's raised ground, Got it at its end.
+  tip: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.md, backgroundColor: colors.bgElevated },
+  tipIcon: { alignSelf: 'flex-start', marginTop: 2 },
+  tipText: { ...typography.small, color: colors.text, flex: 1, lineHeight: 18 },
 });

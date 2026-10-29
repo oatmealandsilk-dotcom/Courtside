@@ -15,6 +15,7 @@ import { lensFollow, lensLand, lensRide, lensSettle } from '@/features/navigatio
 import { TabFocus, ThemeGate } from '@/features/navigation/tabFocus';
 import { useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
+import { useAfterLogConnectWatch } from '@/features/activity/afterLogConnect';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { useCurtainDown } from '@/features/feed/warmup';
 import { useTourOpen } from '@/features/tour/tourStore';
@@ -124,6 +125,8 @@ function TabsLayoutBody() {
     if (i >= 0) lensLand(i);
   };
   const { ready, currentUserId, remoteLoaded, snapshotShown, isGuest } = useApp();
+  // Whether "Want this to log itself next time?" may follow a session logged by hand (afterLogConnect).
+  useAfterLogConnectWatch();
   const { isPhone } = useResponsive();
   // The Feed is built out of sight a moment after the app has opened, while
   // you look at the start page, so its first clip has loaded by the time you

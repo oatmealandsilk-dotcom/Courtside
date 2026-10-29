@@ -2,6 +2,8 @@ import { router } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 
 import type { DetectedActivity, ID, MatchSet, PracticeSession, SessionPlayer } from '@/data/types';
+import { connectAfterLogged } from '@/features/activity/afterLogConnect';
+import { fitbitTipAfterLogged, noteFitbitYes } from '@/features/activity/watchTip';
 import { activityDay } from '@/features/activity/format';
 import { andList, canTagKind } from '@/features/activity/sessionTags';
 import { sourceOn } from '@/features/activity/recent';
@@ -127,6 +129,8 @@ export function useTrackerSession(activityId: ID | undefined) {
         // A workout logged as fitness keeps what it was ("Run"), so the log says so after the workout's own row goes (migration 107).
         ...(!isTennisActivity(activity) && input.kind === 'fitness' ? { workout: activity.sport } : {}),
       });
+      // A Fitbit "Sport" logged as tennis here is a "Was this tennis?" yes: its note is followed by the Fitbit tip (watchTip).
+      if (activity.unsure && activity.source === 'fitbit' && input.kind !== 'fitness') noteFitbitYes(currentUserId, id);
       if (tagging.length) {
         const refused = await actions.setSessionPlayers(id, tagging).catch(() => []);
         for (const r of refused) showToast({ title: `${firstOf(r.id)} wasn’t tagged`, body: r.why, icon: 'pricetag-outline' });
@@ -177,14 +181,17 @@ export function showLogged(minutes: number, s: Pick<PracticeSession, 'kind' | 'w
     showToast({ title: record.title, body: record.body, glyph: 'record', ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}) });
     return;
   }
+  // After a Fitbit "Was this tennis?" yes logged from its own row, the once-ever Fitbit tip (watchTip) instead.
+  const closed = fitbitTipAfterLogged(sessionId, connectAfterLogged(onClosed));
   showToast({
     title: 'Logged',
     body: `${duration(minutes)} · ${loggedLabel(s)}`,
     glyph: 'logged',
     ...(streak.now >= 2 ? { stat: { value: streak.now, from: streak.before, label: 'day streak' } } : {}),
     ...(sessionId ? { action: shareAction({ session: sessionId }) } : {}),
-    // Told when the note goes, for what follows it (log-session's "Something come up today?", R11).
-    ...(onClosed ? { onClosed } : {}),
+    // Told when the note goes, for what follows it: "Want this to log itself next time?" for a player with nothing
+    // connected (afterLogConnect, at most once a day), else log-session's "Something come up today?" (R11).
+    ...(closed ? { onClosed: closed } : {}),
   });
 }
 

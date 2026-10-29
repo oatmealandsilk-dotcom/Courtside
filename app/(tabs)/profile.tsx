@@ -212,7 +212,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    </Pressable>}
    {/* The website only: "Get CourtSide on your iPhone", until closed or the phone app is opened (R3, Oct 20 sweep). */}
    <PhoneAppRow />
-   {/* The phone apps: "Log your hits automatically" while nothing brings sessions in (Oct 24), after the setup cards above. */}
+   {/* The phone apps: "Connect your watch" while nothing brings sessions in (Oct 24; Not now brings it back in two days, Oct 28), after the setup cards above. */}
    {hasMoved && !firstWeek.showing && !firstWeek.deciding && skipped.length === 0 && <ConnectCard />}
    {/* The picture in the middle, the name under it, and who follows whom in
        one quiet line — the post counts moved down to the Posts / Clips / Tagged row. */}

@@ -26,6 +26,7 @@ import type { DetectedActivity, HitRequest, Notification, NotificationKind, Post
 import { hitSpot } from '@/features/hits/visible';
 import { isTennisActivity } from '@/features/activity/workouts';
 import { isOwnAutoPostOf, seenByLine, shownTo, unsureWaiting } from '@/features/activity/autoLogSharing';
+import { fitbitTipAfterYes } from '@/features/activity/watchTip';
 import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
@@ -332,16 +333,21 @@ export default function Notifications() {
   const [unsureBusy, setUnsureBusy] = useState(false);
   const yesAll = async () => {
     if (unsureBusy) return;
+    const fromFitbit = unsure.some((a) => a.source === 'fitbit');
     setUnsureBusy(true);
     const r = await actions.confirmUnsureTennis();
     setUnsureBusy(false);
     if (!r) { showToast({ title: 'Couldn’t log them', body: 'Try again in a moment.', icon: 'alert-circle-outline' }); return; }
+    // After the first yes ever (on this phone), Fitbit's watch tip follows the note (approved Oct 27; watchTip). Not when
+    // the note says Sport from the Fitbit logs itself as tennis from now on: the tip would read against it (review, Oct 28).
+    const tip = fromFitbit && !r.learned ? fitbitTipAfterYes(currentUserId) : undefined;
     // Every one was already logged by hand: filed as that, nothing logged twice (migration 193).
-    if (!r.logged) { showToast({ title: 'Already in Your sessions', body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'You logged these yourself.', icon: 'checkmark-circle-outline' }); return; }
+    if (!r.logged) { showToast({ title: 'Already in Your sessions', body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'You logged these yourself.', icon: 'checkmark-circle-outline', ...(tip ? { onClosed: tip } : {}) }); return; }
     showToast({
       title: r.logged === 1 ? 'Tennis logged' : `${r.logged} tennis sessions logged`,
       body: r.learned ? 'From now on, Sport from your Fitbit logs itself as tennis.' : 'In Your sessions.',
       icon: 'checkmark-circle-outline',
+      ...(tip ? { onClosed: tip } : {}),
     });
   };
   // Each person and post by id, once: every row looks its people and its post up several times, and

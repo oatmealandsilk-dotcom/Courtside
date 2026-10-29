@@ -1782,6 +1782,34 @@ const STEPS = [
     },
   },
   {
+    // "Connect your watch" (Oct 28, owner: "Auto log should be very pushed hard"). A player with nothing connected
+    // (?new=1): the card is at the top of Activities; Not now puts it away (for two days, then it comes back).
+    name: 'connect-card',
+    title: 'Activities: "Connect your watch" for a player with nothing connected, and its Not now',
+    async run(page) {
+      await page.goto('/sign-in?new=1');
+      const opened = await page.waitForAny([{ text: 'Find Players' }, { label: 'Log in' }], 45000);
+      if (opened.index === 1) {
+        try { await page.tap({ label: 'Log in' }, 5000); } catch { /* it went on to the app by itself */ }
+        const next = await page.waitForAny([{ text: /^Demo build — no accounts, no database/ }, { text: 'Find Players' }], 45000);
+        if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
+      }
+      await page.waitFor({ text: 'Find Players' }, 45000);
+      await page.tap({ label: 'Feed' });
+      await page.tap({ label: 'Activities' }, 20000);
+      // Honest about who sees it: one tap never chooses (migration 193 review).
+      await page.waitFor({ label: /^Connect your watch\. Your tennis logs itself from .+\. You choose who sees it\.$/ }, 30000);
+    },
+    expect: [{ text: 'Connect your watch' }, { label: 'Not now: connect your watch' }, { label: 'Log a session' }],
+    after: async (page) => {
+      await page.tap({ label: 'Not now: connect your watch' });
+      await page.gone({ text: 'Connect your watch' });
+      await page.waitFor({ label: 'Log a session' });
+      // An ordinary player again for anything after this.
+      await page.eval("sessionStorage.removeItem('courtside-demo-new'); true");
+    },
+  },
+  {
     // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).
     name: 'app-link',
     title: 'Website link straight to the iPhone app',

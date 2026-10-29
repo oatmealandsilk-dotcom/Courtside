@@ -421,6 +421,9 @@ let barHolder: string | null = null;
 
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
+/** A first answer still on its way as Activities comes on show is waited for this long before its start page is left out for the visit. */
+const ACTS_GRACE_MS = 250;
+
 function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   previewSection?: string;
   /** Told when a finger's own swipe lands on a new page: given only on the Feed tab itself (For you and its group feeds), never on a one-person or one-court feed (post/[id] and the like). */
@@ -453,20 +456,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const nearAuthors = useNearYouAuthors(!!scope?.activities);
   const nearRef = useRef(nearAuthors);
   nearRef.current = nearAuthors;
-  // Also, however many you follow, while the slim "Connect Apple Health" row has something to offer (owner, Oct 6).
-  // Once there, it stays for the visit: following your tenth player, or connecting, from it never pulls it out from under you.
-  const connectRow = useConnectRow();
-  const actsStartNow = !!scope?.activities && ready && (followingIds.length < START_UNDER || connectRow.offer);
-  const actsStartKept = useRef(false);
-  if (actsStartNow) actsStartKept.current = true;
-  const actsStart = actsStartNow || (!!scope?.activities && actsStartKept.current);
-  // Their sessions are asked for once a visit, as Activities opens (the feed's own load holds only the newest few posts).
-  const askedNear = useRef(false);
-  useEffect(() => {
-    if (!actsStart || askedNear.current) return;
-    askedNear.current = true;
-    void actions.loadRecentSessionPosts();
-  }, [actsStart, actions]);
   const currentUser = users.find((u) => u.id === currentUserId);
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
@@ -529,6 +518,31 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
+  // Also, however many you follow, while the "Connect your watch" card has something to offer (owner, Oct 6). The
+  // watch tip never opens Activities on this page by itself (owner, Oct 29, "2-4" / "Ship", without that change):
+  // it shows when you are on this page. Once there, it stays: following your tenth player, or connecting, from it never pulls it out from under you.
+  // Those two are only final once heard (switches, connections, this phone's Not now and Got it): decided as
+  // Activities comes on show, with a short grace for a first answer on its way; one heard after the feed is up
+  // waits until it is out of sight at its top, so no page is ever slipped in over the one being read (review, Oct 28).
+  const connectRow = useConnectRow();
+  const actsShown = !!scope?.activities && !paused && focused;
+  const actsCameAt = useRef<number | null>(null);
+  if (!actsShown) actsCameAt.current = null;
+  else if (actsCameAt.current === null) actsCameAt.current = Date.now();
+  const actsStartKept = useRef(false);
+  if (!actsStartKept.current && !!scope?.activities && ready) {
+    if (followingIds.length < START_UNDER) actsStartKept.current = true;
+    else if (connectRow.known && connectRow.offer
+      && (actsShown ? Date.now() - (actsCameAt.current ?? 0) < ACTS_GRACE_MS : active === 0)) actsStartKept.current = true;
+  }
+  const actsStart = !!scope?.activities && actsStartKept.current;
+  // Their sessions are asked for once a visit, as Activities opens (the feed's own load holds only the newest few posts).
+  const askedNear = useRef(false);
+  useEffect(() => {
+    if (!actsStart || askedNear.current) return;
+    askedNear.current = true;
+    void actions.loadRecentSessionPosts();
+  }, [actsStart, actions]);
   // The top row follows this feed's scroll while it is the feed on show, the way Instagram's
   // header does (Oct 22, owner): forward takes it out with the finger, back brings it in. A hold,
   // a tap to pause, a pull to refresh, the first page, coming back to the Feed or switching its
@@ -2155,7 +2169,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 ? Math.max(top, insets.top + 12 + (removedTall[post.id] ?? REMOVED_GUESS) + 16) : top);
 
               if (item.type === 'tip') return <TipPage key="tip" onSubmit={actions.submitTip} />;
-              if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} sessions={feedItems.length} />;
+              if (item.type === 'act-start') return <ActivitiesStart key="act-start" topInset={insets.top + 64} bottomInset={barInset > 0 ? barInset + 8 : POST_BOTTOM} nearCount={feedItems.filter((i) => i.type === 'post' && nearAuthors.has(i.post.authorId)).length} sessions={feedItems.length} shown={actsShown} onTop={active === 0} />;
               if (item.type === 'challenge') return <ChallengePage key="challenge" challenge={challenge} />;
               if (item.type === 'caught-up') return caughtUpPage(index);
 

@@ -6,6 +6,7 @@ import { TabsPager } from '@/components/TabsPager';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useApp } from '@/store/AppContext';
 import { warmConnectOffer } from '@/features/activity/autoLog';
+import { useAfterLogConnectWatch } from '@/features/activity/afterLogConnect';
 
 /**
  * On the phone the four tabs are one sliding row (see TabsPager). The Tabs
@@ -17,8 +18,10 @@ export default function TabsLayout() {
   useTheme();
   const pathname = usePathname();
   const { ready, currentUserId } = useApp();
-  // Profile's "Log your hits automatically" card, decided before Profile is first opened.
+  // Profile's "Connect your watch" card, decided before Profile is first opened.
   useEffect(() => { if (currentUserId) warmConnectOffer(currentUserId); }, [currentUserId]);
+  // Whether "Want this to log itself next time?" may follow a session logged by hand (afterLogConnect).
+  useAfterLogConnectWatch();
   // Both built once (the row only when the address changes): this layout hears every change in the
   // app, for the two values above, and each one redrew the row and the hidden navigator with it
   // (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").

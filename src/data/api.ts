@@ -171,13 +171,37 @@ export function demoNewPlayer(): boolean {
   }
 }
 
+/**
+ * Demo build in a browser: `?watch=1` (or `?watch=fitbit`, kept for the tab) plays a player who connected Apple
+ * Health (or Fitbit) but has never had a tennis session come in from it: WHOOP not connected, no tennis waiting or
+ * logged from a tracker. So the watch tip can be seen (features/activity/watchTip): at the top of Activities and on
+ * the Health page.
+ */
+export function demoWatchOnly(): 'apple-health' | 'fitbit' | null {
+  try {
+    if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return null;
+    const asked = new URLSearchParams(window.location.search).get('watch');
+    if (asked) window.sessionStorage.setItem('courtside-demo-watch', asked === 'fitbit' ? 'fitbit' : 'apple-health');
+    const kept = window.sessionStorage.getItem('courtside-demo-watch');
+    return kept === 'fitbit' || kept === 'apple-health' ? kept : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchBootstrap(): Promise<Bootstrap> {
   // The demo's catch-up, only with ?found=1 (mock/activities): five workouts found in one go.
   const found = supabase ? null : demoFoundWorkouts();
+  const watchOnly = supabase ? null : demoWatchOnly();
   const fresh = !supabase && demoNewPlayer();
-  const sources = fresh
-    ? integrations.map((i) => (i.provider === 'apple-health' || i.provider === 'whoop' ? { ...i, connected: false, readsWorkouts: false, readsAllWorkouts: false, lastSyncedAt: undefined } : i))
+  // No tracker's sessions in: a new player, or one with only a watch that has sent none (?watch=1).
+  const noTracker = fresh || !!watchOnly;
+  const sources = noTracker
+    ? integrations.map((i) => (i.provider === watchOnly ? { ...i, connected: true, readsWorkouts: true, readsAllWorkouts: false, lastSyncedAt: new Date(Date.now() - 20 * 60_000).toISOString() }
+      : i.provider === 'apple-health' || i.provider === 'whoop' ? { ...i, connected: false, readsWorkouts: false, readsAllWorkouts: false, lastSyncedAt: undefined } : i))
     : integrations;
+  // A watch with nothing in from it yet: its sessions are logged by hand only.
+  const ownSessions = watchOnly ? demoSessions.map(({ activityId: _a, autoLogged: _l, ...x }) => x) : demoSessions;
   return delay(
     clone({
       // ?admin=1: the demo's own player is an admin (demoAdmin), to try the admin pages without a database.
@@ -204,15 +228,15 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // The demo's tracker session and its "Tennis detected" row, two of the
       // map's alerts and a tag of you. Only without a database: a real
       // account's come from the server.
-      notifications: supabase ? [] : [...demoRecapNotification(), ...(fresh ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications), ...(fresh ? [] : demoGroupInviteNotifications())],
-      detectedActivities: supabase ? [] : [...(fresh ? [] : detectedActivities), ...(found?.activities ?? [])],
+      notifications: supabase ? [] : [...demoRecapNotification(), ...(noTracker ? [] : activityNotifications), ...(found?.notifications ?? []), ...DEMO_MAP_ALERTS, ...demoSessionTagNotifications, ...(fresh ? [] : demoHitNotifications), ...(fresh ? [] : demoGroupInviteNotifications())],
+      detectedActivities: supabase ? [] : [...(noTracker ? [] : detectedActivities), ...(found?.activities ?? [])],
       coachingRequests,
       integrations: sources,
       healthHistory,
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: fresh ? demoHits.filter((h) => !DEMO_HITS_OF_YOURS.includes(h.id)) : demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: demoSessions, sessionTags: demoSessionTags }),
+      ...(supabase ? {} : { hitRequests: fresh ? demoHits.filter((h) => !DEMO_HITS_OF_YOURS.includes(h.id)) : demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: ownSessions, sessionTags: demoSessionTags }),
     }),
   );
 }

@@ -36,6 +36,11 @@ export function trackerStatus(me: string | null): Promise<TrackerStatus> {
   return asking;
 }
 
+/** The last answer heard on this phone (any age), or null before the first: a seed, so a repeat open need not wait. */
+export function knownTrackerStatus(): TrackerStatus | null {
+  return known?.status ?? null;
+}
+
 /** The hook screens use. None open until the server answers. */
 export function useTrackerStatus(): TrackerStatus {
   const { currentUserId } = useApp();
