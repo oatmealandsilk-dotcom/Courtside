@@ -27,20 +27,23 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(play !== false && !reduced ? from : value);
   const frame = useRef<number | null>(null);
-  // Off, the number in full; 'wait', its starting point; on, it counts from there (as CountUp).
+  // Counts up once: a number already shown in full never falls back to 0 to count again when `play` comes on (as CountUp).
+  const settled = useRef(play === false || reduced);
   useEffect(() => {
-    if (!play || reduced || typeof requestAnimationFrame !== 'function') { setShown(value); return undefined; }
+    if (play === 'wait' && !reduced) { setShown(settled.current ? value : from); return undefined; }
+    if (!play || reduced || settled.current || typeof requestAnimationFrame !== 'function') { settled.current = true; setShown(value); return undefined; }
+    settled.current = true;
     setShown(from);
-    if (play === 'wait') return undefined;
-    // Timed from the moment it was turned on (plus its delay), as the phone's is, so its first frame is
-    // already on its way rather than a frame spent standing at the start.
-    const begin = performance.now() + delay;
-    const step = (t: number) => {
-      const p = Math.min(1, Math.max(0, (t - begin) / Math.max(1, duration)));
-      setShown(from + (value - from) * outCubic(p));
-      if (p < 1) frame.current = requestAnimationFrame(step);
-    };
-    const timer = setTimeout(() => { frame.current = requestAnimationFrame(step); }, delay);
+    let start = 0;
+    const timer = setTimeout(() => {
+      const step = (t: number) => {
+        if (!start) start = t;
+        const p = Math.min(1, (t - start) / Math.max(1, duration));
+        setShown(from + (value - from) * outCubic(p));
+        if (p < 1) frame.current = requestAnimationFrame(step);
+      };
+      frame.current = requestAnimationFrame(step);
+    }, delay);
     return () => { clearTimeout(timer); if (frame.current != null) cancelAnimationFrame(frame.current); };
   }, [value, from, play, reduced, delay, duration]);
   return (

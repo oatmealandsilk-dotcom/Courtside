@@ -361,7 +361,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, beat = 120, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
@@ -402,14 +402,8 @@ export function SessionCard({ session, width, height, play = false, beat = 120, 
    * Only for the pictures (with `picture`), never the feed's card.
    */
   clear?: boolean;
-  /** Count the numbers up (once, when the card comes into view); 'wait' holds them at their start, ready to. */
+  /** Count the numbers up (once, when the card comes into view). */
   play?: CountPlay;
-  /**
-   * How long the time waits once `play` turns on before it counts, the other numbers a little after it:
-   * a beat after a screen opens. A Feed page gives 0: its numbers start as a swipe heads for the page,
-   * and a beat on top of that only made them late (Oct 27).
-   */
-  beat?: number;
   /** The author's own preview: the players picked, waiting ones faded. Otherwise only those who accepted (session.with). */
   people?: CardPerson[];
   /** People the viewer blocked: never shown. */
@@ -480,7 +474,6 @@ export function SessionCard({ session, width, height, play = false, beat = 120, 
       width={width}
       height={height}
       play={play}
-      beat={beat}
       top={shownTop}
       result={result}
       score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden, people) } : null}
@@ -507,7 +500,7 @@ export function SessionCard({ session, width, height, play = false, beat = 120, 
         ) : null}
       </View>
       <Reanimated.View layout={picture ? undefined : LinearTransition.duration(220)} style={[styles.middle, { justifyContent: health && !tall ? 'flex-start' : 'center', paddingTop: health && !tall ? 18 * k : 0 }]}>
-        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={beat} duration={700} textStyle={shade} />
+        <Duration minutes={session.minutes} size={96 * k} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} textStyle={shade} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), color: look.muted, marginTop: 2 * k, ...shade }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // The ScoreBoard (T1, Oct 22) in the box's own lettering: the box already says Won or Lost.
@@ -517,7 +510,7 @@ export function SessionCard({ session, width, height, play = false, beat = 120, 
         ) : null}
         {far ? (
           <View style={{ marginTop: 8 * k }}>
-            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={beat + 40} textStyle={shade} />
+            <Figure value={far.value} part={far.value < 10 ? 'dec1' : 'int'} unit={far.unit} baseline size={30 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={160} textStyle={shade} />
           </View>
         ) : null}
         {place ? (
@@ -530,15 +523,15 @@ export function SessionCard({ session, width, height, play = false, beat = 120, 
           <Reanimated.View entering={picture ? undefined : FadeIn.duration(220)} exiting={picture ? undefined : FadeOut.duration(160)} style={{ marginTop: 20 * k }}>
             {hr || avg ? (
               <View style={[styles.hrRow, { columnGap: 26 * k, rowGap: 6 * k }]}>
-                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={beat + 80} textStyle={shade} /> : null}
-                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={beat + 80} textStyle={shade} /> : null}
+                {hr ? <Figure value={session.maxHr!} unit="max bpm" size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
+                {avg ? <Figure value={avg} unit={hr ? 'avg' : 'avg bpm'} size={38 * k} color={look.figure} unitColor={look.muted} unitScale={0.33} play={play} delay={200} textStyle={shade} /> : null}
               </View>
             ) : null}
-            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={beat + 80} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
+            {zones ? <ZoneBar zones={zones} colors={look.zones} height={10 * k} play={play} delay={200} duration={600} style={{ marginTop: hr || avg ? 14 * k : 0 }} /> : null}
             {strain != null || kcal ? (
               <View style={[styles.hrRow, { columnGap: 22 * k, rowGap: 6 * k, marginTop: hr || avg || zones ? 12 * k : 0 }]}>
-                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={beat + 140} textStyle={shade} /> : null}
-                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={beat + 140} textStyle={shade} /> : null}
+                {strain != null ? <Figure value={strain} part="dec1" baseline unit="Strain" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
+                {kcal ? <Figure value={kcal} baseline unit="cal" size={24 * k} color={look.figure} unitColor={look.muted} unitScale={0.46} play={play} delay={260} textStyle={shade} /> : null}
               </View>
             ) : null}
           </Reanimated.View>
@@ -597,13 +590,12 @@ type SidewaysStat = { key: string; value: number; part?: 'int' | 'dec1'; label: 
  * bottom. `height` is whatever the page has room for: everything is drawn
  * to the scale that fits both ways (358 wide by about 250 tall is 1).
  */
-function Sideways({ session, look, width, height, play, beat, top, result, score, stats, zones, lead, more, vs, source }: {
+function Sideways({ session, look, width, height, play, top, result, score, stats, zones, lead, more, vs, source }: {
   session: SessionDetail;
   look: CardLook;
   width: number;
   height: number;
   play: CountPlay;
-  beat: number;
   top: string;
   result: string | null;
   /** The score's sets and the two sides' names, for the ScoreBoard. */
@@ -654,7 +646,7 @@ function Sideways({ session, look, width, height, play, beat, top, result, score
         ) : null}
       </View>
       <View style={[styles.middle, styles.sidewaysMiddle, { paddingTop: 12 * k, paddingBottom: foot ? 14 * k : 0 }]}>
-        <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={beat} duration={700} />
+        <Duration minutes={session.minutes} size={hero} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={700} />
         <Text style={{ ...font('500'), fontSize: small(14, 10), lineHeight: line(small(14, 10)), color: look.muted, marginTop: 2 * k }} maxFontSizeMultiplier={1.2}>{onCourtWord(session)}</Text>
         {score ? (
           // The ScoreBoard (T1, Oct 22) in the box's own lettering, at the height the card measured.
@@ -666,13 +658,13 @@ function Sideways({ session, look, width, height, play, beat, top, result, score
           <View style={[styles.statRow, { gap: 10 * k, marginTop: 14 * k, paddingTop: 10 * k, borderTopColor: look.lines }, look.plain && styles.hairTop]}>
             {stats.map((s) => (
               <View key={s.key} style={styles.stat}>
-                <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={beat + 80} />
+                <Figure value={s.value} part={s.part} size={26 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} />
                 <Text style={[{ ...font('500'), fontSize: small(12, 10), lineHeight: line(small(12, 10)), color: look.muted, marginTop: 2 * k }, look.plain && styles.capsLabel]} numberOfLines={1} maxFontSizeMultiplier={1.2}>{s.label}</Text>
               </View>
             ))}
           </View>
         ) : null}
-        {zones ? <ZoneBar zones={zones} colors={look.zones} height={8 * k} play={play} delay={beat + 80} duration={600} style={{ marginTop: 12 * k }} /> : null}
+        {zones ? <ZoneBar zones={zones} colors={look.zones} height={8 * k} play={play} delay={200} duration={600} style={{ marginTop: 12 * k }} /> : null}
       </View>
       {foot ? (
         <View style={styles.foot}>

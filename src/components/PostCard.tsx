@@ -2,7 +2,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlaceLine } from '@/components/PlaceLine';
 import { TaggedLine } from '@/components/TaggedLine';
-import React, { useMemo, useState, memo } from 'react';
+import React, { useEffect, useMemo, useState, memo, useContext } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { router } from 'expo-router';
@@ -18,7 +18,9 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
-import { PageCount } from '@/features/feed/pageCount';
+import { PageKeyContext, usePageHeading } from '@/features/feed/pageLeaving';
+import { useSwipeFollow } from '@/features/feed/swipeFollow';
+import type { CountPlay } from '@/components/session/countFormat';
 import { PushedDownTag } from '@/components/PushedDownTag';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -152,6 +154,18 @@ function PostCardInner({
   // The room the card has: as wide as the post, and in the feed's fixed-height
   // page only as tall as is left once the caption and buttons have theirs.
   const [slot, setSlot] = useState({ w: 0, h: 0 });
+  // The stats count up once, the first time the page comes in, and on time (Oct 27, owner: "It starts too late
+  // the numbers counting"): from the moment a decided swipe heads for this page, not once it has landed. Until
+  // then they wait at their starting point, so they never show in full and then fall back to count.
+  const heading = usePageHeading(useSwipeFollow());
+  // Only on a Feed page (inside the pager) does it wait to count; anywhere else (a shared preview) it shows in full.
+  const onPage = useContext(PageKeyContext) !== null;
+  const [play, setPlay] = useState<CountPlay>(() => (onPage && sessionCard && !counted.has(post.id) ? 'wait' : false));
+  useEffect(() => {
+    if (!sessionCard || !(active || heading) || counted.has(post.id)) return;
+    counted.add(post.id);
+    setPlay(true);
+  }, [sessionCard, active, heading, post.id]);
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
   // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session:
   // the court, as in Your sessions; the stopwatch stays for the time and stats under it.
@@ -229,12 +243,7 @@ function PostCardInner({
             if (w > 0 && (w !== slot.w || h !== slot.h)) setSlot({ w, h });
           }}
         >
-          {/* The stats count up once, the first time the page comes in, from the moment a decided swipe heads for it (PageCount). */}
-          {slot.w && slot.h ? (
-            <PageCount seen={counted} postId={post.id} active={active}>
-              {(play) => <SessionCard session={post.session!} author={author.name} width={slot.w} height={Math.min(slot.h, Math.round(slot.w * SIDEWAYS))} play={play} beat={0} hidden={blockedIds} onPress={openStats} />}
-            </PageCount>
-          ) : null}
+          {slot.w && slot.h ? <SessionCard session={post.session!} author={author.name} width={slot.w} height={Math.min(slot.h, Math.round(slot.w * SIDEWAYS))} play={play} hidden={blockedIds} onPress={openStats} /> : null}
         </View>
       ) : null}
       <Pressable onPress={onPress} style={styles.body}>

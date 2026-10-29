@@ -11,7 +11,6 @@ import { distanceFigure, formatDistance } from '@/features/activity/workouts';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { colors, font, withAlpha } from '@/theme';
 import { Duration, Figure } from './Duration';
-import type { CountPlay } from './countFormat';
 import { CardWash, boxLook } from './SessionCard';
 import { spokenScore } from '@/features/activity/score';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
@@ -36,21 +35,14 @@ import { LESS_AI } from '@/theme/look';
  * lines where the session has no log behind it (a written plan) or the
  * page already names the person (the tag).
  */
-export function SessionStrip({ session, hidden = [], play = false, beat = 120, scale = 1, onPress, title: titleAs, sub, flat = false, author, people }: {
+export function SessionStrip({ session, hidden = [], play = false, scale = 1, onPress, title: titleAs, sub, flat = false, author, people }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
   /** The composer's preview: the players picked, named on the board before they accept. */
   people?: { name: string; role: 'opponent' | 'partner' }[];
   hidden?: ID[];
-  /** Count the numbers up (once, when it comes into view); 'wait' holds them at their start, ready to. */
-  play?: CountPlay;
-  /**
-   * How long the time waits once `play` turns on before it counts, the other numbers a little after it:
-   * a beat after a screen opens. A Feed page gives 0: its numbers start as a swipe heads for the page,
-   * and a beat on top of that only made them late (Oct 27).
-   */
-  beat?: number;
+  play?: boolean;
   scale?: number;
   onPress?: () => void;
   /** In place of what it was ("Match · Won"). */
@@ -93,11 +85,11 @@ export function SessionStrip({ session, hidden = [], play = false, beat = 120, s
   const plain = !!look.plain;
   const eyebrow = [title, sub ?? (source ? source.replace(/^Data by /, '') : null)].filter(Boolean).join(' · ').toUpperCase();
   const stats = [
-    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={beat + 80} duration={600} /> } : null,
-    avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={beat + 80} duration={600} /> } : null,
-    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={beat + 80} duration={600} /> } : null,
+    kcal != null ? { key: 'kcal', label: 'Calories', node: <Figure value={kcal} baseline size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    avg ? { key: 'avg', label: 'Avg HR', node: <Figure value={avg} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
+    hr ? { key: 'max', label: 'Max HR', node: <Figure value={session.maxHr!} unit="bpm" baseline unitScale={0.62} size={19 * k} color={look.figure} unitColor={look.muted} play={play} delay={200} duration={600} /> } : null,
   ].filter((x): x is { key: string; label: string; node: React.ReactElement } => !!x);
-  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={beat} duration={600} />;
+  const time = <Duration minutes={session.minutes} size={19 * k} unitScale={0.62} color={look.figure} unitColor={look.muted} play={play} delay={120} duration={600} />;
   // One panel, Strava's activity block in the theme's colour (Oct 4, owner: "needs big UI work"):
   // what it was and who with, then the numbers in even columns; with only the time shared, one line.
   return (
