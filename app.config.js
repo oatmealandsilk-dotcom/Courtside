@@ -160,6 +160,9 @@ module.exports = {
       // the white one, light on the dark one), so they do not flip when the app takes over; once the app
       // runs, ThemedStatusBar sets them per theme. Replaces expo-status-bar's plugin (fixed dark, Oct 24).
       './plugins/withLaunchStatusBar',
+      // iOS 27 needs the scene start-up or the app stops at launch (Xcode 27 builds, Oct 29):
+      // Expo's own ExpoAppSceneDelegate makes the window (plugins/withSceneLifecycle.js).
+      './plugins/withSceneLifecycle',
       // adaptiveColors off (Oct 25): left on, expo-router redraws every page in the app the moment the
       // phone (or browser) turns dark or light, for its own Color API, which the app does not use. With
       // the app following the phone (userInterfaceStyle 'automatic'), that would be a whole-app redraw at
