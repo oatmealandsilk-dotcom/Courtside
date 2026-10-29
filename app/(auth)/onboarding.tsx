@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -9,9 +9,15 @@ import { CourtSpinner } from '@/components/CourtSpinner';
 import { LocationField } from '@/components/LocationField';
 import { PermissionRows } from '@/components/PermissionRows';
 import { Button, Collapse, Field, SegmentedControl, Toggle } from '@/components/ui';
-import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
+import { PlayerCard } from '@/components/tennis/PlayerCard';
+import { StatusShade } from '@/components/StatusShade';
+import { Wash } from '@/components/Wash';
 import { useSetupCount } from '@/features/onboarding/setupCount';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { SCALES } from '@/features/players/ratingScales';
+import { notKnownAdult } from '@/features/players/age';
 import { perWeekText, playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
 import { useTrackerPerWeek } from '@/features/players/usePerWeek';
 import { experienceLabel } from '@/lib/format';
@@ -38,7 +44,7 @@ import type {
   SkillSystem,
   SurfacePreference,
 } from '@/data/types';
-import { colors, radius, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 
 const PLAY_STYLES: { value: PlayStyle; label: string; detail: string }[] = [
@@ -93,6 +99,23 @@ const STEPS: { title: string; lead?: string; skip?: SetupStep }[] = [
   { title: 'Calendar', lead: 'Optional. Gives the plan a target.', skip: 'calendar' },
   { title: 'Review', lead: 'What the coach works from.' },
 ];
+
+/**
+ * The redraw's one line under About you and Your game (ONBOARDING_V2, round 2, Oct 29, owner: "3 and 5
+ * specifically need to push more for ppl to put in information"): why it is worth filling in, said once.
+ */
+const V2_LEADS: Record<number, string> = {
+  0: 'Players near you find you by town and level.',
+  1: 'This is what other players see.',
+};
+/**
+ * A teen's (round 2 review): a teen is never listed to strangers by town (players_in_town, migration 190) and is
+ * searched for by name or @handle only (migration 118), so the adults' lines would not be true for them.
+ */
+const V2_TEEN_LEADS: Record<number, string> = {
+  0: 'Friends find you by name and see your level.',
+  1: 'This is what your friends see.',
+};
 
 /** Opened from the Tennis profile to change your answers: the steps about you and your game, with Save on each. */
 const EDIT_STEPS = [0, 1, 3, 4];
@@ -163,6 +186,9 @@ function OnboardingSteps() {
   // Joining (not changing saved answers): one step count across all of setup, and setup's shared buttons (Oct 20 sweep).
   const setupRun = !editing && !forCoach && params.from !== 'profile';
   const setupCount = useSetupCount(step === 0 ? 'about' : 'game', setupRun);
+  // The sign-up redraw (ONBOARDING_V2): only while joining. Game details, Edit rating, the coach's
+  // setup and the profile's "finish setting up" stay exactly as they are.
+  const v2 = ONBOARDING_V2 && setupRun;
   const skipped = useRef<Set<SetupStep>>(new Set());
   // Set as Finish is pressed, so the account becoming set up here is never taken for one that already was (below).
   const leaving = useRef(false);
@@ -171,6 +197,12 @@ function OnboardingSteps() {
   const [name, setName] = useState(currentUser?.name ?? '');
   const [location, setLocation] = useState(currentUser?.location ?? '');
   const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
+  // The live card's town (round 2 review): only a picked town, or what is in the box once it is left, never each keystroke ("Los Ang").
+  const [cardTown, setCardTown] = useState(location);
+  const typedTown = useRef(location);
+  // A tall phone (844pt and up, not an SE): the live card gets a little more room inside (round 2 review).
+  const tall = useWindowDimensions().height >= 780;
+  const changeTown = (next: string, at: { lat: number; lng: number } | null) => { setLocation(next); setCityAt(at); typedTown.current = next; if (at) setCardTown(next); };
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
   // Joining, the rating starts empty (Oct 5): it used to start at 3.5, and
   // beginners kept it and were matched at the wrong level. "Not sure?" under
@@ -328,6 +360,17 @@ function OnboardingSteps() {
   const yearNote = yearsText !== '' && !yearsOk ? `Enter a number from 0 to ${maxYears}`
     : playing ? (playing.since !== undefined ? yearsWords(playing) : `Your profile says ${experienceLabel(playing.years).toLowerCase()}. Add how many years you've played.`)
     : 'A rough number is fine.';
+  // The redraw says nothing until there is something to say (an out-of-range number, or what the number means).
+  const yearNoteV2 = yearsText !== '' && !yearsOk ? yearNote : playing ? yearNote : '';
+  // The redraw's "Invited by": a quiet link until it is tapped, or open from the start when a link filled it in.
+  const [inviteOpen, setInviteOpen] = useState(false);
+  // Opened by the link tap (never when a link filled it in): the box takes the caret once the fold has opened, so one tap is enough to start typing.
+  const inviteInput = useRef<TextInput>(null);
+  useEffect(() => {
+    if (!inviteOpen) return undefined;
+    const t = setTimeout(() => inviteInput.current?.focus(), 280);
+    return () => clearTimeout(t);
+  }, [inviteOpen]);
 
   /* ------------------------------ Animation ------------------------------ */
 
@@ -507,12 +550,188 @@ function OnboardingSteps() {
     </View>
   );
 
+  // The redraw's version: a tidy grid of equal chips, three to a row.
+  const foundViaBlockV2 = (
+    <View style={styles.v2Found} accessibilityRole="radiogroup" accessibilityLabel="How did you find CourtSide? Optional">
+      <View style={styles.foundHead}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>How did you find CourtSide?</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.optional}>Optional</Text>
+      </View>
+      <View style={styles.v2Grid}>
+        {FOUND_VIA.map((o) => {
+          const on = foundVia === o.value;
+          return (
+            <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ selected: on, checked: on }} accessibilityLabel={o.label} onPress={() => pickFoundVia(o.value)} style={[styles.v2Chip, styles.v2GridChip, on && styles.v2ChipOn]}>
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.v2ChipText, styles.v2GridText, on && { color: colors.brandInk }]}>{o.label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {foundGuess && foundVia === foundGuess && !foundTouched ? (
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note}>Picked from how you joined.</Text>
+      ) : null}
+    </View>
+  );
+
+  const styleNow = PLAY_STYLES.find((p) => p.value === playStyle);
+  // The live card on About you and Your game (round 2): the account as it stands with what is typed here laid
+  // over it. Display only: nothing is saved until Continue, which saves exactly as before.
+  const draft = useMemo(() => (currentUser ? {
+    ...currentUser,
+    name,
+    location: cardTown,
+    profile: { ...currentUser.profile, skillSystem: skillSystem as SkillSystem, rating, startedYear, playStyle, handedness, backhand, preferredSurface: surface },
+  } : null), [currentUser, name, cardTown, skillSystem, rating, startedYear, playStyle, handedness, backhand, surface]);
+  const liveCard = (game: boolean) => (draft ? (
+    <PlayerCard variant="setup" user={draft} setup={{ rated: ratingValid, years: yearsOk ? typedYears : null, game, roomy: tall }} />
+  ) : null);
+  const inviteShown = inviteOpen || !!prefilled || !!inviteCode || !!inviteNote;
+
+  // About you, redrawn: who you are, your rating on one row, years playing, and "Invited by" only when wanted.
+  const aboutV2 = (
+    <>
+      {liveCard(false)}
+      <View style={styles.v2You}>
+        {/* Name and town as one inset list, each label beside its box (round 2: two boxes with labels over them took about 40pt more). */}
+        <View style={styles.v2Inset}>
+          <View style={styles.v2FieldRow}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2FieldLabel}>Name</Text>
+            <View style={styles.v2FieldBox}>
+              <Field row accessibilityLabel="Name" placeholder="Your name" value={name} onChangeText={setName} autoCapitalize="words" />
+            </View>
+          </View>
+          <View style={styles.v2Hairline} />
+          <LocationField row value={location} onChange={changeTown} onSettle={() => setCardTown(typedTown.current)} />
+        </View>
+        {currentUser?.ageGroup === 'teen' ? (
+          <View style={[styles.v2Inset, styles.v2PrivRow]}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.privacyTitle}>Private account</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note}>{currentUser.isPrivate ? 'Only people you approve see your posts.' : 'Anyone can see your posts.'}</Text>
+            </View>
+            <Toggle value={!!currentUser.isPrivate} onChange={actions.setPrivateAccount} accessibilityLabel="Private account" />
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.v2Section}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>Rating</Text>
+        <View style={styles.v2RatingRow}>
+          <View style={{ flex: 1 }}>
+            <Field accessibilityLabel="Rating" value={ratingText} onChangeText={typeRating} placeholder={skillSystem === 'UTR' ? 'e.g. 6.0' : 'e.g. 3.5'} keyboardType="decimal-pad" selectTextOnFocus />
+          </View>
+          <View style={styles.v2System}>
+            <SegmentedControl<'NTRP' | 'UTR'> accessibilityLabel="Rating system" value={skillSystem} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+          </View>
+        </View>
+        <View style={styles.v2NoteRow}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.v2Note, { flex: 1 }]}>{ratingValid ? band.label : ratingText.trim() ? `Enter ${scale.min.toFixed(1)}–${scale.max.toFixed(1)}` : ''}</Text>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: levelsOpen }} accessibilityLabel="Not sure of your rating? Pick your level" hitSlop={8} onPress={() => { haptics.tap(); setLevelsOpen((o) => !o); }}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2NotSure}>{levelsOpen ? 'Close' : 'Not sure?'}</Text>
+          </Pressable>
+        </View>
+        <Collapse open={levelsOpen}>
+          <View style={[styles.v2Inset, styles.v2Levels]}>
+            {levels.map((l, i) => (
+              <Row key={l.label} check label={l.label} detail={`${skillSystem} ${l.value.toFixed(1)}`} selected={ratingValid && rating === l.value} first={i === 0} onPress={() => pickLevel(l.value)} />
+            ))}
+          </View>
+        </Collapse>
+      </View>
+      <View style={styles.v2Section}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2SmallLabel}>Years playing</Text>
+        <View style={styles.v2YearsRow}>
+          <View style={styles.v2YearBox}>
+            <Field accessibilityLabel="How many years have you played?" placeholder="e.g. 5" value={yearsText} onChangeText={typeYears} keyboardType="number-pad" selectTextOnFocus />
+          </View>
+          <Pressable accessibilityRole="button" accessibilityState={{ selected: underOne }} accessibilityLabel="Less than 1 year" onPress={pickUnderOne} style={[styles.v2Chip, underOne && styles.v2ChipOn]}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.v2ChipText, underOne && { color: colors.brandInk }]}>Less than 1</Text>
+          </Pressable>
+        </View>
+        {yearNoteV2 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note} accessibilityLiveRegion="polite">{yearNoteV2}</Text> : null}
+      </View>
+      {/* Round 2 review: the page's spare height goes here, so "Invited by" sits just over Continue with no empty middle (none on an SE). */}
+      {asksInviter && (inviter?.handle || inviter?.canSet) ? <View style={styles.v2Spring} /> : null}
+      {asksInviter && inviter?.handle && !inviter.canSet ? (
+        <View style={[styles.v2Section, styles.v2InvitedRow]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
+          {followOffer ? (
+            <Button label={`Follow @${followOffer.handle}`} variant="secondary" onPress={() => { actions.toggleFollow(followOffer.id); setFollowOffer(null); }} />
+          ) : null}
+        </View>
+      ) : asksInviter && inviter?.canSet ? (
+        <View style={styles.v2Section}>
+          {inviteShown ? null : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Invited by someone?" hitSlop={8} onPress={() => { haptics.tap(); setInviteOpen(true); }} style={styles.v2InviteLink}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2QuietLink}>Invited by someone?</Text>
+            </Pressable>
+          )}
+          <Collapse open={inviteShown}>
+            <Field
+              inputRef={inviteInput}
+              label="Invited by"
+              placeholder="Their @handle or link"
+              value={inviteCode}
+              onChangeText={(t) => { setInviteCode(t); setInviteNote(undefined); }}
+              autoCapitalize="none"
+              autoCorrect={false}
+              hint={inviteNote ?? (prefilled && handleFromText(inviteCode) === prefilled ? `Matched from the link you used. Not @${prefilled}? Type who invited you.` : 'Can only be set once.')}
+              onSubmitEditing={() => void claimCode()}
+            />
+          </Collapse>
+        </View>
+      ) : null}
+    </>
+  );
+
+  // Your game, redrawn: the style as one pop-up row, hand and backhand side by side, the surface, then the optional question.
+  const gameV2 = (
+    <>
+      {liveCard(true)}
+      <View style={[styles.v2Inset, styles.v2GameFirst]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: styleOpen }} accessibilityLabel="Style of play" onPress={() => setStyleOpen((o) => !o)} style={({ pressed }) => [styles.v2StyleRow, pressed && { backgroundColor: colors.surfaceAlt }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2StyleLabel}>Style</Text>
+          <View style={styles.v2StyleValue}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2StyleNow} numberOfLines={1}>{styleNow?.label}</Text>
+            <Animated.View style={{ transform: [{ rotate: chevronTurn.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '180deg'] }) }] }}>
+              <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+            </Animated.View>
+          </View>
+        </Pressable>
+        <Collapse open={styleOpen}>
+          {PLAY_STYLES.filter((p) => p.value !== playStyle).map((p) => (
+            <Row key={p.value} check label={p.label} detail={p.detail} selected={false} first={false} onPress={() => { pick(setPlayStyle)(p.value); setStyleOpen(false); }} />
+          ))}
+        </Collapse>
+      </View>
+      <View style={[styles.twoCol, styles.v2GameRow]}>
+        <View style={{ flex: 1 }}>
+          <Group label="Hand">
+            <SegmentedControl<Handedness> value={handedness} onChange={pick(setHandedness)} segments={[{ value: 'right', label: 'Right' }, { value: 'left', label: 'Left' }]} />
+          </Group>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Group label="Backhand">
+            <SegmentedControl<Backhand> value={backhand} onChange={pick(setBackhand)} segments={[{ value: 'two-handed', label: 'Two' }, { value: 'one-handed', label: 'One' }]} />
+          </Group>
+        </View>
+      </View>
+      <View style={[styles.v2Section, styles.v2GameRow]}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.groupLabel}>Surface</Text>
+        <SegmentedControl<SurfacePreference> value={surface} onChange={pick(setSurface)} segments={SURFACES} />
+      </View>
+      {FOUND_VIA_STEP === 1 && asksFoundVia ? foundViaBlockV2 : null}
+    </>
+  );
+
+  const v2Leads = currentUser && notKnownAdult(currentUser) ? V2_TEEN_LEADS : V2_LEADS;
   if (setUpAlready) return <View style={[styles.root, styles.waiting]}><CourtSpinner size={28} /></View>;
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
     <View style={[styles.root, { paddingTop: space.header }]}>
-      <View style={styles.head}>
-        {setupRun ? <View style={styles.progress}><SetupProgress count={setupCount} /></View> : ratingOnly ? null : (
+      {/* Setup's faint court wash (round 2), drawn once behind the whole page: it stays still while the steps move over it. */}
+      {setupRun && ONBOARDING_V2 ? <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} /> : null}
+      <View style={[styles.head, v2 && styles.v2Narrow]}>
+        {setupRun ? <View style={v2 ? styles.v2Progress : styles.progress}><SetupProgress count={setupCount} /></View> : ratingOnly ? null : (
           <View style={styles.track}>
             <Animated.View style={[styles.fill, { transform: [{ scaleX: progress }] }]} />
           </View>
@@ -521,7 +740,8 @@ function OnboardingSteps() {
           <Reanimated.Text key={ratingOnly ? 'rating' : STEPS[step].title} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Reanimated.Text>
           {ratingOnly || setupRun ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
-        {ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
+        {v2 && v2Leads[step] ? <Reanimated.Text key={v2Leads[step]} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{v2Leads[step]}</Reanimated.Text>
+          : ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
           : STEPS[step].lead ? <Reanimated.Text key={STEPS[step].lead} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Reanimated.Text> : null}
       </View>
 
@@ -532,15 +752,16 @@ function OnboardingSteps() {
         onScroll={keyboard.onScroll}
         scrollEventThrottle={16}
         // The rating alone sits right under its title; the setup steps stay centred as before.
-        contentContainerStyle={[styles.body, ratingOnly && styles.bodyTop]}
+        contentContainerStyle={[styles.body, ratingOnly && styles.bodyTop, v2 && styles.v2Body]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
         // The number pad has no return key: a drag down the page puts the keys away.
         keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : Platform.OS === 'ios' ? 'interactive' : undefined}
       >
-        <Reanimated.View key={step} entering={stepIn} exiting={STEP_OUT} style={{ gap: spacing.lg }}>
-          {step === 0 ? (
+        <Reanimated.View key={step} entering={stepIn} exiting={STEP_OUT} style={v2 ? styles.v2Step : { gap: spacing.lg }}>
+          {v2 && step === 0 ? aboutV2 : v2 && step === 1 ? gameV2 : null}
+          {!v2 && step === 0 ? (
             <>
               {ratingOnly ? null : <>
               <Field label="Name" value={name} onChangeText={setName} autoCapitalize="words" />
@@ -637,7 +858,7 @@ function OnboardingSteps() {
             </>
           ) : null}
 
-          {step === 1 ? (
+          {!v2 && step === 1 ? (
             <>
               <Group label="Style of play">
                 <View style={styles.list}>
@@ -793,6 +1014,8 @@ function OnboardingSteps() {
         </View>
       </View>
       )}
+      {/* What scrolls up stops at the status bar, painted like the page behind it. */}
+      {v2 ? <StatusShade wash={setupLook.wash} /> : null}
     </View>
     </KeyboardScrollContext.Provider>
   );
@@ -810,22 +1033,24 @@ function Group({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function Row({ label, detail, selected, first, onPress }: { label: string; detail?: string; selected: boolean; first: boolean; onPress: () => void }) {
+function Row({ label, detail, selected, first, onPress, check }: { label: string; detail?: string; selected: boolean; first: boolean; onPress: () => void; /** The redraw: a checkmark on the one picked, as the iPhone's own lists, in place of the radio. */ check?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, !first && styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
+      style={({ pressed }) => [styles.row, check && styles.v2Row, !first && styles.rowBorder, pressed && { backgroundColor: colors.surfaceAlt }]}
     >
       <View style={{ flex: 1, gap: 2 }}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowLabel, selected && { color: colors.text }]}>{label}</Text>
         {detail ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowDetail}>{detail}</Text> : null}
       </View>
-      <View style={[styles.radio, selected && styles.radioOn]}>
-        {selected ? <View style={styles.radioDot} /> : null}
-      </View>
+      {check ? (selected ? <Ionicons name="checkmark" size={20} color={colors.brand} /> : null) : (
+        <View style={[styles.radio, selected && styles.radioOn]}>
+          {selected ? <View style={styles.radioDot} /> : null}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -900,4 +1125,52 @@ const styleDefinitions = StyleSheet.create({
   footerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   skip: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   skipText: { ...typography.smallStrong, color: colors.textMuted },
+
+  // The sign-up redraw (ONBOARDING_V2), joining only.
+  v2Narrow: { maxWidth: 460 },
+  // The title 24pt under the bar (the head's own 4pt gap and this).
+  v2Progress: { marginBottom: setupLook.titleGap - spacing.xs },
+  // The live card 16pt under the lead (the head's own 8 and this).
+  v2Body: { maxWidth: 460, paddingTop: spacing.sm },
+  v2You: { gap: spacing.md, marginTop: 20 },
+  // Round 2 review: the step fills the page, and a spring before "Invited by" takes what is left.
+  v2Step: { flexGrow: 1 },
+  v2Spring: { flexGrow: 1 },
+  // Round 2: 20 between groups (was 24), so the page fills without an empty middle.
+  v2Section: { marginTop: 20, gap: spacing.sm },
+  v2Lead: { ...setupLook.lead, marginTop: spacing.xs },
+  v2FieldRow: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.lg },
+  v2FieldLabel: { ...typography.body, color: colors.textMuted, width: 88 },
+  v2FieldBox: { flex: 1, minWidth: 0 },
+  v2Hairline: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
+  v2SmallLabel: { ...typography.small, fontSize: 13, color: colors.textMuted },
+  v2NotSure: { ...typography.smallStrong, color: colors.textMuted },
+  v2GameFirst: { marginTop: 20 },
+  v2GameRow: { marginTop: spacing.lg },
+  v2SectionRow: { marginTop: setupLook.sectionGap },
+  v2Inset: { ...setupLook.inset },
+  v2PrivRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  v2RatingRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
+  v2System: { width: 140 },
+  v2NoteRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, marginTop: -2 },
+  v2Note: { ...typography.small, lineHeight: 18, color: colors.textMuted },
+  v2Levels: { marginTop: spacing.xs },
+  v2YearsRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.md },
+  v2YearBox: { width: 96 },
+  v2Chip: { ...setupLook.chip },
+  v2ChipOn: { ...setupLook.chipOn },
+  v2ChipText: { ...setupLook.chipText, textAlign: 'center' },
+  v2InvitedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  v2InviteLink: { alignSelf: 'flex-start', minHeight: 32, justifyContent: 'center' },
+  v2QuietLink: { ...typography.smallStrong, color: colors.textMuted },
+  v2Row: { paddingHorizontal: spacing.lg },
+  v2StyleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.lg },
+  v2StyleLabel: { ...typography.body, color: colors.textMuted },
+  v2StyleValue: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  v2StyleNow: { ...typography.body, ...font('500'), color: colors.text, flexShrink: 1 },
+  v2Found: { marginTop: 20, paddingTop: spacing.lg, gap: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  v2Grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  // Round 2: 32pt chips, three to a row.
+  v2GridChip: { flexBasis: '30%', flexGrow: 1, minHeight: 32, paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  v2GridText: { fontSize: 14 },
 });

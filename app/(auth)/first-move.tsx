@@ -12,8 +12,9 @@ import { FollowPill } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { useNearCourts } from '@/components/place/CourtsNear';
 import { Avatar, Button } from '@/components/ui';
-import { SetupFooter, SetupProgress } from '@/components/setup/SetupBits';
+import { QuietButton, SetupFooter, SetupProgress, setupLook } from '@/components/setup/SetupBits';
 import { useSetupCount } from '@/features/onboarding/setupCount';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import { Wash } from '@/components/Wash';
 import type { FirstMove } from '@/data/remote';
 import type { User } from '@/data/types';
@@ -29,6 +30,11 @@ import { formatSpotMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isRoughSpot } from '@/features/players/positions';
 import { useMyCity } from '@/features/players/useMyCity';
+import { isOfficial } from '@/features/players/official';
+import { townLabel } from '@/features/players/nearMe';
+import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
+import { useCityFill } from '@/features/cityBoard/fill';
+import { OfficialCheck } from '@/components/OfficialCheck';
 import { useInstantsOn } from '@/features/stories/instantsSwitch';
 import { confirmUnfollow } from '@/lib/confirm';
 import * as haptics from '@/lib/haptics';
@@ -50,8 +56,16 @@ const LOOK_MS = 2500;
 /** People offered to follow, at most (Instagram's "People you may know" shows about this many). */
 const MOST = 8;
 
-/** One person offered, with the line under their name ("Invited you", "Followed by Om", "2 mi away"). */
-interface Pick { user: User; meta: string }
+/**
+ * A teen's verified coaches on "People you may know" (round 2). OFF until the owner says Yes: today's
+ * suggestions never show a teen someone they don't know, and coaches are adult strangers (public, professional
+ * accounts, the ones the Coaching tab already shows them, never with a town or distance). Off, a teen with
+ * nobody to suggest gets the contacts row, @courtside and Search.
+ */
+const TEEN_COACHES: boolean = false;
+
+/** One person offered, with the line under their name ("Invited you", "Followed by Om", "2 mi away"); a filled row names its group. */
+interface Pick { user: User; meta: string; section?: 'city' | 'coaches' }
 
 /**
  * Right after setup: "People you may know" (Oct 6, owner: "There's a page
@@ -77,7 +91,7 @@ export default function FirstMove() {
   const styles = useThemedStyles(styleDefinitions);
   // Clear of the status bar and the home bar, the same as every page before the app.
   const space = useGateSpace();
-  const { currentUser, currentUserId, users, lastSeen, followingIds, followRequests, blockedIds, actions } = useApp();
+  const { currentUser, currentUserId, users, lastSeen, followingIds, followRequests, blockedIds, blockedMeIds, coaches, actions } = useApp();
   const { findable } = useFindable();
   const { leave, curtain } = useLeave();
   const adult = !!currentUser && !notKnownAdult(currentUser);
@@ -86,6 +100,25 @@ export default function FirstMove() {
   const firstName = currentUser?.name?.split(' ')[0];
   const contacts = canReadContacts();
   const instantsOn = useInstantsOn() === true;
+  // Whatever was picked, the app opens on its start page (Community, on the
+  // map: see startTab); a post, an Instant or a search then opens over it.
+  // Opened from the profile's "Make your first move", the app is already
+  // underneath: this page closes down to it (never a second copy of the tabs
+  // on top), and Continue with nothing done simply goes back to the profile.
+  const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
+  const overApp = openedFrom === 'profile';
+  // Round 2 (Oct 29, owner, of an empty list: "There's no reason this should be empty"): the sign-up run fills the
+  // list up to MOST from what the app already shows, each under its own rules (below).
+  const fills = ONBOARDING_V2 && !overApp;
+  // Most active in your city: the city page's own fill (city_page().fill: by the town on their profile, never where
+  // they are, only people the server says you may see), for a known adult only. Asked only on this run.
+  const cityBoard = useCityBoard(fills && adult);
+  const homeCityId = fills && adult ? cityBoard.board?.me.cityId ?? null : null;
+  const homeCityName = cityBoard.board?.me.cityName ?? null;
+  const cityPage = useCityPage(homeCityId, cityBoard.month);
+  const cityFill = useCityFill(homeCityId ? cityPage.page : null, []);
+  // Still hearing about the city (never past LOOK_MS): the list waits, so it is decided once.
+  const fillPending = fills && adult && (cityBoard.status === 'loading' || (!!homeCityId && cityPage.status === 'loading'));
 
   // Who plays round your city: that part of the map, asked for once, the
   // same ask the full map makes when it looks there (an adult only).
@@ -127,7 +160,7 @@ export default function FirstMove() {
   useEffect(() => {
     if (picks || !currentUser) return;
     // Whoever invited you is waited for too (never past LOOK_MS), so they are not left off a list that settled first.
-    const settled = (inviter !== undefined || waited) && (!adult || heard || waited || (!city && !cityPending));
+    const settled = (inviter !== undefined || waited) && (!adult || heard || waited || (!city && !cityPending)) && (!fillPending || waited);
     if (!settled) return;
     const list: Pick[] = inviter ? [{ user: inviter, meta: 'Invited you' }] : [];
     const add = (user: User, meta: string) => {
@@ -140,20 +173,44 @@ export default function FirstMove() {
       if (adult && !/^(Plays in|Interacted)/.test(s.reason)) return;
       add(s.user, adult || s.reason !== 'Suggested for you' ? s.reason : 'Follows you');
     });
+    // The sign-up redraw (ONBOARDING_V2): an adult's list is filled up to MOST with the rest of the
+    // suggestions, in their own order ("Coach on CourtSide", "Suggested for you"): the same people,
+    // under the same rules, the app's own Suggested players row already shows them. A teen's list is as before.
+    if (ONBOARDING_V2 && !overApp && adult) suggested.forEach((s) => add(s.user, s.reason));
+    if (fills) {
+      // Never anyone blocked either way, anyone who may not be found, anyone followed already or already listed.
+      const fits = (u: User | undefined): u is User => !!u && u.id !== currentUserId && !blockedIds.includes(u.id) && !blockedMeIds.includes(u.id)
+        && findable(u) && !followingIds.includes(u.id) && !list.some((p) => p.user.id === u.id);
+      const byId = new Map(users.map((u) => [u.id, u]));
+      // The coaches the Coaching tab shows (listed unless switched off), verified only.
+      const verified = coaches.filter((c) => c.listed !== false && c.verified);
+      // CourtSide's own account first, when the app has it (the demo has none).
+      const official = users.find((u) => isOfficial(u.id));
+      if (fits(official) && list.length < MOST) list.push({ user: official, meta: 'Official · tips and events' });
+      if (adult) {
+        cityFill.filter((f) => fits(f.user)).slice(0, 4).forEach((f) => { if (list.length < MOST) list.push({ user: f.user, meta: f.lines.join(' '), section: 'city' }); });
+        const myTown = townLabel(currentUser.location);
+        if (myTown) {
+          verified.map((c) => byId.get(c.userId)).filter((u): u is User => fits(u) && townLabel(u.location) === myTown).slice(0, 2)
+            .forEach((u) => { if (list.length < MOST) list.push({ user: u, meta: `Coach · ${myTown}`, section: 'coaches' }); });
+        }
+        // A quiet city (round 2 review: Austin left @courtside and one person over an empty page): the rest of the
+        // verified coaches, from any town, by what they teach, never with a town or distance (the teen rows' look).
+        verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; })
+          .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
+      } else if (TEEN_COACHES) {
+        // A teen: the coaches the Coaching tab already shows them, by what they teach, never by where they are.
+        verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; }).slice(0, 3)
+          .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
+      }
+    }
     setPicks(list);
-  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter]);
+  }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter, overApp, fills, fillPending, cityFill, coaches, users, blockedIds, blockedMeIds, currentUserId, findable]);
   const empty = !!picks && !picks.length;
 
   const nearCourts = useNearCourts(empty && adult ? city : null);
   const court = useInviteCourt(city, nearCourts);
 
-  // Whatever was picked, the app opens on its start page (Community, on the
-  // map: see startTab); a post, an Instant or a search then opens over it.
-  // Opened from the profile's "Make your first move", the app is already
-  // underneath: this page closes down to it (never a second copy of the tabs
-  // on top), and Continue with nothing done simply goes back to the profile.
-  const { from: openedFrom } = useLocalSearchParams<{ from?: string }>();
-  const overApp = openedFrom === 'profile';
   // Setup's last page: setup's one step count (Oct 20 sweep); none when opened again from the profile.
   const setupCount = useSetupCount('first-move', !overApp);
   const done = (move: FirstMove, then?: () => void) => {
@@ -203,6 +260,96 @@ export default function FirstMove() {
   const line = !adult ? 'Your map shows only your friends.'
     : empty && cityName ? `CourtSide is new in ${cityName}.`
       : 'Follow anyone you know. Their clips and hits fill your feed and map.';
+
+  // Only the sign-up run is redrawn: "Make your first move" from the profile stays as it is.
+  if (ONBOARDING_V2 && !overApp) {
+    // The redraw (Oct 29, owner: "People you may know screen I don't even feel a need to read I'm just
+    // tapping next because it seems confusing"): the people, each with Follow, and one quiet way to bring
+    // your own. Nothing else to read, and Finish the only green button.
+    const finishLabel = setupCount && setupCount.index === setupCount.total - 1 ? 'Finish' : 'Continue';
+    const inviteLabel = shared ? 'Link shared' : adult ? 'Invite your hitting partners' : 'Invite your friends';
+    const emptyLine = !adult ? FRIENDS_LINE
+      : court ? `Your link opens on ${court.name}.`
+        : cityName ? `CourtSide is new in ${cityName}.`
+          : 'Whoever joins with your link follows you.';
+    // A teen's contacts come first, above the list (round 2): the friends they already have are the ones to find.
+    const contactsRow = (
+      <Pressable accessibilityRole="button" accessibilityLabel={CONTACTS_LABEL} onPress={findContacts} style={({ pressed }) => [styles.v2Inset, styles.v2Contacts, !adult && styles.v2ContactsFirst, pressed && styles.pressed]}>
+        <Ionicons name="people-outline" size={20} color={colors.textMuted} />
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2ContactsText} numberOfLines={1}>{CONTACTS_LABEL}</Text>
+        <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+      </Pressable>
+    );
+    const sectionLabel = (section: Pick['section']) => (section === 'city' ? `Most active in ${homeCityName ?? cityName ?? 'your city'}` : section === 'coaches' ? 'Coaches' : null);
+    const ways = (
+      <>
+        <View style={empty ? null : styles.v2InviteGap}>
+          <QuietButton label={inviteLabel} icon="paper-plane-outline" onPress={() => { void share(); }} />
+        </View>
+        {contacts && adult ? contactsRow : null}
+        {/* Teen search (migration 118): by name or @handle, never by town. */}
+        <Pressable accessibilityRole="link" accessibilityLabel="Search by @handle" hitSlop={8} onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} style={({ pressed }) => [styles.v2Search, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietText}>Search by @handle</Text>
+        </Pressable>
+      </>
+    );
+    return (
+      <View style={styles.root}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.scroll, styles.v2Scroll, { paddingTop: setupCount ? space.header : space.top }]}>
+          {setupCount ? <Animated.View entering={enter(0)} style={styles.v2Bar}><SetupProgress count={setupCount} /></Animated.View> : null}
+          <Animated.View entering={enter(0)} style={styles.head}>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{empty ? (adult ? 'Bring your hitting partners' : FRIENDS_TITLE) : 'People you may know'}</Text>
+            {empty ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{emptyLine}</Text> : null}
+          </Animated.View>
+          <Animated.View entering={enter(1)} style={styles.v2Body}>
+            {contacts && !adult ? contactsRow : null}
+            {picks === null ? (
+              // Room kept for three people, so the page does not jump when they arrive.
+              <View style={styles.v2Waiting}><ActivityIndicator color={colors.textFaint} /></View>
+            ) : picks.length ? (
+              <Animated.View entering={FadeIn.duration(220)}>
+                {canFollowAll ? (
+                  <View style={styles.v2AllRow}>
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Follow all ${notYet.length}`} hitSlop={8} onPress={followAll} style={({ pressed }) => [styles.v2All, pressed && { opacity: PRESS_DIM }]}>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2AllText}>Follow all</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+                {picks.map(({ user, meta, section }, i) => {
+                  // A filled group's small label over its first row (Most active in Raleigh, Coaches); real picks have none.
+                  const label = section && picks[i - 1]?.section !== section ? sectionLabel(section) : null;
+                  return (
+                  <React.Fragment key={user.id}>
+                  {label ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Section}>{label}</Text> : null}
+                  <View style={styles.v2Person}>
+                    <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={44} ring={user.isCoach} />
+                    <View style={[styles.v2PersonWords, i > 0 && !label && styles.v2PersonLine]}>
+                      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                        <View style={styles.v2NameLine}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={15} /></View>
+                        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text>
+                      </View>
+                      <FollowPill small soft following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
+                    </View>
+                  </View>
+                  </React.Fragment>
+                  );
+                })}
+                {ways}
+              </Animated.View>
+            ) : (
+              <Animated.View entering={FadeIn.duration(220)}>{ways}</Animated.View>
+            )}
+          </Animated.View>
+        </ScrollView>
+        <Animated.View entering={enter(2)}>
+          <SetupFooter primary={{ label: finishLabel, onPress: () => done(move) }} />
+        </Animated.View>
+        <StatusShade wash={setupLook.wash} />
+        {curtain}
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -358,4 +505,28 @@ const styleDefinitions = StyleSheet.create({
   instant: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: 13, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   instantText: { ...typography.small, color: colors.textMuted },
   instantLink: { ...typography.smallStrong, color: colors.text },
+
+  // The sign-up redraw (ONBOARDING_V2).
+  v2Scroll: { gap: 0 },
+  // The title 24pt under the bar.
+  v2Bar: { marginBottom: setupLook.titleGap },
+  v2Lead: { ...setupLook.lead },
+  v2Body: { marginTop: spacing.xl, gap: spacing.md },
+  v2Waiting: { height: 192, alignItems: 'center', justifyContent: 'center' },
+  v2AllRow: { flexDirection: 'row', justifyContent: 'flex-end', height: 32, alignItems: 'center', marginTop: -spacing.sm },
+  v2All: { minHeight: 32, justifyContent: 'center' },
+  v2AllText: { ...typography.bodyStrong, color: colors.brand },
+  v2Person: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 64 },
+  // The hairline starts at the name, not the photo, as on the iPhone's own lists and Instagram's.
+  v2PersonWords: { flex: 1, minWidth: 0, alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  v2PersonLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  v2InviteGap: { marginTop: 20 },
+  v2Inset: { ...setupLook.inset },
+  v2Contacts: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 52, paddingHorizontal: spacing.lg, marginTop: spacing.md },
+  v2ContactsText: { ...typography.body, color: colors.text, flex: 1 },
+  v2Search: { alignSelf: 'flex-start', minHeight: 44, justifyContent: 'center', marginTop: spacing.xs },
+  // Round 2.
+  v2ContactsFirst: { marginTop: 0 },
+  v2Section: { ...typography.smallStrong, fontSize: 13, color: colors.textMuted, marginTop: 20, marginBottom: spacing.sm },
+  v2NameLine: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
 });

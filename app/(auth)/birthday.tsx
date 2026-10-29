@@ -4,9 +4,10 @@ import { router, useLocalSearchParams } from 'expo-router';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui';
-import { SetupProgress } from '@/components/setup/SetupBits';
+import { QuietButton, SetupProgress, setupLook } from '@/components/setup/SetupBits';
 import { useSetupCount } from '@/features/onboarding/setupCount';
-import { AgeReadout, AnswerCard, FooterFade, PrivacyLine, ProtectionsCard, Rise, UnlockCard } from '@/components/age/AgeBits';
+import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
+import { AdultBlock, AgeLine, AgeReadout, AnswerCard, AnswerList, AnswerRow, FooterFade, NoBirthdayBlock, PrivacyLine, ProtectionsCard, Rise, UnlockCard } from '@/components/age/AgeBits';
 import { BirthdaySegments } from '@/components/age/BirthdaySegments';
 import { DateWheel, EMPTY_WHEEL, type WheelDate } from '@/components/age/DateWheel';
 import { isDeviceBlocked, toBirthDate } from '@/features/age/ageCheck';
@@ -17,6 +18,7 @@ import { useGateSpace } from '@/lib/useGateSpace';
 import { useAndroidBack } from '@/lib/androidBack';
 import { goBack } from '@/lib/goBack';
 import { StatusShade } from '@/components/StatusShade';
+import { Wash } from '@/components/Wash';
 import { KeyboardScrollContext, useKeyboardReveal } from '@/lib/keyboardScroll';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
@@ -54,6 +56,8 @@ export default function Birthday() {
   const fromSettings = from === 'settings';
   // Setup's one step count (Oct 20 sweep); none when opened from Settings.
   const setupCount = useSetupCount('birthday', !fromSettings);
+  // Only the sign-up run is redrawn: Settings → Add your birthday stays as it is.
+  const v2 = ONBOARDING_V2 && !fromSettings;
   const [date, setDate] = useState({ month: '', day: '', year: '' });
   // The wheel starts on "Month / Day / Year", no date at all; Continue waits until all three are picked.
   const [wheel, setWheel] = useState<WheelDate>(EMPTY_WHEEL);
@@ -142,6 +146,47 @@ export default function Birthday() {
     );
   }
 
+  if (step === 'skip' && v2) {
+    // The redraw (ONBOARDING_V2): the two answers as one inset list, exactly alike, a checkmark on the one picked.
+    return (
+      <View style={styles.root}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
+        <ScrollView style={styles.fill} contentContainerStyle={[styles.scroll, styles.scrollV2, { paddingTop: setupCount ? space.header : space.top }]}>
+          <Rise>
+            <SetupProgress count={setupCount} />
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.titleV2, !!setupCount && styles.titleUnderBar]}>Are you 13 or older?</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.leadV2}>No birthday needed. Just pick one.</Text>
+          </Rise>
+          <Rise delay={70}>
+            <AnswerList>
+              <AnswerRow first title="I'm 13 or older" detail="13 or older today" selected={answer === 'over'} disabled={busy} onPress={() => { setAnswer('over'); setError(''); }} />
+              <AnswerRow title="I'm under 13" detail="12 or younger today" selected={answer === 'under'} disabled={busy} onPress={() => { setAnswer('under'); setError(''); }} />
+            </AnswerList>
+            {error ? <Text style={[styles.error, styles.errorV2]}>{error}</Text> : null}
+          </Rise>
+          <Rise delay={140}>
+            <NoBirthdayBlock rule={false} />
+          </Rise>
+        </ScrollView>
+        <View style={[styles.footer, { paddingBottom: space.footer }]}>
+          <FooterFade />
+          <Button
+            label="Continue"
+            loading={busy}
+            disabled={!answer}
+            onPress={() => { if (answer === 'over') void over13(); else if (answer === 'under') void under13(); }}
+            full
+          />
+          <Pressable accessibilityRole="button" disabled={busy} onPress={() => { setStep('date'); setError(''); setAnswer(null); }} hitSlop={10} style={styles.linkWrap}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkV2}>Add my birthday instead</Text>
+          </Pressable>
+        </View>
+        <StatusShade wash={setupLook.wash} />
+        {curtain}
+      </View>
+    );
+  }
+
   if (step === 'skip') {
     // Two answers drawn exactly alike: the question does not lean towards either.
     return (
@@ -181,6 +226,45 @@ export default function Birthday() {
         <StatusShade />
         {curtain}
       </View>
+    );
+  }
+
+  if (v2) {
+    // The redraw (ONBOARDING_V2, Oct 29, owner: "When's your birthday screen is not aesthetic enough"):
+    // the wheel on the page like the iPhone's own, one quiet line under it, and what 18 opens as
+    // plain words under a hairline. No mark, no boxes, no icons.
+    return (
+      <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
+      <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+        <Wash height={setupLook.wash.height} strength={setupLook.wash.strength} />
+        <ScrollView ref={keyboard.scroller} onScroll={keyboard.onScroll} scrollEventThrottle={16} style={styles.fill} contentContainerStyle={[styles.scroll, styles.scrollV2, { paddingTop: setupCount ? space.header : space.top }]} keyboardShouldPersistTaps="handled">
+          <Rise>
+            <SetupProgress count={setupCount} />
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.titleV2, !!setupCount && styles.titleUnderBar]}>{fromSettings ? 'Add your birthday' : "When's your birthday?"}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.leadV2}>Optional. It helps us keep younger players safe.</Text>
+          </Rise>
+          <Rise delay={70} style={styles.wheelV2}>
+            {look === 'a'
+              ? <DateWheel plain value={wheel} onChange={(next) => { setWheel(next); setError(''); }} rowHeight={short ? 36 : 44} label="Birthday (optional)" />
+              : <BirthdaySegments value={date} onChange={(next) => { setDate(next); setError(''); }} onSubmit={() => { if (ready) void submit(); }} />}
+            <AgeLine {...parts} error={error} />
+          </Rise>
+          <Rise delay={140}>
+            <AdultBlock compact={short} />
+          </Rise>
+        </ScrollView>
+        {/* Skip for now stays a full button, as plain to see as Continue (Apple, 5.1.1(v)): quiet grey, not a second green. */}
+        <View style={[styles.footer, { paddingBottom: space.footer }]}>
+          <FooterFade />
+          <Button label={fromSettings ? 'Save' : 'Continue'} loading={busy} disabled={!ready} onPress={() => { void submit(); }} full />
+          {fromSettings
+            ? <QuietButton label="Not now" disabled={busy} onPress={() => goBack()} />
+            : <QuietButton label="Skip for now" disabled={busy} onPress={() => { setStep('skip'); setError(''); }} />}
+        </View>
+        <StatusShade wash={setupLook.wash} />
+        {curtain}
+      </KeyboardAvoidingView>
+      </KeyboardScrollContext.Provider>
     );
   }
 
@@ -241,4 +325,12 @@ const styleDefinitions = StyleSheet.create({
   linkWrap: { alignSelf: 'center', paddingVertical: spacing.xs },
   link: { ...typography.smallStrong, color: colors.textMuted, textDecorationLine: 'underline' },
   error: { ...typography.small, color: colors.danger },
+  // The redraw (ONBOARDING_V2).
+  scrollV2: { gap: spacing.xl },
+  titleV2: { ...setupLook.title },
+  titleUnderBar: { marginTop: setupLook.titleGap },
+  leadV2: { ...setupLook.lead, marginTop: spacing.sm },
+  wheelV2: { marginTop: 4 },
+  errorV2: { marginTop: spacing.md },
+  linkV2: { ...typography.smallStrong, color: colors.textMuted },
 });
