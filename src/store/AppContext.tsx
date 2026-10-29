@@ -457,11 +457,12 @@ export interface Prefs {
   pushHitNudges: boolean;
   /** Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). */
   pushPartnerStreak: boolean;
+  pushCatchUp: boolean;
   /** Oct 24 (migration 185): a tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows. On unless switched off. */
   autoLog: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true, autoLog: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true, pushCatchUp: true, autoLog: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
@@ -631,6 +632,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   hitNudgeAlertsLive: boolean;
   /** The database has the "Partner streak reminders" switch (migration 180); before that it would do nothing, so it is not shown. */
   partnerStreakAlertsLive: boolean;
+  /** The database has the "Catch-up alerts" switch (migration 201); before that it would do nothing, so it is not shown. */
+  catchUpAlertsLive: boolean;
   /** The database logs tennis by itself (migration 185); before that the "Log tennis automatically" switch would do nothing, so it is not shown. */
   autoLogLive: boolean;
   /**
@@ -701,6 +704,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushQuestions: got.pushQuestions ?? s.prefs.pushQuestions,
     pushHitNudges: got.pushHitNudges ?? s.prefs.pushHitNudges,
     pushPartnerStreak: got.pushPartnerStreak ?? s.prefs.pushPartnerStreak,
+    pushCatchUp: got.pushCatchUp ?? s.prefs.pushCatchUp,
     autoLog: got.autoLog ?? s.prefs.autoLog,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
@@ -2039,6 +2043,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
       pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+      pushCatchUp: s.catchUpAlertsLive ? s.prefs.pushCatchUp : undefined,
       autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       constraints: self?.profile.constraints,
     },
@@ -2175,6 +2180,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           pushQuestions: data.userState.pushQuestions ?? prev.prefs.pushQuestions,
           pushHitNudges: data.userState.pushHitNudges ?? prev.prefs.pushHitNudges,
           pushPartnerStreak: data.userState.pushPartnerStreak ?? prev.prefs.pushPartnerStreak,
+          pushCatchUp: data.userState.pushCatchUp ?? prev.prefs.pushCatchUp,
           autoLog: data.userState.autoLog ?? prev.prefs.autoLog,
         }
         : prev.prefs,
@@ -2184,6 +2190,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       questionAlertsLive: data.userState?.pushQuestions !== undefined ? true : prev.questionAlertsLive,
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
       partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
+      catchUpAlertsLive: data.userState?.pushCatchUp !== undefined ? true : prev.catchUpAlertsLive,
       autoLogLive: data.userState?.autoLog !== undefined ? true : prev.autoLogLive,
       // The settings row carries city_boards only once migration 196 has run.
       cityBoardsVisible: data.userState?.cityBoards ?? (data.userState ? null : prev.cityBoardsVisible),
@@ -2526,6 +2533,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     questionAlertsLive: !isSupabaseConfigured,
     hitNudgeAlertsLive: !isSupabaseConfigured,
     partnerStreakAlertsLive: !isSupabaseConfigured,
+    catchUpAlertsLive: !isSupabaseConfigured,
     autoLogLive: !isSupabaseConfigured,
     partnerStreaks: null,
     hiddenWords: null,
@@ -2996,6 +3004,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
         pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
         pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+        pushCatchUp: s.catchUpAlertsLive ? s.prefs.pushCatchUp : undefined,
         autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       }).finally(settled);
     }, 400);

@@ -54,7 +54,7 @@ interface Row {
  */
 export default function Settings() {
   const styles = useThemedStyles(styleDefinitions);
-  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, autoLogLive, autoLogSharing, integrations } = useApp();
+  const { currentUser, currentUserId, locationEnabled, detectedLocation, actions, prefs, courtExtras, mapLive, mapVisibility, teenMap, contactsFindableLive, joinAlertsLive, questionAlertsLive, hitNudgeAlertsLive, partnerStreakAlertsLive, catchUpAlertsLive, autoLogLive, autoLogSharing, integrations } = useApp();
   const [locationNote, setLocationNote] = useState('');
   const toggleLocation = async (next: boolean) => {
     // Location here is this phone's own (courts near you): since migration 189 it never shares anything;
@@ -184,6 +184,9 @@ export default function Settings() {
         // Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). Shown once the database has it,
         // and to adults only: teens and players with no birthday never get one (no nudging minors), so there is nothing to switch.
         ...(partnerStreakAlertsLive && currentUser?.ageGroup === 'adult' ? [{ icon: 'people-outline' as const, label: 'Partner streak reminders', detail: 'One on the weekend if you haven’t hit yet that week', toggle: { value: prefs.pushPartnerStreak, onChange: (v: boolean) => actions.setPref('pushPartnerStreak', v) } }] : []),
+        // Oct 29 (owner: "come back alerts every 5 days"): after 5 days away, one alert every 5 days, only with something real to say
+        // (friends up for a hit, open hits nearby, a friend's new clip or session, your city on the board; migration 201). Shown once the database has it.
+        ...(catchUpAlertsLive ? [{ icon: 'notifications-outline' as const, label: 'Catch-up alerts', detail: 'When you’ve been away 5 days', toggle: { value: prefs.pushCatchUp, onChange: (v: boolean) => actions.setPref('pushCatchUp', v) } }] : []),
         // The 7pm reminder, set on this phone (features/practice/reminder).
         { icon: 'flame-outline' as const, label: 'Streak reminders', detail: 'At 7pm, when today has nothing yet', toggle: { value: prefs.pushStreak, onChange: (v: boolean) => actions.setPref('pushStreak', v) } },
       ],
