@@ -8,6 +8,7 @@ import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react
 import { useGrowAway, useGrowLabels } from '@/features/players/mapGrow';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, type SharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { SwipeArea } from '@/features/navigation/swipePress';
 
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
@@ -69,6 +70,7 @@ import type { MapVisibility } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
+import { isOfficial } from '@/features/players/official';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -855,7 +857,7 @@ export function PlayersSheet({ items, cityName, onSelect, onProfile, nearTown = 
           <View style={styles.listWords}>
             <View style={styles.personTop}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.listName} numberOfLines={1}>{p.user.name}</Text>
-              <LevelPill profile={p.user.profile} small />
+              <LevelPill profile={p.user.profile} userId={p.user.id} small />
             </View>
             {/* A friend's check-in: how far and how long ago (on Following, My level and Near me, "Up to hit" first, as those lists hold people who are not). A town row: only the town on their profile. */}
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[upTag && townOf(p) === null ? 'Up to hit' : null, townOf(p) ?? placedFar(p), 'seenAt' in p && p.seenAt ? agoLabel(p.seenAt) : null, isOpenToHit(p.user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
@@ -1059,12 +1061,12 @@ function TrayFace({ placed: p, onPress }: { placed: Listed; onPress: () => void 
   const seenAt = 'seenAt' in p ? p.seenAt : undefined;
   const far = town ?? placedFar(p);
   const ago = seenAt ? agoShort(seenAt) : '';
-  const said = [p.user.name, levelBadge(p.user.profile).label, far, seenAt ? agoLabel(seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
+  const said = [p.user.name, isOfficial(p.user.id) ? null : levelBadge(p.user.profile).label, far, seenAt ? agoLabel(seenAt) : null, open ? 'open to hit' : null].filter(Boolean).join(', ');
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={`${said}. ${town !== null ? 'Open profile' : 'Show on the map'}`} onPress={onPress} style={({ pressed }) => [styles.trayFace, pressed && styles.listPressed]}>
       <OpenRing open={open} size={TRAY_FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} size={TRAY_FACE} ring={p.user.isCoach} /></OpenRing>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayName} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-      <LevelPill profile={p.user.profile} small style={styles.trayLevel} />
+      <LevelPill profile={p.user.profile} userId={p.user.id} small style={styles.trayLevel} />
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.trayMeta} numberOfLines={1}>{[far, ago].filter(Boolean).join(' · ')}</Text>
     </Pressable>
   );
@@ -1144,10 +1146,12 @@ function LockNote({ lock, onUnlock }: { lock: 'location' | 'hidden'; onUnlock?: 
  * down from where the finger left it, at speed (sheetFling), so the
  * swipe, the card sliding away and what was under it settling back are one motion.
  */
-function useDragToClose(onClose: () => void) {
+function useDragToClose(onClose: () => void, sideways = false) {
   const y = useSharedValue(0);
-  const gesture = Gesture.Pan()
-    .activeOffsetY(8)
+  const pan = Gesture.Pan().activeOffsetY(8);
+  // Over a row that swipes side to side (the court card's hit boxes, COURT_CARD_HIT_BOXES), a finger
+  // that goes sideways first is the row's, never the card's: the pull gives way after 12pt across.
+  const gesture = (sideways ? pan.failOffsetX([-12, 12]) : pan)
     .onUpdate((e) => { y.value = Math.max(0, e.translationY); })
     .onEnd((e) => {
       if (e.translationY > 60 || e.velocityY > 600) { sheetFling.value = 1; runOnJS(onClose)(); }
@@ -1247,7 +1251,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
         <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, open profile`} onPress={onProfile} style={styles.personWords}>
           <View style={styles.personTop}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
-            <LevelPill profile={user.profile} small />
+            <LevelPill profile={user.profile} userId={user.id} small />
           </View>
           {/* At a court right now (migration 63): which one, first; otherwise the town, and how far (never finer than the pin is). */}
           {/* "Follows you" joins whichever line is short: this one at a court (no town on it, and the
@@ -1354,7 +1358,7 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
         <View style={styles.personWords}>
           <View style={styles.personTop}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>You</Text>
-            <Level profile={me.profile} small />
+            <Level profile={me.profile} userId={me.id} small />
           </View>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>@{me.handle}{me.location ? ` · ${me.location}` : ''}</Text>
         </View>
@@ -1400,6 +1404,54 @@ export function YouSheet({ me, open, teen = false, onToggle, onProfile, onClose,
 export const COURT_CARD_MORE_HITS: boolean = false;
 
 /**
+ * The court card's open hits as the Community tab's boxes (Oct 29, owner: "the hits on the court card needs to
+ * be how they look in main community tab. it needs to look like the boxes. is that possible to fit in or no, we
+ * can make it a side to side swiping thing."): every open hit at the court, each in the same HitCard the
+ * Community tab's Open hits list shows, in a row that swipes side to side, one card at a time, the next one
+ * peeking at the right edge. One hit: a single box the card's full width, nothing to swipe. Taps do what they
+ * do on Community. false: the card as it is, one quiet line per hit (one beside clips, two without).
+ */
+export const COURT_CARD_HIT_BOXES: boolean = true;
+/** How much of the next hit box shows at the row's right edge, so the row reads as one to swipe. */
+const HIT_BOX_PEEK = 28;
+
+/** The court card's hits as Community's boxes, side by side (COURT_CARD_HIT_BOXES). */
+function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { width: windowW } = useWindowDimensions();
+  // The row's own width once laid out; until then the screen's, which on a phone is the same.
+  const [rowW, setRowW] = useState(0);
+  const w = rowW || windowW;
+  const one = hits.length === 1;
+  const gap = spacing.md;
+  const cardW = Math.max(200, Math.round(one ? w - spacing.lg * 2 : w - spacing.lg - gap - HIT_BOX_PEEK));
+  return (
+    <ScrollView
+      horizontal
+      scrollEnabled={!one}
+      showsHorizontalScrollIndicator={false}
+      onLayout={(e) => { const next = Math.round(e.nativeEvent.layout.width); if (next && next !== rowW) setRowW(next); }}
+      // One card per swipe, each coming to rest at the card's left margin.
+      snapToInterval={cardW + gap}
+      snapToAlignment="start"
+      decelerationRate="fast"
+      disableIntervalMomentum
+      style={[styles.hitBoxes, !one && Platform.OS === 'web' ? styles.hitBoxesSnapWeb : null]}
+      contentContainerStyle={styles.hitBoxesRow}
+    >
+      {/* Pressed the way Community's boxes are: a finger that starts a sideways swipe never dims the box under it. */}
+      <SwipeArea on={!one}>
+        {hits.map((h) => (
+          <View key={h.id} style={[{ width: cardW }, Platform.OS === 'web' ? styles.hitBoxSnapWeb : null]}>
+            <HitCard hit={h} miles={miles} fill />
+          </View>
+        ))}
+      </SwipeArea>
+    </ScrollView>
+  );
+}
+
+/**
  * A court, picked on the map: what OpenStreetMap knows, who may play there,
  * how it is right now, what players say, the people you follow who play
  * there, what was posted there, and the open hits there. Directions, Play
@@ -1412,7 +1464,6 @@ export const COURT_CARD_MORE_HITS: boolean = false;
  */
 export function CourtSheet({ court, miles, ringed = false, onClose }: { court: Court; miles: number; /** Played on this week: the disc wears the story ring. */ ringed?: boolean; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
-  const pull = useDragToClose(onClose);
   const { height: windowH } = useWindowDimensions();
   const { currentUserId, users, actions, courtFacts, courtExtras } = useApp();
   // Only a court OpenStreetMap knows can carry facts, follows and tags; a place sent without one
@@ -1439,7 +1490,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
   // Open hits here, the same ones the court's page lists: one beside the clips, two without them.
   const allHits = useCourtHits(place);
-  const hits = allHits.slice(0, strip.length ? 1 : 2);
+  // As Community's boxes (COURT_CARD_HIT_BOXES): every one of them, in a row that swipes.
+  const hits = COURT_CARD_HIT_BOXES ? allHits : allHits.slice(0, strip.length ? 1 : 2);
+  // With the boxes' row showing, a sideways swipe moves the row, never the card (useDragToClose).
+  const pull = useDragToClose(onClose, COURT_CARD_HIT_BOXES && hits.length > 1);
   // The ones the card has no room for (COURT_CARD_MORE_HITS): its last row says how many, and opens the page.
   const moreHits = COURT_CARD_MORE_HITS ? allHits.length - hits.length : 0;
   const hitLine = (h: HitRequest) => {
@@ -1505,7 +1559,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
           </ScrollView> : null}
         </View>
       ) : null}
-      {hits.length ? (
+      {hits.length && COURT_CARD_HIT_BOXES ? <CourtHitBoxes hits={hits} miles={miles} /> : hits.length ? (
         <View style={styles.hitRows}>
           {hits.map((h) => (
             <Pressable key={h.id} accessibilityRole="link" accessibilityLabel={`Open hit: ${hitLine(h)}`} onPress={() => router.push(`/hit-request/${h.id}`)} style={({ pressed }) => [styles.hitRow, pressed && styles.postedPressed]}>
@@ -2156,6 +2210,12 @@ const styleDefinitions = StyleSheet.create({
   hitMore: { backgroundColor: 'transparent', paddingVertical: 2 },
   hitMoreGap: { width: 28 },
   hitMoreText: { ...typography.smallStrong, color: colors.brand, flex: 1, minWidth: 0 },
+  // The court card's hits as Community's boxes (COURT_CARD_HIT_BOXES): a row that swipes, the boxes stretched to one height.
+  hitBoxes: { flexGrow: 0, paddingBottom: spacing.sm },
+  hitBoxesRow: { gap: spacing.md, paddingHorizontal: spacing.lg, alignItems: 'stretch' },
+  // A browser has no snapToInterval: CSS scroll snapping does it, each box resting at the card's left margin.
+  hitBoxesSnapWeb: { scrollSnapType: 'x mandatory', scrollPaddingLeft: spacing.lg } as object,
+  hitBoxSnapWeb: { scrollSnapAlign: 'start' } as object,
   hitSheetCard: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   cityless: { borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, gap: 4 },
   citylessDisc: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },

@@ -48,6 +48,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 // Activity (Oct 24, owner): their posts that carry a hit's or a match's numbers, as on your own profile.
 const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
@@ -241,11 +242,12 @@ function UserProfile() {
             <View style={styles.identityWords}>
               <View style={styles.nameLine}>
                 <PlayerName userId={user.id} style={[styles.name, styles.nameLeft]}>{user.name}</PlayerName>
+                <OfficialCheck userId={user.id} size={18} />
                 <StreakFlame days={shownStreak(user, currentUserId)} size="large" />
               </View>
               <View style={styles.levelRow}>
                 {user.isPrivate ? <Ionicons name="lock-closed" size={14} color={colors.textMuted} /> : null}
-                <LevelPill profile={profile} />
+                <LevelPill profile={profile} userId={user.id} />
               </View>
             </View>
           </View>
@@ -255,10 +257,11 @@ function UserProfile() {
           {/* The name and, close after it, their streak's flame (3 days or more). */}
           <View style={styles.nameLine}>
             <PlayerName userId={user.id} style={styles.name}>{user.name}</PlayerName>
+            <OfficialCheck userId={user.id} size={17} />
             <StreakFlame days={shownStreak(user, currentUserId)} size="large" />
           </View>
           {user.isPrivate ? <Ionicons name="lock-closed" size={14} color={colors.textMuted} /> : null}
-          <LevelPill profile={profile} />
+          <LevelPill profile={profile} userId={user.id} />
         </View>
         </>}
         {!!user.bio && <Text style={[styles.bio, LESS_AI_ROUND2 && styles.bioLeft]}>{user.bio}</Text>}

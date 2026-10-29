@@ -25,7 +25,7 @@ import { themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
  *
  * Admins first (the same pattern as the map peek): COURTS_GLOW_FOR_EVERYONE turns it on for all.
  */
-export const COURTS_GLOW_FOR_EVERYONE = false;
+export const COURTS_GLOW_FOR_EVERYONE = true;
 
 /** Whether this person sees the light: everyone once it is released, admins until then. */
 export function useCourtsGlowOn(): boolean {

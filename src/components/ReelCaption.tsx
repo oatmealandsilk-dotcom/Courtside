@@ -28,6 +28,7 @@ import { useTourBusy } from '@/features/tour/tourStore';
 import { font } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /*
  * Every word over a clip or an Instant follows one set of rules, the ones
@@ -205,9 +206,9 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
         </Pressable>
         <View style={styles.whoWords}>
           <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}${streakWords(streak)}, open profile`} onPress={onAuthor} style={styles.nameRow} hitSlop={NAME_SLOP}>
-            <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
+            <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text><OfficialCheck userId={author.id} size={13} onMedia style={styles.flame} />
             <StreakFlame days={streak} onMedia textStyle={EDGE_SMALL} maxFontSizeMultiplier={MAX_GROW} style={styles.flame} />
-            <LevelPill profile={author.profile} small onMedia style={styles.badge} />
+            <LevelPill profile={author.profile} userId={author.id} small onMedia style={styles.badge} />
             {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}
             {canFollow ? (
               // Tapped, it fades out (180 ms) rather than vanishing under the finger (Oct 22 sweep, item 26).
@@ -243,9 +244,9 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
           onLayout={(e) => setTagFits(e.nativeEvent.layout.height < 40)}
         >
           <View style={styles.avatarSpace} />
-          <Text style={[styles.handle, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text>
+          <Text style={[styles.handle, styles.keep]} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text><OfficialCheck userId={author.id} size={13} onMedia style={styles.flame} />
           <StreakFlame days={streak} onMedia textStyle={EDGE_SMALL} maxFontSizeMultiplier={MAX_GROW} style={styles.flame} />
-          <LevelPill profile={author.profile} small onMedia style={styles.badge} />
+          <LevelPill profile={author.profile} userId={author.id} small onMedia style={styles.badge} />
           <View style={styles.badge}><NewHereTag onMedia short /></View>
         </View>
       ) : null}

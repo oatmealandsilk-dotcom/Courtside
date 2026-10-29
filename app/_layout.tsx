@@ -26,6 +26,7 @@ import { Inter_800ExtraBold } from '@expo-google-fonts/inter/800ExtraBold';
 import { AppProvider } from '@/store/AppContext';
 import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
+import { EarlyThemesGate } from '@/theme/EarlyThemesGate';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
@@ -36,6 +37,7 @@ import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 import { ConfirmHost } from '@/components/ConfirmHost';
+import { AlertsWhyHost } from '@/components/AlertsWhyHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
 
@@ -86,8 +88,11 @@ export default function RootLayout() {
       <ThemeProvider><SafeAreaProvider>
       <AppProvider>
         <ThemedStatusBar/>
+        <EarlyThemesGate />
         <AppShell><RootStack /></AppShell>
         <SignOutCurtainHost />
+        {/* "Why turn on alerts" before the phone's own question (alertsWhy.ts; off until he picks it). Under "are you sure?". */}
+        <AlertsWhyHost />
         {/* "Delete post?" and the like: the app's own card, last so it sits above every sheet, menu and the tab bar. */}
         <ConfirmHost />
       </AppProvider>

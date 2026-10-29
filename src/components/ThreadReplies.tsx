@@ -30,6 +30,7 @@ import { listedAnswers } from '@/features/hiddenWords/hiddenWords';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 export function ThreadReplies({questionId, preview = false}:{questionId:string; preview?:boolean}) {
   const {questions,answers,currentUserId,actions}=useApp();
@@ -125,7 +126,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         accessibilityState={collapsed ? { expanded: false } : undefined}
         onPress={collapsed ? expand : undefined} onLongPress={hold} style={styles.answerHead}>
         <Avatar name={responder?.name ?? '?'} seed={responder?.avatarSeed ?? answer.authorId} uri={responder?.avatarUrl} size={30}/>
-        <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName>
+        <PlayerName userId={responder?.id} style={styles.answerName}>{responder?.name ?? 'Unknown'}</PlayerName><OfficialCheck userId={responder?.id} size={12} style={styles.flame} />
         <StreakFlame days={streak} size="small" style={styles.flame} />
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{relativeTime(answer.createdAt)}</Text>
         {askerId && answer.authorId === askerId ? <View style={styles.op}><Text maxFontSizeMultiplier={TextScale.BODY} style={styles.opText}>OP</Text></View> : null}

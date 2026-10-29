@@ -39,7 +39,7 @@ export const COURTS_LOOK: 'now' | 'N' = 'N';
  * and that has never run on a real iPhone (this Mac has no Xcode). So admin accounts (the owner's own phone)
  * get it first; everyone else keeps the outlined card until he has seen it on his phone. Then turn this on.
  */
-export const PEEK_FOR_EVERYONE = false;
+export const PEEK_FOR_EVERYONE = true;
 /** The card this person sees: map peek, or the outlined card. */
 export function usePeekLook(): 'now' | 'N' {
   const { users, currentUserId } = useApp();

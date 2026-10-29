@@ -1515,7 +1515,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.stripName} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.stripReason} numberOfLines={1}>{reason}</Text>
               </View>
-              <LevelPill profile={user.profile} small />
+              <LevelPill profile={user.profile} userId={user.id} small />
             </Pressable>
             <FollowPill following={followingIds.includes(user.id)} userId={user.id} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); if (followingIds.includes(user.id)) confirmUnfollow(user, () => actions.toggleFollow(user.id)); else actions.toggleFollow(user.id); }} small name={user.name} />
           </View>

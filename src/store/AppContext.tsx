@@ -83,6 +83,7 @@ import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
 import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
+import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
@@ -457,11 +458,12 @@ export interface Prefs {
   pushHitNudges: boolean;
   /** Sweep R12 (Oct 20): one weekend reminder when a weekly streak with a hitting partner has nothing yet this week (migration 180). */
   pushPartnerStreak: boolean;
+  pushCatchUp: boolean;
   /** Oct 24 (migration 185): a tracker's tennis of 20+ minutes logs itself, privately, so the streak always shows. On unless switched off. */
   autoLog: boolean;
 }
 export type PrefKey = keyof Prefs;
-const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true, autoLog: true };
+const DEFAULT_PREFS: Prefs = { showActivity: true, pushLikes: true, pushCoach: true, pushMessages: true, pushActivity: true, pushMapFriends: true, pushMapHits: true, pushMapPlayers: true, pushCourts: true, contactsFindable: true, pushRecap: true, pushJoined: true, pushStreak: true, pushQuestions: true, pushHitNudges: true, pushPartnerStreak: true, pushCatchUp: true, autoLog: true };
 
 interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessionState {
   ready: boolean;
@@ -631,6 +633,8 @@ interface AppState extends Bootstrap, CourtLifeState, FeedGroupsState, LiveSessi
   hitNudgeAlertsLive: boolean;
   /** The database has the "Partner streak reminders" switch (migration 180); before that it would do nothing, so it is not shown. */
   partnerStreakAlertsLive: boolean;
+  /** The database has the "Catch-up alerts" switch (migration 201); before that it would do nothing, so it is not shown. */
+  catchUpAlertsLive: boolean;
   /** The database logs tennis by itself (migration 185); before that the "Log tennis automatically" switch would do nothing, so it is not shown. */
   autoLogLive: boolean;
   /**
@@ -701,6 +705,7 @@ function withServerSettings(s: AppState, base: string, got: UserState | null): P
     pushQuestions: got.pushQuestions ?? s.prefs.pushQuestions,
     pushHitNudges: got.pushHitNudges ?? s.prefs.pushHitNudges,
     pushPartnerStreak: got.pushPartnerStreak ?? s.prefs.pushPartnerStreak,
+    pushCatchUp: got.pushCatchUp ?? s.prefs.pushCatchUp,
     autoLog: got.autoLog ?? s.prefs.autoLog,
   };
   for (const k of Object.keys(prefs) as PrefKey[]) if (s.prefs[k] !== was.f[k]) prefs[k] = s.prefs[k];
@@ -2039,6 +2044,7 @@ function snapshotOf(s: AppState, me: ID): RemoteData {
       pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
       pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
       pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+      pushCatchUp: s.catchUpAlertsLive ? s.prefs.pushCatchUp : undefined,
       autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       constraints: self?.profile.constraints,
     },
@@ -2175,6 +2181,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
           pushQuestions: data.userState.pushQuestions ?? prev.prefs.pushQuestions,
           pushHitNudges: data.userState.pushHitNudges ?? prev.prefs.pushHitNudges,
           pushPartnerStreak: data.userState.pushPartnerStreak ?? prev.prefs.pushPartnerStreak,
+          pushCatchUp: data.userState.pushCatchUp ?? prev.prefs.pushCatchUp,
           autoLog: data.userState.autoLog ?? prev.prefs.autoLog,
         }
         : prev.prefs,
@@ -2184,6 +2191,7 @@ function mergeRemote(prev: AppState, data: RemoteData, me: ID, email: string | n
       questionAlertsLive: data.userState?.pushQuestions !== undefined ? true : prev.questionAlertsLive,
       hitNudgeAlertsLive: data.userState?.pushHitNudges !== undefined ? true : prev.hitNudgeAlertsLive,
       partnerStreakAlertsLive: data.userState?.pushPartnerStreak !== undefined ? true : prev.partnerStreakAlertsLive,
+      catchUpAlertsLive: data.userState?.pushCatchUp !== undefined ? true : prev.catchUpAlertsLive,
       autoLogLive: data.userState?.autoLog !== undefined ? true : prev.autoLogLive,
       // The settings row carries city_boards only once migration 196 has run.
       cityBoardsVisible: data.userState?.cityBoards ?? (data.userState ? null : prev.cityBoardsVisible),
@@ -2526,6 +2534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     questionAlertsLive: !isSupabaseConfigured,
     hitNudgeAlertsLive: !isSupabaseConfigured,
     partnerStreakAlertsLive: !isSupabaseConfigured,
+    catchUpAlertsLive: !isSupabaseConfigured,
     autoLogLive: !isSupabaseConfigured,
     partnerStreaks: null,
     hiddenWords: null,
@@ -2996,6 +3005,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         pushQuestions: s.questionAlertsLive ? s.prefs.pushQuestions : undefined,
         pushHitNudges: s.hitNudgeAlertsLive ? s.prefs.pushHitNudges : undefined,
         pushPartnerStreak: s.partnerStreakAlertsLive ? s.prefs.pushPartnerStreak : undefined,
+        pushCatchUp: s.catchUpAlertsLive ? s.prefs.pushCatchUp : undefined,
         autoLog: s.autoLogLive ? s.prefs.autoLog : undefined,
       }).finally(settled);
     }, 400);
@@ -3739,7 +3749,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // This phone stops getting the account's alerts while the session can still take its address off (as Log out does),
       // and your Up to hit ends (endCheckInFor).
       await Promise.all([endCheckInFor(me), forgetPushToken()]);
-      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
+      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush({ ask: !ALERTS_WHY }); throw err; }
     }
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
     void stopWorkoutWatch();
@@ -4364,6 +4374,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     placeMine(fix, got.until);
     void loadLastSeen();
     onFix?.({ lat: fix.lat, lng: fix.lng });
+    // Up to hit went through: a moment alerts plainly help (the "why turn on alerts" card, off until he picks it).
+    void askForAlertsAt('up-to-hit');
     return null;
   }, [loadLastSeen]);
 
@@ -4476,6 +4488,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (took) setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hit.id ? { ...h, invitedIds: took } : h)) }));
         else showToast({ title: 'Your hit is up, but the invites didn’t go', body: 'Only you can see it for now. Call it off and post it again.', icon: 'alert-circle-outline' });
       }
+      // The hit is up: someone joining it is worth an alert (the "why turn on alerts" card, off until he picks it).
+      void askForAlertsAt('hit-posted');
     }
     return hit.id;
   }, [requireUser]);
@@ -4537,6 +4551,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return result;
     }
     const conversationId = result.conversationId;
+    // In: the hit's chat is worth an alert (the "why turn on alerts" card, off until he picks it).
+    void askForAlertsAt('hit-joined');
     if (conversationId) {
       setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, conversationId } : h)) }));
       // The hit's chat was just made (or joined) on the server: bring it in so it can open.
@@ -8837,6 +8853,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
+      // A follow (not an undo's): a follow back is worth an alert (the "why turn on alerts" card, off until he picks it).
+      if (live(me, userId) && userId !== me && !following && !quiet) void askForAlertsAt('follow');
       // The buzz answers the tap itself, not the redraw that follows it.
       if (me && userId !== me && !noBuzz) following ? haptics.untap() : haptics.tap();
       // Unfollowing a public account is one tap, so one tap takes it back.

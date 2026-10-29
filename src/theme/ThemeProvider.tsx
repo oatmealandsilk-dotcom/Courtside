@@ -442,6 +442,20 @@ function setTheme(name: ThemeName) {
   show(shownNow());
 }
 
+/**
+ * Puts the saved court back to another one without it counting as a pick: unlike setTheme, Match
+ * phone is never switched off, so with the phone dark Night stays on show and only the court saved
+ * underneath changes. For the early-members gate (EarlyThemesGate), which moves a new player off a
+ * court they were never offered.
+ */
+export function replacePicked(name: ThemeName) {
+  if (!(name in themes) || name === chosen) return;
+  picked = true;
+  chosen = name;
+  save(STORAGE_KEY, name);
+  show(shownNow());
+}
+
 function setAutoFlag(on: boolean) {
   autoDark = on;
   save(AUTO_DARK_KEY, on ? '1' : '0');
