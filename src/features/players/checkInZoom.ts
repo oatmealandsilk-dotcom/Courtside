@@ -43,8 +43,12 @@ export const CHECKIN_ZOOM_FOR_EVERYONE = false;
 // Terrible." / "It should never look anything different from the video I approved"): the phone path is
 // being rebuilt; the web demo keeps it for admins.
 export const ZOOM_ON_PHONES = false;
+// Off on the website too (Oct 29, owner on the admin website: "why the fuck is the raleigh not in the middle like before and the
+// zoom animation is fucking laggy and not what we asked for"): with it off the Community card is the plain card again, the city
+// words in its middle. It comes back only after a simulator video he approves.
+export const ZOOM_ON_WEB = false;
 export const checkInZoomOn = (me: User | null | undefined): boolean =>
-  (Platform.OS === 'web' || ZOOM_ON_PHONES) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
+  ((Platform.OS === 'web' && ZOOM_ON_WEB) || (Platform.OS !== 'web' && ZOOM_ON_PHONES)) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
 
 /** The same, for a screen. */
 export function useCheckInZoom(): boolean {
