@@ -176,7 +176,7 @@ export default function EditProfile() {
               <View style={[styles.row, styles.bioRow]}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.rowLabel, styles.bioLabel]}>Bio</Text>
                 <View style={styles.rowBox}>
-                  <Field bare multiline minHeight={64} accessibilityLabel="Bio" placeholder="A line about your tennis" value={bio} onChangeText={setBio} />
+                  <Field bare multiline minHeight={92} accessibilityLabel="Bio" placeholder="A line about your tennis" value={bio} onChangeText={setBio} />
                 </View>
               </View>
               <View style={styles.hairline} />
