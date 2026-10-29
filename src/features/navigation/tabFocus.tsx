@@ -4,7 +4,7 @@ import { useIsFocused as useRouteFocused } from 'expo-router';
 // The router's own navigation hook, as useIsFocused (src/lib) reads it: asked on demand, it never redraws anything.
 import { useNavigation } from 'expo-router/build/react-navigation/core/useNavigation';
 import { AppStateLater } from '@/store/AppContext';
-import { useGrowPageLive } from '@/features/players/mapGrow';
+import { useGrowPageLive, useGrowPending } from '@/features/players/mapGrow';
 import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
@@ -40,7 +40,11 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   const box = useRef({ active }).current;
   useLayoutEffect(() => { box.active = active; }, [box, active]);
   const quick = usePressV2();
-  const onShow = routeFocused && active;
+  // The check-in zoom on a phone (v6, mapGrow): its full map opens hidden over the tabs while you are found, see-through.
+  // The router calls the tab covered; it is still the page you see (and the one that pushes in), so it stays on show
+  // until the push-in starts: its card's place held, its pill live, nothing standing down under your eyes.
+  const growPending = useGrowPending();
+  const onShow = (routeFocused || growPending) && active;
   // The parts that only stand down when covered (the map, court pictures, tips: useIsFocusedLater) hear
   // "covered" once the page opened over the tab has slid in, not in the tap that opens it. Before, the
   // map card, the court cards and their hidden picture-taker all redrew (the last one taken down) in that
@@ -172,9 +176,9 @@ export function ThemeGate({ pane, children }: { pane: string; children: () => Re
 function OffScreenLater({ pane, children }: { pane: string; children: React.ReactNode }) {
   // On show: the route on top and, in the tab row, this tab on screen (see useIsFocused).
   const onShow = useIsFocused();
-  // The check-in zoom's grow (mapGrow): Community is what you see starting to push in, under the full map opened over it at
-  // once in a browser (see-through), so for that first moment it keeps the live state: the Up to hit pill's green comes on
-  // the frame you are found, not a few frames later as background work.
+  // The check-in zoom's grow (mapGrow): Community is what you see starting to push in, under the full map opened over it
+  // (see-through: at once in a browser, while you are found on a phone), so until that first moment is over it keeps the
+  // live state: the Up to hit pill's green comes on the frame you are found, not a few frames later as background work.
   const growing = useGrowPageLive() && pane === '/discuss';
   // Outside the phone's tab row (a browser's tabs), "covered" for the parts that can wait comes from
   // here, the same way TabFocus gives it in the row: once a page opened over the tab has slid in.

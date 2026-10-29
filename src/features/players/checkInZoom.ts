@@ -22,7 +22,9 @@ import { useApp } from '@/store/AppContext';
  *    as before). The first time, "Who can see you on the map?" and then Apple's prompt come exactly as
  *    they always have (Apple 5.1.2(i)): the zoom only ever starts after both.
  *  - A teen: the same, on themselves.
- *  - Reduce Motion (the system's own setting): the full map opens straight onto you, close in, no swoop.
+ *  - Reduce Motion (the system's own setting): in a browser the full map opens straight onto you, close in, no swoop.
+ *    On an iPhone (v6) the Community card does not zoom at all with it on: nothing opens, you are simply up (one place
+ *    decides it, NearbyMap, so the push-in and the dive can never disagree about it).
  *
  * How close it comes: zoom 15¼, just past the street level a court opened from a post uses (15). On a
  * phone that is about 1.3 km across and 2.8 km top to bottom (ten or so city blocks each way): your
@@ -32,19 +34,26 @@ import { useApp } from '@/store/AppContext';
  * all at once in the moment it comes to rest.
  *
  * Admins first (CHECKIN_ZOOM_FOR_EVERYONE), so the owner can try it on his own iPhone before anyone
- * else; for everyone by setting the switch to true and shipping an over-the-air update (no database
- * change, no new native code). In the web demo, ?admin=1 makes the demo's player an admin, and
+ * else; for everyone on the website by setting the switch to true and shipping an over-the-air update (no
+ * database change, no new native code). Phones stay admins only until the owner has seen it on his own
+ * iPhone (checkInZoomOn). In the web demo, ?admin=1 makes the demo's player an admin, and
  * ?swoop=dive|bank|takeoff (or localStorage courtside-swoop) picks the swoop to compare them.
  */
 export const CHECKIN_ZOOM_FOR_EVERYONE = false;
 
-/** Whether Up to hit zooms you in for this person: everyone once released, admins until then. */
-// Off on phones for now (Oct 28, owner on his iPhone: "It swipes to the side. Lags a bit then zooms in.
-// Terrible." / "It should never look anything different from the video I approved"): the phone path is
-// being rebuilt; the web demo keeps it for admins.
-export const ZOOM_ON_PHONES = false;
+/**
+ * Whether Up to hit zooms you in for this person. The website: everyone once released, admins until then. Phones (v6, the
+ * iPhone rebuilt to look exactly like the approved video: mapGrow): admins only, whatever CHECKIN_ZOOM_FOR_EVERYONE says,
+ * and only on an iPhone (nobody can try it on Android, whose see-through page and modal are unchecked). ZOOM_ON_PHONES is
+ * the one switch that takes it off every phone again (an over-the-air update), should the owner's own test go badly.
+ * (Oct 28, owner on his iPhone, of the old phone path: "It swipes to the side. Lags a bit then zooms in. Terrible." /
+ * "It should never look anything different from the video I approved"; then: "You rebuild".)
+ */
+export const ZOOM_ON_PHONES = true;
 export const checkInZoomOn = (me: User | null | undefined): boolean =>
-  (Platform.OS === 'web' || ZOOM_ON_PHONES) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
+  Platform.OS === 'web'
+    ? CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin
+    : ZOOM_ON_PHONES && Platform.OS === 'ios' && !!me?.isAdmin;
 
 /** The same, for a screen. */
 export function useCheckInZoom(): boolean {
@@ -96,6 +105,12 @@ export function swoopFound() { if (!findingSince) return; findingSince = 0; emit
 export function swoopTo(to: LatLng, fresh: boolean) { findingSince = 0; asked = { id: ++askIds, to, fresh, at: Date.now() }; emit(); }
 /** How many swoops have been asked for so far: a tap reads it before and after, to know whether it set one off. */
 export const swoopAsks = (): number => askIds;
+/**
+ * The swoop asked for is not going to happen after all (the phone's grow let go: its full map never drew in time): one
+ * nobody took is dropped, so no full map opened later swoops by surprise, and what waited for the landing (the toast,
+ * the tip) goes now.
+ */
+export function swoopDrop() { asked = null; landed(); }
 
 /* ------------------------------------------------------- after it lands */
 

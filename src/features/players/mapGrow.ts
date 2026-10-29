@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useSyncExternalStore, type MutableRefObject } from 'react';
 import { Platform, type View } from 'react-native';
-import { Easing, cancelAnimation, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, withSequence, withTiming } from 'react-native-reanimated';
+import { Easing, cancelAnimation, makeMutable, runOnJS, useAnimatedReaction, useAnimatedStyle, useFrameCallback, withSequence, withTiming } from 'react-native-reanimated';
 
 import type { LatLng } from '@/features/players/positions';
 import type { Court } from '@/features/players/courts';
@@ -33,7 +33,7 @@ import type { Court } from '@/features/players/courts';
  * part of the push. The tab bar slides away from that same frame (AppShell, useGrowUnderWay).
  *  - The website: the full map opens at once over the page, see-through, and shows itself once it has drawn (a browser
  *    keeps both pages drawn).
- *  - iPhone and Android: an opened page covers the one under it, so the full map opens with pictures of the page on top
+ *  - iPhone and Android (until v6, below): an opened page covers the one under it, so the full map opens with pictures of the page on top
  *    of it, at exactly the point the live push-in has reached, and carries the push-in on (the hand-over cannot be seen).
  *    The pictures are taken early, while you are being found, right after you said yes (and after the phone's own
  *    question, the first time): the page (taking it holds the phone for a moment, then, with nothing else moving but the
@@ -61,18 +61,29 @@ import type { Court } from '@/features/players/courts';
  *    push-in on that same clock (growFollow) and its pins clipped to the card, until its streets have drawn and come in.
  *    Its pins can only show once its page has started (a moment after it opens).
  *
+ * v6, the iPhone rebuilt (Oct 28, owner on his iPhone: "It swipes to the side. Lags a bit then zooms in. Terrible." /
+ * "It should never look anything different from the video I approved"; then "You rebuild"): the phone now does exactly
+ * what the website does in the approved video. The full map opens see-through over the live Community page (a
+ * transparent modal: the page stays in the window, live, under it), and the one thing a browser gets for free and a phone
+ * does not, a map that has already drawn, is done ahead: the full map is opened hidden as soon as the phone's own question
+ * says yes (openGrow), while you are being found, its page see-through with its streets and pins hidden, its camera
+ * already on the view the pushed-in card will show (the plan's centre and zoom). When you are found it has drawn, and the
+ * push-in starts on that frame (goGrow); if it has not drawn yet the pill keeps finding a moment (up to PAINT_WAIT_MS),
+ * and if it still has not, nothing opens and you are simply up (cancelGrow). No pictures, no web view starting mid-move,
+ * no slide anywhere: the push-in runs on the live page (UI thread), and at COVER_MS the hidden map shows itself (its
+ * streets in over 220 ms, inside its own page) and dives on (swoop.ts), all on live views. After landing it stays a
+ * see-through modal: Back and the left-edge swipe slide it off to the right (app/map.tsx), and a page opened from it
+ * comes up from the bottom (an iOS sheet). iPhone only, admins only (checkInZoom); Android keeps the plain way.
+ *
  * Only the Community tab's card grows (it is the page that pushes in); the For you copy of the card,
- * Reduce Motion, a phone whose pictures of the map come out blank, and Only me keep the plain way in
- * (the page opening as it always has, the map on you). Admins first, with the rest of the zoom
- * (checkInZoom's CHECKIN_ZOOM_FOR_EVERYONE).
+ * Reduce Motion (on a phone), and Only me keep the plain way: nothing opens, the check-in is as it
+ * always was. Admins first, with the rest of the zoom (checkInZoom's CHECKIN_ZOOM_FOR_EVERYONE).
  */
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
 /** Which edge of the card a thing on it slips out of as the push-in starts (the nearer one). */
 export type AwayEdge = 'top' | 'bottom';
-/** The phone: the card's map alone (no words, pins or buttons on it), laid over the card in the picture of the page. */
-export interface GrowBox { rect: Rect; shot: string; radius: number }
 
 /** A grow under way: what the full map needs to open exactly where the grown card is. */
 export interface GrowPlan {
@@ -81,16 +92,14 @@ export interface GrowPlan {
   card: Rect;
   /** The screen it grows to fill. */
   screen: { w: number; h: number };
-  /** The phone's picture of the page (a file), or null: in a browser (the page itself is seen), or a page that moved. */
-  shot: string | null;
-  /** The phone: the card's map alone, over the card in the picture, so what sat on the card is not in what grows. */
-  box?: GrowBox | null;
+  /** The phone (v6): which early opening this is (openGrow), so the full map hears its own start or its own let-go. */
+  early?: number;
   /** Where the full map opens: the card's own centre, as close as the grown card shows it. */
   center: LatLng;
   zoom: number;
   /** How much the page grows. */
   scale: number;
-  /** When the push-in started (Date.now()): the full map carries it on from there, never starting it again. */
+  /** When the push-in started (Date.now()): the full map carries it on from there, never starting it again. 0: not yet (the phone's early opening). */
   started: number;
   at: number;
   /** The courts the card was drawing (v5): the full map starts with them, so its pins at the hand-over are the card's. */
@@ -111,7 +120,7 @@ const CREEP = 0.08;
 const CREEP_MS = 2600;
 /** However long the map takes, it takes over by this long after the push-in began (its own loading look then shows). */
 export const REVEAL_MAX_MS = 3000;
-/** The dissolve from the grown card to the live map (the card's pictures keep moving under it: never a still layer). */
+/** The dissolve from the grown card to the live map (the card keeps pushing in under it: never a still layer). */
 export const REVEAL_MS = 220;
 /** The swoop after a grow: the push-in has done the first part of the way down, so it is shorter than from the city. */
 export const GROW_SWOOP_MS = 1300;
@@ -131,12 +140,14 @@ const SLIP_EASE = Easing.bezier(0.4, 0, 1, 1);
 /** How far (in the card's own size, before it grows): enough to clear the edge from the 12 points in where they sit. */
 const SLIP_PX = 60;
 /**
- * The phone: the full map opens over the live page this long into the push-in, once everything on the card has slipped
- * out of it, so the pictures it opens with (taken before you were found) need nothing that moves.
+ * The phone (v6): found before the hidden full map has drawn, the pill keeps finding you this long at most while it does;
+ * after that nothing opens (you are simply up, as with the zoom off), never a stop mid-move.
  */
-export const HANDOFF_MS = SLIP_MS + 20;
+export const PAINT_WAIT_MS = 1500;
+/** The phone: the hidden full map is never left waiting longer than this (an invisible page would block every touch). */
+export const EARLY_MAX_MS = 12000;
 
-/** 0 → 1 as the page pushes in (1: the card covers the screen; past it as it carries on). Shared by the live page and the phone's picture of it. */
+/** 0 → 1 as the page pushes in (1: the card covers the screen; past it as it carries on). */
 export const growT = makeMutable(0);
 /**
  * The card's words (its city's name and counts, PreviewOverlay): they step out of the way as the grow starts, so the
@@ -222,9 +233,10 @@ function pushRate(ms: number): number {
  * past the plan) and the swoop's ease, whose start runs at exactly the speed the push-in has then, so the push-in and the
  * dive are one move, never a slow-down and a speed-up (v4). Then the same long soft landing as ever.
  */
-export function growHandOver(p: GrowPlan, targetZoom: number): { zoom: number; ease: [number, number, number, number] } {
+export function growHandOver(p: GrowPlan, targetZoom: number, t?: number): { zoom: number; ease: [number, number, number, number] } {
   const levels = Math.log2(Math.max(1.001, p.scale));
-  const zoom = p.zoom + (growT.value - 1) * levels;
+  // `t`: how far the push-in has come, worked out on the phone's clock (growTAt); the website reads the live value.
+  const zoom = p.zoom + ((t ?? growT.value) - 1) * levels;
   const zoomPerSec = pushRate(Date.now() - p.started) * levels * 1000;
   const left = targetZoom - zoom;
   // The swoop's starting slope (its ease's first point at x 0.3): matched, within a quick enough start and a gentle one.
@@ -276,22 +288,17 @@ export function growFollow(p: GrowPlan): GrowFollow {
   const z0 = p.zoom - Math.log2(Math.max(1.001, p.scale));
   return { z0, w0x: worldX(p.center.lng, z0), w0y: worldY(p.center.lat, z0), ax: g.px - g.kx, ay: g.py - g.ky, bx: g.sx - g.px, by: g.sy - g.py, S: p.scale, t0: p.started };
 }
-/** Where the full map's camera is when the page is drawn `s` times bigger: exactly what the pushed-in card shows then. */
+/**
+ * Where the full map's camera is when the page is drawn `s` times bigger: exactly what the pushed-in card shows then. At
+ * `s` = the plan's scale (the card just covering the screen) it is the plan's own centre and zoom, wherever the page sat:
+ * so the phone's hidden full map can draw that view ahead, before the page is measured again as you are found (v6).
+ */
 export function growCamera(p: GrowPlan, s: number): { center: LatLng; zoom: number } {
   const f = growFollow(p);
   const k = Math.max(1e-3, s);
   const x = f.w0x + f.ax + f.bx / k;
   const y = f.w0y + f.ay + f.by / k;
   return { center: { lat: latOf(y, f.z0), lng: lngOf(x, f.z0) }, zoom: f.z0 + Math.log2(k) };
-}
-/** The same, for a map's own page (MapCanvas), as plain old JavaScript: `(f, s) => [lng, lat, zoom]`. */
-export const GROW_CAMERA_JS = `(function(f,s){s=Math.max(1e-3,s);var W=512*Math.pow(2,f.z0),x=f.w0x+f.ax+f.bx/s,y=f.w0y+f.ay+f.by/s,n=Math.PI-2*Math.PI*y/W;return [x/W*360-180,180/Math.PI*Math.atan(Math.sinh(n)),f.z0+Math.log(s)/Math.LN2]})`;
-/** The card's rectangle on the screen when the page is drawn `s` times bigger, and its corner's radius (for a page to clip to). */
-export function growCardAt(p: GrowPlan, s: number, radius: number): { x: number; y: number; w: number; h: number; r: number } {
-  const g = growGeometry(p);
-  const x0 = p.card.x - p.page.x;
-  const y0 = p.card.y - p.page.y;
-  return { x: p.page.x + g.px + (x0 - g.px) * s, y: p.page.y + g.py + (y0 - g.py) * s, w: p.card.w * s, h: p.card.h * s, r: radius * s };
 }
 /** How much bigger the page is drawn now (the website: the live value; 1 when no grow is on). */
 export function growScaleNow(): number {
@@ -311,7 +318,7 @@ export function useGrowLens(on: boolean, apply: (s: number) => void) {
 export function growPlan(o: { page: Rect; card: Rect; screen: { w: number; h: number }; center: LatLng; zoom: number }): GrowPlan {
   // Big enough to cover the screen both ways, and a touch more, so the card's rounded corners and edge go off the screen.
   const scale = Math.max(o.screen.w / o.card.w, o.screen.h / o.card.h) * 1.03;
-  return { ...o, shot: null, box: null, scale, zoom: o.zoom + Math.log2(scale), started: 0, at: Date.now() };
+  return { ...o, scale, zoom: o.zoom + Math.log2(scale), started: 0, at: Date.now() };
 }
 
 /* ------------------------------------------------- the push-in, from the card */
@@ -373,6 +380,8 @@ export function startGrow(still: boolean): number {
   cancelAnimation(growT);
   cancelAnimation(slip);
   if (still) { growT.value = 1; slip.value = 1; return Date.now(); }
+  pushGap.value = 0;
+  pushLast.value = 0;
   slip.value = withTiming(1, { duration: SLIP_MS, easing: SLIP_EASE });
   growT.value = withSequence(
     withTiming(1 + OVER, { duration: GROW_MS, easing: GROW_EASE }),
@@ -382,12 +391,16 @@ export function startGrow(still: boolean): number {
 }
 
 let plan: GrowPlan | null = null;
-/** Handed to the full map, the moment before it opens. */
+/** Handed to the full map, the moment before it opens (the website). */
 export function setGrowPlan(p: GrowPlan) {
   plan = { ...p, at: Date.now() };
 }
-/** The full map, opening: the grow handed to it, if it is still fresh (taken once). */
+/**
+ * The full map, opening: the grow handed to it, if it is still fresh (taken once). On the phone (v6), the early opening
+ * (openGrow), as long as it has not been let go: it opens before the push-in starts, and hears the start (useGrowEarly).
+ */
 export function takeGrowPlan(): GrowPlan | null {
+  if (!WEB) return early && !early.cancelled ? early.plan : null;
   const p = plan;
   plan = null;
   return p && Date.now() - p.at <= PLAN_KEEP_MS ? p : null;
@@ -405,11 +418,179 @@ export function endGrow() {
   armedAt = 0;
   setBarAway(false);
   if (barTimer) { clearTimeout(barTimer); barTimer = null; }
+  // The phone's early opening that grew: done with (one still waiting is left to its own map).
+  if (early?.started) { early = null; emitEarly(); }
 }
 
-/** The push-in, for the picture of the page (the phone's full map, carrying on from the live page). */
-export function useGrowPicture() {
-  return useAnimatedStyle(() => ({ transform: placeAt(growT.value, geo.value) }));
+/* ------------------------------------------------- the phone (v6): the full map opened early, hidden */
+
+/**
+ * The full map opened ahead, hidden, while you are being found (openGrow, from the moment the phone's own question says
+ * yes): see-through, its streets and pins hidden, its camera already where the pushed-in card will be looking, so by the
+ * time you are found it has drawn exactly that view. `started` 0 until the push-in starts (goGrow); `cancelled` once it is
+ * let go (cancelGrow: the map then closes itself, with no movement). `status`: how its drawing is getting on.
+ */
+export interface GrowEarly {
+  id: number;
+  plan: GrowPlan;
+  started: number;
+  cancelled: boolean;
+  /** The full map is up (it took the plan) and has not gone yet. */
+  mounted: boolean;
+  /** The full map has been asked to open (router.push), once. */
+  pushed: boolean;
+  status: 'none' | 'loading' | 'painted' | 'failed';
+}
+let early: GrowEarly | null = null;
+let earlyIds = 0;
+let earlyTimer: ReturnType<typeof setTimeout> | null = null;
+let earlyVersion = 0;
+const earlyListeners = new Set<() => void>();
+const emitEarly = () => { earlyVersion += 1; earlyListeners.forEach((fn) => fn()); };
+const subscribeEarly = (fn: () => void) => { earlyListeners.add(fn); return () => { earlyListeners.delete(fn); }; };
+/** Found before the hidden map has drawn: the Up to hit pill keeps finding you meanwhile (UpToHit), so it never reads as a stop. */
+let waiting = false;
+
+/** The early opening now (pending, going, or let go but its map not gone yet), if any. */
+export const growEarly = (): GrowEarly | null => early;
+
+/** The phone, while you are being found: the full map opens hidden (the card pushes it once the page is on top). Its id. */
+export function openGrow(p: GrowPlan): number {
+  if (earlyTimer) clearTimeout(earlyTimer);
+  const id = ++earlyIds;
+  early = { id, plan: { ...p, early: id, started: 0, at: Date.now() }, started: 0, cancelled: false, mounted: false, pushed: false, status: 'none' };
+  // The Community page stays the live page under it (tabFocus), as it is still the page you see.
+  if (pageLiveTimer) { clearTimeout(pageLiveTimer); pageLiveTimer = null; }
+  setPageLive(true);
+  // Never an invisible page left over the app: let go after EARLY_MAX_MS if the push-in has not started by then.
+  earlyTimer = setTimeout(() => { earlyTimer = null; cancelGrow(id); }, EARLY_MAX_MS);
+  emitEarly();
+  return id;
+}
+
+/**
+ * Whether the page under the phone's grown full map is the one being shown: while that map is open, hidden, and not going
+ * yet, and again as it slides away (leaving). That page then stays the page on show (tabFocus), its tab bar with it (AppShell).
+ */
+export function useGrowPending(): boolean {
+  return useSyncExternalStore(subscribeEarly, () => leaving || (!!early && !early.started), () => false);
+}
+/** The phone's grown full map is sliding away (app/map.tsx): the page under it, and its tab bar, are being uncovered. */
+let leaving = false;
+export function setGrowLeaving(on: boolean) {
+  if (leaving === on) return;
+  leaving = on;
+  emitEarly();
+}
+/** The full map's side: re-renders as its early opening changes (read growEarly() for what it is). */
+export function useGrowEarly(): number {
+  return useSyncExternalStore(subscribeEarly, () => earlyVersion, () => earlyVersion);
+}
+/** Whether the pill should keep finding you (found, the hidden map not drawn yet). */
+export function useGrowWaiting(): boolean {
+  return useSyncExternalStore(subscribeEarly, () => waiting, () => false);
+}
+export function setGrowWaiting(on: boolean) {
+  if (waiting === on) return;
+  waiting = on;
+  emitEarly();
+}
+
+/** The push-in has started (`p.started`): the hidden full map takes over at COVER_MS from then. `p`: the plan measured as you were found. */
+export function goGrow(p: GrowPlan) {
+  if (!early || early.cancelled) return;
+  if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null; }
+  early = { ...early, plan: { ...p, early: early.id, courts: early.plan.courts }, started: p.started };
+  waiting = false;
+  emitEarly();
+}
+
+/** Let go before the push-in started (`id`: only that one): nothing opens, and the hidden map closes itself. */
+export function cancelGrow(id?: number) {
+  if (!early || (id !== undefined && early.id !== id) || early.started || early.cancelled) return;
+  if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null; }
+  waiting = false;
+  // Never asked to open: nothing to close. Otherwise it stays counted until it has gone (its page under it on show
+  // meanwhile, so nothing of that page stands down for a frame); one asked to open that never comes up is let go after a moment.
+  early = early.mounted || early.pushed ? { ...early, cancelled: true } : null;
+  if (early && !early.mounted) {
+    const id2 = early.id;
+    earlyTimer = setTimeout(() => {
+      earlyTimer = null;
+      if (!early || early.id !== id2 || early.mounted) return;
+      early = null;
+      setPageLive(false);
+      emitEarly();
+    }, 2000);
+  }
+  if (!early) setPageLive(false);
+  emitEarly();
+}
+
+/** The hidden full map is up (it took the plan). */
+export function growMapMounted(id: number) {
+  if (!early || early.id !== id) return;
+  early = { ...early, mounted: true };
+  emitEarly();
+}
+/** The hidden full map has gone (closed, or left): the early opening is over, however it went. */
+export function growMapGone(id: number) {
+  if (!early || early.id !== id) return;
+  if (earlyTimer) { clearTimeout(earlyTimer); earlyTimer = null; }
+  const going = !!early.started;
+  early = null;
+  waiting = false;
+  if (!going) setPageLive(false);
+  emitEarly();
+}
+/** The card has asked for the hidden full map to open (once). */
+export function growPushed(id: number) {
+  if (!early || early.id !== id) return;
+  early = { ...early, pushed: true };
+}
+/** How the hidden full map's drawing is getting on (its own map says). */
+export function setGrowMapStatus(id: number, status: GrowEarly['status']) {
+  if (!early || early.id !== id || early.status === status) return;
+  early = { ...early, status };
+  emitEarly();
+}
+/** Resolves true once the hidden full map has drawn, false if it fails, is let go, or `ms` runs out first. */
+export function whenGrowPainted(ms: number): Promise<boolean> {
+  return new Promise((done) => {
+    let over = false;
+    const check = () => {
+      if (over) return;
+      const e = early;
+      if (e && !e.cancelled && e.status === 'painted') finish(true);
+      else if (!e || e.cancelled || e.status === 'failed') finish(false);
+    };
+    const off = subscribeEarly(check);
+    const t = setTimeout(() => finish(false), ms);
+    function finish(ok: boolean) { if (over) return; over = true; clearTimeout(t); off(); done(ok); }
+    check();
+  });
+}
+
+/* ------------------------------------------------- the push-in's own frames (the phone's timing log) */
+
+/** The longest gap between two of the phone's UI-thread frames while the page pushes in (ms), for zoomTiming. */
+const pushGap = makeMutable(0);
+const pushLast = makeMutable(0);
+export const growPushGap = (): number => pushGap.value;
+/**
+ * Counts the push-in's frames on the UI thread (Reanimated's frame clock), only while a grow is under way: the longest gap
+ * between two is what the timing log reports. Nothing is drawn by it.
+ */
+export function useGrowPushStats(on: boolean) {
+  const going = useGrowUnderWay();
+  const frames = useFrameCallback((f) => {
+    'worklet';
+    const t = growT.value;
+    if (t <= 0 || t >= 1 + OVER) { pushLast.value = 0; return; }
+    if (pushLast.value > 0) { const gap = f.timestamp - pushLast.value; if (gap > pushGap.value) pushGap.value = gap; }
+    pushLast.value = f.timestamp;
+  }, false);
+  useEffect(() => { frames.setActive(on && going); }, [on, going]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -469,11 +650,14 @@ export function useLatest<T>(value: T) {
   return r;
 }
 
-/** The full map's options when it opens by growing (app/_layout.tsx): no slide; in a browser, see-through over the page pushing in. */
+/**
+ * The full map's options when it opens by growing (app/_layout.tsx): no slide, see-through over the page pushing in. On
+ * the phone too (v6): a transparent modal leaves the Community page in the window, live, under it (iOS's over-full-screen
+ * presentation), the way a browser does, and with no animation it opens and closes without any movement of its own. It
+ * stays one after landing (Back and the edge swipe are the map's own: app/map.tsx), so it never slides down to close.
+ */
 export function mapScreenOptions(params: unknown) {
   const grow = !!(params && typeof params === 'object' && (params as { grow?: string }).grow);
   if (!grow) return {};
-  return WEB
-    ? { presentation: 'transparentModal' as const, animation: 'none' as const, contentStyle: { backgroundColor: 'transparent' } }
-    : { animation: 'none' as const };
+  return { presentation: 'transparentModal' as const, animation: 'none' as const, contentStyle: { backgroundColor: 'transparent' } };
 }

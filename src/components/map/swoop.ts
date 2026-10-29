@@ -64,8 +64,13 @@ export interface SwoopAsk extends SwoopShape {
   now?: boolean;
 }
 
+/**
+ * How the move went, for the phone's timing log (zoomTiming, admins): how many frames the camera hook drew, the longest
+ * gap between two (ms), and when it began and ended (Date.now(), the phone's one clock; 0 if it never began).
+ */
+export interface SwoopStats { n: number; gap: number; t0: number; te: number }
 /** Runs a swoop on a map: `SWOOP_FN(map, ask, done)`; `done(true)` once it has arrived, `done(false)` if it was stopped part way. */
-export type SwoopFn = (map: unknown, ask: SwoopAsk, done: (arrived: boolean) => void) => { stop: () => void };
+export type SwoopFn = (map: unknown, ask: SwoopAsk, done: (arrived: boolean, stats?: SwoopStats) => void) => { stop: () => void };
 
 /**
  * The streets round a spot, asked for ahead: `warm(map, { lat, lng, zoom }, seen)` fetches the map's own tiles there (the
@@ -103,14 +108,14 @@ var warm=${WARM_JS};
 // The camera hook: a property of the map in MapLibre 4 (the phone's page), set through setTransformCameraUpdate from 5 on (the browser's).
 function hook(map,fn){if(map.setTransformCameraUpdate)map.setTransformCameraUpdate(fn);else map.transformCameraUpdate=fn}
 return function(map,o,done){
-  var over=false,started=false,D=o.ms,t0=0,waitT=0,seen={};
+  var over=false,started=false,D=o.ms,t0=0,waitT=0,seen={},nF=0,gap=0,lastF=0,w0=0;
   // Its streets asked for now; on a map just made, as soon as its list of streets has come (or as it starts, at the latest).
   function warmSoon(e){if(e&&e.sourceDataType!=='metadata')return;if(over||warm(map,o,seen))map.off('sourcedata',warmSoon)}
   if(!o.still&&!less()&&!warm(map,o,seen))map.on('sourcedata',warmSoon);
   function end(arrived){if(over)return;over=true;clearTimeout(waitT);map.off('load',begin);map.off('sourcedata',warmSoon);hook(map,null);map.off('moveend',onEnd);
     // Stopped part way: once the map has come to rest (a finger let go), it lies flat and north up again.
     if(started&&!arrived){var flat=function(){try{if(map.isMoving()){map.once('moveend',flat);return}if(Math.abs(map.getPitch())>0.5||Math.abs(map.getBearing())>0.5)map.easeTo({pitch:0,bearing:0,duration:300})}catch(e){}};setTimeout(flat,0)}
-    if(done)done(arrived)}
+    if(done)done(arrived,{n:nF,gap:Math.round(gap),t0:w0,te:Date.now()})}
   function onEnd(){end(now()-t0>=D-2)}
   function begin(){
     if(over||started)return;started=true;clearTimeout(waitT);map.off('load',begin);
@@ -120,12 +125,14 @@ return function(map,o,done){
     // The tilt and the turn, and the takeoff's pull back, laid over the flyTo's own path on the same clock.
     hook(map,function(c){
       if(over)return {};
-      var t=Math.max(0,Math.min(1,(now()-t0)/D)),r={pitch:o.pitch*hump(t,o.peak),bearing:o.turn*hump(t,o.turnPeak)};
+      // Its frames, for the timing log: how many, and the longest gap between two.
+      var tn=now();if(lastF&&tn-lastF>gap)gap=tn-lastF;lastF=tn;nF++;
+      var t=Math.max(0,Math.min(1,(tn-t0)/D)),r={pitch:o.pitch*hump(t,o.peak),bearing:o.turn*hump(t,o.turnPeak)};
       if(o.pull&&t<o.pullEnd)r.zoom=c.zoom-o.pull*hump(t/o.pullEnd,0.5);
       // For testers only: a page that set window.__csSwoopTrace to a list gets each frame's camera in it.
       var tr=window.__csSwoopTrace;if(tr&&tr.push)tr.push([Math.round(now()-t0),Math.round((r.zoom!=null?r.zoom:c.zoom)*1000)/1000,Math.round(r.pitch*10)/10,Math.round(r.bearing*10)/10]);
       return r});
-    t0=now();
+    t0=now();w0=Date.now();
     map.flyTo({center:[o.lng,o.lat],zoom:o.zoom,pitch:0,bearing:0,duration:D,easing:ease,essential:true});
     // Listened for after the flyTo has begun: a move it stopped says it ended, and that is not this one.
     map.on('moveend',onEnd)}

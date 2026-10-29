@@ -68,7 +68,7 @@ export interface NearbyMapProps {
    * (the page around it pushing in), rather than the full map sliding in. Only where the page can push in.
    */
   grow?: boolean;
-  /** The full map, opened by the card growing into it: where it starts (the grown card's own view) and the picture over it. */
+  /** The full map, opened by the card growing into it: where it starts (the grown card's own view); on a phone, opened early and hidden (mapGrow v6). */
   growFrom?: GrowPlan | null;
   /** The grown card has handed over to the full map (it is now just the full map): told once. */
   onGrown?: () => void;
