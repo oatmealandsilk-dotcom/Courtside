@@ -134,7 +134,8 @@ export const LIT_CSS = `
  * folded into it, zoomed out (a small dot, pinEngine). "cs-hits": a court's
  * "+2" open hits badge, scaled back to full size where cs-far shrinks its
  * court (to .72, a lit one to .84), so its number stays readable; on a small
- * court it also steps 4 px out, so it covers no more of the court than up close. "cs-quiet" on the
+ * court it also steps 4 px out (up and to the left: it sits on the court's top
+ * left), so it covers no more of the court than up close. "cs-quiet" on the
  * still card: no pin takes a tap (the card does), and its pins settle in
  * with a 4 px drop as they fade (cs-drop), as the map fades in under them.
  *
@@ -170,7 +171,7 @@ export const MAP_PIN_CSS = `
 .cs-close .cs-court-nm,.cs-court.cs-on .cs-court-nm{display:inline}
 .cs-far .cs-court.cs-live{transform:none}
 .cs-far .cs-court{transform:scale(.72)}
-.cs-far .cs-court:not(.cs-live) .cs-hits{scale:1.39;translate:4px -4px}
+.cs-far .cs-court:not(.cs-live) .cs-hits{scale:1.39;translate:-4px -4px}
 .cs-far .cs-lit .cs-hits{scale:1.19}
 .cs-pin{transition:transform .15s ease-out}
 .cs-pin:active{transform:scale(.94)}
@@ -355,7 +356,7 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const size = on ? 28 : 22;
   const closed = isClosedCourt(court);
   const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
-  const pill = `position:absolute;left:calc(100% + ${live || hits ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
+  const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
   const glowing = (!!live || glowOnly) && !plain;
   const dot = plain ? colors.brand : colors.open;
   const name = live
@@ -367,7 +368,7 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, 'top:-8px;right:-8px')}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, -8, 20)}</div>`;
 }
 
 /* --------------------------------------------------------------- lit courts */
@@ -746,8 +747,8 @@ function litFloodlit(court: Court, pin: LitPin): string {
     + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:calc(100% - ${Math.round(px * 0.8)}px);top:-${Math.round(px * 0.45)}px;display:flex;align-items:center;pointer-events:none">${who}</div>` : '')
     + litWords(court, label, 8, k)
     + hitDot()
-    // Its open hits on its top right corner, or on the top left when who is there sits on the right.
-    + hitsBadge(hits, who ? 'top:-9px;left:-9px' : 'top:-9px;right:-9px', 22)
+    // Its open hits on its top left corner: the top right is who is there.
+    + hitsBadge(hits, -9, 22)
     + `</div>`;
 }
 
@@ -784,7 +785,7 @@ function litRing(court: Court, pin: LitPin): string {
     + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:50%;top:calc(100% - ${Math.round(px * 0.62)}px);transform:translateX(-50%);display:flex;align-items:center;pointer-events:none">${who}</div>` : '')
     + litWords(court, label, who ? Math.round(px * 0.38) + 7 : 8, k)
     + hitDot()
-    + hitsBadge(hits, 'top:-3px;right:-3px', 22)
+    + hitsBadge(hits, -3, 22)
     + `</div>`;
 }
 
@@ -823,7 +824,7 @@ function litRaised(court: Court, pin: LitPin): string {
     + litSweep(delay)
     + `</div></div>`
     + (who ? `<div class="cs-lit-who" style="position:absolute;z-index:4;left:${s - 12}px;top:-${Math.round(px * 0.55)}px;display:flex;align-items:center;padding:3px;border-radius:999px;background:${colors.bg};box-shadow:0 3px 10px rgba(0,0,0,.24);pointer-events:none">${who}</div>` : '')
-    + hitsBadge(hits, who ? 'top:-9px;left:-9px' : `top:-9px;left:${s - 13}px`, 22)
+    + hitsBadge(hits, -9, 22)
     + `</div>`
     + litWords(court, label, 6, k)
     + hitDot()
@@ -837,16 +838,56 @@ const hitDot = () => `<i class="cs-hitdot" style="background:${colors.brand};bor
 export const hitsCountText = (n: number) => (n > 9 ? '9+' : `+${n}`);
 
 /**
- * The open hits scheduled at a court that you may see (Oct 29, owner: "In the top right it has the circle
- * icon that says like +however many for hits scheduled there"): a small round badge on its corner, "+2", in
- * the hit flags' own colours (the brand, its ink) inside a rim of the page, the way the map's "+4" badges sit
- * on a crowd. Only a number: no face or name. It is part of the court's pin, so a tap on it (even on the part
- * standing past the court's edge) opens the court's card, which lists those hits. `at`: where on the pin it sits; `px`: across (a little bigger on a big lit
- * court). None: nothing at all.
+ * What a court's open hits badge says beside its number (Oct 29, owner: "What would calendar mark look
+ * like"). false: the number alone, "+3" (the "+" small, the way the map's "+4" badges say more). true: a tiny
+ * solid calendar before it and no "+", a calendar and "3" (still "9+" past nine).
  */
-function hitsBadge(n: number, at: string, px = 20): string {
+export const HIT_BADGE_MARK: boolean = false;
+
+/**
+ * A tiny solid calendar, `px` square, in the badge's ink: its two rings, its top band, and the page under a
+ * thin line of the badge's own colour. Drawn on a 14 unit grid, so at 7 px every line falls on a device pixel at 2x.
+ */
+function calendarMark(px: number): string {
+  return `<svg width="${px}" height="${px}" viewBox="0 0 14 14" style="display:block;flex:none;overflow:visible" aria-hidden="true">`
+    + `<rect x="0" y="2.5" width="14" height="11.5" rx="2.5" fill="${colors.brandInk}"/>`
+    + `<rect x="3" y="0" width="2.5" height="4" rx="1.25" fill="${colors.brandInk}"/>`
+    + `<rect x="8.5" y="0" width="2.5" height="4" rx="1.25" fill="${colors.brandInk}"/>`
+    + `<rect x="0" y="6" width="14" height="1.5" fill="${colors.brand}"/>`
+    + `</svg>`;
+}
+
+/**
+ * The open hits scheduled at a court that you may see (Oct 29, owner: "In the top right it has the circle
+ * icon that says like +however many for hits scheduled there"; then "Put them always on top left cause top
+ * right would be people"): a small badge on the court's top left corner, on every court, plain or lit, in the
+ * hit flags' own colours (the brand, its ink) inside a rim of the page, the way the map's "+4" badges sit on a
+ * crowd. Only a number (HIT_BADGE_MARK: a calendar before it): no face or name. It is part of the court's pin,
+ * so a tap on it (even on the part standing past the court's edge) opens the court's card, which lists those hits.
+ *
+ * Its spacing (Oct 29, owner: "make the spicing within the circle perfect"): a true circle `px` across while
+ * what it says fits ("+3", "9+"), else a pill with the same room at each end, which grows outward, away from
+ * the court (it is pinned by its right edge). The "+" is set small and centred on the digits' middle, so the
+ * pair sits balanced in the circle; the digits are tabular and lifted half a pixel, so their ink, not their
+ * line box, sits in the exact middle (measured on Apple's system font). `left`: its left edge (and top) from
+ * the court's corner; `px`: across (a little bigger on a big lit court). None: nothing at all.
+ */
+function hitsBadge(n: number, left: number, px = 20): string {
   if (!(n > 0)) return '';
-  return `<i class="cs-hits" style="position:absolute;${at};z-index:5;width:${px}px;height:${px}px;box-sizing:border-box;border-radius:999px;background:${colors.brand};color:${colors.brandInk};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;font:700 ${px > 20 ? 11 : 10}px -apple-system,BlinkMacSystemFont,system-ui,sans-serif;font-style:normal;letter-spacing:-.3px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer">${hitsCountText(n)}</i>`;
+  const fs = px > 20 ? 11 : 10;
+  // How far the ink is lifted to sit in the exact middle: Apple's font rounds its line box, so the 10 pt
+  // digits sit a little lower in theirs than the 11 pt ones do.
+  const lift = fs > 10 ? 1.2 : 0.5;
+  // A "1" is narrow in its tabular slot: its slot's spare right side goes, so its ink centres too.
+  const digits = `<b style="display:block;font:inherit;transform:translateY(-${lift}px)${n === 1 ? ';margin-right:-1.25px' : ''}">${n > 9 ? 9 : n}</b>`;
+  const plus = (side: 'left' | 'right') => `<b style="display:block;font-size:.8em;font-weight:700;transform:translateY(-${lift - 0.25}px);margin-${side}:-.5px">+</b>`;
+  const said = HIT_BADGE_MARK
+    ? `${calendarMark(fs - 3)}<i style="display:block;width:${fs > 10 ? 2 : 1.5}px;flex:none"></i>${digits}${n > 9 ? plus('left') : ''}`
+    : n > 9 ? `${digits}${plus('left')}` : `${plus('right')}${digits}`;
+  // A pill's ends: the room round its ink about what is above and below it (the digits' last pixel of
+  // side bearing taken off the right).
+  const pad = HIT_BADGE_MARK ? (fs > 10 ? '0 4px 0 4.5px' : '0 3px 0 3.5px') : '0';
+  return `<i class="cs-hits" style="position:absolute;top:${left}px;right:calc(100% - ${left + px}px);z-index:5;height:${px}px;min-width:${px}px;padding:${pad};box-sizing:border-box;border-radius:999px;background:${colors.brand};color:${colors.brandInk};border:2px solid ${colors.bg};display:flex;align-items:center;justify-content:center;font:700 ${fs}px/1 ${SANS};font-style:normal;font-variant-numeric:tabular-nums;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2);cursor:pointer">${said}</i>`;
 }
 
 /**
