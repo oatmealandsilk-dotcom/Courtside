@@ -19,8 +19,8 @@ import type { AutoLogAudience, DetectedActivity, Post, User } from '@/data/types
  * player (Apple's 5.1.3: a clear yes, with a no beside it).
  *
  * The server makes each one a post of its own, its card only (time, kind,
- * length, and for an adult the heart rate, zones and calories the tracker
- * recorded; none of those for anyone else), shown in Activities and on the
+ * length, and the heart rate, zones and calories the tracker recorded, at
+ * any age since Oct 29, migration 199), shown in Activities and on the
  * profile to that audience; nobody else ever gets it. Posting the session
  * from "Tennis logged" puts the player's own post in its place.
  *
@@ -88,18 +88,17 @@ export function seenByLine(aud: AutoLogAudience, many = false): string {
 /**
  * Said before connecting (Apple Health's sheet, setup's card, the Health
  * page): who will see the tennis that logs itself, and what of it. For `aud`
- * (onConnect); `chosen`: the player's setting (null: not chosen yet). An adult's
- * shows its time, heart rate, zones and calories; anyone else's only when and
- * how long (the server's share list, migration 193).
+ * (onConnect); `chosen`: the player's setting (null: not chosen yet). It shows
+ * its time, heart rate, zones and calories, at any age (the server's share
+ * list, migration 199; `user` is kept so callers read the same).
  */
-export function consentLine(aud: AutoLogAudience, user: Pick<User, 'ageGroup'> | null | undefined, chosen: AutoLogAudience | null | undefined = aud): string {
+export function consentLine(aud: AutoLogAudience, _user: Pick<User, 'ageGroup'> | null | undefined, chosen: AutoLogAudience | null | undefined = aud): string {
   if (aud === 'private') {
     return chosen ? 'Tennis of 20 minutes or more logs itself, and only you see it until you post it.'
       : 'Tennis of 20 minutes or more logs itself. Only you see it until you choose who can.';
   }
   const who = aud === 'public' ? 'anyone who can see your posts' : 'friends who follow you back';
-  const what = friendsAtMost(user) ? 'when you played and for how long' : 'with its time, heart rate, zones and calories';
-  return `Tennis of 20 minutes or more logs itself, and ${who} can see it, ${what}. Change who in Settings.`;
+  return `Tennis of 20 minutes or more logs itself, and ${who} can see it, with its time, heart rate, zones and calories. Change who in Settings.`;
 }
 
 /** A post the server made for one of your sessions that logged itself, for the session on it (its tracker row, or its log entry). */

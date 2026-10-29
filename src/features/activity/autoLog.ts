@@ -9,7 +9,7 @@ import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { isDemo, isTracker, knownTennisFlags, tennisFlags, type TennisFlags } from './flags';
-import { friendsAtMost, onConnect, savesOnConnect, shownTo } from './autoLogSharing';
+import { onConnect, savesOnConnect, shownTo } from './autoLogSharing';
 import { knownTrackerStatus, trackerStatus } from './trackers';
 import type { AutoLogAudience, User } from '@/data/types';
 import { warmWatchTip } from './watchTip';
@@ -162,7 +162,8 @@ export const tapConnects = (choices: ConnectSource[]): AutoLogSource | null => (
 export function connectLine(choices: ConnectSource[], chosen: AutoLogAudience | null | undefined, user: Pick<User, 'ageGroup'> | null | undefined): string {
   const tap = tapConnects(choices);
   const from = `Your tennis logs itself from ${tap === 'apple-health' ? 'Apple Health' : namesOf(choices)}.`;
-  const numbers = friendsAtMost(user) ? '' : ', with its heart rate and calories';
+  // Every age since Oct 29 (migration 199): the heart rate shows for under-18s too.
+  const numbers = ', with its heart rate and calories';
   if (!chosen) {
     const viaPage = !tap && onConnect(chosen, choices[0], user) !== 'private';
     return viaPage ? `${from} Friends who follow you back see it${numbers}.` : `${from} You choose who sees it.`;

@@ -75,7 +75,7 @@ import { goHome } from '@/lib/goBack';
 import { liveDay, liveHour, liveMinutes, livePlace, liveState, liveTracker, startClock } from '@/features/activity/liveSession';
 import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { useTennisFlags } from '@/features/activity/useTennisFlags';
-import { friendsAtMost, isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
+import { isOwnAutoPostOf, seenByLine, shownTo } from '@/features/activity/autoLogSharing';
 import { knownTennisFlags, tennisFlags } from '@/features/activity/flags';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -273,8 +273,8 @@ function Compose() {
   }, [liveLog?.id, scoreText(liveLog?.sets), liveLog?.won, liveLog?.kind]); // eslint-disable-line react-hooks/exhaustive-deps
   // A tennis session of yours with no score yet: a quiet "Add score" by its card (Oct 6), as on Share.
   const addScoreTo = liveLog && liveLog.userId === currentUserId && canScore(liveLog.kind) && !liveLog.fromSessionId && !liveLog.sets?.length ? liveLog.id : undefined;
-  // "Share health data" starts on for someone known to be an adult, off for
-  // everyone else; anyone can switch it on (owner, Oct 3; migration 72).
+  // Known to be an adult: a place on a post (below). "Share health data" starts on for
+  // every age (owner, Oct 29: "Even under 18 should show heart rate for everyone").
   const adult = !!currentUser && !notKnownAdult(currentUser);
   const [attached, setAttached] = useState(!!opened);
   // One session, one post: whether this one is on a post of yours already.
@@ -305,7 +305,7 @@ function Compose() {
   // Attaching it logged it on the way (a tracker's session nobody had logged).
   const [justLogged, setJustLogged] = useState(false);
   // "Share health data": remembered on this phone for the next post, one choice per account.
-  const [health, setHealth] = useHealthChoice(currentUserId, adult);
+  const [health, setHealth] = useHealthChoice(currentUserId);
   // The numbers a session's post shares: only those chosen that it has, a tracker's or (Oct 8) the ones typed into your log.
   const shareFor = (pick: SessionPick) => chosenShare(health, availableShare(pick.type === 'tracker' ? pick.activity : loggedNumbers(pick.session)));
   // Opened from the weekly challenge: its tag starts the caption, which is what makes the clip an entry.
@@ -1570,7 +1570,7 @@ function Compose() {
                 {autoLogSharing === null ? (
                   <View style={styles.autoAsk}>
                     <Text style={styles.autoAskTitle}>Who sees the tennis that logs itself?</Text>
-                    <Text style={styles.autoAskLine}>{friendsAtMost(currentUser) ? 'Friends: people you follow who follow you back, with when you played and for how long.' : 'Friends: people you follow who follow you back, with its time, heart rate, zones and calories.'} Only me: nobody else. Change it in Settings.</Text>
+                    <Text style={styles.autoAskLine}>Friends: people you follow who follow you back, with its time, heart rate, zones and calories. Only me: nobody else. Change it in Settings.</Text>
                     <Chips label="Who sees the tennis that logs itself" value={undefined} onChange={(v) => { if (v) void actions.setAutoLogSharing(v).then((ok) => { if (!ok) setAutoError('That didn’t save. Try again.'); }); }} options={[{ value: 'mutuals' as const, label: 'Friends' }, { value: 'private' as const, label: 'Only me' }]} />
                   </View>
                 ) : null}

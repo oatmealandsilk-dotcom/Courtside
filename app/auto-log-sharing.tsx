@@ -86,7 +86,7 @@ const ICON: Record<AutoLogAudience, keyof typeof Ionicons.glyphMap> = { mutuals:
 
 /** What is shown, said plainly before it is chosen. */
 const FACTS = [
-  'Tennis of 20 minutes or more logs itself. It shows in Activities and on your profile as a session: when, how long, and your heart rate, heart-rate zones and calories. Under 18, or with no birthday given: only when and how long. Never where you played.',
+  'Tennis of 20 minutes or more logs itself. It shows in Activities and on your profile as a session: when, how long, and your heart rate, heart-rate zones and calories, at any age. Never where you played.',
   'Post it from “Tennis logged” to add the score, a photo or the court. That post goes to everyone who can see your posts.',
   'Connecting Apple Health never chooses this for you.',
 ];
