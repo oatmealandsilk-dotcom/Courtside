@@ -15,6 +15,8 @@ import { TextScale } from '@/theme/textScale';
 import { learned } from '@/features/tips/tips';
 import { catchUpNow } from '@/theme/catchUp';
 import { useNavigation } from 'expo-router';
+import { useApp } from '@/store/AppContext';
+import { showEarlyMemberNote, themeAllowed } from '@/theme/earlyThemes';
 
 const LEAD = 'Applies everywhere straight away. Pick the court you would rather be on.';
 /**
@@ -25,6 +27,8 @@ const LEAD = 'Applies everywhere straight away. Pick the court you would rather 
  * Match phone for screen readers too (the auto-tester finds it by that name).
  */
 const AUTO_TITLE = 'Match phone';
+/** The quiet line early members see above the courts, when EARLY_MEMBER_NOTE is on (src/theme/earlyThemes.ts). */
+const EARLY_NOTE = 'Early member · every court is yours';
 const AUTO_LINE = `Dark when your ${Platform.OS === 'web' ? 'device' : 'phone'} is in dark mode`;
 
 /**
@@ -40,6 +44,11 @@ export default function ThemePage() {
   const styles = useThemedStyles(styleDefinitions);
   const { theme, setTheme } = useTheme();
   const { store, begin } = useThemeFade();
+  // Every court for early members; Clean and Night for players who joined after the launch cutoff
+  // (src/theme/earlyThemes.ts; no cutoff yet, so every court for everyone).
+  const joinedAt = useApp().currentUser?.joinedAt;
+  const courts = themeList.filter((option) => themeAllowed(option.name, joinedAt));
+  const earlyNote = showEarlyMemberNote(joinedAt);
   // Found the themes: the dot on Profile's ☰ has done its job, however this page was reached.
   useEffect(() => { learned('theme'); }, []);
   // An iPhone's edge swipe back shows Profile under the finger from its first pixel: Profile is let go
@@ -71,8 +80,14 @@ export default function ThemePage() {
         <FadeSpot store={store} render={(layers) => layers.map((layer) => <FadeText key={layer.key} op={layer.op} style={remapFor(layer.theme, styleDefinitions).lead} text={LEAD} maxFontSizeMultiplier={TextScale.CARD} testID="theme-fade-text" />)} />
       </View>
       {AUTO_DARK_AVAILABLE ? <AutoDarkRow onChange={onAuto} styles={styles} fade={store} /> : null}
+      {earlyNote ? (
+        <View>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.earlyNote}>{EARLY_NOTE}</Text>
+          <FadeSpot store={store} render={(layers) => layers.map((layer) => <FadeText key={layer.key} op={layer.op} style={remapFor(layer.theme, styleDefinitions).earlyNote} text={EARLY_NOTE} maxFontSizeMultiplier={TextScale.CARD} testID="theme-fade-text" />)} />
+        </View>
+      ) : null}
       <View style={styles.list}>
-        {themeList.map((option) => (
+        {courts.map((option) => (
           <ThemeCard key={option.name} option={option} active={theme === option.name} onPick={onPick} styles={styles} fade={store} pop={opened.current} />
         ))}
       </View>
@@ -83,6 +98,7 @@ export default function ThemePage() {
 const styleDefinitions = StyleSheet.create({
   lead: { ...typography.small, color: colors.textMuted, lineHeight: 20, paddingBottom: spacing.lg },
   list: { gap: spacing.sm },
+  earlyNote: { ...typography.caption, color: colors.textMuted, paddingBottom: spacing.sm },
   // The edge is its own layer (cardEdge), not a border here: a phone draws a view's border over
   // everything inside it, so the new court's edge would cover the fading copy of the old one.
   card: {
