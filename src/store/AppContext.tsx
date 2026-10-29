@@ -83,6 +83,7 @@ import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
 import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
+import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
 import { noteStep, reportError } from '@/lib/crashReporting';
@@ -3748,7 +3749,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // This phone stops getting the account's alerts while the session can still take its address off (as Log out does),
       // and your Up to hit ends (endCheckInFor).
       await Promise.all([endCheckInFor(me), forgetPushToken()]);
-      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush(); throw err; }
+      try { await remoteAuth.signOutEverywhere(); } catch (err) { void registerForPush({ ask: !ALERTS_WHY }); throw err; }
     }
     // Nor this iPhone's own "Workout detected" alerts (build 15, workoutWatch).
     void stopWorkoutWatch();
@@ -4373,6 +4374,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     placeMine(fix, got.until);
     void loadLastSeen();
     onFix?.({ lat: fix.lat, lng: fix.lng });
+    // Up to hit went through: a moment alerts plainly help (the "why turn on alerts" card, off until he picks it).
+    void askForAlertsAt('up-to-hit');
     return null;
   }, [loadLastSeen]);
 
@@ -4485,6 +4488,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (took) setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hit.id ? { ...h, invitedIds: took } : h)) }));
         else showToast({ title: 'Your hit is up, but the invites didn’t go', body: 'Only you can see it for now. Call it off and post it again.', icon: 'alert-circle-outline' });
       }
+      // The hit is up: someone joining it is worth an alert (the "why turn on alerts" card, off until he picks it).
+      void askForAlertsAt('hit-posted');
     }
     return hit.id;
   }, [requireUser]);
@@ -4546,6 +4551,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return result;
     }
     const conversationId = result.conversationId;
+    // In: the hit's chat is worth an alert (the "why turn on alerts" card, off until he picks it).
+    void askForAlertsAt('hit-joined');
     if (conversationId) {
       setState((prev) => ({ ...prev, hitRequests: prev.hitRequests.map((h) => (h.id === hitId ? { ...h, conversationId } : h)) }));
       // The hit's chat was just made (or joined) on the server: bring it in so it can open.
@@ -8846,6 +8853,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (live(me, userId) && userId !== me) void remote.setFollow(me!, userId, !following).then((r) => { if (r === 'refused' && !following) followRefused(userId); });
+      // A follow (not an undo's): a follow back is worth an alert (the "why turn on alerts" card, off until he picks it).
+      if (live(me, userId) && userId !== me && !following && !quiet) void askForAlertsAt('follow');
       // The buzz answers the tap itself, not the redraw that follows it.
       if (me && userId !== me && !noBuzz) following ? haptics.untap() : haptics.tap();
       // Unfollowing a public account is one tap, so one tap takes it back.

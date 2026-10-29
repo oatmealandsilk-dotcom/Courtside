@@ -53,8 +53,13 @@ let currentToken: string | null = null;
 
 export type PushState = 'on' | 'off' | 'unavailable';
 
-/** Asks once for permission (the phone never asks twice), then saves this phone's push address to the account. */
-export async function registerForPush(): Promise<PushState> {
+/**
+ * Asks once for permission (the phone never asks twice), then saves this
+ * phone's push address to the account. `ask: false` never asks: it only saves
+ * the address if alerts are already allowed (with the "why turn on alerts"
+ * card on, alertsWhy.ts, the question waits for that card's own button).
+ */
+export async function registerForPush({ ask = true }: { ask?: boolean } = {}): Promise<PushState> {
   try {
     if (Platform.OS === 'web' || !Device.isDevice || !supabase) return 'unavailable';
     const projectId = (Constants.expoConfig?.extra as { eas?: { projectId?: string } } | undefined)?.eas?.projectId
@@ -63,7 +68,7 @@ export async function registerForPush(): Promise<PushState> {
     // Android: its alert channels first (Android 13 shows the alerts question only once one exists).
     await setUpNotificationChannels();
     let { status } = await Notifications.getPermissionsAsync();
-    if (status === 'undetermined') status = (await Notifications.requestPermissionsAsync()).status;
+    if (status === 'undetermined' && ask) status = (await Notifications.requestPermissionsAsync()).status;
     if (status !== 'granted') return 'off';
     const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
     const { error } = await supabase.rpc('save_push_token', { t: token, p: Platform.OS });
