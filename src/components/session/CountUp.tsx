@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-native';
 import Reanimated, { Easing, cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
@@ -16,10 +16,12 @@ const AnimatedInput = Reanimated.createAnimatedComponent(TextInput);
  * never makes it stutter. With Reduce Motion on, it simply shows the number.
  * See CountUp.web for the browser's.
  */
-export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
+export function CountUp({ value, from = 0, resume = false, part = 'int', delay = 0, duration = 700, play = true, style, maxFontSizeMultiplier }: {
   value: number;
   /** Where the count starts (0 unless a clock starts at its first hour). */
   from?: number;
+  /** A new value after the first counts on from the number on show, not from `from` (the sign-up card's rating as it is typed). */
+  resume?: boolean;
   part?: CountPart;
   delay?: number;
   duration?: number;
@@ -30,12 +32,16 @@ export function CountUp({ value, from = 0, part = 'int', delay = 0, duration = 7
 }) {
   const reduced = useReducedMotion();
   const v = useSharedValue(play && !reduced ? from : value);
+  const shownOnce = useRef(false);
   useEffect(() => {
+    const onward = resume && shownOnce.current;
+    shownOnce.current = true;
     cancelAnimation(v);
     if (!play || reduced) { v.value = value; return; }
-    v.value = from;
+    // Onward: the timing starts from where the count stopped, the number on show.
+    if (!onward) v.value = from;
     v.value = withDelay(delay, withTiming(value, { duration, easing: Easing.out(Easing.cubic) }));
-  }, [value, from, play, reduced, delay, duration, v]);
+  }, [value, from, resume, play, reduced, delay, duration, v]);
   const animatedProps = useAnimatedProps(() => {
     const text = countText(v.value, part);
     return { text, defaultValue: text } as never;

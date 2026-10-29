@@ -21,7 +21,9 @@ import { OfficialCheck } from '@/components/OfficialCheck';
 import { useTheme } from '@/theme/ThemeProvider';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SCALES } from '@/features/players/ratingScales';
-import { colors, font, lift } from '@/theme';
+import { colors, font, inkOn, lift } from '@/theme';
+import { TextScale } from '@/theme/textScale';
+import { useUsers } from '@/store/AppContext';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { initials } from '@/lib/format';
 import { EaseSwatch, GlideText, RollRating, SoftSwap, SoftText } from './SetupMotion';
@@ -208,15 +210,32 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const filled = look.filled;
   // The avatar's disc: a deeper shade of a filled card; else the brand once there is a name, the card's lines before.
   const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines;
+  const face = draft.roomy ? 52 : 44;
+  // A photo covers the disc (Avatar's own lookup): then the initials are never drawn.
+  const users = useUsers();
+  const photo = !!(user.avatarUrl ?? users.find((u) => u.avatarSeed === user.avatarSeed || u.id === user.avatarSeed)?.avatarUrl);
+  const surface = surfaceWord[p.preferredSurface];
+  const cut = surface.lastIndexOf(' ');
+  const surfaceKind = cut > 0 ? surface.slice(0, cut) : surface;
+  const surfaceTail = cut > 0 ? `\u00A0${surface.slice(cut + 1)}` : '';
+  const [handWord, backhandWord] = handsLine(p).split(' · ');
   const spoken = `Your card: ${name || 'no name yet'}, ${town || 'no town yet'}, ${rating ? `${system} ${rating}` : 'no rating yet'}${draft.years === null ? '' : `, playing ${draft.years === 0 ? 'less than a year' : `${draft.years} ${draft.years === 1 ? 'year' : 'years'}`}`}.`;
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, draft.roomy && styles.setupRoomy, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
       <CardWash look={look} radius={corner(16)} />
       {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
       <View style={styles.setupTop}>
-        <SoftSwap token={`${initials(name || ' ')}|${disc}`}>
-          <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={draft.roomy ? 52 : 44} style={{ backgroundColor: disc }} />
-        </SoftSwap>
+        {/* The disc and its initials change apart: a new disc colour grows in over the old; new initials swap on the same disc. */}
+        <View>
+          <SoftSwap token={disc}>
+            <Avatar plain={!photo} name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={face} style={{ backgroundColor: disc }} />
+          </SoftSwap>
+          {photo ? null : (
+            <View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.setupInitials]}>
+              <SoftText whole text={initials(name)} color={inkOn(disc)} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.setupInitial, { fontSize: face * 0.38 }]} slot={{ alignSelf: 'center', width: face }} />
+            </View>
+          )}
+        </View>
         <View style={styles.identityWords}>
           <SoftText text={name || 'Your name'} color={name ? look.ink : look.faint} maxFontSizeMultiplier={1.3} style={styles.setupName} />
           <View style={styles.setupHandleLine}>
@@ -236,9 +255,16 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
             <GlideText text={playStyleLabel[p.playStyle]} style={[styles.small, { color: look.muted }]} />
             <Text style={[styles.small, { color: look.muted }]}> · </Text>
             {filled ? <Swatch surface={p.preferredSurface} look={look} /> : <EaseSwatch color={colors[surfaceSlot(p.preferredSurface)]} style={styles.setupSwatch} />}
-            <SoftText text={surfaceWord[p.preferredSurface]} color={look.muted} style={styles.small} slot={styles.setupTownSlot} />
+            {/* Only the kind changes ('Hard' to 'Clay'); ' court' stays and glides with it. */}
+            <GlideText text={surfaceKind} style={[styles.small, { color: look.muted }]} />
+            <Text numberOfLines={1} style={[styles.small, styles.shrink, { color: look.muted }]}>{surfaceTail}</Text>
           </View>
-          <SoftText text={handsLine(p)} color={look.muted} style={styles.small} />
+          {/* The hand and the backhand change apart: a new hand glides what follows, a new backhand swaps only itself. */}
+          <View style={styles.setupLine}>
+            <GlideText text={handWord} style={[styles.small, { color: look.muted }]} />
+            <Text numberOfLines={1} style={[styles.small, styles.setupHandle, { color: look.muted }]}>{'\u00A0·\u00A0'}</Text>
+            <SoftText text={backhandWord} color={look.muted} style={styles.small} slot={styles.setupTownSlot} />
+          </View>
         </View>
       ) : null}
       <SetupFacts look={look} roomy={draft.roomy} cells={[{ key: 'years', figure: years, empty: '– yrs', label: 'Playing' }, { key: 'level', figure: level, empty: '–', label: 'Level', wide: true }]} />
@@ -384,7 +410,8 @@ const styles = StyleSheet.create({
   setupRoomy: { padding: 20 },
   setupGameRoomy: { marginTop: 12 },
   setupFactsRoomy: { marginTop: 16, paddingTop: 16 },
-  setupNarrow: { flexGrow: 0, flexBasis: 96 },
+  // Exactly 96pt: a long level is cut short in its own cell, never squeezing this one (round 4 review: the divider moved).
+  setupNarrow: { flexGrow: 0, flexShrink: 0, flexBasis: 96 },
   // The handle and its dot, then the town in the rest of the line (cut short there, never the handle).
   setupHandleLine: { flexDirection: 'row', alignItems: 'baseline', minWidth: 0 },
   setupHandle: { flexShrink: 0 },
@@ -392,4 +419,9 @@ const styles = StyleSheet.create({
   // Swatch's own square (9pt, a 2pt corner, 5pt before the word), its colour easing.
   setupSwatch: { width: 9, height: 9, borderRadius: 2, marginRight: 5 },
   setupWide: { flexGrow: 1 },
+  // The hand line: the hand, its dot, then the backhand in the rest of the line.
+  setupLine: { flexDirection: 'row', alignItems: 'center', minWidth: 0 },
+  // The initials over the disc, where Avatar draws its own.
+  setupInitials: { alignItems: 'center', justifyContent: 'center' },
+  setupInitial: { ...font('700'), textAlign: 'center' },
 });
