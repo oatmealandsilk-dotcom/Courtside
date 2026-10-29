@@ -25,7 +25,7 @@ import * as Device from 'expo-device';
  * all, never on the app's first launch, and never to someone whose alerts are
  * already on. A browser has no alerts: alertsWhy.web.ts does nothing.
  */
-export const ALERTS_WHY = false;
+export const ALERTS_WHY = true;
 
 export type AlertMoment = 'up-to-hit' | 'hit-posted' | 'hit-joined' | 'follow';
 

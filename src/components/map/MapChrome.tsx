@@ -1411,7 +1411,7 @@ export const COURT_CARD_MORE_HITS: boolean = false;
  * peeking at the right edge. One hit: a single box the card's full width, nothing to swipe. Taps do what they
  * do on Community. false: the card as it is, one quiet line per hit (one beside clips, two without).
  */
-export const COURT_CARD_HIT_BOXES: boolean = false;
+export const COURT_CARD_HIT_BOXES: boolean = true;
 /** How much of the next hit box shows at the row's right edge, so the row reads as one to swipe. */
 const HIT_BOX_PEEK = 28;
 
