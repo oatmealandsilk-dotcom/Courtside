@@ -1523,3 +1523,22 @@ export async function setFoundVia(choice: FoundVia | null): Promise<boolean> {
 }
 /** What the demo account answered this visit, if anything (the demo Links page adds it to its sample). */
 export const demoFoundViaAnswer = () => demoFoundVia;
+
+/* ------------------- "Show your tennis to friends?" (200) ------------------- */
+
+/**
+ * Tells the server this phone runs a version that has "Show your tennis to
+ * friends?" (app/auto-log-ask), so its one phone alert may go to this
+ * account (migration 200 sends it only to accounts marked this way: an older
+ * version, as the store's build 22, could not show the card the alert opens).
+ * Once is enough; asking again changes nothing. Best effort: a database a
+ * migration behind, offline, or the demo, and nothing happens.
+ */
+export async function markAutoLogAskReady(): Promise<void> {
+  if (!supabase) return;
+  try {
+    await supabase.rpc('auto_log_ask_ready');
+  } catch {
+    /* best effort */
+  }
+}

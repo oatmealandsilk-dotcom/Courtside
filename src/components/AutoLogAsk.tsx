@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { router, usePathname } from 'expo-router';
 
 import { isBusy } from '@/components/HitFollowUp';
+import { markAutoLogAskReady } from '@/data/api';
 import { AUTO_LOG_ASK, demoAsk, hasAutoTennis, readAsked } from '@/features/activity/autoLogAsk';
 import { isDemo } from '@/features/activity/flags';
 import { useFeedSwiped } from '@/features/feed/firstSwipe';
@@ -16,6 +17,8 @@ import { useApp } from '@/store/AppContext';
 const SETTLE_MS = 2500;
 /** Something else was up when the moment came: looked at again this much later. */
 const RETRY_MS = 4000;
+/** Accounts this launch has already told the server it can show the card (once per launch is plenty). */
+const toldReady = new Set<string>();
 
 /**
  * Opens "Show your tennis to friends?" (app/auto-log-ask) by itself, once
@@ -45,6 +48,13 @@ export function AutoLogAsk({ enabled }: { enabled: boolean }) {
   // The demo only when asked for (?ask=auto-log, read on whatever page it is opened at), so it never stands over a walk-through.
   const demoWanted = !!demoAsk();
   const live = enabled && !!currentUserId && (!isDemo(currentUserId) || demoWanted);
+  // This version can show the card, so the server's one alert may come to this account (migration 200
+  // sends it only then: an older version, as the store's build 22, could not open it). Never the demo's.
+  useEffect(() => {
+    if (!live || !currentUserId || isDemo(currentUserId) || toldReady.has(currentUserId)) return;
+    toldReady.add(currentUserId);
+    void markAutoLogAskReady();
+  }, [live, currentUserId]);
   useEffect(() => {
     if (!live || !currentUserId) return undefined;
     let on = true;
@@ -52,6 +62,11 @@ export function AutoLogAsk({ enabled }: { enabled: boolean }) {
     void readAsked(currentUserId).then((v) => { if (on) setAsked(v); });
     return () => { on = false; };
   }, [live, currentUserId]);
+
+  // Up by any way (the alert, Settings): it has been asked this app session, never put up again by itself.
+  useEffect(() => {
+    if (pathname === AUTO_LOG_ASK) { opened.current = true; setAsked(true); }
+  }, [pathname]);
 
   const due = live && asked === false && autoLogSharing === null && hasAutoTennis(currentUserId, sessions, detectedActivities);
   const clear = curtainDown && !touring && !uploading && !isBusy(pathname) && pathname !== AUTO_LOG_ASK && !waitOnFeed;

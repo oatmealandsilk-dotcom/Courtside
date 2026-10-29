@@ -297,14 +297,17 @@ function askLine(upToHit: boolean, teen: boolean, noBirthday: boolean): string {
  * the people you follow, in the order you followed them; none, an empty list
  * (never a stranger, never a made-up face). Never anyone who could not see
  * your pin or you would not want named: whoever you blocked, whoever blocked
- * you, whoever you muted, a suspended account.
+ * you, whoever you muted, a suspended account. `includeMuted`: muted ones
+ * too, for an ask whose yes reaches them as well (the server shows sessions
+ * that log themselves to everyone who follows each other with you, muted or
+ * not, so "Show your tennis to friends?" names them all).
  */
-export function useFriendsBack(): User[] {
+export function useFriendsBack({ includeMuted = false }: { includeMuted?: boolean } = {}): User[] {
   const { users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds } = useApp();
   return useMemo(() => {
     if (!currentUserId) return [];
     const followsMe = new Set(followEdges.filter((e) => e.followingId === currentUserId).map((e) => e.followerId));
-    const hidden = new Set([...blockedIds, ...blockedMeIds, ...mutedIds]);
+    const hidden = new Set([...blockedIds, ...blockedMeIds, ...(includeMuted ? [] : mutedIds)]);
     const byId = new Map(users.map((u) => [u.id, u]));
     const out: User[] = [];
     for (const id of followingIds) {
@@ -313,7 +316,7 @@ export function useFriendsBack(): User[] {
       if (u && !u.suspended && !out.includes(u)) out.push(u);
     }
     return out;
-  }, [users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds]);
+  }, [users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds, includeMuted]);
 }
 
 /** The faces drawn: the first three. */

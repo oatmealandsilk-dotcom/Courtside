@@ -26,9 +26,9 @@ import { TextScale, buttonShape, colors, radius, spacing, typography } from '@/t
  * The map's "Who can see you" card (design E1, app/map-visibility), in the
  * same place and with the same motion: on its left edge, the faces and names
  * of the friends who follow you back, the ones a yes shows them to ("Sam,
- * Marcus and 5 friends will see it"); the question; one line on who sees
- * them and what of them (an adult's heart rate, zones and calories; under
- * 18 or no birthday, only when and how long); one on what it brings.
+ * Marcus and 5 friends will see them"); the question; one line on who sees
+ * them and what of them (heart rate, zones and calories, at any age since
+ * migration 199); one on what it brings.
  * "Show to friends" is the big, solid green button. "Keep private" is a
  * plain text button under it: smaller, but in the page's own ink, one tap,
  * and saved as a real answer (Only me), like iOS's own "Not Now" (Apple's
@@ -41,7 +41,8 @@ export default function AutoLogAsk() {
   const reduce = useReducedMotion();
   const params = useLocalSearchParams<{ from?: string; preview?: string }>();
   const { actions, autoLogSharing, currentUser, currentUserId, detectedActivities } = useApp();
-  const friends = useFriendsBack();
+  // Everyone a yes shows them to: muted friends too (the server's rule), never blocked or suspended ones.
+  const friends = useFriendsBack({ includeMuted: true });
   // The demo can show a teen's card (`preview=teen`, or `?ask=teen`); a real account is always its own age.
   const teen = isDemo(currentUserId) && (params.preview === 'teen' || demoAsk() === 'teen');
   const [busy, setBusy] = useState<AutoLogAudience | null>(null);
@@ -173,7 +174,7 @@ export default function AutoLogAsk() {
             <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>Show your tennis to friends?</Text>
             {/* Apple 5.1.3: who sees them and exactly what of them, said before the yes. */}
             <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(sourcesWords(currentUserId, detectedActivities), currentUser, teen)}</Text>
-            <Text {...EVEN} style={[styles.cardLine, EVEN_WEB]}>Friends can like and comment on them in Activities. Change it anytime in Settings.</Text>
+            <Text {...EVEN} style={[styles.cardLine, EVEN_WEB]}>Right now only you see them. Friends can like and comment on them in Activities. Change it anytime in Settings.</Text>
           </ScrollView>
           <View style={styles.cardActions}>
             {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}

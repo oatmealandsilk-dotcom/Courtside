@@ -2,7 +2,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { DetectedActivity, PracticeSession, User } from '@/data/types';
 import { sourceWord } from '@/features/activity/recent';
-import { friendsAtMost } from '@/features/activity/autoLogSharing';
 
 /*
  * "Show your tennis to friends?" (owner, Oct 29: "Can you somehow push them
@@ -54,23 +53,23 @@ export function sourcesWords(me: string | null, activities: Pick<DetectedActivit
 }
 
 /**
- * The card's one line: who sees them and what of them, by today's rules
- * (consentLine's): an adult's show their time, heart rate, zones and
- * calories; anyone else's (under 18, or no birthday given) only when and how long.
+ * The card's one line, said as what a yes would do (nothing is shared until
+ * then): who would see them and what of them, by today's rules (consentLine's,
+ * migration 199): their time, heart rate, zones and calories, at any age.
+ * `user` and `teen` are kept so a teen's card reads the same way.
  */
-export function askLine(sources: string, user: Pick<User, 'ageGroup'> | null | undefined, teen = false): string {
-  const start = `Your sessions from ${sources} show to friends who follow you back`;
-  return teen || friendsAtMost(user) ? `${start}: when you played and for how long, no heart rate.` : `${start}, with heart rate, zones and calories.`;
+export function askLine(sources: string, _user?: Pick<User, 'ageGroup'> | null, _teen = false): string {
+  return `Your sessions from ${sources} will show to friends who follow you back, with heart rate, zones and calories.`;
 }
 
-/** "Sam, Marcus and 5 friends will see it" (real friends who follow you back; none, no line). */
+/** "Sam, Marcus and 5 friends will see them" (real friends who follow you back; none, no line). */
 export function willSeeWords(people: Pick<User, 'name'>[]): string {
   const first = people.map((u) => u.name.split(' ')[0]);
   if (!first.length) return '';
-  if (first.length === 1) return `${first[0]} will see it`;
-  if (first.length <= 3) return `${first.slice(0, -1).join(', ')} and ${first[first.length - 1]} will see it`;
+  if (first.length === 1) return `${first[0]} will see them`;
+  if (first.length <= 3) return `${first.slice(0, -1).join(', ')} and ${first[first.length - 1]} will see them`;
   const rest = first.length - 2;
-  return `${first.slice(0, 2).join(', ')} and ${rest} ${rest === 1 ? 'friend' : 'friends'} will see it`;
+  return `${first.slice(0, 2).join(', ')} and ${rest} ${rest === 1 ? 'friend' : 'friends'} will see them`;
 }
 
 /**
