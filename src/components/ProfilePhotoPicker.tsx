@@ -10,10 +10,12 @@ import { useTheme } from '@/theme/ThemeProvider';
  * uses it as it is; a group chat passes its own picture (`preview`) and
  * words (`label`), so the same picker serves both.
  */
-export function ProfilePhotoPicker({ value, name, onChange, label = 'Change profile photo', preview }: {
+export function ProfilePhotoPicker({ value, name, onChange, label = 'Change profile photo', accessibilityLabel, preview }: {
   value?: string; name: string; onChange: (uri: string) => void;
   /** The link's words under the picture. */
   label?: string;
+  /** What a screen reader says, when it should differ from the words shown (Edit profile's "Edit picture"). */
+  accessibilityLabel?: string;
   /** Drawn in place of the default 88px avatar. */
   preview?: React.ReactNode;
 }) {
@@ -29,7 +31,7 @@ export function ProfilePhotoPicker({ value, name, onChange, label = 'Change prof
   return <View style={{alignItems:'center',gap:12,paddingVertical:16}}>
     {/* Back from the crop means the wrong photo: straight back into your photos to pick again. */}
     {cropping ? <CircleCrop uri={cropping} onDone={(uri) => { setCropping(null); onChange(uri); }} onCancel={() => { setCropping(null); void choose(); }} /> : null}
-    <Pressable accessibilityRole="button" accessibilityLabel={label} style={{alignItems:'center',gap:12}} onPress={() => { void choose(); }}>{preview ?? <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>}<Text style={{color:colors.brand,...font('600')}}>{label}</Text></Pressable>
+    <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} style={{alignItems:'center',gap:12}} onPress={() => { void choose(); }}>{preview ?? <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>}<Text style={{color:colors.brand,...font('600')}}>{label}</Text></Pressable>
     {!!error && <Text style={{color:colors.danger}}>{error}</Text>}
   </View>;
 }
