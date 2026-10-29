@@ -34,7 +34,6 @@ import { FIND_PLAYERS_ROOM, FeedFindPlayers, useFindPlayersShown } from '@/compo
 import { FollowPill } from '@/components/FollowPill';
 import { START_UNDER, useNearYouAuthors } from '@/features/activity/nearYou';
 import { useConnectRow } from '@/features/activity/autoLog';
-import { useWatchTip } from '@/features/activity/watchTip';
 import { QuestionCard } from '@/components/QuestionCard';
 import { PostCard } from '@/components/PostCard';
 import { BrandMark } from '@/components/BrandMark';
@@ -519,14 +518,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   }, [active, immersion, punch]);
   const [visit, setVisit] = useState(0);
   const focused = useIsFocused();
-  // Also, however many you follow, while the "Connect your watch" card has something to offer (owner, Oct 6), or
-  // while the watch tip is due (connected, no tennis session in from it yet; features/activity/watchTip, Oct 28).
-  // Once there, it stays: following your tenth player, or connecting, from it never pulls it out from under you.
+  // Also, however many you follow, while the "Connect your watch" card has something to offer (owner, Oct 6). The
+  // watch tip never opens Activities on this page by itself (owner, Oct 29, "2-4" / "Ship", without that change):
+  // it shows when you are on this page. Once there, it stays: following your tenth player, or connecting, from it never pulls it out from under you.
   // Those two are only final once heard (switches, connections, this phone's Not now and Got it): decided as
   // Activities comes on show, with a short grace for a first answer on its way; one heard after the feed is up
   // waits until it is out of sight at its top, so no page is ever slipped in over the one being read (review, Oct 28).
   const connectRow = useConnectRow();
-  const watchTip = useWatchTip();
   const actsShown = !!scope?.activities && !paused && focused;
   const actsCameAt = useRef<number | null>(null);
   if (!actsShown) actsCameAt.current = null;
@@ -534,7 +532,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const actsStartKept = useRef(false);
   if (!actsStartKept.current && !!scope?.activities && ready) {
     if (followingIds.length < START_UNDER) actsStartKept.current = true;
-    else if (connectRow.known && watchTip.known && (connectRow.offer || watchTip.due)
+    else if (connectRow.known && connectRow.offer
       && (actsShown ? Date.now() - (actsCameAt.current ?? 0) < ACTS_GRACE_MS : active === 0)) actsStartKept.current = true;
   }
   const actsStart = !!scope?.activities && actsStartKept.current;
