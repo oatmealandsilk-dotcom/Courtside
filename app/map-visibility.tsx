@@ -269,6 +269,8 @@ function askTitle(upToHit: boolean): string {
  */
 const EVEN = { lineBreakStrategyIOS: 'push-out', textBreakStrategy: 'balanced' } as const;
 const EVEN_WEB = Platform.OS === 'web' ? ({ textWrap: 'pretty' } as unknown as TextStyle) : null;
+/** A short label over two lines: both about as long. */
+const BALANCE_WEB = Platform.OS === 'web' ? ({ textWrap: 'balance' } as unknown as TextStyle) : null;
 
 /** When Up to hit tapped now ends by itself: "at 10pm", or "in 2 hours" from 8pm on (checkInEnds). */
 function endsWords(now: Date = new Date()): string {
@@ -373,7 +375,8 @@ export function Faces({ people, words, label, lines }: { people: User[]; /** Sai
           </View>
         ))}
       </View>
-      <Text numberOfLines={lines ?? 1} maxFontSizeMultiplier={TextScale.CARD} style={styles.whoNames}>{names}</Text>
+      {/* More than one line (another ask's): even lines, never one word alone on the last. */}
+      <Text numberOfLines={lines ?? 1} maxFontSizeMultiplier={TextScale.CARD} {...((lines ?? 1) > 1 ? EVEN : null)} style={[styles.whoNames, (lines ?? 1) > 1 && BALANCE_WEB]}>{names}</Text>
     </View>
   );
 }
