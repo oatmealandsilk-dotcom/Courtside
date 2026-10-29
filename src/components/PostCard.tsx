@@ -39,6 +39,7 @@ import { colors, font, radius, spacing, typography } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 interface Props {
   /** Opens the comments; without it the comment button behaves like a tap on the card. */
@@ -191,6 +192,7 @@ function PostCardInner({
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>
               {author.name}
             </Text>
+            <OfficialCheck userId={author.id} size={13} />
             <StreakFlame days={streak} />
             {author.isCoach ? (
               <Ionicons name="shield-checkmark" size={14} color={colors.brand} />
@@ -209,7 +211,7 @@ function PostCardInner({
           {/* Where, on its own line under the name, as Instagram sets it: the whole place, a tap opens the court. */}
           <PlaceLine court={post.court} location={post.location} />
         </View>
-        <LevelPill profile={author.profile} small />
+        <LevelPill profile={author.profile} userId={author.id} small />
       </Pressable>
 
       {post.imageUrl ? <ExpoImage accessibilityLabel={post.mediaLabel ?? "Post photo"} source={{uri:post.imageUrl}} style={styles.photo} contentFit="cover" cachePolicy="memory-disk"/> : null}

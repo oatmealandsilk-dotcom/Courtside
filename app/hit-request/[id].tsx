@@ -88,7 +88,7 @@ function WhosIn({ hit }: { hit: HitRequest }) {
                 {/* The name with its level, the way Near you lists players: tennis context with the person. */}
                 <View style={styles.nameRow}>
                   <Text style={styles.name} numberOfLines={1}>{you ? 'You' : user.name}</Text>
-                  <LevelPill profile={user.profile} small />
+                  <LevelPill profile={user.profile} userId={user.id} small />
                 </View>
                 {/* Every row two lines, so they line up: the poster's role, a player's handle, or that you're in. */}
                 <Text style={styles.meta} numberOfLines={1}>{role !== 'In' ? role : you ? 'You’re in' : `@${user.handle}`}</Text>

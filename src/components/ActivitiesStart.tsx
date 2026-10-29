@@ -180,7 +180,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
                   <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                     {/* The name has the whole first line; the rating sits with the reason on the second, so names are not cut short. */}
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
-                    <View style={styles.personMeta}><LevelPill profile={user.profile} small /><Text style={styles.reason} numberOfLines={1}>{reason}</Text></View>
+                    <View style={styles.personMeta}><LevelPill profile={user.profile} userId={user.id} small /><Text style={styles.reason} numberOfLines={1}>{reason}</Text></View>
                   </View>
                 </Pressable>
                 <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />

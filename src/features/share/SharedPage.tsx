@@ -19,6 +19,8 @@ import { FORMAT_LABEL, hitWhen, levelText } from '@/features/hits/format';
 import { rememberReferrer, rememberShareTarget } from '@/features/invite/referral';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
+import { isOfficial } from '@/features/players/official';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /**
  * What a link shared outside the app shows someone with no account: the
@@ -260,9 +262,9 @@ function ProfileCard({ preview }: { preview: SharePreview }) {
   return (
     <View style={[styles.card, { alignItems: 'center' }]}>
       <Avatar uri={who.avatarUrl} name={who.name} seed={who.id} size={84} ring={who.isCoach} />
-      <Text style={styles.profileName}>{who.name}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}><Text style={[styles.profileName, { marginTop: 0 }]}>{who.name}</Text><OfficialCheck userId={who.id} size={18} /></View>
       <Text style={styles.personLine}>@{who.handle}{who.location ? ` · ${who.location}` : ''}</Text>
-      {p.rating ? <View style={[styles.chip, styles.chipStrong, { marginTop: spacing.sm }]}><Text style={[styles.chipText, styles.chipStrongText]}>{p.skillSystem ?? 'NTRP'} {p.rating.toFixed(1)}</Text></View> : null}
+      {p.rating && !isOfficial(who.id) ? <View style={[styles.chip, styles.chipStrong, { marginTop: spacing.sm }]}><Text style={[styles.chipText, styles.chipStrongText]}>{p.skillSystem ?? 'NTRP'} {p.rating.toFixed(1)}</Text></View> : null}
       {p.bio ? <Text style={[styles.body, { textAlign: 'center' }]}>{p.bio}</Text> : null}
       <View style={styles.stats}>
         <Stat n={p.posts} label={p.posts === 1 ? 'post' : 'posts'} />

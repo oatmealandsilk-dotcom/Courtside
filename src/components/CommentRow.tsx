@@ -23,6 +23,7 @@ import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { useCommentsV2 } from '@/features/feed/commentsV2';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -153,7 +154,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
         <Pressable accessibilityRole={onPressBody || hold ? 'button' : undefined} accessibilityHint={holdHint} onPress={onPressBody} onLongPress={hold} delayLongPress={400} disabled={!onPressBody && !hold} style={({ pressed }) => [styles.bodyPress, pressed && !!hold && styles.bodyHeld]}>
           {/* Who, their streak's flame (3 days or more), when: one line, the name giving way first. */}
           <View style={styles.metaLine}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, big && styles.nameBig]} numberOfLines={1} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, big && styles.nameBig]} numberOfLines={1} onPress={openProfile}>{who?.name ?? 'Unknown'}</Text><OfficialCheck userId={who?.id} size={12} style={styles.flame} />
             <StreakFlame days={streak} size="small" style={styles.flame} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.meta, big && styles.metaBig]}>{relativeTime(comment.createdAt)}</Text>
           </View>

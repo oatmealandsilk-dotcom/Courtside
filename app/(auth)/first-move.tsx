@@ -260,7 +260,7 @@ export default function FirstMove() {
                     {/* The name gets the room; the level and why they are here sit under it. */}
                     <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName} numberOfLines={1}>{user.name}</Text>
-                      <View style={styles.personTop}><LevelPill profile={user.profile} small /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text></View>
+                      <View style={styles.personTop}><LevelPill profile={user.profile} userId={user.id} small /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{meta}</Text></View>
                     </View>
                     <FollowPill small following={followingIds.includes(user.id)} userId={user.id} onPress={() => follow(user)} name={user.name.split(' ')[0]} />
                   </View>

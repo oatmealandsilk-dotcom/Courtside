@@ -22,6 +22,7 @@ import { colors, font, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_ROUND2 } from '@/theme/look';
+import { OfficialCheck } from '@/components/OfficialCheck';
 
 /**
  * The post itself, at the top of its comments: who, the whole caption (never
@@ -95,9 +96,9 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
             {/* The name first and whole: its pills follow on the same line while there is room, and drop
                 under it on a narrow phone, rather than squeezing the name down to "J…" (Oct 5 audit). */}
             <View style={styles.badges}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1} onPress={openProfile} accessibilityRole="link" suppressHighlighting>{author.name}</Text><OfficialCheck userId={author.id} size={13} />
               <StreakFlame days={streak} style={styles.flame} />
-              <LevelPill profile={author.profile} small />
+              <LevelPill profile={author.profile} userId={author.id} small />
               {post && isNewHere(post) ? <NewHereTag short /> : null}
               {/* Admins only: pushed to the bottom of feeds (migration 152). Nothing at all for anyone else. */}
               {post ? <PushedDownTag post={post} /> : null}
