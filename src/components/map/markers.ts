@@ -135,8 +135,9 @@ export const LIT_CSS = `
  * "+2" open hits badge, scaled back to full size where cs-far shrinks its
  * court (to .72, a lit one to .84), so its number stays readable; on a small
  * court it also steps 4 px out (up and to the left: it sits on the court's top
- * left), so it covers no more of the court than up close. "cs-quiet" on the
- * still card: no pin takes a tap (the card does), and its pins settle in
+ * left), so it covers no more of the court than up close. The "cs-hit" dot
+ * sits on the same corner, under the badge, which already counts that hit.
+ * "cs-quiet" on the still card: no pin takes a tap (the card does), and its pins settle in
  * with a 4 px drop as they fade (cs-drop), as the map fades in under them.
  *
  * Open to hit is a class on a pin's own marker element (OPEN_CLASS), not a
@@ -845,15 +846,18 @@ export const hitsCountText = (n: number) => (n > 9 ? '9+' : `+${n}`);
 export const HIT_BADGE_MARK: boolean = false;
 
 /**
- * A tiny solid calendar, `px` square, in the badge's ink: its two rings, its top band, and the page under a
- * thin line of the badge's own colour. Drawn on a 14 unit grid, so at 7 px every line falls on a device pixel at 2x.
+ * A tiny solid calendar in the badge's ink, 7 px wide and 8 tall on either badge: its two rings, its top
+ * band, and the page under a 1 px line of the badge's own colour. Drawn in whole pixels, and 8 tall so it
+ * centres in the badge's 16 or 18 px inside on a whole pixel too: its straight top and bottom edges fall on
+ * device pixels at 1x, 2x and 3x (only its rounded corners are smoothed; side to side it goes where the
+ * centring puts it). Its body is 7 tall, the height of the digits.
  */
-function calendarMark(px: number): string {
-  return `<svg width="${px}" height="${px}" viewBox="0 0 14 14" style="display:block;flex:none;overflow:visible" aria-hidden="true">`
-    + `<rect x="0" y="2.5" width="14" height="11.5" rx="2.5" fill="${colors.brandInk}"/>`
-    + `<rect x="3" y="0" width="2.5" height="4" rx="1.25" fill="${colors.brandInk}"/>`
-    + `<rect x="8.5" y="0" width="2.5" height="4" rx="1.25" fill="${colors.brandInk}"/>`
-    + `<rect x="0" y="6" width="14" height="1.5" fill="${colors.brand}"/>`
+function calendarMark(): string {
+  return `<svg width="7" height="8" viewBox="0 0 7 8" style="display:block;flex:none" aria-hidden="true">`
+    + `<rect x="0" y="1" width="7" height="7" rx="1.5" fill="${colors.brandInk}"/>`
+    + `<rect x="1" y="0" width="1" height="2" fill="${colors.brandInk}"/>`
+    + `<rect x="5" y="0" width="1" height="2" fill="${colors.brandInk}"/>`
+    + `<rect x="0" y="3" width="7" height="1" fill="${colors.brand}"/>`
     + `</svg>`;
 }
 
@@ -868,21 +872,23 @@ function calendarMark(px: number): string {
  * Its spacing (Oct 29, owner: "make the spicing within the circle perfect"): a true circle `px` across while
  * what it says fits ("+3", "9+"), else a pill with the same room at each end, which grows outward, away from
  * the court (it is pinned by its right edge). The "+" is set small and centred on the digits' middle, so the
- * pair sits balanced in the circle; the digits are tabular and lifted half a pixel, so their ink, not their
+ * pair sits balanced in the circle; the digits are tabular and lifted a touch, so their ink, not their
  * line box, sits in the exact middle (measured on Apple's system font). `left`: its left edge (and top) from
  * the court's corner; `px`: across (a little bigger on a big lit court). None: nothing at all.
  */
 function hitsBadge(n: number, left: number, px = 20): string {
   if (!(n > 0)) return '';
   const fs = px > 20 ? 11 : 10;
-  // How far the ink is lifted to sit in the exact middle: Apple's font rounds its line box, so the 10 pt
-  // digits sit a little lower in theirs than the 11 pt ones do.
-  const lift = fs > 10 ? 1.2 : 0.5;
+  // How far the ink is lifted to sit in the exact middle: Apple's font rounds its line box, so the 11 pt
+  // digits sit a little lower in theirs than the 10 pt ones do. Measured at 2x and 3x in Clean and New York:
+  // the gaps above and below the ink match within half a device pixel (the browser lifts by whole device
+  // pixels, so the 11 pt lift of 1 is 2 of them at 2x and 3 at 3x).
+  const lift = fs > 10 ? 1 : 0.5;
   // A "1" is narrow in its tabular slot: its slot's spare right side goes, so its ink centres too.
   const digits = `<b style="display:block;font:inherit;transform:translateY(-${lift}px)${n === 1 ? ';margin-right:-1.25px' : ''}">${n > 9 ? 9 : n}</b>`;
   const plus = (side: 'left' | 'right') => `<b style="display:block;font-size:.8em;font-weight:700;transform:translateY(-${lift - 0.25}px);margin-${side}:-.5px">+</b>`;
   const said = HIT_BADGE_MARK
-    ? `${calendarMark(fs - 3)}<i style="display:block;width:${fs > 10 ? 2 : 1.5}px;flex:none"></i>${digits}${n > 9 ? plus('left') : ''}`
+    ? `${calendarMark()}<i style="display:block;width:${fs > 10 ? 2 : 1.5}px;flex:none"></i>${digits}${n > 9 ? plus('left') : ''}`
     : n > 9 ? `${digits}${plus('left')}` : `${plus('right')}${digits}`;
   // A pill's ends: the room round its ink about what is above and below it (the digits' last pixel of
   // side bearing taken off the right).
