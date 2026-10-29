@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 
 import { useApp } from '@/store/AppContext';
-import { pickedTheme, useTheme } from '@/theme/ThemeProvider';
+import { pickedTheme, replacePicked, useTheme } from '@/theme/ThemeProvider';
 import { joinedAfterCutoff, NEW_PLAYER_FALLBACK, themeAllowed } from '@/theme/earlyThemes';
 
 /**
@@ -12,14 +12,18 @@ import { joinedAfterCutoff, NEW_PLAYER_FALLBACK, themeAllowed } from '@/theme/ea
  * page never offers them another court, so nobody is moved off a court they
  * picked while using the app. Early members, guests, and everyone while there
  * is no cutoff: nothing happens.
+ *
+ * It swaps the saved court with replacePicked, not setTheme: a pick of a light
+ * court with Match phone on and the phone dark switches Match phone off, and
+ * this player never touched that switch.
  */
 export function EarlyThemesGate() {
   const { currentUser } = useApp();
-  const { theme, setTheme } = useTheme();
+  const { theme } = useTheme();
   const joinedAt = currentUser?.joinedAt;
   useEffect(() => {
     if (!joinedAfterCutoff(joinedAt)) return;
-    if (!themeAllowed(pickedTheme(), joinedAt)) setTheme(NEW_PLAYER_FALLBACK);
-  }, [joinedAt, theme, setTheme]);
+    if (!themeAllowed(pickedTheme(), joinedAt)) replacePicked(NEW_PLAYER_FALLBACK);
+  }, [joinedAt, theme]);
   return null;
 }

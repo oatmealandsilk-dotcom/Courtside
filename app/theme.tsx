@@ -16,7 +16,7 @@ import { learned } from '@/features/tips/tips';
 import { catchUpNow } from '@/theme/catchUp';
 import { useNavigation } from 'expo-router';
 import { useApp } from '@/store/AppContext';
-import { showEarlyMemberNote, themeAllowed } from '@/theme/earlyThemes';
+import { joinedAfterCutoff, showEarlyMemberNote, themeAllowed } from '@/theme/earlyThemes';
 
 const LEAD = 'Applies everywhere straight away. Pick the court you would rather be on.';
 /**
@@ -46,8 +46,16 @@ export default function ThemePage() {
   const { store, begin } = useThemeFade();
   // Every court for early members; Clean and Night for players who joined after the launch cutoff
   // (src/theme/earlyThemes.ts; no cutoff yet, so every court for everyone).
+  // Unless the account is known to have joined after the cutoff, the court you are on is always
+  // listed (and the one you were on as the page opened, so the list never shrinks under you): a
+  // guest, an account whose join time isn't read yet, or a link opened before the app has loaded
+  // keeps seeing their own court ticked; it is never taken off the page. A known new player has
+  // only Clean and Night (EarlyThemesGate has already moved them off any other).
   const joinedAt = useApp().currentUser?.joinedAt;
-  const courts = themeList.filter((option) => themeAllowed(option.name, joinedAt));
+  const [openedOn] = useState(pickedTheme);
+  const keepOwn = !joinedAfterCutoff(joinedAt);
+  const courts = themeList.filter((option) =>
+    themeAllowed(option.name, joinedAt) || (keepOwn && (option.name === pickedTheme() || option.name === openedOn)));
   const earlyNote = showEarlyMemberNote(joinedAt);
   // Found the themes: the dot on Profile's ☰ has done its job, however this page was reached.
   useEffect(() => { learned('theme'); }, []);
