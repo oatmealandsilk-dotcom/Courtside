@@ -53,7 +53,7 @@ export function tabsOnShow(): boolean {
  */
 const SEE_THROUGH = new Set([
   'compose', 'ask', 'comments', 'session-stats', 'who-played', 'health-share', 'post-menu', 'invite', 'log-session',
-  'session-tag', 'court-report', 'court-now', 'start-session', 'new-session', 'live-session', 'flyby', 'map-visibility',
+  'session-tag', 'court-report', 'court-now', 'start-session', 'new-session', 'live-session', 'flyby', 'map-visibility', 'auto-log-ask',
   'open-to-hit', 'tennis-sheet', 'review-request', 'hit-request/new', 'edit-post', 'share', 'pick-group', 'find-groups',
   'group-form', 'group-invite', 'pick-court', 'set-court', 'pick-session', 'ask-coach', 'messages/new', 'likes',
 ]);

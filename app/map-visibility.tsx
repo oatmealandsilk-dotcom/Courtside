@@ -299,7 +299,7 @@ function askLine(upToHit: boolean, teen: boolean, noBirthday: boolean): string {
  * your pin or you would not want named: whoever you blocked, whoever blocked
  * you, whoever you muted, a suspended account.
  */
-function useFriendsBack(): User[] {
+export function useFriendsBack(): User[] {
   const { users, currentUserId, followingIds, followEdges, blockedIds, blockedMeIds, mutedIds } = useApp();
   return useMemo(() => {
     if (!currentUserId) return [];
@@ -347,10 +347,10 @@ function friendsWords(people: User[]): string {
  * tone, never a cluster of bright bubbles. Real friends who follow you back
  * only, never strangers; with none, the card has neither.
  */
-function Faces({ people }: { people: User[] }) {
+export function Faces({ people, words, label, lines }: { people: User[]; /** Said beside the faces instead of just their names (another ask's). */ words?: string; /** What a screen reader says for the row instead. */ label?: string; /** Lines the words may take (one for the map's ask). */ lines?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const shown = people.slice(0, FACES);
-  const names = friendsWords(people);
+  const names = words ?? friendsWords(people);
   // Each face its own tone: the seed's, unless a face already shown has it; then the next one free.
   const tones = quietTints();
   const used: string[] = [];
@@ -361,7 +361,7 @@ function Faces({ people }: { people: User[] }) {
     return tint;
   });
   return (
-    <View style={styles.who} accessible accessibilityLabel={`${names} follow${people.length > 1 ? '' : 's'} you back`}>
+    <View style={styles.who} accessible accessibilityLabel={label ?? `${names} follow${people.length > 1 ? '' : 's'} you back`}>
       <View style={styles.faces}>
         {shown.map((u, i) => (
           <View key={u.id} style={[styles.faceRing, i > 0 && { marginLeft: -FACE_TUCK }]}>
@@ -370,7 +370,7 @@ function Faces({ people }: { people: User[] }) {
           </View>
         ))}
       </View>
-      <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.whoNames}>{names}</Text>
+      <Text numberOfLines={lines ?? 1} maxFontSizeMultiplier={TextScale.CARD} style={styles.whoNames}>{names}</Text>
     </View>
   );
 }

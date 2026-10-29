@@ -16,7 +16,7 @@ const OPEN = new Set([
 ]);
 
 const ASK: [RegExp, string][] = [
-  [/^\/(compose|edit-post|log-session|pick-session|start-session|new-session|live-session|share-session|share-card|health-share|pick-court|pick-location|pick-group|session-tag)$/, 'post'],
+  [/^\/(compose|edit-post|log-session|auto-log-ask|pick-session|start-session|new-session|live-session|share-session|share-card|health-share|pick-court|pick-location|pick-group|session-tag)$/, 'post'],
   [/^\/(ask|ask-coach)$/, 'ask a question'],
   [/^\/hit-request\/new$/, 'post a hit'],
   [/^\/(messages|share)(\/|$)/, 'message players'],

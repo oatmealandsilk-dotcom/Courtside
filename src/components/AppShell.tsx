@@ -14,6 +14,7 @@ import { TourOverlay } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
 import { MessageBanner } from './MessageBanner';
+import { AutoLogAsk } from './AutoLogAsk';
 import { HitFollowUp } from './HitFollowUp';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
@@ -66,7 +67,7 @@ const routes = Object.keys(paths).map(name => ({ key: name, name }));
  * The comments close themselves on Escape, with their own animation (see
  * DragSheet.web), so they are not here: a second step back closed the page under them too.
  */
-const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/set-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/tennis-sheet', '/review-request', '/start-session', '/live-session', '/new-session']);
+const SHEETS = new Set(['/compose', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/pick-court', '/set-court', '/ask', '/post-menu', '/edit-post', '/messages/new', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/auto-log-ask', '/open-to-hit', '/tennis-sheet', '/review-request', '/start-session', '/live-session', '/new-session']);
 const TAB_ORDER: string[] = Object.values(paths);
 /** How often an open app looks for new workouts and new Notifications rows: just over the two minutes the Apple Health look waits between looks. */
 const LIVE_LOOK_MS = 125_000;
@@ -295,7 +296,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // hide it everywhere.
   // The full map (owner, Oct 8: "without the feed community profile etc.") runs without it too:
   // the map fills the screen and its own Back (or the edge swipe) leaves it.
-  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
+  const phoneOnlyHide = ['/map', '/compose', '/edit-post', '/ask', '/ask-coach', '/coach-apply', '/pick-location', '/pick-court', '/set-court', '/invite', '/comments', '/session-stats', '/who-played', '/share', '/pick-group', '/find-groups', '/group-form', '/group-invite', '/likes', '/post-menu', '/log-session', '/pick-session', '/session-tag', '/hit-request/new', '/court-report', '/court-now', '/map-visibility', '/auto-log-ask', '/open-to-hit', '/wrapped', '/health-share', '/share-session', '/share-card', '/tennis-sheet', '/flyby', '/weekly-recap', '/review-request', '/start-session', '/live-session', '/new-session'].includes(pathname) || pathname === '/messages' || pathname.startsWith('/messages/');
   // The page the phone's bar sits over: the one on show, or, while a page that takes the bar away is
   // up (the Create box and a clip's comments among them, which leave the bar under them), the one it
   // was over. The quiet pill turns dark over a clip only on the Feed itself (TabBarLooks): a page
@@ -541,6 +542,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
     <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    {/* "Show your tennis to friends?", once, for a player who never chose who sees the tennis that logs itself: on the same terms. */}
+    <AutoLogAsk enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
     {/* "Still playing?", when a live session's clock reaches three hours: the same note, on the same terms. */}
     <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}

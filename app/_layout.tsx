@@ -154,6 +154,8 @@ function RootStack() {
       {/* Flyby's list, "At Alder Park today" (migration 130): a sheet over the page it came from (DragSheet). */}
       <Stack.Screen name="flyby" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       <Stack.Screen name="map-visibility" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
+      {/* "Show your tennis to friends?", asked once (features/activity/autoLogAsk): the map's small card, over the page it came up on. */}
+      <Stack.Screen name="auto-log-ask" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* Holding your own ring in Community's Open to hit row: until when, and how far (DragSheet). */}
       <Stack.Screen name="open-to-hit" options={{ presentation: 'transparentModal', animation: 'none', contentStyle: { backgroundColor: 'transparent' } }} />
       {/* The Tennis profile's small sheets: an injury or limit, a goal, every achievement (DragSheet). */}

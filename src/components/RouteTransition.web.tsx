@@ -24,6 +24,8 @@ SHEETS.add('/live-session');
 SHEETS.add('/new-session');
 // "Who can see you on the map?" sits over the map or Find Players the same way.
 SHEETS.add('/map-visibility');
+// So does "Show your tennis to friends?", the same small card.
+SHEETS.add('/auto-log-ask');
 // So does Open to hit's hold-to-edit sheet, over Find Players.
 SHEETS.add('/open-to-hit');
 // The Tennis profile's sheets (an injury or limit, a goal, every achievement) sit over the page the same way.

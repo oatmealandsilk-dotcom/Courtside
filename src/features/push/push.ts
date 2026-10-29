@@ -11,6 +11,7 @@ import { heardAlert } from '@/features/messages/incoming';
 import { isChatInFront } from '@/features/messages/chatInFront';
 import { setUpNotificationChannels } from '@/features/push/channels';
 import { STILL_PLAYING_ALERT } from '@/features/activity/liveSession';
+import { askFromAlert } from '@/features/activity/autoLogAsk';
 
 /**
  * Push notifications: alerts on the phone's lock screen for likes, replies,
@@ -116,7 +117,8 @@ export function listenForPushTaps(): () => void {
   const open = async (response: Notifications.NotificationResponse | null) => {
     const sent = response?.notification.request.content.data?.href;
     if (typeof sent !== 'string' || !sent.startsWith('/')) return;
-    const href = foundListFor(sent) ?? sent;
+    // "Show your tennis to friends?"'s one alert (migration 199) opens its card in this version.
+    const href = foundListFor(sent) ?? askFromAlert(sent) ?? sent;
     // One tap is its alert's name plus when that alert arrived. The name alone
     // is not enough: training-plan reminders reuse theirs every week
     // (courtside-plan-0 is every Monday), and next Monday's tap must still open.
