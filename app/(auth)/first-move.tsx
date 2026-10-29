@@ -194,6 +194,10 @@ export default function FirstMove() {
           verified.map((c) => byId.get(c.userId)).filter((u): u is User => fits(u) && townLabel(u.location) === myTown).slice(0, 2)
             .forEach((u) => { if (list.length < MOST) list.push({ user: u, meta: `Coach · ${myTown}`, section: 'coaches' }); });
         }
+        // A quiet city (round 2 review: Austin left @courtside and one person over an empty page): the rest of the
+        // verified coaches, from any town, by what they teach, never with a town or distance (the teen rows' look).
+        verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; })
+          .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
       } else if (TEEN_COACHES) {
         // A teen: the coaches the Coaching tab already shows them, by what they teach, never by where they are.
         verified.flatMap((c) => { const u = byId.get(c.userId); return fits(u) ? [{ u, c }] : []; }).slice(0, 3)

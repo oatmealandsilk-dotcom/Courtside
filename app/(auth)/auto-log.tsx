@@ -68,6 +68,12 @@ export default function AutoLog() {
     return out.length >= 2 ? out : [];
   }, [posts, users, currentUserId, blockedIds, blockedMeIds]);
   const [busy, setBusy] = useState<AutoLogSource | null>(null);
+  // Round 2 review: the sample card takes the page's spare height (no empty middle above the buttons), from 170 on an
+  // SE up to the feed's own tall card (4:5). Its slot grows into the room left and is measured; a guess from the window until then.
+  const contentW = Math.min(win.width, 460) - spacing.xl * 2;
+  const cardMax = Math.round(contentW * 1.25);
+  const [room, setRoom] = useState(0);
+  const cardH = Math.round(Math.max(170, Math.min(cardMax, room || win.height - 500)));
   // Setup's one step count (Oct 20 sweep).
   const setupCount = useSetupCount('auto-log', true);
   const [gaveUp, setGaveUp] = useState(false);
@@ -102,8 +108,6 @@ export default function AutoLog() {
     // Round 2 (Oct 29, owner: "3 and 5 specifically need to push more for ppl to put in information and connect"):
     // what they get, shown, not said. The feed's own sideways session card with sample numbers on their own name,
     // marked EXAMPLE; the real people already logging this way, when there are any; then who sees it, as before.
-    const contentW = Math.min(win.width, 460) - spacing.xl * 2;
-    const cardH = Math.max(170, Math.min(240, win.height - 560));
     const firstName = currentUser?.name?.split(' ')[0] || undefined;
     const sample = { ...SAMPLE_SESSION, source: auto.apple || !auto.whoop ? 'apple-health' as const : 'whoop' as const };
     const first = (u: User) => u.name.split(' ')[0];
@@ -116,9 +120,9 @@ export default function AutoLog() {
           {setupCount ? <Animated.View entering={enter(0)} style={styles.v2Bar}><SetupProgress count={setupCount} /></Animated.View> : null}
           <Animated.View entering={enter(0)} style={styles.head}>
             <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={2} style={styles.title}>Your tennis, logged for you</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>Connect once. Every hit of 20 minutes or more logs itself.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>Connect once. Your past week comes in first, then every hit logs itself.</Text>
           </Animated.View>
-          <Animated.View entering={enter(1)} style={styles.v2Card}>
+          <Animated.View entering={enter(1)} style={styles.v2Card} onLayout={(e) => setRoom(e.nativeEvent.layout.height)}>
             <SessionCard session={sample} width={contentW} height={cardH} author={firstName} eyebrow="EXAMPLE · TODAY" showSource play={play} people={[]} accessibilityHint="An example, not a real session" />
           </Animated.View>
           {loggers.length ? (
@@ -135,7 +139,7 @@ export default function AutoLog() {
           ) : null}
           {ready ? (
             <Animated.Text entering={enter(2)} style={styles.v2Who}>
-              {consentLine(auto.seenBy(auto.apple ? 'apple-health' : 'whoop'), currentUser, autoLogSharing)}{auto.apple ? ' Also adds sleep, steps and food to your Health page.' : ''}
+              {consentLine(auto.seenBy(auto.apple ? 'apple-health' : 'whoop'), currentUser, autoLogSharing)} Other workouts only you see until you post one.{auto.apple ? ' Also adds sleep, steps and food to your Health page.' : ''}
             </Animated.Text>
           ) : <View style={styles.v2WhoWaiting}><ActivityIndicator color={colors.textFaint} /></View>}
         </ScrollView>
@@ -214,10 +218,11 @@ const styleDefinitions = StyleSheet.create({
   // The redraw (ONBOARDING_V2): a plain hairline inset card, words only.
   cardV2: { ...setupLook.inset, padding: spacing.lg },
   // Round 2.
-  v2Scroll: { gap: 0 },
+  v2Scroll: { gap: 0, flexGrow: 1 },
   v2Bar: { marginBottom: setupLook.titleGap },
   v2Lead: { ...setupLook.lead },
-  v2Card: { marginTop: 20 },
+  // Grows into the page's spare height (never below 170, minHeight 0 so the card drawn in it never props it open).
+  v2Card: { marginTop: 20, flexGrow: 1, flexBasis: 170, minHeight: 0 },
   v2Faces: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
   v2Stack: { flexDirection: 'row' },
   // Each face ringed in the page's colour, so the overlap reads as three faces, not one shape.

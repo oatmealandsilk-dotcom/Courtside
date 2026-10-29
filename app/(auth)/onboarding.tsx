@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Animated, Easing, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { Redirect, router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { useAndroidBack } from '@/lib/androidBack';
@@ -17,6 +17,7 @@ import { useSetupCount } from '@/features/onboarding/setupCount';
 import { ONBOARDING_V2 } from '@/features/onboarding/onboardingV2';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { SCALES } from '@/features/players/ratingScales';
+import { notKnownAdult } from '@/features/players/age';
 import { perWeekText, playingFor, startedYearBounds, yearsFromStarted, yearsWords } from '@/features/players/tennisProfile';
 import { useTrackerPerWeek } from '@/features/players/usePerWeek';
 import { experienceLabel } from '@/lib/format';
@@ -107,6 +108,14 @@ const V2_LEADS: Record<number, string> = {
   0: 'Players near you find you by town and level.',
   1: 'This is what other players see.',
 };
+/**
+ * A teen's (round 2 review): a teen is never listed to strangers by town (players_in_town, migration 190) and is
+ * searched for by name or @handle only (migration 118), so the adults' lines would not be true for them.
+ */
+const V2_TEEN_LEADS: Record<number, string> = {
+  0: 'Friends find you by name and see your level.',
+  1: 'This is what your friends see.',
+};
 
 /** Opened from the Tennis profile to change your answers: the steps about you and your game, with Save on each. */
 const EDIT_STEPS = [0, 1, 3, 4];
@@ -188,6 +197,12 @@ function OnboardingSteps() {
   const [name, setName] = useState(currentUser?.name ?? '');
   const [location, setLocation] = useState(currentUser?.location ?? '');
   const [cityAt, setCityAt] = useState(currentUser?.cityAt ?? null);
+  // The live card's town (round 2 review): only a picked town, or what is in the box once it is left, never each keystroke ("Los Ang").
+  const [cardTown, setCardTown] = useState(location);
+  const typedTown = useRef(location);
+  // A tall phone (844pt and up, not an SE): the live card gets a little more room inside (round 2 review).
+  const tall = useWindowDimensions().height >= 780;
+  const changeTown = (next: string, at: { lat: number; lng: number } | null) => { setLocation(next); setCityAt(at); typedTown.current = next; if (at) setCardTown(next); };
   const [skillSystem, setSkillSystem] = useState<'NTRP' | 'UTR'>(existing?.skillSystem === 'UTR' ? 'UTR' : 'NTRP');
   // Joining, the rating starts empty (Oct 5): it used to start at 3.5, and
   // beginners kept it and were matched at the wrong level. "Not sure?" under
@@ -564,11 +579,11 @@ function OnboardingSteps() {
   const draft = useMemo(() => (currentUser ? {
     ...currentUser,
     name,
-    location,
+    location: cardTown,
     profile: { ...currentUser.profile, skillSystem: skillSystem as SkillSystem, rating, startedYear, playStyle, handedness, backhand, preferredSurface: surface },
-  } : null), [currentUser, name, location, skillSystem, rating, startedYear, playStyle, handedness, backhand, surface]);
+  } : null), [currentUser, name, cardTown, skillSystem, rating, startedYear, playStyle, handedness, backhand, surface]);
   const liveCard = (game: boolean) => (draft ? (
-    <PlayerCard variant="setup" user={draft} setup={{ rated: ratingValid, years: yearsOk ? typedYears : null, game }} />
+    <PlayerCard variant="setup" user={draft} setup={{ rated: ratingValid, years: yearsOk ? typedYears : null, game, roomy: tall }} />
   ) : null);
   const inviteShown = inviteOpen || !!prefilled || !!inviteCode || !!inviteNote;
 
@@ -586,7 +601,7 @@ function OnboardingSteps() {
             </View>
           </View>
           <View style={styles.v2Hairline} />
-          <LocationField row value={location} onChange={(next, at) => { setLocation(next); setCityAt(at); }} />
+          <LocationField row value={location} onChange={changeTown} onSettle={() => setCardTown(typedTown.current)} />
         </View>
         {currentUser?.ageGroup === 'teen' ? (
           <View style={[styles.v2Inset, styles.v2PrivRow]}>
@@ -634,6 +649,8 @@ function OnboardingSteps() {
         </View>
         {yearNoteV2 ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note} accessibilityLiveRegion="polite">{yearNoteV2}</Text> : null}
       </View>
+      {/* Round 2 review: the page's spare height goes here, so "Invited by" sits just over Continue with no empty middle (none on an SE). */}
+      {asksInviter && (inviter?.handle || inviter?.canSet) ? <View style={styles.v2Spring} /> : null}
       {asksInviter && inviter?.handle && !inviter.canSet ? (
         <View style={[styles.v2Section, styles.v2InvitedRow]}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Note} accessibilityLabel={`Invited by @${inviter.handle}`}>Invited by @{inviter.handle}</Text>
@@ -706,6 +723,7 @@ function OnboardingSteps() {
     </>
   );
 
+  const v2Leads = currentUser && notKnownAdult(currentUser) ? V2_TEEN_LEADS : V2_LEADS;
   if (setUpAlready) return <View style={[styles.root, styles.waiting]}><CourtSpinner size={28} /></View>;
   return (
     <KeyboardScrollContext.Provider value={Platform.OS === 'web' ? null : keyboard.reveal}>
@@ -722,7 +740,7 @@ function OnboardingSteps() {
           <Reanimated.Text key={ratingOnly ? 'rating' : STEPS[step].title} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>{ratingOnly ? 'Your rating' : STEPS[step].title}</Reanimated.Text>
           {ratingOnly || setupRun ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepLabel}>{position + 1} / {order.length}</Text>}
         </View>
-        {v2 && V2_LEADS[step] ? <Reanimated.Text key={V2_LEADS[step]} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{V2_LEADS[step]}</Reanimated.Text>
+        {v2 && v2Leads[step] ? <Reanimated.Text key={v2Leads[step]} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.v2Lead}>{v2Leads[step]}</Reanimated.Text>
           : ratingOnly ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>NTRP or UTR, whichever you know. It shows on your profile.</Text>
           : STEPS[step].lead ? <Reanimated.Text key={STEPS[step].lead} entering={stepIn} exiting={STEP_OUT} maxFontSizeMultiplier={TextScale.CARD} style={styles.lead}>{STEPS[step].lead}</Reanimated.Text> : null}
       </View>
@@ -741,7 +759,7 @@ function OnboardingSteps() {
         // The number pad has no return key: a drag down the page puts the keys away.
         keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : Platform.OS === 'ios' ? 'interactive' : undefined}
       >
-        <Reanimated.View key={step} entering={stepIn} exiting={STEP_OUT} style={v2 ? null : { gap: spacing.lg }}>
+        <Reanimated.View key={step} entering={stepIn} exiting={STEP_OUT} style={v2 ? styles.v2Step : { gap: spacing.lg }}>
           {v2 && step === 0 ? aboutV2 : v2 && step === 1 ? gameV2 : null}
           {!v2 && step === 0 ? (
             <>
@@ -1115,6 +1133,9 @@ const styleDefinitions = StyleSheet.create({
   // The live card 16pt under the lead (the head's own 8 and this).
   v2Body: { maxWidth: 460, paddingTop: spacing.sm },
   v2You: { gap: spacing.md, marginTop: 20 },
+  // Round 2 review: the step fills the page, and a spring before "Invited by" takes what is left.
+  v2Step: { flexGrow: 1 },
+  v2Spring: { flexGrow: 1 },
   // Round 2: 20 between groups (was 24), so the page fills without an empty middle.
   v2Section: { marginTop: 20, gap: spacing.sm },
   v2Lead: { ...setupLook.lead, marginTop: spacing.xs },

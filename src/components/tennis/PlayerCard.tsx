@@ -66,7 +66,7 @@ export function PlayerCard({ user, variant, onPress, setup }: {
  * What the sign-up's live card knows (variant 'setup'): whether the rating typed is a real one yet, the years
  * played (0 is under a year; null not said yet), and whether to show how they play (Your game).
  */
-export interface SetupDraft { rated: boolean; years: number | null; game?: boolean }
+export interface SetupDraft { rated: boolean; years: number | null; game?: boolean; /** A tall phone (round 2 review): a little more room inside, so the page has no empty middle. */ roomy?: boolean }
 
 function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | 'banner'; onPress?: () => void }) {
   const { theme } = useTheme();
@@ -205,11 +205,11 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const filled = look.filled;
   const spoken = `Your card: ${name || 'no name yet'}, ${town || 'no town yet'}, ${rating ? `${system} ${rating}` : 'no rating yet'}${draft.years === null ? '' : `, playing ${draft.years === 0 ? 'less than a year' : `${draft.years} ${draft.years === 1 ? 'year' : 'years'}`}`}.`;
   return (
-    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
+    <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, draft.roomy && styles.setupRoomy, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
       <CardWash look={look} radius={corner(16)} />
       {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
       <View style={styles.setupTop}>
-        <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={44} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines }} />
+        <Avatar name={name || ' '} seed={user.avatarSeed} uri={user.avatarUrl} size={draft.roomy ? 52 : 44} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines }} />
         <View style={styles.identityWords}>
           <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.setupName, { color: name ? look.ink : look.faint }]}>{name || 'Your name'}</Text>
           <Text numberOfLines={1} maxFontSizeMultiplier={1.3} style={[styles.small, { color: look.muted }]}>
@@ -218,13 +218,14 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
         </View>
         <Bump token={rating}>
           <View style={styles.setupRating}>
-            <Text maxFontSizeMultiplier={1.2} style={[styles.setupFigure, { color: rating ? ratingInk : look.faint }]}>{rating || '–.–'}</Text>
+            {/* Not rated yet: the same '–.–' drawn light, so it reads as an empty rating, not a glyph (round 2 review). */}
+            <Text maxFontSizeMultiplier={1.2} style={[styles.setupFigure, !rating && styles.setupFigureEmpty, { color: rating ? ratingInk : look.faint }]}>{rating || '–.–'}</Text>
             <Text maxFontSizeMultiplier={1.2} style={[styles.setupSystem, { color: look.eyebrow }]}>{system}</Text>
           </View>
         </Bump>
       </View>
       {draft.game ? (
-        <View style={styles.setupGame}>
+        <View style={[styles.setupGame, draft.roomy && styles.setupGameRoomy]}>
           <View style={styles.inline}>
             <Text style={[styles.small, { color: look.muted }]}>{playStyleLabel[p.playStyle]} · </Text>
             <Swatch surface={p.preferredSurface} look={look} />
@@ -233,15 +234,15 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>{handsLine(p)}</Text>
         </View>
       ) : null}
-      <SetupFacts look={look} cells={[{ key: 'years', figure: years, empty: '– yrs', label: 'Playing' }, { key: 'level', figure: level, empty: '–', label: 'Level', wide: true }]} />
+      <SetupFacts look={look} roomy={draft.roomy} cells={[{ key: 'years', figure: years, empty: '– yrs', label: 'Playing' }, { key: 'level', figure: level, empty: '–', label: 'Level', wide: true }]} />
     </View>
   );
 }
 
 /** The setup card's two facts on a hairline, Strip's look: two by two never needed (there are only two). */
-function SetupFacts({ look, cells }: { look: CardLook; cells: { key: string; figure: string; empty: string; label: string; wide?: boolean }[] }) {
+function SetupFacts({ look, cells, roomy }: { look: CardLook; cells: { key: string; figure: string; empty: string; label: string; wide?: boolean }[]; roomy?: boolean }) {
   return (
-    <View style={[styles.setupFacts, { borderTopColor: look.lines }]}>
+    <View style={[styles.setupFacts, roomy && styles.setupFactsRoomy, { borderTopColor: look.lines }]}>
       {cells.map((c, i) => (
         <View key={c.key} style={[styles.cell, c.wide ? styles.setupWide : styles.setupNarrow, i > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: look.lines, paddingLeft: 12 }]}>
           <Text numberOfLines={1} maxFontSizeMultiplier={1.25} style={[styles.setupFact, styles.tabular, { color: c.figure ? look.figure : look.faint }]}>{c.figure || c.empty}</Text>
@@ -387,6 +388,10 @@ const styles = StyleSheet.create({
   setupGame: { marginTop: 10, gap: 0 },
   setupFacts: { flexDirection: 'row', marginTop: 12, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
   setupFact: { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.3 },
+  setupFigureEmpty: { ...font('400'), letterSpacing: 0 },
+  setupRoomy: { padding: 20 },
+  setupGameRoomy: { marginTop: 12 },
+  setupFactsRoomy: { marginTop: 16, paddingTop: 16 },
   setupNarrow: { flexGrow: 0, flexBasis: 96 },
   setupWide: { flexGrow: 1 },
 });

@@ -24,9 +24,11 @@ const matchLength = (name: string, typed: string) => {
 };
 
 type At = { lat: number; lng: number };
-export function LocationField({ value, onChange, row = false }: {
+export function LocationField({ value, onChange, onSettle, row = false }: {
   value: string;
   onChange: (next: string, at: At | null) => void;
+  /** The town is settled: the box was left, or "Use my location" was tapped (sign-up's live card shows a town only then). */
+  onSettle?: () => void;
   /**
    * Drawn as one row of an inset list (sign-up's Name and Town, ONBOARDING_V2): "Town" beside the box, the places
    * and "Use my location" as further rows of the same list under it, each on a hairline.
@@ -53,7 +55,7 @@ export function LocationField({ value, onChange, row = false }: {
     return [...local, ...remote.filter((r) => !names.has(r.name.toLowerCase()))].filter((p) => p.name !== value).slice(0, 6);
   }, [value, remote]);
   const showDetected = locationEnabled && detectedLocation && detectedLocation !== value;
-  const useDetected = () => { if (!detectedLocation) return; const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, bank ? { lat: bank.lat, lng: bank.lng } : null); setFocused(false); };
+  const useDetected = () => { if (!detectedLocation) return; const bank = PLACES.find((p) => p.name === detectedLocation); onChange(detectedLocation, bank ? { lat: bank.lat, lng: bank.lng } : null); setFocused(false); onSettle?.(); };
 
   if (row) {
     return (
@@ -68,7 +70,7 @@ export function LocationField({ value, onChange, row = false }: {
               value={value}
               onChangeText={(next) => { setFocused(true); onChange(next, null); }}
               onFocus={() => setFocused(true)}
-              onBlur={() => setTimeout(() => setFocused(false), 150)}
+              onBlur={() => setTimeout(() => { setFocused(false); onSettle?.(); }, 150)}
               autoCapitalize="words"
               autoCorrect={false}
             />
