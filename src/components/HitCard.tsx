@@ -79,7 +79,9 @@ import { useLoadedSurface } from '@/features/players/courts';
  * `tipAt`: the page's address, for a list that leaves "its page on show" to
  * the tip (see useShownAt), so the page opening others is not redrawn.
  */
-export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey, atCourt = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey, atCourt = false, fill = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+  /** In a row of cards side by side (the map's court card, COURT_CARD_HIT_BOXES): the card takes its slot's full height, its foot at the bottom, so every card in the row is the same height. Nothing else about it changes. */
+  fill?: boolean;
   /** Given: the tip also waits for the page to rest after any swipe, and after this changes (usePaneRested). */
   restKey?: string;
   /** On the court's own page (the court page's options): no line with the court's name, which the page already is. */
@@ -176,7 +178,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
     },
   });
   return (
-    <SwipePressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, pressed && { opacity: PRESS_DIM }]}>
+    <SwipePressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, fill && styles.cardFill, pressed && { opacity: PRESS_DIM }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
           name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
@@ -251,7 +253,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
           Your own hit with people in it has two things to do (Chat, Call off): who's in takes the
           foot's first line in full, and the two buttons share the line under it, so neither the
           names nor a button is ever squeezed (review, Oct 7: "Sam and …" on a 375pt phone). */}
-      <View style={[styles.foot, twoLine && styles.footTwoLine]}>
+      <View style={[styles.foot, twoLine && styles.footTwoLine, fill && styles.footFill]}>
         <View style={styles.joined}>
           {joined.length ? (
             <View style={styles.faces}>
@@ -349,6 +351,9 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
 
 const styleDefinitions = StyleSheet.create({
   card: { ...(LESS_AI_HITS ? { borderWidth: 1, borderColor: colors.border } : lift), gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  // `fill`: the slot's full height, the foot held to the bottom.
+  cardFill: { flex: 1 },
+  footFill: { marginTop: 'auto' },
   // The court's surface, when the courts already on the phone know it: its dot and word lead the details line.
   surfaceLead: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 0 },
   surfaceDot: { width: 7, height: 7, borderRadius: 4 },
