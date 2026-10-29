@@ -39,6 +39,12 @@ export const demoHits: HitRequest[] = [
   // Your own hit tomorrow evening, which Priya was in until she tapped
   // "Can't make it": its spot is open again, and her note is in your alerts.
   { id: 'hit-demo-8', authorId: CURRENT_USER_ID, startsAt: tomorrowAt(18), place: at(2), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'Match play, best of three tiebreak sets.', createdAt: hoursFromNow(-8), joinedIds: [] },
+  // Two more at Cypress Hollow, so one court on the demo map carries three open hits and its "+3" badge
+  // (Oct 29, owner: "+however many for hits scheduled there"); Alder Park keeps one (Sam's), and Marigold
+  // Park, a court nobody is at, gets one, so a quiet court's "+1" shows too.
+  { id: 'hit-demo-10', authorId: 'u-priya', startsAt: tomorrowAt(18), place: at(3), levelMin: 3.5, levelMax: 4.5, format: 'singles', spots: 1, note: 'After work, an hour of rallies then points.', createdAt: hoursFromNow(-4), joinedIds: [] },
+  { id: 'hit-demo-11', authorId: 'u-marcus', startsAt: daysFromNowAt(2, 10), place: at(3), format: 'hit', spots: 1, createdAt: hoursFromNow(-7), joinedIds: [] },
+  { id: 'hit-demo-12', authorId: 'u-priya', startsAt: daysFromNowAt(3, 9), place: at(4), format: 'doubles', spots: 2, note: 'Weekend doubles, one more pair wanted.', createdAt: hoursFromNow(-9), joinedIds: [] },
   // Rosa's hit with no court yet: its town and a town-sized area (0.05°), the way the server keeps one (migration 187).
   { id: 'hit-demo-9', authorId: 'u-rosa', startsAt: tomorrowAt(17), place: { flexible: true, name: 'Court flexible · near Glendale', near: 'Glendale', area: { lat: 34.15, lng: -118.25 } }, levelMin: 3.0, levelMax: 4.0, format: 'hit', spots: 1, note: 'New to LA and still finding courts. Happy to play wherever suits you.', createdAt: hoursFromNow(-3), joinedIds: [] },
 ];
