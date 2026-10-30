@@ -96,7 +96,7 @@ const styleDefinitions = StyleSheet.create({
   why: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: spacing.lg },
   whyText: { ...typography.small, flex: 1, color: colors.textMuted },
   error: { ...typography.small, color: colors.danger },
-  prompt: { marginHorizontal: spacing.lg, marginTop: spacing.sm, gap: 4 },
+  prompt: { marginTop: spacing.sm, gap: 4 },
   promptRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8, paddingLeft: 8, paddingRight: 6, borderRadius: radius.lg, ...buttonShape.curve, backgroundColor: colors.brandDim },
   promptDisc: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   promptText: { ...typography.small, ...font('500'), flex: 1, color: colors.text },
