@@ -44,9 +44,9 @@ export const CHECKIN_ZOOM_FOR_EVERYONE = false;
 /** Whether Up to hit zooms you in for this person: everyone once released, admins until then. */
 // Off on phones for now (Oct 28, owner on his iPhone: "It swipes to the side. Lags a bit then zooms in.
 // Terrible." / "It should never look anything different from the video I approved"): the iPhone path is
-// rebuilt as v7 (zoomV7: one camera move from a map drawn ahead, ZoomLayer), and stays off until he approves
-// its simulator video. iPhone only: Android never gets it.
-export const ZOOM_ON_PHONES = false;
+// rebuilt as v7 (zoomV7: one camera move from a map drawn ahead, ZoomLayer). On since Oct 30, the owner having
+// watched its simulator video (zoom-v9): "Ship the zoom". Admins first (above). iPhone only: Android never gets it.
+export const ZOOM_ON_PHONES = true;
 // Off on the website too (Oct 29, owner on the admin website: "why the fuck is the raleigh not in the middle like before and the
 // zoom animation is fucking laggy and not what we asked for"): with it off the Community card is the plain card again, the city
 // words in its middle. It comes back only after a simulator video he approves.
