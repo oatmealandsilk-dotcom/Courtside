@@ -78,6 +78,8 @@ export default function CourtNowSheet() {
   const [asking, setAsking] = useState<CourtNow | null>(null);
   // Saved, but not lit: why (MISSED).
   const [missed, setMissed] = useState<Missed | null>(null);
+  // The server said the answer was given at the court, so it lights it up.
+  const [litUp, setLitUp] = useState(false);
   // How tall the sheet's contents are, so it opens just that tall rather than at 70% with a gap under them (as Open to hit does).
   const [contentH, setContentH] = useState(0);
   useEffect(() => { if (courtId && currentUserId) void actions.loadCourtInfo([courtId]); }, [courtId, currentUserId, actions]);
@@ -109,8 +111,10 @@ export default function CourtNowSheet() {
     const got = await actions.reportCourtNow(courtId, status, at);
     setBusy(false);
     if (typeof got === 'string') { setError(got); return; }
-    const miss = lightsCourt(status) && !got.atCourt ? (at ? 'far' : why) : null;
+    // `unchecked`: the server can't tell yet (migration 207 not in): a plain thanks, never "answer from the court".
+    const miss = lightsCourt(status) && !got.atCourt && !got.unchecked ? (at ? 'far' : why) : null;
     setMissed(miss);
+    setLitUp(got.atCourt);
     if (checkInHere) { setThanks(status); return; }
     showToast(miss
       ? { title: 'Saved', body: MISSED[miss], icon: 'location-outline' }
@@ -189,7 +193,7 @@ export default function CourtNowSheet() {
         ) : (
           <Text style={thanks ? styles.thanks : styles.fineLine}>
             {/* Busy or Full given at the court: it lights up (migration 207), so it says so. */}
-            {thanks ? `Thanks. ${NOW_LABEL[thanks]} ${lightsCourt(thanks) ? 'lights up this court' : 'shows'} for 90 minutes, never with your name.` : 'Your answer shows for 90 minutes, never with your name.'}
+            {thanks ? `Thanks. ${NOW_LABEL[thanks]} ${lightsCourt(thanks) && litUp ? 'lights up this court' : 'shows'} for 90 minutes, never with your name.` : 'Your answer shows for 90 minutes, never with your name.'}
           </Text>
         )}
         {playing ? (

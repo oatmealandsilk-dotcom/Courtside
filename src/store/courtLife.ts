@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
 import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, withReview, type Seeing } from '@/data/mock/courtLife';
-import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
+import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
 import { atCourtFor } from '@/features/places/courtReach';
 import { notKnownAdult } from '@/features/players/age';
@@ -83,7 +83,7 @@ export interface CourtLifeActions {
    * can say whether you are at the court (migration 207: only answers given there light it up; the spot is never
    * kept). Resolves whether it counted as at the court, or a sentence when it did not go through.
    */
-  reportCourtNow: (courtId: string, status: CourtNow | null, at?: LatLng) => Promise<{ atCourt: boolean } | string>;
+  reportCourtNow: (courtId: string, status: CourtNow | null, at?: LatLng) => Promise<CourtNowSaved | string>;
   /**
    * "I'm playing here", for `minutes` (the "How long are you here?" card: 30
    * minutes to 4 hours, migration 204), or two hours when not said. Resolves
@@ -240,7 +240,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     }));
   }, [stateRef, setState, live]);
 
-  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null, at?: LatLng): Promise<{ atCourt: boolean } | string> => {
+  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null, at?: LatLng): Promise<CourtNowSaved | string> => {
     const me = stateRef.current.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
     const was = stateRef.current.courtNow[courtId];
@@ -254,6 +254,8 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     const base = was ?? { courtId, playing: 0, friendIds: [], youHere: false };
     // The card's line at once; the court lights only once the answer is known to be given there (migration 207).
     const said: CourtRightNow = status ? { ...base, status, statusAt: stamp } : { ...base, status: undefined, statusAt: undefined };
+    // A calmer answer (Free, Wet, Locked) from anywhere turns the glow off at once, as the server does (migration 207).
+    if (status && status !== 'wait' && status !== 'full') { said.litStatus = undefined; said.litAt = undefined; }
     const lit = (row: CourtRightNow): CourtRightNow => (status ? { ...row, litStatus: status, litAt: stamp } : row);
     put(said);
     // Only a spot sent with the answer can count; the demo works it out the way the server does.

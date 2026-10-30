@@ -1643,6 +1643,15 @@ export interface CourtFacts extends CourtAccessInfo {
 export type CourtNow = 'free' | 'wait' | 'full' | 'wet' | 'locked';
 
 /** Right now at a court (court_right_now). */
+/**
+ * A "How is it right now?" answer that went through: whether the server counted it as given at the court (only those
+ * light it up, migration 207). `unchecked`: the server could not check yet (207 not in), so say nothing either way.
+ */
+export interface CourtNowSaved {
+  atCourt: boolean;
+  unchecked?: boolean;
+}
+
 export interface CourtRightNow {
   courtId: string;
   /** The latest answer in the last 90 minutes, and when. */

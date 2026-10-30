@@ -20,7 +20,7 @@ begin
   ) then
     raise exception 'Undo 207 stopped before changing anything: report_court_status is not as 207 or 60 left it. Ask Claude to look.';
   end if;
-  if not exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.court_right_now(text[])') and md5(p.prosrc) in ('9cec8c465e92b02af972d8824d25f806', 'edbebe69561ce181c8876a60de755221')) then
+  if not exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.court_right_now(text[])') and md5(p.prosrc) in ('c462c9ff3b1e6811fbf8a53b43905c1a', 'edbebe69561ce181c8876a60de755221')) then
     raise exception 'Undo 207 stopped before changing anything: court_right_now is not as 207 or 204 left it. Ask Claude to look.';
   end if;
 end $$;

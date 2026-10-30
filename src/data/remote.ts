@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -4496,11 +4496,16 @@ export const remote = {
    * whether you are at the court (migration 207; it never keeps it). Resolves whether the server counted the answer
    * as given at the court (only those light it up), else a sentence.
    */
-  async reportCourtStatus(courtId: string, status: CourtNow | null, at?: { lat: number; lng: number }): Promise<{ atCourt: boolean } | string> {
+  async reportCourtStatus(courtId: string, status: CourtNow | null, at?: { lat: number; lng: number }): Promise<CourtNowSaved | string> {
     let { data, error } = await need().rpc('report_court_status', at ? { p_court: courtId, p_status: status, p_lat: at.lat, p_lng: at.lng } : { p_court: courtId, p_status: status });
-    // Before migration 207 the server takes no spot: the answer still goes in (it lights nothing until 207 is in).
-    if (error && at && missingFunction(error)) ({ data, error } = await need().rpc('report_court_status', { p_court: courtId, p_status: status }));
-    if (!error) return { atCourt: data === true };
+    // Before migration 207 the server takes no spot: the answer still goes in, but it can't say whether you're at the
+    // court, so the sheet says a plain thanks rather than "answer from the court".
+    let unchecked = false;
+    if (error && at && missingFunction(error)) {
+      ({ data, error } = await need().rpc('report_court_status', { p_court: courtId, p_status: status }));
+      unchecked = true;
+    }
+    if (!error) return unchecked ? { atCourt: false, unchecked: true } : { atCourt: data === true };
     fail('court status')(error);
     if (missingFunction(error)) return 'This isn’t switched on yet. Try again soon.';
     if (/private_court/.test(error.message)) return 'This is someone’s home court, so it doesn’t take reports.';

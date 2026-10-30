@@ -7,11 +7,10 @@
 -- (Numbered 207: 205 is "Played here today" on feat/played-here-today, 206 is
 -- live. This touches neither of their functions; any order works.)
 --
--- SHIP ORDER: apply this on live, THEN merge feat/busy-glow-at-court to main.
--- (Either order is safe: before this is in, the new app's call with a position
--- falls back to the old one by itself, and nothing glows from a Busy or Full
--- answer until it is, since no answer is marked at the court yet. Merged first,
--- the map simply stops glowing from answers until this goes in.)
+-- SHIP ORDER: apply this on live FIRST, THEN merge feat/busy-glow-at-court to
+-- main. Merged before this is in, nothing breaks (the app's call with a
+-- position falls back to the old one by itself and the answer is saved, with a
+-- plain thanks), but no answer can light a court until this goes in.
 --
 -- Why (owner, Oct 30): "If someone flips it to light it up, we will pop smth up
 -- like turn on location or smth, and when they turn it on and are within the
@@ -36,9 +35,13 @@
 --     dropped and the new one made in the same go; the old app's call, with
 --     two answers, reaches the new one.)
 --   * court_right_now gives two more columns, lit_status and lit_at: the
---     latest answer GIVEN AT THE COURT in the last 90 minutes. The app lights
---     a court from those only. status and status_at, the latest answer of
---     all, are exactly as before (the court card's "Busy · 20 min ago").
+--     latest answer GIVEN AT THE COURT in the last 90 minutes, while the
+--     latest answer of all still says Busy or Full. The app lights a court
+--     from those only. So only someone at the court can turn a glow on, and a
+--     newer, calmer answer (Free, Wet, Locked) from anyone turns it off, as
+--     any newer answer did before: it can't fake a busy court, at worst it
+--     hides one. status and status_at, the latest answer of all, are exactly
+--     as before (the court card's "Busy · 20 min ago").
 --     Nothing new about anyone: still no name, no count, no position.
 --
 -- Left as they are: every other function, table, policy and grant.
@@ -59,7 +62,7 @@ begin
   ) then
     raise exception 'Migration 207 stopped before changing anything: report_court_status changed since migration 60. Ask Claude to look.';
   end if;
-  if not exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.court_right_now(text[])') and md5(p.prosrc) in ('edbebe69561ce181c8876a60de755221', '9cec8c465e92b02af972d8824d25f806')) then
+  if not exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.court_right_now(text[])') and md5(p.prosrc) in ('edbebe69561ce181c8876a60de755221', 'c462c9ff3b1e6811fbf8a53b43905c1a')) then
     raise exception 'Migration 207 stopped before changing anything: court_right_now changed since migration 204. Ask Claude to look.';
   end if;
 end $$;
@@ -139,8 +142,9 @@ AS $function$
     exists (select 1 from public.court_checkins k where k.user_id = me.id and k.court_id = w.id and k.until > now()),
     -- When yours there ends, so "You're here · till 6:30pm" survives the app reopening (migration 204).
     (select k.until from public.court_checkins k where k.user_id = me.id and k.court_id = w.id and k.until > now()),
-    -- The latest answer given AT the court (migration 207): only this lights it up on the map.
-    lt.status, lt.created_at
+    -- The latest answer given AT the court (migration 207): only this lights it up on the map, and only while the
+    -- latest answer of all still says Busy or Full: a calmer one (Free, Wet, Locked) from anyone turns it off.
+    case when st.status in ('wait', 'full') then lt.status end, case when st.status in ('wait', 'full') then lt.created_at end
   from wanted w cross join me
   left join lateral (
     select s.status, s.created_at from public.court_status s
@@ -164,7 +168,7 @@ do $$
 begin
   if to_regprocedure('public.report_court_status(text, text)') is not null
      or md5((select prosrc from pg_proc where oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)'))) is distinct from '9cf4bfa335a3f9ad438086b6f7923c0c'
-     or md5((select prosrc from pg_proc where oid = to_regprocedure('public.court_right_now(text[])'))) is distinct from '9cec8c465e92b02af972d8824d25f806' then
+     or md5((select prosrc from pg_proc where oid = to_regprocedure('public.court_right_now(text[])'))) is distinct from 'c462c9ff3b1e6811fbf8a53b43905c1a' then
     raise exception 'Migration 207 stopped: a function did not come out as written. Nothing changed.';
   end if;
   if not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'court_status' and column_name = 'at_court') then
