@@ -23,6 +23,7 @@ import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneBar } from './ZoneBar';
+import type { CountPlay } from './countFormat';
 
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
 export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent' | 'partner'; pending?: boolean };
@@ -402,7 +403,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
    */
   clear?: boolean;
   /** Count the numbers up (once, when the card comes into view). */
-  play?: boolean;
+  play?: CountPlay;
   /**
    * Holds every count this much longer (ms) before it starts, the numbers waiting at zero: a page that
    * shows the card from its first frame (sign-up's sample, ONBOARDING_V2) starts the count once its own
@@ -601,7 +602,7 @@ function Sideways({ session, look, width, height, play, wait, top, result, score
   look: CardLook;
   width: number;
   height: number;
-  play: boolean;
+  play: CountPlay;
   /** SessionCard's countDelay. */
   wait: number;
   top: string;

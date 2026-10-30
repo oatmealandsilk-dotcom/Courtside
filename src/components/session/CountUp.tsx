@@ -3,9 +3,9 @@ import { StyleSheet, TextInput, type StyleProp, type TextStyle } from 'react-nat
 import Reanimated, { Easing, cancelAnimation, useAnimatedProps, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { countText, type CountPart } from './countFormat';
+import { countText, type CountPart, type CountPlay } from './countFormat';
 
-export type { CountPart } from './countFormat';
+export type { CountPart, CountPlay } from './countFormat';
 
 const AnimatedInput = Reanimated.createAnimatedComponent(TextInput);
 
@@ -25,8 +25,8 @@ export function CountUp({ value, from = 0, resume = false, part = 'int', delay =
   part?: CountPart;
   delay?: number;
   duration?: number;
-  /** Off: the final number, still. Turned on: counts up from 0. */
-  play?: boolean;
+  /** Off: the final number, still. Turned on: counts up from 0. 'wait': 0, still, until turned on. */
+  play?: CountPlay;
   style?: StyleProp<TextStyle>;
   maxFontSizeMultiplier?: number;
 }) {
@@ -34,6 +34,8 @@ export function CountUp({ value, from = 0, resume = false, part = 'int', delay =
   const v = useSharedValue(play && !reduced ? from : value);
   const shownOnce = useRef(false);
   useEffect(() => {
+    // Waiting: held at the start, still (with Reduce Motion, the number itself).
+    if (play === 'wait' && !reduced) { cancelAnimation(v); v.value = from; return; }
     const onward = resume && shownOnce.current;
     shownOnce.current = true;
     cancelAnimation(v);

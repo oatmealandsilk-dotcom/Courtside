@@ -18,6 +18,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
+import { usePageCount } from '@/features/feed/pageCount';
 import { PushedDownTag } from '@/components/PushedDownTag';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Card, Chip } from '@/components/ui';
@@ -152,12 +153,8 @@ function PostCardInner({
   // The room the card has: as wide as the post, and in the feed's fixed-height
   // page only as tall as is left once the caption and buttons have theirs.
   const [slot, setSlot] = useState({ w: 0, h: 0 });
-  const [play, setPlay] = useState(false);
-  useEffect(() => {
-    if (!sessionCard || !active || counted.has(post.id)) return;
-    counted.add(post.id);
-    setPlay(true);
-  }, [sessionCard, active, post.id]);
+  // On a Feed page the stats count from the moment a decided swipe heads for it, every time it is landed on (usePageCount).
+  const play = usePageCount(post.id, active, sessionCard, counted);
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
   // A post carrying a tennis session (a tracker's, or one from your log) is labelled for the game itself, not as a generic session:
   // the court, as in Your sessions; the stopwatch stays for the time and stats under it.

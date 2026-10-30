@@ -8,6 +8,12 @@
  */
 export type CountPart = 'int' | 'hours' | 'minutes2' | 'dec1' | 'clockHours' | 'clockMinutes2';
 
+/**
+ * When a counting number runs: false, the final number, still; true, counting up from its start;
+ * 'wait', held at its start, still, until it is turned on (a Feed page not yet on its way in).
+ */
+export type CountPlay = boolean | 'wait';
+
 /** The number as it reads at `v` on its way up. A worklet, so a phone can run it on the UI thread. */
 export function countText(v: number, part: CountPart): string {
   'worklet';

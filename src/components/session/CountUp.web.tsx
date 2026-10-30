@@ -2,9 +2,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Text, type StyleProp, type TextStyle } from 'react-native';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { countText, type CountPart } from './countFormat';
+import { countText, type CountPart, type CountPlay } from './countFormat';
 
-export type { CountPart } from './countFormat';
+export type { CountPart, CountPlay } from './countFormat';
 
 const outCubic = (t: number) => 1 - (1 - t) ** 3;
 
@@ -22,7 +22,7 @@ export function CountUp({ value, from = 0, resume = false, part = 'int', delay =
   part?: CountPart;
   delay?: number;
   duration?: number;
-  play?: boolean;
+  play?: CountPlay;
   style?: StyleProp<TextStyle>;
   maxFontSizeMultiplier?: number;
 }) {
@@ -34,6 +34,8 @@ export function CountUp({ value, from = 0, resume = false, part = 'int', delay =
   onShow.current = shown;
   const shownOnce = useRef(false);
   useEffect(() => {
+    // Waiting: held at the start, still (with Reduce Motion, the number itself).
+    if (play === 'wait' && !reduced) { setShown(from); return undefined; }
     const onward = resume && shownOnce.current;
     shownOnce.current = true;
     if (!play || reduced || typeof requestAnimationFrame !== 'function') { setShown(value); return undefined; }

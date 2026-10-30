@@ -3,6 +3,7 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import type { CountPlay } from './countFormat';
 
 /**
  * The five zones as one bar, easiest on the left: each segment as long as
@@ -13,7 +14,8 @@ export function ZoneBar({ zones, colors, height = 10, play = false, delay = 0, d
   zones: number[];
   colors: string[];
   height?: number;
-  play?: boolean;
+  /** As CountUp's: 'wait' holds it empty until it is turned on. */
+  play?: CountPlay;
   delay?: number;
   duration?: number;
   /** Square ends (the foot along a photo's bottom edge). */
@@ -24,6 +26,7 @@ export function ZoneBar({ zones, colors, height = 10, play = false, delay = 0, d
   const grow = useSharedValue(play && !reduced ? 0 : 1);
   useEffect(() => {
     if (!play || reduced) { grow.value = 1; return; }
+    if (play === 'wait') { grow.value = 0; return; }
     grow.value = 0;
     grow.value = withDelay(delay, withTiming(1, { duration, easing: Easing.out(Easing.cubic) }));
   }, [play, reduced, delay, duration, grow]);

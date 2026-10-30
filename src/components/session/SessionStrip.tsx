@@ -16,6 +16,7 @@ import { spokenScore } from '@/features/activity/score';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneGlyph } from './ZoneGlyph';
 import { LESS_AI } from '@/theme/look';
+import type { CountPlay } from './countFormat';
 
 /**
  * A photo post's session, straight under the picture (the picture stays
@@ -42,7 +43,7 @@ export function SessionStrip({ session, hidden = [], play = false, scale = 1, on
   /** The composer's preview: the players picked, named on the board before they accept. */
   people?: { name: string; role: 'opponent' | 'partner' }[];
   hidden?: ID[];
-  play?: boolean;
+  play?: CountPlay;
   scale?: number;
   onPress?: () => void;
   /** In place of what it was ("Match · Won"). */
