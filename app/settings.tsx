@@ -213,7 +213,7 @@ export default function Settings() {
     // "Friends up for a hit", from friends who follow each other with them (migration 78).
     ...(!mapAlerts ? [] : [{
       title: 'Map alerts',
-      note: 'At most one a day each.',
+      note: 'At most one a day each, apart from friends playing at a court.',
       rows: [
         ...(mapAdult || mapTeen ? [
           { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => (v ? actions.setPref('pushMapFriends', true) : confirmFriendAlertsOff(() => actions.setPref('pushMapFriends', false))) } },
