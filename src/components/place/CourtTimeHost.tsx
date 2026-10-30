@@ -371,7 +371,8 @@ export function CourtTimeHost() {
  * WASH_ALPHA for their colours), each feathered to nothing, in the theme now on. The id carries the theme (iOS keeps a
  * gradient by its id and would not repaint one whose colours changed under the same name).
  */
-function LivingWash({ id, dark, light }: { id: string; dark: boolean; light: string }) {
+// Drawn once per theme: the card's ticks and taps never rebuild it (review).
+const LivingWash = React.memo(function LivingWash({ id, dark, light }: { id: string; dark: boolean; light: string }) {
   const [a, b] = dark ? WASH_ALPHA.dark : WASH_ALPHA.light;
   const one = dark ? colors.brand : colors.brandDim;
   const two = dark ? colors.court : light;
@@ -396,7 +397,7 @@ function LivingWash({ id, dark, light }: { id: string; dark: boolean; light: str
       <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}b)`} />
     </Svg>
   );
-}
+});
 
 /**
  * A court from above filling the tile inside its white frame, as the map's floodlit court draws it
