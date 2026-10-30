@@ -14,7 +14,7 @@ do $$
 begin
   if not (
        (to_regprocedure('public.report_court_status(text, text, double precision, double precision)') is not null
-        and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)') and md5(p.prosrc) = '9cf4bfa335a3f9ad438086b6f7923c0c'))
+        and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)') and md5(p.prosrc) = '9ee2c858f5c7239c7303636363e893f0'))
     or (to_regprocedure('public.report_court_status(text, text, double precision, double precision)') is null
         and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text)') and md5(p.prosrc) = 'ef84d740d834b759bdf88b704e9630ec'))
   ) then

@@ -258,8 +258,10 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (status && status !== 'wait' && status !== 'full') { said.litStatus = undefined; said.litAt = undefined; }
     const lit = (row: CourtRightNow): CourtRightNow => (status ? { ...row, litStatus: status, litAt: stamp } : row);
     put(said);
-    // Only a spot sent with the answer can count; the demo works it out the way the server does.
-    const sent = status && at ? at : undefined;
+    // Only a spot sent with the answer can count; the demo works it out the way the server does. Only a known adult's
+    // can (the teen rule, migration 207): anyone else's answer goes without one, and never lights the court.
+    const self = stateRef.current.users.find((u) => u.id === me);
+    const sent = status && at && self && !notKnownAdult(self) ? at : undefined;
     if (!live(me)) {
       const atCourt = !!sent && await atCourtFor(courtId, sent);
       if (atCourt) put(lit(said));

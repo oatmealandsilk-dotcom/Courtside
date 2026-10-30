@@ -13,6 +13,7 @@ import { getPermission } from '@/features/permissions/devicePermissions';
 import type { LatLng } from '@/features/players/positions';
 import { useCourtTimeUp } from '@/features/places/courtTime';
 import { usePlayingHere } from '@/features/places/playingHere';
+import { notKnownAdult } from '@/features/players/age';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { getPosition, recentPosition } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
@@ -59,12 +60,19 @@ const MISSED: Record<Missed, string> = {
  * Turn on Location brings the phone's own prompt (Just save skips it). The answer is saved either way and shows
  * on the court as before; the server says whether it was given there (migration 207, which never keeps the
  * spot), and if not, one quiet line says so. Free, Wet and Locked light nothing, so they never ask.
+ *
+ * Only a known adult's answer can light a court (the teen rule: a teen is never counted; migration 207 holds the
+ * server to it). A teen, or an account with no birthday on file, is never asked where they are and sends no spot:
+ * the answer saves and shows on the court as before, with a plain thanks, never "lights up this court" nor how to.
  */
 export default function CourtNowSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; name?: string; access?: string }>();
   const { actions, courtNow, courtFacts, users, currentUserId, locationEnabled } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
+  // Only a known adult's Busy or Full can light the court (the teen rule; migration 207): anyone else is never asked.
+  const self = users.find((u) => u.id === currentUserId);
+  const canLight = !!self && !notKnownAdult(self);
   const name = params.name?.trim() || 'This court';
   // With "Who can see you on the map?" up over it (I'm playing here), Escape is that sheet's alone, never this one's too.
   // The same while "How long are you here?" is up over it (CourtTimeHost).
@@ -112,9 +120,9 @@ export default function CourtNowSheet() {
     setBusy(false);
     if (typeof got === 'string') { setError(got); return; }
     // `unchecked`: the server can't tell yet (migration 207 not in): a plain thanks, never "answer from the court".
-    const miss = lightsCourt(status) && !got.atCourt && !got.unchecked ? (at ? 'far' : why) : null;
+    const miss = canLight && lightsCourt(status) && !got.atCourt && !got.unchecked ? (at ? 'far' : why) : null;
     setMissed(miss);
-    setLitUp(got.atCourt);
+    setLitUp(canLight && got.atCourt);
     if (checkInHere) { setThanks(status); return; }
     showToast(miss
       ? { title: 'Saved', body: MISSED[miss], icon: 'location-outline' }
@@ -125,7 +133,8 @@ export default function CourtNowSheet() {
     if (!courtId || busy) return;
     setError('');
     setAsking(null);
-    if (!lightsCourt(status)) { await send(status, undefined, 'off'); return; }
+    // Free, Wet, Locked, or a teen's answer (or one with no birthday on file): saved as it is, no spot, plain thanks.
+    if (!lightsCourt(status) || !canLight) { await send(status, undefined, 'off'); return; }
     setBusy(true);
     const allowed = await getPermission('location');
     // Refused on this phone (or none): saved, and it says how to light it.

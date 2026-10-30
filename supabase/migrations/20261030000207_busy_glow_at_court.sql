@@ -26,6 +26,11 @@
 --     with more, at most 0.35 mi; a place's courts are same-named ones within
 --     800 m, as migration 206 counts them). The position itself is NEVER
 --     kept, in any table or log: it is compared and dropped.
+--   * Only a known adult's answer can count as at the court (the app's
+--     standing teen rule, "a teen is never counted": public.known_adult,
+--     as check_in_at_court has it). A teen's answer, or one from an account
+--     with no birthday on file, is saved and shows on the court card exactly
+--     as today; it just never lights the court, wherever it was given.
 --   * report_court_status takes two more, optional answers, p_lat and p_lng,
 --     and says back whether the answer counts as at the court. Every other
 --     rule is word for word as before (migration 60). An app that sends no
@@ -58,7 +63,7 @@ begin
         and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text)') and md5(p.prosrc) = 'ef84d740d834b759bdf88b704e9630ec')
         and to_regprocedure('public.report_court_status(text, text, double precision, double precision)') is null)
     or (to_regprocedure('public.report_court_status(text, text)') is null
-        and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)') and md5(p.prosrc) = '9cf4bfa335a3f9ad438086b6f7923c0c'))
+        and exists (select 1 from pg_proc p where p.oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)') and md5(p.prosrc) = '9ee2c858f5c7239c7303636363e893f0'))
   ) then
     raise exception 'Migration 207 stopped before changing anything: report_court_status changed since migration 60. Ask Claude to look.';
   end if;
@@ -94,7 +99,9 @@ begin
     raise exception 'slow down';
   end if;
   -- At the court: within its reach (the app's atCourtMiles). The position is only compared here, never kept.
-  if p_lat between -90 and 90 and p_lng between -180 and 180 and c.lat is not null and c.lng is not null then
+  -- Only a known adult's answer can light a court (the teen rule, as check_in_at_court): a teen's, or one from an
+  -- account with no birthday on file, is saved and shows as before, but is never counted as at the court.
+  if public.known_adult(me) and p_lat between -90 and 90 and p_lng between -180 and 180 and c.lat is not null and c.lng is not null then
     -- A named place's courts: same-named ones within 800 m (as migration 206 counts them); a court with no name,
     -- or one only called "Tennis courts", is a place of its own.
     if c.name is not null and c.name !~* '^\s*(public\s+)?(tennis\s+)?courts?\s*$' then
@@ -167,7 +174,7 @@ grant execute on function public.court_right_now(text[]) to authenticated, servi
 do $$
 begin
   if to_regprocedure('public.report_court_status(text, text)') is not null
-     or md5((select prosrc from pg_proc where oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)'))) is distinct from '9cf4bfa335a3f9ad438086b6f7923c0c'
+     or md5((select prosrc from pg_proc where oid = to_regprocedure('public.report_court_status(text, text, double precision, double precision)'))) is distinct from '9ee2c858f5c7239c7303636363e893f0'
      or md5((select prosrc from pg_proc where oid = to_regprocedure('public.court_right_now(text[])'))) is distinct from 'c462c9ff3b1e6811fbf8a53b43905c1a' then
     raise exception 'Migration 207 stopped: a function did not come out as written. Nothing changed.';
   end if;
