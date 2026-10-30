@@ -1,6 +1,7 @@
 import type { CourtFacts, CourtFollowCount, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, Notification, Post, TaggedCourt, User } from '../types';
 import { notKnownAdult } from '@/features/players/age';
 import { isMapCourtId } from '@/features/places/courtName';
+import { demotedPosts } from '@/features/feed/demoted';
 import { DEMO_PARK } from './courts';
 import { CURRENT_USER_ID } from './users';
 
@@ -135,13 +136,15 @@ export function demoRings(posts: Post[], hits: HitRequest[], s: Seeing, box: { m
 
 /**
  * Played here today (court_played_today, migration 205), for up to 50 courts: public posts tagged there since
- * your midnight (none to one group, none logged by itself, none taken down, none by a private account but
- * yours) and open hits there today everyone may see, by the court rule (showsAtCourt), with who.
+ * your midnight (none to one group, none logged by itself, none taken down or pushed to the bottom, none by a
+ * private account but yours) and open hits there everyone may see that started today (an upcoming hit is not
+ * "played" yet), by the court rule (showsAtCourt), with who.
  */
 export function demoToday(courtIds: string[], posts: Post[], hits: HitRequest[], s: Seeing, since: Date, day: string): CourtToday[] {
   const wanted = new Set(courtIds);
   const from = since.getTime();
-  const until = from + 86_400_000;
+  const now = Date.now();
+  const down = demotedPosts();
   const per = new Map<string, CourtToday>();
   const isPublic = (authorId: ID) => authorId === s.me || !s.users.find((u) => u.id === authorId)?.isPrivate;
   const add = (courtId: string, post: boolean, who: ID, at: string) => {
@@ -153,13 +156,13 @@ export function demoToday(courtIds: string[], posts: Post[], hits: HitRequest[],
   };
   for (const p of posts) {
     const t = Date.parse(p.createdAt);
-    if (!p.court || !wanted.has(p.court.id) || !(t >= from && t <= Date.now() + 300_000)) continue;
-    if (p.archived || p.removed || p.groupId || p.autoLogged || p.autoHeld || !isPublic(p.authorId) || !showsAtCourt(p.authorId, s)) continue;
+    if (!p.court || !wanted.has(p.court.id) || !(t >= from && t <= now + 300_000)) continue;
+    if (p.archived || p.removed || p.groupId || p.autoLogged || p.autoHeld || down.has(p.id) || !isPublic(p.authorId) || !showsAtCourt(p.authorId, s)) continue;
     add(p.court.id, true, p.authorId, p.createdAt);
   }
   for (const h of hits) {
     const t = Date.parse(h.startsAt);
-    if (!h.place.id || !wanted.has(h.place.id) || h.cancelled || (h.audience ?? 'everyone') !== 'everyone' || !(t >= from && t < until)) continue;
+    if (!h.place.id || !wanted.has(h.place.id) || h.cancelled || (h.audience ?? 'everyone') !== 'everyone' || !(t >= from && t <= now)) continue;
     if (!isPublic(h.authorId) || !showsAtCourt(h.authorId, s)) continue;
     add(h.place.id, false, h.authorId, h.startsAt);
   }

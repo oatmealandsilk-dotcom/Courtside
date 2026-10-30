@@ -26,7 +26,7 @@ import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
 import type { HitRequest, Post } from '@/data/types';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
-import { PLAYED_TODAY_GLOW, todayClip } from '@/features/places/playedToday';
+import { PLAYED_TODAY_GLOW, playedTodayTone, todayClip } from '@/features/places/playedToday';
 import { joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitShort } from '@/features/hits/format';
 import { isMapCourtId, labelOf } from '@/features/places/courtName';
@@ -1469,7 +1469,7 @@ function TodayClip({ post, author, mine, onOpen }: { post: Post; author?: User; 
         {cover ? <TileCover uri={cover} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : <View style={StyleSheet.absoluteFill}><MediaPlaceholder label={post.mediaLabel ?? 'Clip · 0:15'} seed={post.id} fill /></View>}
         <View style={styles.todayShade} />
         <View style={styles.todayTag}>
-          <View style={styles.todayDot} />
+          <View style={[styles.todayDot, { backgroundColor: playedTodayTone() }]} />
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.todayTagText} numberOfLines={1}>Played here today</Text>
         </View>
         <View style={styles.todayPlay}><Ionicons name="play" size={18} color={colors.onMedia} /></View>
@@ -1515,10 +1515,13 @@ export function CourtSheet({ court, miles, ringed = false, today = false, onClos
   // The same posts, in the same order, as the court's own page and its reel.
   const place = useMemo(() => ({ id: mapCourt ? court.id : undefined, name: court.name, lat: court.lat, lng: court.lng }), [mapCourt, court.id, court.name, court.lat, court.lng]);
   const { posts: here, more } = useCourtPosts(place);
-  const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
   // Played here today (PLAYED_TODAY_GLOW): the most-liked public clip posted here today, at the top of the card.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
   const todays = PLAYED_TODAY_GLOW && today ? todayClip(here, usersById, currentUserId) : null;
+  // The clips under it leave out the one already on top, so a court with one clip today does not show it twice;
+  // when that clip is the court's only post, "Played here" is left out altogether.
+  const strip = here.filter((p) => (p.thumbnailUrl || p.imageUrl) && p.id !== todays?.id).slice(0, 12);
+  const onlyToday = !!todays && here.length === 1 && !more;
   // Open hits here, the same ones the court's page lists: one beside the clips, two without them.
   const allHits = useCourtHits(place);
   // As Community's boxes (COURT_CARD_HIT_BOXES): every one of them, in a row that swipes.
@@ -1573,7 +1576,7 @@ export function CourtSheet({ court, miles, ringed = false, today = false, onClos
       ) : null}
       {extras ? <View style={styles.courtBlock}><CourtFactsLine courtId={court.id} name={court.name} note={false} lines={1} /></View> : null}
       {extras ? <View style={styles.courtBlock}><RegularsRow court={{ id: court.id, name: court.name, lat: court.lat, lng: court.lng }} closed={closed} /></View> : null}
-      {here.length ? (
+      {here.length && !onlyToday ? (
         <View style={styles.posted}>
           <View style={styles.postedHead}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.postedTitle}>Played here <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.postedCount}>· {countLabel(here, more)}</Text></Text>
@@ -2208,7 +2211,8 @@ const styleDefinitions = StyleSheet.create({
   todayClip: { height: 148, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surfaceAlt, justifyContent: 'center', alignItems: 'center' },
   todayShade: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.16)' },
   todayTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, height: 24, borderRadius: radius.pill, backgroundColor: colors.bg },
-  todayDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.sun },
+  // Its colour is the pins' played-today tone (playedTodayTone), set where it is drawn.
+  todayDot: { width: 7, height: 7, borderRadius: 4 },
   todayTagText: { ...typography.smallStrong, fontSize: 12, color: colors.text },
   todayPlay: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingLeft: 2 },
   todayWho: { position: 'absolute', left: 12, right: 12, bottom: 9, ...typography.smallStrong, fontSize: 12, color: colors.onMedia, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },

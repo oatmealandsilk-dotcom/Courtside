@@ -13,7 +13,8 @@
 -- What it adds: court_played_today(ids, since), read-only. For up to 50 courts,
 -- what PUBLIC was at each since `since` (the asker's own midnight, sent by the
 -- app; never more than 26 hours back): posts tagged at that court, and open
--- hits there starting that day that everyone may see. One row per court with
+-- hits there that everyone may see and that have started (an upcoming hit is
+-- not "played" yet; it already shows as its own hit tag). One row per court with
 -- anything: how many posts, how many hits, the latest time, and who (their ids,
 -- so the app can leave out anyone it hides). Nothing else: no spot, no names,
 -- no text, no pictures (the court's card reads its posts as it always has).
@@ -22,8 +23,10 @@
 --   * a post shared to one group (posts.group_id), a session that logged
 --     itself or is held back (posts.auto_logged / auto_held: their audience is
 --     mutuals or only the player), a post put away (archived) or taken down
---     (removed_at);
---   * a hit for invited people (audience other than 'everyone'), or called off;
+--     (removed_at), or a post an admin pushed to the bottom (post_demotions,
+--     migration 152; the author still sees their own, as in their feed);
+--   * a hit for invited people (audience other than 'everyone'), called off, or
+--     not started yet;
 --   * anything by a private account (except your own), a suspended account,
 --     someone blocked either way (is_blocked_between) or muted either way
 --     (user_state.muted_ids), or anyone the court rule already hides from you
@@ -42,6 +45,7 @@ begin
      or to_regclass('public.posts') is null
      or to_regclass('public.hit_requests') is null
      or to_regclass('public.user_state') is null
+     or to_regclass('public.post_demotions') is null
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'court_id')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'group_id')
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'posts' and column_name = 'auto_logged')
@@ -72,12 +76,14 @@ language sql stable security definer set search_path = public as $$
       and p.created_at >= day.t and p.created_at <= now() + interval '5 minutes'
       and not p.archived and p.removed_at is null and p.group_id is null
       and not p.auto_logged and not p.auto_held
+      and (p.author_id = (select id from me)
+           or not exists (select 1 from public.post_demotions d where d.post_id = p.id))
     union all
     select h.place->>'id', 0, h.author_id, h.starts_at
     from public.hit_requests h, day
     where h.place->>'id' in (select id from wanted)
       and h.audience = 'everyone' and not h.cancelled
-      and h.starts_at >= day.t and h.starts_at < day.t + interval '24 hours'
+      and h.starts_at >= day.t and h.starts_at <= now()
   ), shown as (
     select a.* from act a, me, mine
     where me.id is not null

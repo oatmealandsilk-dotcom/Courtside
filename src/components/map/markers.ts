@@ -6,7 +6,7 @@ import { initials } from '@/lib/format';
 import { colors, surfaceColorFor, withAlpha } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
-import { PLAYED_TODAY_GLOW } from '@/features/places/playedToday';
+import { PLAYED_TODAY_GLOW, playedTodayTone } from '@/features/places/playedToday';
 
 /**
  * A court pin's colour by what it is played on (Oct 24, owner: "the courts near me hard grass
@@ -389,17 +389,22 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
 
 
 /**
- * A court played on today (features/places/playedToday), around its pin: a thin warm ring in the court's
- * warm decoration colour (colors.sun) a gap of the page out, and a soft halo of it behind, much quieter
+ * A court played on today (features/places/playedToday), around its pin: a thin ring in the played-today
+ * tone (playedTodayTone: the warm gold, or the rose where gold would read as a lit court) a gap of the page
+ * out, and a soft halo of it behind, much quieter
  * than a lit court's light. The halo is its own layer, behind the court, so only it breathes.
  */
-const todayRing = () => `0 0 0 2px ${colors.bg},0 0 0 3.5px ${withAlpha(colors.sun, 0.75)},0 0 10px 3px ${withAlpha(colors.sun, 0.3)},`;
+const todayRing = () => {
+  const tone = playedTodayTone();
+  return `0 0 0 2px ${colors.bg},0 0 0 3.5px ${withAlpha(tone, 0.75)},0 0 10px 3px ${withAlpha(tone, 0.3)},`;
+};
 const todayHalo = (size: number) => {
   const reach = Math.round(size * 0.55);
-  return `<i class="cs-today-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;z-index:-1;pointer-events:none;background:radial-gradient(closest-side,${withAlpha(colors.sun, 0.34)} 0%,${withAlpha(colors.sun, 0.16)} 55%,${withAlpha(colors.sun, 0)} 100%)"></i>`;
+  const tone = playedTodayTone();
+  return `<i class="cs-today-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;z-index:-1;pointer-events:none;background:radial-gradient(closest-side,${withAlpha(tone, 0.34)} 0%,${withAlpha(tone, 0.16)} 55%,${withAlpha(tone, 0)} 100%)"></i>`;
 };
 /** "Played today" before a court's name, zoomed in (or picked), so a long name never cuts it off: a small warm dot before it. */
-const todayWords = () => `<i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${colors.sun}"></i>`;
+const todayWords = () => `<i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${playedTodayTone()}"></i>`;
 
 /* --------------------------------------------------------------- lit courts */
 
