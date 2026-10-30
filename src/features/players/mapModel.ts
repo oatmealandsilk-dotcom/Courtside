@@ -56,14 +56,23 @@ export const COURTS_MIN_ZOOM = 10;
 export const IN_TOWN_MILES = 30;
 
 /**
+ * How close to a big city's middle you must be for the card to be that city (Oct 30, owner: "it shouldn't always show
+ * Raleigh. Raleigh is by default but it should show the city you're in if your location is on"). It was IN_TOWN_MILES
+ * (30): anywhere from Durham to Wake Forest read "Raleigh", centred on Raleigh, often with you off the card. Now only
+ * inside the city itself (7 miles, most of a big city's own streets); further out, the town you are in (its name from
+ * the map search, centred on you), as it always was far from any big city the app knows.
+ */
+export const CARD_CITY_MILES = 7;
+
+/**
  * The still card's centre with Location on (Oct 3): the big city you are
- * near, else where you are. It only frames the picture (and the city its
+ * in, else where you are. It only frames the picture (and the city its
  * players are counted in): no distance is ever measured from it. That is
  * measureFrom's job.
  */
 export function liveCentre(fix: LatLng): LatLng {
   const place = nearestPlace(fix.lat, fix.lng);
-  return milesBetween(fix, place) <= IN_TOWN_MILES ? { lat: place.lat, lng: place.lng } : fix;
+  return milesBetween(fix, place) <= CARD_CITY_MILES ? { lat: place.lat, lng: place.lng } : fix;
 }
 
 /**
@@ -140,18 +149,22 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
     return () => { on = false; };
   }, [townKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const looked = townName && townName.key === townKey ? townName.name : null;
-  // While the app is young, the card is the big city you are near (Oct 3, owner's
-  // call): Wake Forest and North Raleigh both read "Raleigh", centred on Raleigh,
-  // counting everyone in town, so the map feels as full as it is. The small
-  // towns still show as the map's own labels. Far from any big city the app
-  // knows, it is the town you are in.
+  // In a big city the app knows, the card is that city, centred on its middle
+  // (Oct 3, owner's call). Outside one (CARD_CITY_MILES, Oct 30: it was 30 miles,
+  // so Durham read "Raleigh"), it is the town you are in, centred on you.
   const live = useMemo<{ at: LatLng; name: string; exact?: boolean } | null>(() => {
     if (fixLat === undefined || fixLng === undefined) return null;
     const at = { lat: fixLat, lng: fixLng };
     const centre = liveCentre(at);
     if (centre !== at) return { at: centre, name: nearestPlace(fixLat, fixLng).name.split(',')[0] };
-    return { at, name: looked ?? 'you', exact: true };
-  }, [fixLat, fixLng, looked]);
+    // The town you are in: centred near you, not on you (to a 0.05° square, a few km: you are always well inside the card),
+    // so once its name is known it is kept like a city's (the card opens on it next time instead of on your profile's city
+    // and then holding there while seen). Until then, nothing of it is kept (exact).
+    const town = { lat: Math.round(fixLat * 20) / 20, lng: Math.round(fixLng * 20) / 20 };
+    // The same town as last time: its name at once, while the map search is asked again.
+    const name = looked ?? (cardHint && Math.abs(cardHint.lat - town.lat) < 1e-6 && Math.abs(cardHint.lng - town.lng) < 1e-6 ? cardHint.name : null);
+    return name ? { at: town, name } : { at: town, name: 'you', exact: true };
+  }, [fixLat, fixLng, looked, cardHint?.lat, cardHint?.lng, cardHint?.name]); // eslint-disable-line react-hooks/exhaustive-deps
   // The still card only: with Location on and no fix yet this time, the town it showed last time
   // (cardShot's hint, kept on this phone), so it opens where it will most likely stay instead of on
   // your profile's city and then moving. Only the card's centre and name: never your pin or your spot.

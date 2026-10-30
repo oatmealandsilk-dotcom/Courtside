@@ -139,3 +139,12 @@ export async function askCourtTime(courtName: string, go: (minutes: number) => P
     });
   });
 }
+
+/** Once "How long are you here?" has gone from the screen (at once if it is not up). */
+export function courtTimeGone(): Promise<void> {
+  if (!up) return Promise.resolve();
+  return new Promise((done) => {
+    const check = () => { if (up) return; listeners.delete(check); done(); };
+    listeners.add(check);
+  });
+}

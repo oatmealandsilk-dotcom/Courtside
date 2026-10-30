@@ -20,6 +20,8 @@ export function SimDriverHost() {
       simAction('go', (q) => { if (q.to) router.navigate(q.to as never); }),
       simAction('back', () => { if (router.canGoBack()) router.back(); }),
       simAction('mapvis', () => { void now.current.setMapVisibility('mutuals'); }),
+      // Location off (Settings' "Use my location"): the Community card goes back to the profile's city.
+      simAction('locoff', () => { void now.current.setLocationEnabled(false); }),
       // How Up to hit's check-in behaves from now on (simCheckIn): fix=ms, server=ms, shift=m, fail=1.
       simAction('checkin', (q) => {
         if (q.fix !== undefined) simCheckIn.fixMs = Number(q.fix) || 0;

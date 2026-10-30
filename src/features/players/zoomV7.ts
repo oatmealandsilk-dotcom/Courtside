@@ -63,6 +63,11 @@ export interface V7Params {
   city: LatLng;
   /** You: where the camera lands (moved part way by a newer reading: the page's v7re). */
   you: LatLng;
+  /**
+   * You off the card (Oct 30): the spot on the card the move starts from (the push-in's fixed point P), the camera drifting
+   * from it to `you` from the first frame until the card covers the screen (V7.offMax). Absent: you are on the card.
+   */
+  from?: LatLng;
   /** When the card covers the screen, as a fraction of D. */
   uc: number;
   /** When (ms from t0) you have glided to the middle of the screen. */
@@ -87,6 +92,14 @@ export const V7 = {
   glide: 400,
   /** The push-in's fixed point is your spot on the card, but at least this far in from its edges. */
   margin: 110,
+  /**
+   * You off the card (Oct 30, owner: "The zoom animation is gone for up to hit", away from the patch of town the card shows):
+   * the move starts from the nearest spot on the card (kept V7.margin in) and the map drifts to you as it pushes in, done
+   * as the card covers the screen. Up to this far off (points at the card's zoom, past that spot): about 16 km in Los Angeles
+   * at zoom 9.7, a card's half-width or so. The drift's speed on the screen grows with the push-in (about twice this, all
+   * told, over roughly half a second); further, it reads as a blur across the city, so you are simply up, as before.
+   */
+  offMax: 180,
   /** The move starts this long after it is set going, so the web view and the UI thread both have it before its first frame. */
   lead: 50,
   /** The map's buttons (copies over the layer) slide in over the move's last stretch, this long. */
@@ -483,7 +496,7 @@ function lng(x,z){return x/(512*Math.pow(2,z))*360-180}
 function lat(y,z){var n=Math.PI-2*Math.PI*y/(512*Math.pow(2,z));return 180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)))}
 return function(map,o,post,on){
   var z0=o.z0,dz=o.z1-o.z0,C={x:o.W/2,y:o.H/2};
-  var Y0={x:wx(o.you.lng,z0),y:wy(o.you.lat,z0)},RT=null,late=null;
+  var Y0=o.from?{x:wx(o.from.lng,z0),y:wy(o.from.lat,z0)}:{x:wx(o.you.lng,z0),y:wy(o.you.lat,z0)},RT=null,late=null;
   var frames=[],gaps=[],last=0,maxGap=0,first=-1,n=0,over=false,recv=Date.now()-o.t0,hook0=null,covered=false,landing=false;
   // You on the screen at t0 (the card shows the city at its middle K): the page grows round P from there.
   var q0={x:o.K.x+(Y0.x-wx(o.city.lng,z0)),y:o.K.y+(Y0.y-wy(o.city.lat,z0))};
@@ -494,7 +507,11 @@ return function(map,o,post,on){
   var qc={x:o.P.x+(q0.x-o.P.x)*kAt(tc),y:o.P.y+(q0.y-o.P.y)*kAt(tc)},kd=(kAt(tc+1)-kAt(tc-1))/2,vc={x:(q0.x-o.P.x)*kd,y:(q0.y-o.P.y)*kd},Tg=Math.max(1,o.tg-tc);
   function herm(p0,v0,p1,t){var s=t/Tg,h00=2*s*s*s-3*s*s+1,h10=s*s*s-2*s*s+s,h01=-2*s*s*s+3*s*s;return h00*p0+h10*Tg*v0+h01*p1}
   // Where you are (world pixels at z0) at a moment: a newer reading is blended in from RT.t1 to RT.t2.
-  function you(ms){if(!RT)return Y0;var u=(ms-RT.t1)/Math.max(1,RT.t2-RT.t1);if(u<=0)return RT.f;if(u>=1)return RT.t;var s=u*u*(3-2*u);return {x:RT.f.x+(RT.t.x-RT.f.x)*s,y:RT.f.y+(RT.t.y-RT.f.y)*s}}
+  function you(ms){if(!RT)return Y0;var u=(ms-RT.t1)/Math.max(1,RT.t2-RT.t1);if(u<=0)return RT.f;if(u>=1)return RT.t;var s=RT.b?RT.b(u):u*u*(3-2*u);return {x:RT.f.x+(RT.t.x-RT.f.x)*s,y:RT.f.y+(RT.t.y-RT.f.y)*s}}
+  // Off the card: from the first frame to the cover, the camera drifts from the card's spot to you. Its speed on the
+  // screen (the drift times the push-in) is one smooth swell, so it reads as the map sliding toward you as it pushes in.
+  if(o.from){var tb=Math.max(200,tc),N=64,acc=[0],sum=0;for(var i=1;i<=N;i++){var a=(i-0.5)/N;sum+=6*a*(1-a)/kAt(a*tb);acc.push(sum)}
+    RT={f:Y0,t:{x:wx(o.you.lng,z0),y:wy(o.you.lat,z0)},t1:0,t2:tb,b:function(u){var x=u*N,j=Math.min(N-1,Math.floor(x));return (acc[j]+(acc[j+1]-acc[j])*(x-j))/sum}}}
   function cam(ms){
     var k=kAt(ms),z=z0+Math.log(k)/Math.LN2,q,Y=you(ms);
     if(ms<=tc)q={x:o.P.x+(q0.x-o.P.x)*k,y:o.P.y+(q0.y-o.P.y)*k};

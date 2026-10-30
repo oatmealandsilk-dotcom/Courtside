@@ -36,12 +36,12 @@ import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/
 import { useNoOneReaskDue } from '@/features/players/noOneReask';
 import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
-import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
+import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
 import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
-import { SIM_DRIVER, simAction } from '@/lib/simDriver';
+import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -363,14 +363,26 @@ export function NearbyMap(props: NearbyMapProps) {
     const wy = (ll: LatLng) => { const k = Math.sin((Math.max(-85, Math.min(85, ll.lat)) * Math.PI) / 180); return (0.5 - Math.log((1 + k) / (1 - k)) / (4 * Math.PI)) * 512 * 2 ** z0; };
     const K = { x: cardAt.x + cardAt.w / 2, y: cardAt.y + cardAt.h / 2 };
     const q0 = { x: K.x + wx(here) - wx(view.center), y: K.y + wy(here) - wy(view.center) };
-    if (q0.x < cardAt.x || q0.x > cardAt.x + cardAt.w || q0.y < cardAt.y || q0.y > cardAt.y + cardAt.h) { v7Give(t, 'offCard'); return; }
     // The push-in grows round your own spot (kept in from the card's edges, so it covers the screen soon), as far as the card
     // needs to cover the screen and a touch more (its corners and edge go off the screen).
     const M = V7.margin;
     const P = { x: Math.min(Math.max(q0.x, cardAt.x + M), cardAt.x + cardAt.w - M), y: Math.min(Math.max(q0.y, cardAt.y + M), cardAt.y + cardAt.h - M) };
+    // Off the card (Oct 30): the move starts from P, the nearest spot on it, and the map drifts to you as it pushes in
+    // (the page's from); too far off for that (V7.offMax), you are simply up, as before.
+    let from: LatLng | undefined;
+    if (q0.x < cardAt.x || q0.x > cardAt.x + cardAt.w || q0.y < cardAt.y || q0.y > cardAt.y + cardAt.h) {
+      const off = Math.hypot(q0.x - P.x, q0.y - P.y);
+      if (off > V7.offMax) { zoomWord(`off ${Math.round(off)}pt`); v7Give(t, 'offCard'); return; }
+      const n = 512 * 2 ** z0;
+      const fx = wx(view.center) + (P.x - K.x);
+      const fy = wy(view.center) + (P.y - K.y);
+      const r = Math.PI - (2 * Math.PI * fy) / n;
+      from = { lat: (180 / Math.PI) * Math.atan(Math.sinh(r)), lng: (fx / n) * 360 - 180 };
+      zoomWord(`drift ${Math.round(off)}pt`);
+    }
     const S = 1.03 * Math.max(P.x / (P.x - cardAt.x), (windowW - P.x) / (cardAt.x + cardAt.w - P.x), P.y / (P.y - cardAt.y), (windowH - P.y) / (cardAt.y + cardAt.h - P.y));
     const t0 = Date.now() + V7.lead;
-    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: view.center, you: here, uc: 0, tg: 0, landLead: V7.landLead, me: v7MeAt(here), trace: SIM_DRIVER };
+    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: view.center, you: here, from, uc: 0, tg: 0, landLead: V7.landLead, me: t.me !== undefined ? t.me : v7MeAt(here), trace: SIM_DRIVER };
     p.uc = coverU(p);
     p.tg = p.uc * V7.D + V7.glide;
     t.started = true;
@@ -467,6 +479,29 @@ export function NearbyMap(props: NearbyMapProps) {
     v7Give(t, t.found ? 'notReady' : 'server');
   };
   const v7Landing = (): Promise<void> | null => v7Now.current?.arrival ?? null;
+  /**
+   * A court lit from the Community page ("You're at <court>? · Light it up", Oct 30): the same move as Up to hit, from the
+   * card down to the court, the full map taking over there. Your pin lands as the full map shows it: where you are, if you
+   * are up to hit; none if not (a court lit shows the court, not you).
+   */
+  const v7LightUp = (court: LatLng): Promise<void> => {
+    zoomTap();
+    v7Finding();
+    const t = v7Now.current;
+    if (!t) return Promise.resolve();
+    t.me = checkIn.on && model.mePos ? v7MeAt(model.mePos) : null;
+    v7Up(court);
+    return t.arrival;
+  };
+  const lightUpNow = useRef(v7LightUp);
+  lightUpNow.current = v7LightUp;
+  const lightUpZoomOn = v7On && !still;
+  useEffect(() => {
+    if (!lightUpZoomOn) return undefined;
+    const fn = (court: LatLng) => lightUpNow.current(court);
+    setLightUpZoom(fn);
+    return () => { if (lightUpZoom() === fn) setLightUpZoom(null); };
+  }, [lightUpZoomOn]);
   // Which of the zoom's hooks Up to hit has here: the Community card's move (v7 on the iPhone), the full map's round arrow
   // (its swoop to you), or none (the For you copy of the card: you are simply up, as with the zoom off; a phone never slides
   // the map in for it).
@@ -572,6 +607,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
   const weather = useWeather(home);
   const cityName = model.cityName;
+  // The simulator's proof (simDriver, demo builds only): the town the Community card shows, each time it changes.
+  useEffect(() => { if (SIM_DRIVER && growsHere) simLog(`[card] ${cityName}`); }, [cityName, growsHere]);
   const canvas = useRef<MapCanvasHandle | null>(null);
   // A fix arriving after the map is up moves the map to it.
   const lastHome = useRef(home);
@@ -1245,6 +1282,8 @@ interface V7Tap {
   next: LatLng | null;
   /** The server has said yes. */
   found: boolean;
+  /** Your pin as the layer lands it, when it is not the one at where the move goes (a court lit: the full map's own, or none). */
+  me?: CanvasMarker | null;
   /** Over once the move has been handed over or stopped, or none started. */
   arrival: Promise<void>;
   arrive: () => void;
