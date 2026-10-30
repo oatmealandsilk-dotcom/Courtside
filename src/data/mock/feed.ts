@@ -2,6 +2,7 @@ import { isoDaysAgo } from '@/lib/format';
 import type { Comment, Post } from '../types';
 import { CURRENT_USER_ID } from './users';
 import { DEMO_PARK } from './courts';
+import { PLAYED_TODAY_GLOW } from '@/features/places/playedToday';
 
 /** A demo park as a post's court tag. */
 const courtTag = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
@@ -417,6 +418,24 @@ export const posts: Post[] = [
     commentIds: [],
     tags: [],
   },
+  // Played here today (PLAYED_TODAY_GLOW, off until approved): Kai's clip at Larkspur, posted earlier today, with
+  // nobody playing there now and no hit there today, so the map shows the soft "played today" glow there and
+  // its card opens on this clip. Only while the switch is on: otherwise the demo is exactly as before.
+  ...(PLAYED_TODAY_GLOW ? [{
+    id: 'p-kai-today',
+    authorId: 'u-kai',
+    kind: 'clip' as const,
+    // Earlier today, never yesterday: at least a minute past midnight.
+    createdAt: new Date(Math.max(Date.now() - 95 * 60_000, new Date(new Date().setHours(0, 1, 0, 0)).getTime())).toISOString(),
+    body: 'Finally landed the kick serve. Larkspur was empty, so we just served for an hour.',
+    mediaLabel: 'Kick serve · 0:12',
+    thumbnailUrl: MORNING_COURT,
+    likedBy: ['u-rosa', 'u-noor'],
+    commentIds: [],
+    court: courtTag(6),
+    location: courtTag(6).name,
+    tags: [],
+  }] : []),
 ];
 
 export const comments: Comment[] = [

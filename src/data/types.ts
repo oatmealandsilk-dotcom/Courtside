@@ -1663,6 +1663,12 @@ export interface CourtFollowCount { courtId: string; followers: number; followin
 
 /** A court ring on the map: a real court with a post or open hit there in the last 7 days that you may see (court_rings). */
 export interface CourtRing { courtId: string; name?: string; lat: number; lng: number; posts: number; hits: number; lastAt: string }
+/**
+ * Played here today (features/places/playedToday): something public at a court in your own day, a post tagged
+ * there or an open hit there everyone may see (court_played_today, migration 205). `authorIds`: who, so the
+ * app can leave out people you muted. `day`: which of your days it is about.
+ */
+export interface CourtToday { courtId: string; posts: number; hits: number; lastAt: string; authorIds: ID[]; day: string }
 
 /** "Sam and Dev, who you follow, play here" (court_people_you_follow): up to 5 people, most recent first. */
 export interface CourtRegulars { courtId: string; userIds: ID[] }

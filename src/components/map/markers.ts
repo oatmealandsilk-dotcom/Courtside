@@ -6,6 +6,7 @@ import { initials } from '@/lib/format';
 import { colors, surfaceColorFor, withAlpha } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
+import { PLAYED_TODAY_GLOW, playedTodayTone } from '@/features/places/playedToday';
 
 /**
  * A court pin's colour by what it is played on (Oct 24, owner: "the courts near me hard grass
@@ -128,6 +129,18 @@ export const LIT_CSS = `
 `;
 
 /**
+ * Played here today (features/places/playedToday): the halo behind the court breathes very slowly, a
+ * change of light only (7 s each way, opacity alone, so the compositor runs it); still with Reduce Motion.
+ * Kept out of MAP_PIN_CSS (which keys the card's saved pictures) while switched off.
+ */
+const TODAY_CSS = `
+.cs-today-glow{animation:cs-today 7s ease-in-out infinite alternate}
+@keyframes cs-today{0%{opacity:.5}100%{opacity:1}}
+.cs-still .cs-today-glow{animation:none}
+@media (prefers-reduced-motion:reduce){.cs-today-glow{animation:none}}
+`;
+
+/**
  * Styles the pins share, and what the map's zoom switches on: court names
  * once you are down at street level. The canvases put "cs-close" on the
  * map when zoomed in that far, "cs-far" when far out, and "cs-short" below
@@ -227,7 +240,7 @@ export const MAP_PIN_CSS = `
 .cs-still .cs-pf{transition:none;animation-name:cs-fade-in}
 .cs-still .cs-spring{animation:none}
 @media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-move.cs-spring{animation:none;transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}}
-${LIT_CSS}`;
+${LIT_CSS}${PLAYED_TODAY_GLOW ? TODAY_CSS : ''}`;
 
 /**
  * The check-in zoom (mapGrow): as the Community card grows into the full map, its pins step aside with its words, a quick
@@ -353,7 +366,7 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * their lit courts with litCourtPinHtml): the words beside it with no glow at
  * all (an open hit on another day).
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, plain = false, hits = 0): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, plain = false, hits = 0, /** Played here today (playedToday): the soft warm glow, never on a glowing court. */ today = false): string {
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
@@ -361,18 +374,39 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
   const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
   const glowing = (!!live || glowOnly) && !plain;
+  const warm = today && !glowing;
   const dot = plain ? colors.brand : colors.open;
   const name = live
     ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${dot}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
+    : warm && !glowOnly ? `<span class="cs-court-name" style="${pill};left:calc(100% + 9px);color:${colors.text}">${todayWords()}Played today${nameText ? `<span style="color:${colors.textMuted};font-weight:500"> · ${nameText}</span>` : ''}</span>`
     : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
-  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
+  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : warm ? todayRing() : ring ? storyRing(2, 2.5) : '';
   const tint = courtTone(court);
   const tone = closed ? colors.borderStrong : tint;
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, -8, 20)}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${warm ? todayHalo(size) : ''}${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, -8, 20)}</div>`;
 }
+
+
+/**
+ * A court played on today (features/places/playedToday), around its pin: a thin ring in the played-today
+ * tone (playedTodayTone: the warm gold, or the rose where gold would read as a lit court) a gap of the page
+ * out, and a soft halo of it behind, much quieter
+ * than a lit court's light. The halo is its own layer, behind the court, so only it breathes.
+ */
+const todayRing = () => {
+  const tone = playedTodayTone();
+  return `0 0 0 2px ${colors.bg},0 0 0 3.5px ${withAlpha(tone, 0.75)},0 0 10px 3px ${withAlpha(tone, 0.3)},`;
+};
+const todayHalo = (size: number) => {
+  const reach = Math.round(size * 0.55);
+  const tone = playedTodayTone();
+  return `<i class="cs-today-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;z-index:-1;pointer-events:none;background:radial-gradient(closest-side,${withAlpha(tone, 0.34)} 0%,${withAlpha(tone, 0.16)} 55%,${withAlpha(tone, 0)} 100%)"></i>`;
+};
+/** "Played today" before a court's name, zoomed in (or picked), so a long name never cuts it off: a small warm dot before it. */
+const todayWords = () => `<i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${playedTodayTone()}"></i>`;
 
 /* --------------------------------------------------------------- lit courts */
 
