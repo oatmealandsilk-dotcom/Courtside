@@ -126,8 +126,10 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
             <Reanimated.View key={user.id} exiting={LEAVE} style={styles.card}>
               <Pressable accessibilityRole="link" accessibilityLabel={[user.name, line, second].filter(Boolean).join(', ')} onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
                 <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={68} ring={user.isCoach} />
-                {/* Name only (Oct 28, owner: "should be slightly shorter maybe just take out the reasoning explanation"); a screen reader still hears why. */}
+                {/* The name, then one short line of why (Oct 30, owner: "add a short line under their name between that and follow
+                    which says smth"; Oct 28 took out the longer explanation). One line only, so the card stays as short. */}
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.why} numberOfLines={1}>{line}</Text>
               </Pressable>
               <Button
                 label={label}
@@ -164,4 +166,5 @@ const styleDefinitions = StyleSheet.create({
   hide: { position: 'absolute', top: 6, right: 6, width: 26, height: 26, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   who: { alignItems: 'center', gap: 2 },
   name: { ...typography.smallStrong, fontSize: 15, color: colors.text, marginTop: spacing.sm, maxWidth: CARD - spacing.md * 2 },
+  why: { ...typography.small, color: colors.textMuted, maxWidth: CARD - spacing.md * 2 },
 });
