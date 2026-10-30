@@ -97,6 +97,8 @@ export interface CourtLifeActions {
 }
 
 const seeing = (s: Reads): Seeing => ({ me: s.currentUserId, users: s.users, followingIds: s.followingIds, blockedIds: s.blockedIds, mutedIds: s.mutedIds });
+/** The demo's answer for a court, its friends only those you follow (a player who just joined, ?new=1, has none there). */
+const demoNow = (id: string, s: Reads): CourtRightNow => { const r = demoNowFor(id); return { ...r, friendIds: r.friendIds.filter((f) => s.followingIds.includes(f)) }; };
 const byCourt = <T extends { courtId: string }>(rows: T[]) => Object.fromEntries(rows.map((r) => [r.courtId, r]));
 /**
  * Right now at courts as the server says it, keeping when yours ends where this phone knows it and the server
@@ -127,7 +129,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
         courtExtras: true,
         courtFacts: { ...Object.fromEntries(ids.map((id) => [id, demoFactsFor(id)])), ...prev.courtFacts },
         courtFollows: { ...Object.fromEntries(ids.map((id) => [id, demoFollowsFor(id)])), ...prev.courtFollows },
-        courtNow: { ...Object.fromEntries(ids.map((id) => [id, demoNowFor(id)])), ...prev.courtNow },
+        courtNow: { ...Object.fromEntries(ids.map((id) => [id, demoNow(id, s)])), ...prev.courtNow },
         courtRegulars: { ...prev.courtRegulars, ...regulars },
       }));
       return;
@@ -214,7 +216,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       const s = stateRef.current;
       // Your followed courts as they stand here (the demo's two to begin with), with what is new at each worked out afresh.
       const kept = s.followedCourts ?? Object.values(DEMO_FOLLOWED_AT).map((c) => ({ courtId: c.id, name: c.name, lat: c.lat, lng: c.lng, access: 'unknown' as const, followedAt: c.at, newPosts: 0, upcomingHits: 0 }));
-      const now = { ...Object.fromEntries(kept.map((c) => [c.courtId, demoNowFor(c.courtId)])), ...s.courtNow };
+      const now = { ...Object.fromEntries(kept.map((c) => [c.courtId, demoNow(c.courtId, s)])), ...s.courtNow };
       const list = demoMyCourts(kept.map((c) => ({ id: c.courtId, name: c.name ?? 'Tennis courts', lat: c.lat, lng: c.lng, at: c.followedAt, access: s.courtFacts[c.courtId]?.access ?? demoFactsFor(c.courtId).access })), s.posts, s.hitRequests, now, seeing(s));
       setState((prev) => ({ ...prev, courtExtras: true, followedCourts: list, courtNow: now, courtFollows: { ...Object.fromEntries(list.map((c) => [c.courtId, demoFollowsFor(c.courtId)])), ...prev.courtFollows } }));
       return;
@@ -348,7 +350,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       // The demo's answers for courts not yet seen; anything changed here (yours, a light-up) stays.
       setState((prev) => {
         const add = ids.filter((id) => !prev.courtNow[id]);
-        return add.length ? { ...prev, courtNow: { ...Object.fromEntries(add.map((id) => [id, demoNowFor(id)])), ...prev.courtNow } } : prev;
+        return add.length ? { ...prev, courtNow: { ...Object.fromEntries(add.map((id) => [id, demoNow(id, stateRef.current)])), ...prev.courtNow } } : prev;
       });
       return;
     }

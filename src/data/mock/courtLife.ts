@@ -69,6 +69,11 @@ export const DEMO_NOW: Record<string, CourtRightNow> = {
   [park(2).id]: { courtId: park(2).id, playing: 0, friendIds: ['u-omar'], youHere: false },
   [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
   [park(5).id]: { courtId: park(5).id, playing: 4, friendIds: [], youHere: false },
+  // "How is it now?" answers lighting courts on their own (no one checked in): Marigold said Busy (lit), Larkspur
+  // Full (hot), Hillcrest Free (quiet, nothing from it).
+  [park(4).id]: { courtId: park(4).id, status: 'wait', statusAt: minutesAgo(15), playing: 0, friendIds: [], youHere: false },
+  [park(6).id]: { courtId: park(6).id, status: 'full', statusAt: minutesAgo(30), playing: 0, friendIds: [], youHere: false },
+  [park(7).id]: { courtId: park(7).id, status: 'free', statusAt: minutesAgo(10), playing: 0, friendIds: [], youHere: false },
 };
 export const demoNowFor = (courtId: string): CourtRightNow => DEMO_NOW[courtId] ?? { courtId, playing: 0, friendIds: [], youHere: false };
 

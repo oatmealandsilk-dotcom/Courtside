@@ -6,6 +6,7 @@ import { hitShort } from '@/features/hits/format';
 import { isMapCourtId } from '@/features/places/courtName';
 import { checkInEnds, clock } from '@/features/players/checkIn';
 import { fetchCourts, peekCourts, type Court } from '@/features/players/courts';
+import { NOW_LABEL } from '@/features/players/courtSummary';
 import { milesBetween } from '@/features/players/geo';
 import { canCheckIn } from '@/features/players/mapPrivacy';
 import type { MapModel, Placed } from '@/features/players/mapModel';
@@ -54,8 +55,15 @@ import { useApp } from '@/store/AppContext';
  *    only a plain disc and the "+5"); a teen is never counted, and a teen sees no one else's
  *    count.
  *
- *    Tapping Up to hit while standing at a court (within SAME_COURT_MILES of its
- *    pin, the map's own same-court rule) also says "I'm playing here" there:
+ *    Busy and Full light a court too (Oct 29, owner: "It should glow when someone taps busy or full"): the
+ *    latest "How is it now?" answer there, for 90 minutes, Busy as lit (2) and Full as hot (3), taking the
+ *    higher of that and what the people and hits there make it. That answer is already shown to everyone,
+ *    teens too, with no name on it (court_right_now's status), so the glow carries no one: no face, no
+ *    count, only "Busy" or "Full" beside it when the answer is what lights it most. Free, Wet, Locked or
+ *    older than 90 minutes: nothing from it.
+ *
+ *    Tapping Up to hit while standing at a court (within atCourtMiles of its
+ *    pin: further at a big club) also says "I'm playing here" there:
  *    the same tap, never on its own. Not for a teen or at someone's home
  *    court (canCheckIn, the server's own rule too; a club's court is fine since
  *    Oct 29, migration 203). Turn off
@@ -91,15 +99,43 @@ export const litLine = (span: string): string => `Up to hit · ${span}`;
 
 /** The map's own rule for the same court (features/places/court sameCourt): within 0.15 mi of its pin. */
 const SAME_COURT_MILES = 0.15;
+/** A big place reaches further: this much more per court past AT_COURT_BASE_COURTS, up to AT_COURT_MAX_MILES. */
+const AT_COURT_PER_COURT_MILES = 0.01;
+const AT_COURT_BASE_COURTS = 4;
+const AT_COURT_MAX_MILES = 0.35;
 
-/** The court you are standing at: the nearest one within SAME_COURT_MILES (a club's too, never someone's home court), or null. */
+/**
+ * How far from a court's pin you still count as at it (Oct 29, owner: "But what if like my club has 20 courts. The
+ * area is much bigger"): SAME_COURT_MILES (about 240 m) for up to 4 courts, about 16 m more for each court past 4,
+ * at most 0.35 mi (about 560 m): 8 courts 0.19 mi, 12 courts 0.23 mi, 20 courts 0.31 mi. The server places a friend
+ * on a big club's court as far out (migration 206, map_players).
+ */
+export const atCourtMiles = (courts: number): number =>
+  Math.min(AT_COURT_MAX_MILES, SAME_COURT_MILES + AT_COURT_PER_COURT_MILES * Math.max(0, courts - AT_COURT_BASE_COURTS));
+
+/** Named courts this close together are one place (a big club's courts can fall into two or three of the map's pins). */
+const ONE_PLACE_MILES = 0.5;
+
+/** How many courts the place a pin stands for has: its own, plus same-named pins close by (an unnamed pin is its own place). */
+export function placeCourts(c: Court, courts: Court[]): number {
+  if (!c.name || c.name === 'Tennis courts') return Math.max(1, c.count);
+  let n = Math.max(1, c.count);
+  for (const o of courts) if (o.id !== c.id && o.name === c.name && milesBetween(o, c) <= ONE_PLACE_MILES) n += Math.max(1, o.count);
+  return n;
+}
+
+/**
+ * The court you are standing at: the nearest one within reach of its pin (atCourtMiles: further at a big club), a
+ * club's too, never someone's home court; or null. Nearest by how far into its reach you are, so a small park beside
+ * a big club still wins when you stand on it.
+ */
 export function courtAt(at: LatLng, courts: Court[]): Court | null {
   let best: Court | null = null;
-  let bestMiles = SAME_COURT_MILES;
+  let bestShare = 1;
   for (const c of courts) {
     if (!isMapCourtId(c.id) || c.access === 'private') continue;
-    const miles = milesBetween(at, c);
-    if (miles < bestMiles) { best = c; bestMiles = miles; }
+    const share = milesBetween(at, c) / atCourtMiles(placeCourts(c, courts));
+    if (share < bestShare) { best = c; bestShare = share; }
   }
   return best;
 }
@@ -136,7 +172,7 @@ export type GlowLevel = 1 | 2 | 3;
 /** A court with something on right now, as the map draws it. */
 export interface CourtGlow {
   level: GlowLevel;
-  /** "4 here", "You + 2 here", "You’re here", "Playing now" (one or two: their circles say who), "Hit 6pm", "2 hits today". */
+  /** "4 here", "You + 2 here", "You’re here", "Playing now" (one or two: their circles say who), "Hit 6pm", "2 hits today", "Busy", "Full". */
   label: string;
   court: Court;
   /** How many people are there now, you included (strangers only as the server counts them). */
@@ -161,6 +197,20 @@ export const LIVE_MAX = 6;
 
 /** Quiet (0), warm (1), lit (2 or 3), hot (4 or more). */
 export const glowLevel = (score: number): GlowLevel | 0 => (score >= 4 ? 3 : score >= 2 ? 2 : score >= 1 ? 1 : 0);
+
+/** How long a "How is it now?" answer lights its court: as long as it shows (court_right_now: 90 minutes). */
+const STATUS_GLOW_MS = 90 * 60_000;
+
+/**
+ * How lit the latest "How is it now?" answer makes a court: Busy lit (2), Full hot (3); Free, Wet, Locked,
+ * none, or older than 90 minutes: 0. Anonymous, as the answer already shows to everyone.
+ */
+export function statusGlow(row: Pick<CourtRightNow, 'status' | 'statusAt'> | undefined, now: Date = new Date()): GlowLevel | 0 {
+  if (!row?.status || !row.statusAt) return 0;
+  const at = Date.parse(row.statusAt);
+  if (!Number.isFinite(at) || now.getTime() - at > STATUS_GLOW_MS) return 0;
+  return row.status === 'full' ? 3 : row.status === 'wait' ? 2 : 0;
+}
 
 /** Standing on a court: within about 20 m of its pin (the same as pinList's ON_COURT_MILES). */
 const ON_COURT_MILES = 0.0125;
@@ -229,14 +279,19 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, users
     const you = !!row?.youHere || playingAt === c.id;
     const people = others + (you ? 1 : 0);
     const times = (hitsAt.get(c.id) ?? []).sort();
-    const level = glowLevel(people + times.length);
+    const counted = glowLevel(people + times.length);
+    // Busy or Full said there in the last 90 minutes: at least lit or hot (the higher of the two wins).
+    const said = statusGlow(row, now);
+    const level = Math.max(counted, said) as GlowLevel | 0;
     if (!level) continue;
     // One or two people: their circles on the court say who and how many, so its words carry no number
     // (Oct 28, owner: "if its 2 or less ppl hitting there. the icons of them should show up instead of it
-    // just saying 2ppl"); three or more: the count.
-    const label = people
-      ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
-      : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
+    // just saying 2ppl"); three or more: the count. The answer lighting it more than they do: "Busy", "Full".
+    const label = said > counted && row?.status
+      ? NOW_LABEL[row.status]
+      : people
+        ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
+        : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
     // Faces: friends the map places here (most recently seen first), then friends only the server names here.
     const seen = (faceAt.get(c.id) ?? []).slice().sort((a, b) => (Date.parse(b.seenAt ?? '') || 0) - (Date.parse(a.seenAt ?? '') || 0)).map((p) => p.user);
     const extra = [...friendIds].filter((id) => !seen.some((u) => u.id === id)).map((id) => byId.get(id)).filter((u): u is User => !!u);

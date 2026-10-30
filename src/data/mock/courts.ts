@@ -23,7 +23,9 @@ export interface DemoCourtRow {
 
 const park = (n: number, name: string | null, lat: number, lng: number, courts: number, lit: boolean, surface: string | null, access?: { access: CourtAccess; book_url?: string }): DemoCourtRow[] => {
   // A park's courts stand a few metres apart: the same ~250 m cell, so the map folds them into one pin with a count.
-  const spots = [[0, 0], [0.0003, 0.0002], [-0.0003, 0.0002], [0.0002, -0.0004], [-0.0002, -0.0004], [0.0004, 0.0005]];
+  const few = [[0, 0], [0.0003, 0.0002], [-0.0003, 0.0002], [0.0002, -0.0004], [-0.0002, -0.0004], [0.0004, 0.0005]];
+  // A big club's rows of courts: five across, about 25 m apart, still in the one cell (the first stays on the spot).
+  const spots = courts <= few.length ? few : Array.from({ length: courts }, (_, i) => [Math.floor(i / 5) * 0.00025, (i % 5) * 0.0003]);
   return spots.slice(0, courts).map(([dLat, dLng], i) => ({
     id: `way9${String(n).padStart(3, '0')}${String(i + 1).padStart(6, '0')}`,
     name,
@@ -46,7 +48,8 @@ export const DEMO_COURT_ROWS: DemoCourtRow[] = [
   ...park(4, 'Marigold Park', 34.034, -118.26, 1, false, null),
   ...park(5, 'Juniper Community Park', 34.0868, -118.245, 3, false, 'clay'),
   ...park(6, 'Larkspur Recreation Center', 34.0186, -118.233, 2, false, 'hard', { access: 'pay', book_url: 'https://example.com/book' }),
-  ...park(7, 'Hillcrest Tennis Club', 34.056, -118.212, 5, false, 'clay', { access: 'members' }),
+  // A big club, 20 courts (Oct 29: "I'm playing here" reaches further at a big place, lightUp atCourtMiles).
+  ...park(7, 'Hillcrest Tennis Club', 34.056, -118.212, 20, false, 'clay', { access: 'members' }),
   ...park(8, null, 34.045, -118.248, 2, false, null, { access: 'private' }),
 ];
 

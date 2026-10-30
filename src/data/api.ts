@@ -236,7 +236,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       achievements,
       // Only without a database: with one, these come from the server, and an
       // account's real hits must never be covered by the demo's.
-      ...(supabase ? {} : { hitRequests: fresh ? demoHits.filter((h) => !DEMO_HITS_OF_YOURS.includes(h.id)) : demoHits, lastSeen: demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: ownSessions, sessionTags: demoSessionTags }),
+      ...(supabase ? {} : { hitRequests: fresh ? demoHits.filter((h) => !DEMO_HITS_OF_YOURS.includes(h.id)) : demoHits, lastSeen: fresh ? {} : demoLastSeen, followingIds: fresh ? [] : DEMO_FOLLOWING, followEdges: fresh ? [] : DEMO_FOLLOWERS.map((id) => ({ followerId: id, followingId: CURRENT_USER_ID })), sessions: ownSessions, sessionTags: demoSessionTags }),
     }),
   );
 }
