@@ -907,6 +907,8 @@ const demoDemoted = new Map<ID, { at: string; by: ID; note?: string }>();
  */
 export function demoAdmin(): boolean {
   if (supabase) return false;
+  // The iPhone Simulator's demo build for the check-in zoom's videos (simDriver): bundled with EXPO_PUBLIC_SIM_ADMIN=1.
+  if (process.env.EXPO_PUBLIC_SIM_ADMIN === '1') return true;
   try {
     if (typeof window === 'undefined' || !window.location || !window.sessionStorage) return false;
     if (new URLSearchParams(window.location.search).get('admin') === '1') window.sessionStorage.setItem('courtside-demo-admin', '1');

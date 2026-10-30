@@ -525,7 +525,7 @@ return function(map,ml,o){
     (k.cls||'').split(' ').forEach(function(n){if(n)k.el.classList.remove(n)});(c||'').split(' ').forEach(function(n){if(n)k.el.classList.add(n)});k.cls=c;
     if(on&&!was&&!fresh){k.el.classList.add(JUST);clearTimeout(k.pop);k.pop=setTimeout(function(){k.el.classList.remove(JUST)},POP_MS)}else if(!on)k.el.classList.remove(JUST)}
   // A new pin wears its classes before it is on the map, so a pin already open is drawn open: no ring drawing in, no pop.
-  function make(it,off){var el=document.createElement('div');el.innerHTML=it.html;var id=it.id;
+  function make(it,off){var el=document.createElement('div');el.innerHTML=it.html;var id=it.id;if(o.tag)el.classList.add(o.tag);
     (it.cls||'').split(' ').forEach(function(n){if(n)el.classList.add(n)});
     el.addEventListener('click',function(e){e.stopPropagation();var k=ms[id];if(!k||k.leaving)return;
       if(k.it.cl){if(o.quiet)o.tap(k.it.cl.lead||k.it.cl.m[0]);else expand(id)}else o.tap(id)});

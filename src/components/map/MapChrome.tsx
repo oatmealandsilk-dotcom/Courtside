@@ -1719,7 +1719,7 @@ const labelEdge = (ground: string) => (Platform.OS === 'web'
  * says "open" — a map is plainly a thing you tap. (Oct 5 moved the name to
  * the top; Oct 6 the owner wanted it back in the middle, as it always was.)
  */
-export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, reask = false, chip = false }: { /** The No one re-ask may come now (noOneReask: the Community card, due for this person). */ reask?: boolean; /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
+export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, weather, checkIn, lock = null, inviting = false, uthTip = false, reask = false, chip = false, copy = false }: { /** A copy drawn over the check-in zoom's layer (v7, ZoomLayer): exactly the card's, but with no tips of its own. */ copy?: boolean; /** The No one re-ask may come now (noOneReask: the Community card, due for this person). */ reask?: boolean; /** The card draws the full map's own pins (fullCard: the zoom, admins first): the words go in a small chip by the weather, out of the pins' way. */ chip?: boolean; /** Up to hit's one tip may come now (upToHitTip: the Community card, the right visit, the right person). */ uthTip?: boolean; cityName: string; count: number; /** Places to play in town (one per park, not single courts). */ placeCount?: number; /** Open hits in town. */ hitCount?: number; weather: Weather | null; /** The Check in button (useCheckIn, migration 189). */ checkIn?: CheckInControl; /** What keeps "Players nearby" from you (nearbyLock). */ lock?: NearbyLock; /** The "You're early" card sits right under this one, asking for the first players already. */ inviting?: boolean }) {
   const labelsOut = useGrowLabels();
   // The check-in zoom's grow (mapGrow): the weather slips down out of the card at its own size as the page pushes in.
   const weatherAway = useGrowAway('bottom');
@@ -1786,13 +1786,15 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       </>}
       {checkIn ? (
         <>
-          <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>
+          {copy ? null : <View pointerEvents="none" style={styles.previewPulse}><TipPulse where="card" size={32} /></View>}
           {/* The Up to hit pill (Oct 27, the owner's pick: "Up to hit"; migration 189): "Up to hit", or while it is on,
               "Up to hit · till 10pm" on green (a tap turns it off). UpToHit: it springs to its words as the green sweeps in. */}
           <UpToHitPill control={checkIn} />
-          <HideTip where="card" style={{ top: 52, right: 8 }} />
-          <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
-          <NoOneReaskTip ready={reask && !checkIn.on && !checkIn.busy} span={checkIn.span} />
+          {copy ? null : <>
+            <HideTip where="card" style={{ top: 52, right: 8 }} />
+            <UpToHitTip ready={uthTip && !checkIn.on && !checkIn.busy} span={checkIn.span} />
+            <NoOneReaskTip ready={reask && !checkIn.on && !checkIn.busy} span={checkIn.span} />
+          </>}
         </>
       ) : null}
       {weatherChip && !chip ? (

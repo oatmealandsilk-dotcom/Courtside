@@ -95,6 +95,11 @@ export interface GrowPlan {
   at: number;
   /** The courts the card was drawing (v5): the full map starts with them, so its pins at the hand-over are the card's. */
   courts?: Court[];
+  /**
+   * v7 (the iPhone, zoomV7): the zoom layer flies the whole move; the full map opens under it at the landing view (no
+   * pictures, no veil) and takes over once it has drawn and the layer has landed.
+   */
+  v7?: boolean;
 }
 
 /**
@@ -366,6 +371,25 @@ export function aimGrow(p: GrowPlan) {
   growT.value = 0;
   cancelAnimation(slip);
   slip.value = 0;
+}
+
+/**
+ * v7: the push-in's aim from a fixed point of the caller's choosing (`P`, window points: round your own spot on the card)
+ * and how far (`S`). The push-in itself is then driven from the wall clock by the zoom layer (growT, zoomV7), not here.
+ */
+export function aimGrowAt(page: Rect, P: { x: number; y: number }, S: number) {
+  geo.value = { cx: page.w / 2, cy: page.h / 2, px: P.x - page.x, py: P.y - page.y, s: S };
+  cancelAnimation(growT);
+  growT.value = 0;
+  cancelAnimation(slip);
+  slip.value = 0;
+}
+
+/** v7: only what sits on the card slips out (the words, the pill, the weather, the credit), as startGrow does it. */
+export function startSlip() {
+  cancelAnimation(slip);
+  slip.value = 0;
+  slip.value = withTiming(1, { duration: SLIP_MS, easing: SLIP_EASE });
 }
 
 /** The push-in starts, on the live page, this frame; what sits on the card slips out with it. When it started. */

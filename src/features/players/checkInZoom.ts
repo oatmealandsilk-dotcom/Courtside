@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import type { User } from '@/data/types';
 import type { LatLng } from '@/features/players/positions';
 import { SWOOPS, SWOOP_KINDS, type SwoopKind, type SwoopShape } from '@/components/map/swoop';
+import { SIM_ZOOM } from '@/lib/simDriver';
 import { useApp } from '@/store/AppContext';
 
 /*
@@ -40,15 +41,16 @@ export const CHECKIN_ZOOM_FOR_EVERYONE = false;
 
 /** Whether Up to hit zooms you in for this person: everyone once released, admins until then. */
 // Off on phones for now (Oct 28, owner on his iPhone: "It swipes to the side. Lags a bit then zooms in.
-// Terrible." / "It should never look anything different from the video I approved"): the phone path is
-// being rebuilt; the web demo keeps it for admins.
+// Terrible." / "It should never look anything different from the video I approved"): the iPhone path is
+// rebuilt as v7 (zoomV7: one camera move from a map drawn ahead, ZoomLayer), and stays off until he approves
+// its simulator video. iPhone only: Android never gets it.
 export const ZOOM_ON_PHONES = false;
 // Off on the website too (Oct 29, owner on the admin website: "why the fuck is the raleigh not in the middle like before and the
 // zoom animation is fucking laggy and not what we asked for"): with it off the Community card is the plain card again, the city
 // words in its middle. It comes back only after a simulator video he approves.
 export const ZOOM_ON_WEB = false;
 export const checkInZoomOn = (me: User | null | undefined): boolean =>
-  ((Platform.OS === 'web' && ZOOM_ON_WEB) || (Platform.OS !== 'web' && ZOOM_ON_PHONES)) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
+  ((Platform.OS === 'web' && ZOOM_ON_WEB) || (Platform.OS === 'ios' && (ZOOM_ON_PHONES || SIM_ZOOM))) && (CHECKIN_ZOOM_FOR_EVERYONE || !!me?.isAdmin);
 
 /** The same, for a screen. */
 export function useCheckInZoom(): boolean {
@@ -96,10 +98,27 @@ const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listen
 export function swoopFinding() { findingSince = Date.now(); emit(); }
 /** Finding you is over, however it went (a swoop asked for, or nothing). */
 export function swoopFound() { if (!findingSince) return; findingSince = 0; emit(); }
-/** You are up: the full map (open now, or about to be: `fresh`) swoops down to `to`. */
-export function swoopTo(to: LatLng, fresh: boolean) { findingSince = 0; asked = { id: ++askIds, to, fresh, at: Date.now() }; emit(); }
+/**
+ * You are up: the full map (open now, or about to be: `fresh`) swoops down to `to`. `later`: the screens listening hear of it
+ * on the JS thread's next turn, not this one (v7: a redraw now would hold up the move's start, zoomV7).
+ */
+export function swoopTo(to: LatLng, fresh: boolean, later = false) {
+  findingSince = 0;
+  asked = { id: ++askIds, to, fresh, at: Date.now() };
+  if (later) setTimeout(emit, 0); else emit();
+}
 /** How many swoops have been asked for so far: a tap reads it before and after, to know whether it set one off. */
 export const swoopAsks = (): number => askIds;
+/**
+ * The swoop asked for is let go before any map took it (v7: the move stopped before the full map opened, the app put
+ * away): no map swoops later by surprise, and what waited for the landing (the toast) comes now.
+ */
+export function swoopCancel() {
+  if (!asked) return;
+  asked = null;
+  landed();
+  emit();
+}
 
 /* ------------------------------------------------------- after it lands */
 

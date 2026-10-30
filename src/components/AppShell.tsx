@@ -54,6 +54,9 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTimi
 import { useCreateMenuState } from '@/features/compose/createMenu';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useGrowUnderWay } from '@/features/players/mapGrow';
+import { ZoomLayer } from '@/components/map/ZoomLayer';
+import { SimDriverHost } from '@/components/SimDriverHost';
+import { SIM_DRIVER } from '@/lib/simDriver';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -533,7 +536,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
-    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
+    <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{/* The check-in zoom's layer (v7, iPhone admins): over the pages, under the toasts. */}{currentUserId ? <ZoomLayer /> : null}{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
     {(showNav || (barKept && barWanted)) && isPhone ? (
       <Reanimated.View pointerEvents={showNav ? 'box-none' : 'none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barSlide, barSteady ? BAR_IN_PLACE : null]}>
       <Reanimated.View ref={((node: unknown) => { navLayer.current = node as HTMLElement | null; navFade.ref?.(node); }) as never} pointerEvents={barOnStage || !showNav ? 'none' : 'box-none'} style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }, barOnStage && { overflow: 'hidden' }, navFade.style]}>
@@ -543,13 +546,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     ) : null}
     {liveBarOn && isPhone ? <LiveBar phone /> : null}
     {/* A new message drops in at the top, over the bar too; never on the pages the app keeps to themselves. */}
-    <MessageBanner enabled={!!currentUserId && !hideEverywhere && !onSplash && !detour} />
+    <MessageBanner enabled={!SIM_DRIVER && !!currentUserId && !hideEverywhere && !onSplash && !detour} />
     {/* "How was the hit?", once, after a hit you played; only for a set-up account, never on the pages the app keeps to themselves. */}
-    <HitFollowUp enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    <HitFollowUp enabled={!SIM_DRIVER && !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
     {/* "Show your tennis to friends?", once, for a player who never chose who sees the tennis that logs itself: on the same terms. */}
-    <AutoLogAsk enabled={!!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
+    <AutoLogAsk enabled={!SIM_DRIVER && !!currentUserId && onboardingComplete && (remoteLoaded || !isSupabaseConfigured) && !hideEverywhere && !onSplash && !detour} />
     {/* "Still playing?", when a live session's clock reaches three hours: the same note, on the same terms. */}
-    <StillPlaying enabled={!!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
+    <StillPlaying enabled={!SIM_DRIVER && !!currentUserId && onboardingComplete && !hideEverywhere && !onSplash && !detour} />
     {/* The splash curtain, from the splash's hand-over until the page the app opens on has drawn (see warmup). */}
     {!curtainDown && !!currentUserId && !hideEverywhere && (onSplash || isStartTab(pathname)) ? <WarmCurtain /> : null}
     {/* The first-run tour: over the bar, so it can light the bar's own buttons. */}
@@ -560,5 +563,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     {currentUserId && !isGuest ? <PhoneAppWelcome calm={calmPage} /> : null}
     {/* Guest mode's one "Join CourtSide to …" ask, over everything, the bar too. */}
     {isGuest ? <JoinSheet /> : null}
+    {/* The iPhone Simulator's proof harness (demo builds bundled with EXPO_PUBLIC_SIM_DRIVER only: simDriver). */}
+    {SIM_DRIVER ? <SimDriverHost /> : null}
   </View>;
 }
