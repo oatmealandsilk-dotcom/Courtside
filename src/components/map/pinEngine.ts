@@ -1,4 +1,4 @@
-import { JUST_OPEN_CLASS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
+import { CLOSE_ZOOM_NAMES, FAR_ZOOM, JUST_OPEN_CLASS, OPEN_CLASS, POP_MS } from '@/components/map/markers';
 
 /*
  * The map's pins, kept on the map: one engine for both canvases. MapLibre
@@ -112,6 +112,22 @@ export interface CanvasMarker {
   fix?: boolean;
   /** Never gathered with its kind, though it still makes room like one (a court with something on: its glow and label stay in sight). */
   solo?: boolean;
+  /**
+   * Lit up (features/places/lightUp; with `solo`): zoomed out, where lit courts would land on one another, each stands beside
+   * the ones before it rather than under them (the hotter first and in front: `r`), and a quiet court, or a crowd of them,
+   * steps out from under one (pinEngine's spread and room).
+   */
+  lit?: boolean;
+  /**
+   * All it reaches round its spot, where more than its own square (a lit court's faces and words, a court's words beside it):
+   * boxes [left, top, right, bottom] in px from its spot at full size, flattened (markers.ts litFootprint, tagFootprint).
+   * Lit courts keep these clear of each other, and of players and other courts' words, zoomed out (pinEngine's spread).
+   */
+  lb?: number[];
+  /** The same close in (from CLOSE_ZOOM_NAMES), where its words start with its name. Absent: lb. */
+  lbn?: number[];
+  /** How much smaller it is drawn zoomed out (below FAR_ZOOM: markers.ts .cs-far), for lb. Absent: the same size. */
+  ls?: number;
   /** How many it stands for in a gathered pin's count (a court pin: its courts). Absent: one. */
   n?: number;
   /** Half its width, where wider than a court's square (a court crowd's number), so room for players counts all of it. */
@@ -217,10 +233,13 @@ export const FULL_MAP_BOX: NonNullable<PinEngineOptions['box']> = { p: [100, 70]
 export const CARD_BOX: NonNullable<PinEngineOptions['box']> = { p: [48, 48], pFar: [48, 48], c: [22, 22], h: [92, 28] };
 
 export const PIN_ENGINE_JS = `(function(){
-var ZMIN=2,ZMAX=20,OPEN=${JSON.stringify(OPEN_CLASS)},JUST=${JSON.stringify(JUST_OPEN_CLASS)},POP_MS=${POP_MS};
+var ZMIN=2,ZMAX=20,FAR=${FAR_ZOOM},NAMED=${CLOSE_ZOOM_NAMES},OPEN=${JSON.stringify(OPEN_CLASS)},JUST=${JSON.stringify(JUST_OPEN_CLASS)},POP_MS=${POP_MS};
 // Where a pin takes the badge and the second disc (markers.ts); spelt in two halves so the page's HTML never reads them as a comment.
 var BADGE='<'+'!--cs-badge-->',STACK='<'+'!--cs-stack-->';
 var GLIDES=40,FOLD_BELOW=12,CHIP_W=44,FAN_W=104,FAN_H=80,FAN_COLS=3,WAVE_MS=595,POP_IN_MS=340;
+// Courts with something on (solo: lit, or a hit there) never gather, so zoomed out lit ones may land on one spot (room()): one that
+// would touch another (any of its court, faces or words) steps aside to stand LIT_GAP px clear of it, at most LIT_REACH px from its spot.
+var LIT_GAP=4,LIT_REACH=160,LIT_STEPS=24,LIT_GRID=12;
 // Faces on the full map: two players gather only once their white discs (about 40 across) are nearer than FACE_MERGE of one across
 // (24 px), so faces overlap a little before they gather and split about half a zoom step sooner (Oct 7, owner: "you keep thinking
 // it will split but you keep scrolling in"). FACE_IN: how far a ring's room may overlap another pin's, and "on one spot" for a ring.
@@ -477,6 +496,31 @@ return function(map,ml,o){
       for(i=0;i<shown.length&&ok;i++){var e=shown[i];if(Math.abs(e.x-p.x)<e.w+w+3&&e.t<b+2&&e.b>t-2)ok=false}
       if(ok)shown.push({x:p.x,w:w,t:t,b:b});else out[p.id]=ext(p.it,{cls:((p.it.cls||'')+' cs-nn').trim(),nn:1})});
   }
+  // All a pin reaches round x, y at this level (CanvasMarker.lb: a lit court's faces and words, a court's words beside it; lbn where
+  // any of this level is close enough for names), drawn smaller far out (ls) where all of this level is far out; with no lb, its
+  // square (cw: half its width, a crowd's number too).
+  function foot(it,x,y){var z=zoomOf(lvl),f=z+0.5<=FAR?(it.ls||1):1,b=it.lb&&z+0.5>NAMED&&it.lbn||it.lb,r=[],i;
+    if(!b){var cw=(it.cw||14)*f,hh=14*f;return [[x-cw,y-hh,x+cw,y+hh]]}
+    for(i=0;i+3<b.length;i+=4)r.push([x+b[i]*f,y+b[i+1]*f,x+b[i+2]*f,y+b[i+3]*f]);return r}
+  // Whether any of boxes A comes within g px of any of B.
+  function meets(A,B,g){for(var i=0;i<A.length;i++)for(var j=0;j<B.length;j++){var a=A[i],b=B[j];if(a[0]<b[2]+g&&b[0]<a[2]+g&&a[1]<b[3]+g&&b[1]<a[3]+g)return true}return false}
+  // The boxes of B within LIT_REACH (and a gap) of boxes A: all that A could touch moving no further than that.
+  function within(B,A){var l=Infinity,r=-Infinity,t=Infinity,u=-Infinity,R=LIT_REACH+LIT_GAP+1;A.forEach(function(a){l=Math.min(l,a[0]);t=Math.min(t,a[1]);r=Math.max(r,a[2]);u=Math.max(u,a[3])});
+    return B.filter(function(b){return b[2]>l-R&&b[0]<r+R&&b[3]>t-R&&b[1]<u+R})}
+  // How much of boxes A lies on boxes B (px²), for the least-covered spot when none is clear.
+  function covered(A,B){var s=0;A.forEach(function(a){B.forEach(function(b){var w=Math.min(a[2],b[2])-Math.max(a[0],b[0]),h=Math.min(a[3],b[3])-Math.max(a[1],b[1]);if(w>0&&h>0)s+=w*h})});return s}
+  // Where boxes A could move to stand just clear of the boxes B near them (g apart): any mix of beside one of them (either side) and
+  // above or below one (so into a corner between several), the nearest first, side by side before one above the other, none further
+  // than LIT_REACH. The nearest LIT_STEPS ways each across and up or down (so a crowded map stays quick), and a grid past them.
+  function besides(A,B,g){var xs={0:1},ys={0:1},R=LIT_REACH,l=Infinity,r=-Infinity,t=Infinity,u=-Infinity;
+    A.forEach(function(a){l=Math.min(l,a[0]);t=Math.min(t,a[1]);r=Math.max(r,a[2]);u=Math.max(u,a[3])});
+    B.forEach(function(b){if(b[2]<l-R-g||b[0]>r+R+g||b[3]<t-R-g||b[1]>u+R+g)return;A.forEach(function(a){
+      xs[Math.round(b[2]+g-a[0])]=1;xs[Math.round(b[0]-g-a[2])]=1;ys[Math.round(b[3]+g-a[1])]=1;ys[Math.round(b[1]-g-a[3])]=1})});
+    function near(o){return Object.keys(o).map(Number).filter(function(v){return Math.abs(v)<=R}).sort(function(p,q){return Math.abs(p)-Math.abs(q)}).slice(0,LIT_STEPS)}
+    var s=[],X=near(xs),Y=near(ys);X.forEach(function(x){Y.forEach(function(y){if((x||y)&&Math.sqrt(x*x+y*y)<=R)s.push([x,y])})});
+    // And every LIT_GRID px out to LIT_REACH, for the open room past the nearest edges.
+    for(var gx=-R;gx<=R;gx+=LIT_GRID)for(var gy=-R;gy<=R;gy+=LIT_GRID)if((gx||gy)&&Math.sqrt(gx*gx+gy*gy)<=R)s.push([gx,gy]);
+    return s.sort(function(p,q){return (Math.sqrt(p[0]*p[0]+p[1]*p[1]*1.44)-Math.sqrt(q[0]*q[0]+q[1]*q[1]*1.44))})}
   // Room for players: what stands on a player's spot lifts above their disc; a court their name would cover moves aside; zoomed out, a flag on anything folds into it.
   function room(out){
     names(out);
@@ -487,23 +531,79 @@ return function(map,ml,o){
     for(id in out){it=out[id];if(it.k==='p'||it.fix){var q=lp(it.lat,it.lng);ps.push({x:q.x+(it.fx||0),y:q.y+(it.fy||0),r:(it.ds||48)/2,w:hw(it),nb:it.nn?6:36})}
       // The "+N" beside you is in the way too (a small round thing, no name under it).
       else if(it.k==='chip'){var qc=lp(it.lat,it.lng);ps.push({x:qc.x+(it.fx||0),y:qc.y,r:15,w:20,nb:12})}}
-    // Courts: where each sits now, so one moved aside never lands on another.
-    var cs={};for(id in out){it=out[id];if(it.k==='c'){var q1=lp(it.lat,it.lng);cs[id]={x:q1.x,y:q1.y}}}
-    function clear(id,x,y){for(var o2 in cs){if(o2===id)continue;if(Math.abs(cs[o2].x-x)<30&&Math.abs(cs[o2].y-y)<30)return false}return true}
+    // Each player as a box (their disc and their name), for what moves aside never to land on one.
+    var pb=ps.map(function(p){return [p.x-p.w+2,p.y-p.r-12,p.x+p.w-2,p.y+p.r+p.nb]});
     // Whether a court this wide (cw: half its width) at x, y would sit on any player's face or name: moved aside off one, it must not land on the next.
     function onPlayer(x,y,cw){for(var i=0;i<ps.length;i++){var p=ps[i],dx=x-p.x,dy=y-p.y;if(Math.abs(dx)<p.w+cw-2&&dy>-p.r-12&&dy<p.r+p.nb)return true}return false}
-    for(id in out){it=out[id];if(it.k!=='c'||it.sel)continue;
-      // A court crowd (cw) counts its whole width; on a player's very spot it moves aside rather than up.
-      var c=lp(it.lat,it.lng),lift=0,shift=0,gone=false,cw=it.cw||14;
-      // The court a ring of players fans round stays on its spot under them, and its words make way (the ring says who is there).
-      if(rings.some(function(r){return (r.ct||r.mid)&&r.at===id||Math.abs(r.x-c.x)<3&&Math.abs(r.y-c.y)<3})){out[id]=ext(it,{cls:((it.cls||'')+' cs-anchor').trim()});continue}
-      ps.forEach(function(p){var dx=c.x-p.x,dy=c.y-p.y;
+    // A court on a player's spot or under their name: how far it lifts (on the very spot) or moves aside, and whether it is too far under to (gone).
+    function aside(c,cw){var lift=0,shift=0,gone=false;ps.forEach(function(p){var dx=c.x-p.x,dy=c.y-p.y;
         if(Math.abs(dx)<8&&Math.abs(dy)<8&&cw<=14){lift=Math.min(lift,-(p.r+13))}
         else if(Math.abs(dx)<p.w+cw-2&&dy>-p.r-12&&dy<p.r+p.nb){var need=(p.w+cw)-Math.abs(dx);if(need>46+cw)gone=true;else shift=(dx>=0?1:-1)*Math.max(Math.abs(shift),need)}});
-      if(gone&&zoomOf(lvl)<15&&!it.solo){delete out[id];delete cs[id];continue}
+      return {lift:lift,shift:shift,gone:gone}}
+    // The court a ring of players fans round stays on its spot under them, and its words make way (the ring says who is there).
+    function anchored(id,c){return rings.some(function(r){return (r.ct||r.mid)&&r.at===id||Math.abs(r.x-c.x)<3&&Math.abs(r.y-c.y)<3})}
+    function anchor(id){out[id]=ext(out[id],{cls:((out[id].cls||'')+' cs-anchor').trim()})}
+    // Courts: where each sits now, so one moved aside never lands on another.
+    var cs={};for(id in out){it=out[id];if(it.k==='c'){var q1=lp(it.lat,it.lng);cs[id]={x:q1.x+(it.fx||0),y:q1.y+(it.offsetY||0)}}}
+    function clear(id,x,y){for(var o2 in cs){if(o2===id)continue;if(Math.abs(cs[o2].x-x)<30&&Math.abs(cs[o2].y-y)<30)return false}return true}
+    // Courts with a hit on them (solo, not lit) where they stand now, their words too: a lit court moving aside keeps off them.
+    var tb=[];for(id in out){it=out[id];if(it.k==='c'&&it.solo&&!it.lit){var qt=lp(it.lat,it.lng);foot(it,qt.x+(it.fx||0),qt.y+(it.offsetY||0)).forEach(function(b){tb.push(b)})}}
+    // Lit courts are never gathered (Oct 30, owner: "I think if someone's playing at a court it should just be shown it shouldn't not be
+    // in a cluster"), so zoomed out several may land on one spot. Each stays in sight, all of it (its court, who is there, its words:
+    // lb): the picked one, then the hotter and busier (pinList's rank) keep their own spot; one that would touch any part of one placed
+    // before it steps aside, LIT_GAP clear of all of them, to the nearest spot that is also clear of players and of other courts' words
+    // (else the nearest clear of lit courts alone; else it stays, under the one before it). Closer in, where they stand apart, each is
+    // back on its own spot (gliding there as you zoom). lb: every lit court's boxes where it stands, for everything else to keep off.
+    // Lit courts are kept apart at both ends of this level: here, and half a step in (lb2), where their spots are S2 times as far
+    // apart but their moves the same, so two that swapped sides never close up on each other as you zoom in.
+    var lb=[],lb2=[],lids=[],S2=Math.SQRT2;
+    for(id in out){it=out[id];if(it.k==='c'&&it.lit)lids.push(id)}
+    lids.sort(function(a,b){var A=out[a],B=out[b];return ((B.sel?1:0)-(A.sel?1:0))||((A.r||0)-(B.r||0))||(a<b?-1:1)});
+    lids.forEach(function(id){var it=out[id],q=lp(it.lat,it.lng),fx=it.fx||0,fy=it.offsetY||0,x=q.x+fx,y=q.y+fy,dx=0,dy=0,cw=it.cw||14;
+      // Its reach moved by ex, ey: here, and half a step in.
+      function here(ex,ey){return foot(it,x+ex,y+ey)}
+      function there(ex,ey){return foot(it,q.x*S2+fx+ex,q.y*S2+fy+ey)}
+      // Only what lies within reach of it counts, so a map full of lit courts stays quick.
+      var L1=lb,L2=lb2,P=pb,T=tb;
+      function hid(ex,ey){return meets(here(ex,ey),L1,LIT_GAP)||meets(there(ex,ey),L2,LIT_GAP)}
+      if(anchored(id,q))anchor(id);
+      else if(!it.sel){
+        // Off a player's face or name first, as any court, where that is clear of players.
+        var a=aside({x:x,y:y},cw);if(a.shift&&!onPlayer(x+a.shift,y,cw))dx=a.shift;
+        if(hid(dx,0)){var F=here(dx,0),sp,pick=null,i;
+          L1=within(lb,F);L2=within(lb2,there(dx,0));P=within(pb,F);T=within(tb,F);sp=besides(F,L1.concat(P,T),LIT_GAP);
+          for(i=0;i<sp.length&&!pick;i++){var F1=here(dx+sp[i][0],sp[i][1]);if(!hid(dx+sp[i][0],sp[i][1])&&!meets(F1,P,0)&&!meets(F1,T,0))pick=sp[i]}
+          for(i=0;i<sp.length&&!pick;i++)if(!hid(dx+sp[i][0],sp[i][1]))pick=sp[i];
+          // Nowhere clear: where the least of it is covered (else it stays).
+          if(!pick){var least=covered(F,L1);for(i=0;i<sp.length;i++){var cv=covered(here(dx+sp[i][0],sp[i][1]),L1);if(cv<least-1){least=cv;pick=sp[i]}}}
+          if(pick){dx+=pick[0];dy=pick[1]}}
+      }
+      here(dx,dy).forEach(function(b){lb.push(b)});there(dx,dy).forEach(function(b){lb2.push(b)});cs[id]={x:x+dx,y:y+dy};
+      if(dx||dy)out[id]=ext(out[id],{fx:(it.fx||0)+dx,offsetY:(it.offsetY||0)+dy})});
+    // The other courts: room for players, as ever; then any under a lit court (or, quiet, under a hit court's words) steps out beside
+    // it into clear room, the nearer side first. Courts with a hit on them first, so the quiet ones then keep off where they end up.
+    // With no room, a hit court folds its words away (the court itself stays), and zoomed out a single quiet court folds away (a
+    // crowd of them stays, its number peeking out): a crowd always stands next to a lit court, never hiding one or hidden by one.
+    var hb=[];
+    [true,false].forEach(function(hits){for(id in out){it=out[id];if(it.k!=='c'||it.lit||!!it.solo!==hits)continue;
+      var c=lp(it.lat,it.lng),fx0=it.fx||0,y0=it.offsetY||0,lift=0,shift=0,cw=it.cw||14;
+      if(it.sel){if(hits)foot(it,c.x+fx0,c.y+y0).forEach(function(b){hb.push(b)});continue}
+      if(anchored(id,c)){anchor(id);if(hits)foot(ext(it,{lb:null}),c.x+fx0,c.y+y0).forEach(function(b){hb.push(b)});continue}
+      c={x:c.x+fx0,y:c.y+y0};
+      // A court crowd (cw) counts its whole width; on a player's very spot it moves aside rather than up.
+      var a=aside(c,cw);lift=a.lift;shift=a.shift;
+      if(a.gone&&zoomOf(lvl)<15&&!it.solo){delete out[id];delete cs[id];continue}
       // Moved aside only into clear room; with none, zoomed out it folds away until there is room (closer in it stays, under the name).
       if(shift&&(!clear(id,c.x+shift,c.y+lift)||onPlayer(c.x+shift,c.y+lift,cw))){shift=0;if(zoomOf(lvl)<14&&!it.solo){delete out[id];delete cs[id];continue}}
-      if(lift||shift){out[id]=ext(it,{fx:shift,offsetY:(it.offsetY||0)+lift});cs[id]={x:c.x+shift,y:c.y+lift}}}
+      var F=foot(it,c.x+shift,c.y+lift),under=function(G){return meets(G,lb,2)||!hits&&meets(G,hb,0)},words=true;
+      if(under(F)){var ways=besides(F,lb.concat(hb,pb),LIT_GAP),way=null;
+        for(var wi=0;wi<ways.length&&!way;wi++){var tx=c.x+shift+ways[wi][0],ty=c.y+lift+ways[wi][1],G=foot(it,tx,ty);
+          if(!under(G)&&!meets(G,hits?hb:[],0)&&clear(id,tx,ty)&&!meets(G,pb,0))way=ways[wi]}
+        if(way){shift+=way[0];lift+=way[1]}
+        else if(hits){words=false;out[id]=ext(out[id],{cls:((out[id].cls||'')+' cs-notag').trim()})}
+        else if(zoomOf(lvl)<14&&!it.cl){delete out[id];delete cs[id];continue}}
+      if(hits)foot(words?it:ext(it,{lb:null}),c.x+shift,c.y+lift).forEach(function(b){hb.push(b)});
+      if(lift||shift){out[id]=ext(out[id],{fx:fx0+shift,offsetY:y0+lift});cs[id]={x:c.x+shift,y:c.y+lift}}}});
     // A flag (about 92 wide, 26 tall, hung above its spot) overlapping a court or a player (their disc and name): zoomed out it folds in as a dot; closer, it lifts clear above the highest of them.
     var hosts=[];for(id in out){it=out[id];if(it.k==='p'||it.fix||it.k==='c'){var q2=lp(it.lat,it.lng),isC=it.k==='c',r2=isC?14:(it.ds||48)/2;
       hosts.push({id:id,x:q2.x+(it.fx||0),y:q2.y+(it.fy||0)+(isC?(it.offsetY||0):0),r:r2,w:isC?r2:hw(it),b:isC?r2:r2+(it.nn?4:26)})}}
@@ -558,9 +658,16 @@ return function(map,ml,o){
       if(gone){c.style.transformOrigin='50% '+((it.ds||48)/2)+'px';c.animate([{transform:'scale(1)',opacity:1},{transform:'scale(.3)',opacity:0}],{duration:220,easing:'cubic-bezier(.5,0,.75,0)',fill:'forwards'});return}
       var d=c.querySelector('.cs-disc');if(d)d.animate([{transform:'scale(1)'},{transform:'scale(.88)',offset:.4},{transform:'scale(1)'}],{duration:320,easing:'ease-in-out'});
     }catch(e){}}
+  // why: what moved them ('level', 'fan'; 'lit': a court lit up or went quiet, null: anything else), so what changed glides.
   function render(why){
     if(!ready||dead||held)return;
+    // A court lit up or gone quiet ('lit'): only courts glide, it out of its crowd (or into one) and the crowds round it; players stay.
+    function moves(it){return !!why&&(why!=='lit'||!!it&&it.k==='c')}
     var d=desired(),was=owner,st=still(),spot={},glides=[],fresh=[],back={};
+    // Lit courts at one height, by rank: the hotter and busier drawn on top where they overlap, kept so each drawing (a court
+    // turning hotter moves up at once). Every pin's z is a hundred steps apart, so this never lifts one above the next z.
+    var litUp={},lq=[];for(var lid in d.out){var li=d.out[lid];if(li.k==='c'&&li.lit)lq.push(lid)}
+    lq.sort(function(a,b){return ((d.out[b].r||0)-(d.out[a].r||0))||(a<b?1:-1)}).forEach(function(lid,i){litUp[lid]=Math.min(99,i+1)});
     owner=d.own;
     // Your Up to hit, turned on or off since the last drawing (not in the map's first moments, not with Reduce Motion).
     var upNow=!!(items.me&&items.me.up),tok=(items.me&&items.me.land)||0,arrive=false,depart=false,meMade=false;
@@ -592,22 +699,24 @@ return function(map,ml,o){
       if(!k){
         k=ms[id]=make(it,off);
         // Split off from a gathered pin (or fanned out of one): it glides out from where that pin was. A gathered pin goes by its lead.
-        var ref=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,src=why&&was[ref]&&was[ref]!==id?was[ref]:null,from=src&&spot[src]?plus(spot[src],peek[src]&&peek[src][ref]):null;
+        var ref=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,src=moves(it)&&was[ref]&&was[ref]!==id?was[ref]:null,from=src&&spot[src]?plus(spot[src],peek[src]&&peek[src][ref]):null;
         // A player's own pin out of a gathered one on that very spot (its leader's), or a players' gathered pin taking over from its
         // leader's own pin there: that face was showing all along, so the new one just stands on top (no fade, no spring) while the old
         // one fades out under it; the others spring out from behind it, or glide in behind it.
         if(from&&it.k==='p'&&Math.abs(from.x-pos.x)+Math.abs(from.y-pos.y)<=3){}
-        else if(from&&!st&&onScreen(pos))glides.push({k:k,made:1,p:it.k==='p',dx:from.x-pos.x,dy:from.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
+        // A court crowd taking over from another (its lead lit up, or went quiet and leads it again): the crowd was showing all
+        // along, so the new one glides in solid (same) while the old one fades out under it.
+        else if(from&&!st&&onScreen(pos))glides.push({k:k,made:1,p:it.k==='p',same:id.indexOf('k:c:')===0&&src.indexOf('k:c:')===0,dx:from.x-pos.x,dy:from.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
         else fresh.push({k:k,pos:pos,gathered:id.indexOf('k:')===0});
       }else{
         var before=spot[id];
         if(k.html!==it.html){k.el.innerHTML=it.html;k.html=it.html}
         k.m.setLngLat([it.lng,it.lat]);k.m.setOffset(off);
-        if(why&&before&&!st&&onScreen(pos)&&Math.abs(pos.x-before.x)+Math.abs(pos.y-before.y)>2)glides.push({k:k,dx:before.x-pos.x,dy:before.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
+        if(moves(it)&&before&&!st&&onScreen(pos)&&Math.abs(pos.x-before.x)+Math.abs(pos.y-before.y)>2)glides.push({k:k,dx:before.x-pos.x,dy:before.y-pos.y,d:Math.abs(pos.x-mid.x)+Math.abs(pos.y-mid.y)});
       }
       k.it=it;
       fit(k);
-      k.el.style.zIndex=it.z!=null?String(it.z):'';if(it.k==='p'){k.el.__z=it.z||0;k.el.__r=it.r}
+      k.el.style.zIndex=it.z!=null?String(it.z*100+(litUp[id]||0)):'';if(it.k==='p'){k.el.__z=it.z||0;k.el.__r=it.r}
       // A face-stack's faces fan out by --cs-pv: changed in place, they glide further apart (MAP_PIN_CSS .cs-pf).
       if(it.pv!=null)k.el.style.setProperty('--cs-pv',it.pv+'px');else k.el.style.removeProperty('--cs-pv');
       if(it.role)k.el.setAttribute('role',it.role);else k.el.removeAttribute('role');
@@ -617,7 +726,7 @@ return function(map,ml,o){
     // Gone from this level (gathered into another pin, or folded away): it glides into its new pin as it fades; off screen, it just goes.
     var leaving=[];
     for(id in ms){if(d.out[id]||ms[id].leaving)continue;var me0=spot[id]||at(ms[id]);
-      var ref2=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,tgt=d.own[ref2],into=why&&tgt&&tgt!==id&&d.out[tgt]&&ms[tgt]?plus(at(ms[tgt]),peekNow[tgt]&&peekNow[tgt][ref2]):null;
+      var ref2=id.indexOf('k:')===0?id.split(':').slice(2).join(':'):id,tgt=d.own[ref2],into=moves(ms[id].it)&&tgt&&tgt!==id&&d.out[tgt]&&ms[tgt]?plus(at(ms[tgt]),peekNow[tgt]&&peekNow[tgt][ref2]):null;
       if(!onScreen(me0)){drop(id);continue}
       // A player's own pin whose gathered pin (theirs, on that very spot) has just come back (zoomed straight back out): that shows
       // the same face whole, so this one goes at once rather than fading over it (no second name).
@@ -635,7 +744,8 @@ return function(map,ml,o){
       var k=l.k,id=l.id;k.leaving=setTimeout(function(){k.m.remove();if(ms[id]===k)delete ms[id]},c?260:0)});
     if(glides.length)void ct.offsetWidth;
     // A player split off a gathered pin springs out (a little past its spot and back, growing to full size); anything else just glides.
-    glides.forEach(function(g){var c=child(g.k);if(!c)return;var sp=g.made&&g.p;c.classList.add('cs-move',sp?'cs-spring':'cs-in');c.style.translate='0px 0px';
+    // A court already showing (a lit one stepping aside, a crowd making room) glides with no fade, so it never blinks as it goes.
+    glides.forEach(function(g){var c=child(g.k);if(!c)return;var sp=g.made&&g.p;c.classList.add('cs-move');if(sp)c.classList.add('cs-spring');else if(g.made&&!g.same||!g.k.it||g.k.it.k!=='c')c.classList.add('cs-in');c.style.translate='0px 0px';
       g.k.tidy=setTimeout(function(){c.classList.remove('cs-move','cs-in','cs-spring');c.style.translate=''},sp?620:460)});
     // Your pin, just put up to hit: it lands (land) in place of the plain fade in; just taken down and still here, it dips.
     if(arrive&&ms.me&&d.out.me){var km=ms.me;fresh=fresh.filter(function(f){return f.k!==km});land(km,meMade)}
@@ -656,7 +766,8 @@ return function(map,ml,o){
     }
     if(wave0&&t-wave0>=WAVE_MS)waveDone=true;
     if(calm)return;
-    fresh.forEach(function(f){enter(f.k,why&&f.gathered&&!st?'cs-pop':'cs-in',why&&f.gathered?90:0)});
+    var zoomed=why&&why!=='lit';
+    fresh.forEach(function(f){enter(f.k,zoomed&&f.gathered&&!st?'cs-pop':'cs-in',zoomed&&f.gathered?90:0)});
   }
   // A gathered pin, tapped: zoom in just far enough that it is one pin no longer. It splits, fans out in its ring, or (the "+N"
   // beside you) some of them move off you: the first level in where that happens, half a step more if they all still fit there.
@@ -694,9 +805,12 @@ return function(map,ml,o){
   // The still card's pins go on at once, before the streets have drawn (they are placed from the camera alone), so they are on it before anyone sees it.
   if(o.quiet||o.now)start();else if(map.loaded&&map.loaded())soon();else{map.once('idle',soon);setTimeout(start,2500)}
   return {
-    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;items={};list.forEach(function(it){items[it.id]=it});build();
+    set:function(p){var list=(p&&p.items)||[];if(p&&p.tpl)tpl=p.tpl;var prev=items,lit=false;items={};
+      // A court lit up (never gathered from now on) or gone quiet (gathered with the courts round it again): it glides out of its
+      // crowd, or into it, rather than blinking out in one place and in at another.
+      list.forEach(function(it){items[it.id]=it;var b=prev[it.id];if(b&&it.k==='c'&&b.k==='c'&&!!b.solo!==!!it.solo)lit=true});build();
       if(fan){var n=0;fan.m.forEach(function(id){if(items[id])n++});if(n<(fan.lead?1:2))fan=null}
-      if(ready&&lvl<0)lvl=levelNow();render(null)},
+      if(ready&&lvl<0)lvl=levelNow();render(lit?'lit':null)},
     hold:function(on){var was=held;held=!!on;if(was&&!held)render(null)},
     calm:function(on){calm=!!on&&!!o.quiet},
     wake:function(){if(!ready&&!dead)soon()},

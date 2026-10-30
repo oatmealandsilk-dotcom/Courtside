@@ -1,6 +1,6 @@
 import type { User } from '@/data/types';
 import type { CanvasMarker } from '@/components/map/pinEngine';
-import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litHalf, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml } from '@/components/map/markers';
+import { HIT_LIFT, PLAYING_CLASS, agoShort, courtPinHtml, discSize, hitPinHtml, litCourtPinHtml, litFootprint, litHalf, mePinHtml, pileFaceHtml, playerPinClass, playerPinHtml, tagFootprint } from '@/components/map/markers';
 import type { CourtGlow } from '@/features/places/lightUp';
 import { milesBetween } from '@/features/players/geo';
 import { hitShort } from '@/features/hits/format';
@@ -154,10 +154,13 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       const faces = [...(g.you && !underYou ? [me] : []), ...g.friends];
       const others = Math.max(0, g.people - (g.you ? 1 : 0) - g.friends.length);
       const half = litHalf(g.level, on, faces.length + others > 0);
+      const pin = { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live, hits };
       return {
         id: `c:${c.id}`, lat: c.lat, lng: c.lng,
-        html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live, hits }),
-        z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, n: c.count, cw: half, g: 'c' as const,
+        html: litCourtPinHtml(c, pin),
+        // lb, lbn, ls: all it reaches round its spot (faces, words; close in its words name it), and how much smaller zoomed out
+        // (markers.ts .cs-far .cs-lit).
+        z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, lit: true, lb: litFootprint(c, pin), lbn: litFootprint(c, pin, true), ls: 0.84, n: c.count, cw: half, g: 'c' as const,
         role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, g.label, hitsSaid].filter(Boolean).join(', '),
       };
     }
@@ -165,7 +168,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     // `n`: how many courts it is, for the count on a crowd.
     // Played here today: the soft warm glow (and "Played today" by its name, close in), ahead of the quiet courts in a crowd.
     const played = !!expanded && !!today?.has(c.id);
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag, hits, played), z: on ? 4 : tag ? 2 : played ? 2 : 1, k: 'c' as const, r: (played ? -1e6 : ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag, played ? 'played here today' : null, hitsSaid].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag, hits, played), z: on ? 4 : tag ? 2 : played ? 2 : 1, k: 'c' as const, r: (played ? -1e6 : ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, lb: tag && !underYou ? tagFootprint(c, on, tag, !glow) : undefined, lbn: tag && !underYou ? tagFootprint(c, on, tag, !glow, true) : undefined, ls: glow || !tag ? 0.72 : 1, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag, played ? 'played here today' : null, hitsSaid].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).
