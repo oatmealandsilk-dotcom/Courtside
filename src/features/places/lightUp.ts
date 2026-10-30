@@ -117,8 +117,11 @@ export const atCourtMiles = (courts: number): number =>
 const ONE_PLACE_MILES = 0.5;
 
 /** How many courts the place a pin stands for has: its own, plus same-named pins close by (an unnamed pin is its own place). */
+/** A name that only says what it is ("Tennis Courts", "Public courts", "Courts"), in any case: not a place's own name. */
+const GENERIC_NAME = /^\s*(public\s+)?(tennis\s+)?courts?\s*$/i;
+
 export function placeCourts(c: Court, courts: Court[]): number {
-  if (!c.name || c.name === 'Tennis courts') return Math.max(1, c.count);
+  if (!c.name || GENERIC_NAME.test(c.name)) return Math.max(1, c.count);
   let n = Math.max(1, c.count);
   for (const o of courts) if (o.id !== c.id && o.name === c.name && milesBetween(o, c) <= ONE_PLACE_MILES) n += Math.max(1, o.count);
   return n;
