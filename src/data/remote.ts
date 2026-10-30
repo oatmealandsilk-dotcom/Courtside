@@ -4404,7 +4404,7 @@ export const remote = {
     if (error) fail('check in on map')(error);
     return { error: /ask_first/.test(error?.message ?? '') ? 'ask_first' : 'failed' };
   },
-  /** Check out (migration 189): off friends' maps at once, and out of any court. Resolves false when it could not. */
+  /** Check out (migration 189): off friends' maps at once (a court's "I'm playing here" runs on till its time: migration 209). Resolves false when it could not. */
   async checkOutOfMap(): Promise<boolean> {
     const { error } = await need().rpc('check_out_of_map');
     if (error && missingFunction(error)) return remote.forgetLastSeen();

@@ -3742,8 +3742,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const showing = !s.lastSeenLoaded || !!s.lastSeen[me!] || !!s.liveSession?.checkedIn
       || Object.values(s.courtNow).some((row) => row.youHere) || !!s.followedCourts?.some((c) => c.youHere);
     if (!showing) return Promise.resolve();
+    // (Up to hit off leaves a court's "I'm playing here" to run out since migration 209; signing out still ends it.)
     return Promise.race([
-      remote.checkOutOfMap().then(() => undefined, () => undefined),
+      Promise.all([
+        remote.checkOutOfMap().then(() => undefined, () => undefined),
+        remote.checkOutOfCourt().then(() => undefined, () => undefined),
+      ]).then(() => undefined),
       new Promise<void>((resolve) => { setTimeout(resolve, SIGN_OUT_CHECK_OUT_MS); }),
     ]);
   };
@@ -4406,12 +4410,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     forgetPlaces(me);
     delete seenAround.current[me];
     delete seenInView.current[me];
-    // Gone from this phone's map at once, with any "I'm playing here" (the server drops both).
+    // Gone from this phone's map at once. An "I'm playing here" rides on till its own time runs out (migration 209; owner,
+    // Oct 30: "it should let whatever you put previously ride until it's gone"): "I'm done" on the court ends that.
     setState((prev) => ({
       ...prev,
       lastSeen: prev.lastSeen[me] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== me)) : prev.lastSeen,
-      courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
-      followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
       liveSession: prev.liveSession?.checkedIn ? { ...prev.liveSession, checkedIn: false } : prev.liveSession,
     }));
     if (!live(me)) return;
@@ -8661,8 +8664,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({
         ...prev, locationEnabled: false, locationAsked: true, detectedLocation: null, detectedCoords: null,
         lastSeen: self && prev.lastSeen[self] ? Object.fromEntries(Object.entries(prev.lastSeen).filter(([id]) => id !== self)) : prev.lastSeen,
-        courtNow: Object.fromEntries(Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }])),
-        followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: false })) ?? null,
+        // (An "I'm playing here" rides on till its time runs out: migration 209, owner Oct 30.)
       }));
       if (live(self)) {
         // Since migration 98 nobody counts as near someone with no spot of
