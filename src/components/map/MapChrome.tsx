@@ -1510,8 +1510,10 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   // Everything between the name and the buttons scrolls once it is taller
   // than this, so the whole card stays within about 60% of the screen: on a
   // small phone it never covers the search and the chips, and the pin
-  // stays in sight. (The name row and the buttons take about 190pt.)
-  const middleMax = Math.max(160, Math.round(windowH * 0.6) - 190);
+  // stays in sight. (The name row and the buttons take about 190pt; the
+  // "I'm playing here" row under them about 50 more, so the card is no taller
+  // with it: the middle scrolls a little sooner instead.)
+  const middleMax = Math.max(160, Math.round(windowH * 0.6) - 190 - (extras ? 50 : 0));
   return (
     <GestureDetector gesture={pull.gesture}>
     <Animated.View style={[styles.sheet, pull.style]}>

@@ -263,7 +263,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
         return got.error === 'too_far' ? 'You need to be at the court for that.'
           : got.error === 'location_off' ? 'Turn on Location first, so players know you’re really here.'
             : got.error === 'adults_only' ? '“I’m playing here” is for adults only.'
-              : got.error === 'closed_court' ? 'Only for courts anyone can play at.'
+              : got.error === 'closed_court' ? 'Not at someone’s home court.'
                 : got.error === 'slow_down' ? 'That’s a lot of courts today. Try again tomorrow.'
                   : got.error === 'hidden' ? 'You chose No one on the map. Change it in Settings → Privacy.'
                   : got.error === 'ask_first' ? 'Say who can see you on the map first.'

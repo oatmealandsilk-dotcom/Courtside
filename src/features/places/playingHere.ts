@@ -74,7 +74,11 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess) {
     setBusy(true);
     try {
       // No yes yet: "Who can see you on the map?" first, and nothing without a yes (Apple 5.1.2(i), migration 191).
-      if (!(await yesFirst(latest.current.mapVisibility, 'court'))) return false;
+      if (!(await yesFirst(latest.current.mapVisibility, 'court'))) {
+        // No one on the map: say so rather than nothing happening (the server would refuse it too, 'hidden').
+        if (latest.current.mapVisibility === 'none') setError('You chose No one on the map. Change it in Settings → Privacy.');
+        return false;
+      }
       let at: LatLng | undefined;
       if (!latest.current.locationEnabled) {
         // Location off: this tap turns it on (the phone's own prompt, if it has never been asked), then checks in from that spot.

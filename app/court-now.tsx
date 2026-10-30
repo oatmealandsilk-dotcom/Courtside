@@ -60,7 +60,10 @@ export default function CourtNowSheet() {
   const playingHere = usePlayingHere(courtId, access);
   const { here, seenBy } = playingHere;
   const checkInHere = playingHere.can;
-  const hereNote = !locationEnabled ? 'For 2 hours. Switching it on turns on Location too.'
+  // Not on offer for you here (No one on the map): the map card's own line says why, and no switch (the same rule as the card).
+  const hereWhy = playingHere.why && !here ? playingHere.why : null;
+  const hereNote = hereWhy ? `${hereWhy}.`
+    : !locationEnabled ? 'For 2 hours. Switching it on turns on Location too.'
     : seenBy === 'none' ? 'You chose No one on the map, so no one sees you here.'
       // Since migration 189: names only to friends; anyone else only a count, never a face.
       : 'For 2 hours. Friends who follow you back see your name; others only see a count, once 2 or more are here.';
@@ -116,7 +119,7 @@ export default function CourtNowSheet() {
                 <Text style={styles.hereTitle}>I’m playing here</Text>
                 <Text style={styles.hereNote}>{hereNote}</Text>
               </View>
-              {seenBy === 'none' ? null : <Toggle value={here} onChange={(v) => { void flipHere(v); }} accessibilityLabel="I’m playing here" />}
+              {hereWhy || seenBy === 'none' ? null : <Toggle value={here} onChange={(v) => { void flipHere(v); }} accessibilityLabel="I’m playing here" />}
             </View>
           </Section>
         ) : null}
