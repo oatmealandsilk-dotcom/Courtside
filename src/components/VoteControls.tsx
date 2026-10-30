@@ -3,7 +3,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { colors, font } from '@/theme';
+import { colors, font, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS } from '@/theme/look';
 
@@ -28,9 +28,10 @@ export function VoteControls({ item, userId, onVote }: {
     const count = direction === 1 ? counts.up : counts.down;
     return <Pressable key={direction} accessibilityRole="button" accessibilityLabel={`${label}, ${count}`}
       accessibilityState={{ selected: active }} onPress={event => { event.stopPropagation(); onVote(direction); }}
-      style={({ pressed }) => [styles.button, active && styles.active, pressed && { opacity: PRESS_DIM }]}>
-      <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? colors.brand : colors.textMuted}/>
-      {LESS_AI_DISCUSS && !count ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: colors.brand }]}>{count}</Text>}
+      style={({ pressed }) => [styles.button, active && (direction === 1 ? styles.active : styles.activeDown), pressed && { opacity: PRESS_DIM }]}>
+      {/* A downvote reads red, an upvote green (Oct 30, owner: "Down voting should be red"). */}
+      <Ionicons name={direction === 1 ? 'arrow-up-outline' : 'arrow-down-outline'} size={18} color={active ? (direction === 1 ? colors.brand : colors.danger) : colors.textMuted}/>
+      {LESS_AI_DISCUSS && !count ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.count, active && { color: direction === 1 ? colors.brand : colors.danger }]}>{count}</Text>}
     </Pressable>;
   })}</View>;
 }
@@ -41,5 +42,6 @@ const styleDefinitions = StyleSheet.create({
   // fills that room instead of widening the button and pushing what sits beside it.
   button: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, minHeight: 36, borderRadius: 20, backgroundColor: LESS_AI_DISCUSS ? 'transparent' : colors.bgElevated, ...(LESS_AI_DISCUSS ? { minWidth: 52 } : null) },
   active: { backgroundColor: colors.brandDim },
+  activeDown: { backgroundColor: withAlpha(colors.danger, 0.12) },
   count: { color: colors.textMuted, fontSize: 12, ...font('600') },
 });
