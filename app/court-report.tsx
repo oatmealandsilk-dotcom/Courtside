@@ -20,7 +20,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { trackCorner } from '@/theme/look';
 import { PRESS_DIM } from '@/theme/press';
-import { TextScale } from '@/theme/textScale';
+import { TextScale, oneLine } from '@/theme/textScale';
 
 const entries = <K extends string>(labels: Record<K, string>) => Object.entries(labels) as [K, string][];
 const WHEN: { key: 'weekday' | 'weekend'; label: string }[] = [{ key: 'weekday', label: 'Weekdays' }, { key: 'weekend', label: 'Weekends' }];
@@ -57,7 +57,7 @@ export default function CourtReport() {
   const [notes, setNotes] = useState(had?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  // COURT_REPORT_V2: Share tapped with nothing picked yet, so the sheet says what it needs.
+  // COURT_REPORT_V2: Share (always drawn solid, so it never reads as broken) tapped with nothing picked yet, so the sheet says what it needs.
   const [nudge, setNudge] = useState(false);
   // Your earlier answers fill the sheet in once they arrive, unless you have already started.
   const touched = useRef(false);
@@ -111,17 +111,17 @@ export default function CourtReport() {
           {/* The court itself: three label-left rows, each a small switch. Tap the chosen side again to take it back. */}
           <View style={styles.inset}>
             <View style={styles.row}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel}>Lights</Text>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Lights</Text>
               <Switch label="Lights" value={lightsValue} onChange={(v) => touch(setLights)(v === undefined ? undefined : v === 'yes')} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
             </View>
             <View style={styles.hairline} />
             <View style={styles.row}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel}>Nets</Text>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Nets</Text>
               <Switch label="Nets" value={nets} onChange={touch(setNets)} options={[{ value: 'good', label: 'Good' }, { value: 'bad', label: 'Bad' }]} />
             </View>
             <View style={styles.hairline} />
             <View style={styles.row}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowLabel}>Surface</Text>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Surface</Text>
               <Switch label="Surface" value={surface} onChange={touch(setSurface)} options={[{ value: 'good', label: 'Good' }, { value: 'cracked', label: 'Cracked' }, { value: 'wet-prone', label: 'Puddles', a11y: 'Puddles after rain' }]} />
             </View>
           </View>
@@ -135,7 +135,7 @@ export default function CourtReport() {
               </View>
               {WHEN.map((w) => (
                 <View key={w.key} style={styles.busyRow}>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.busyLabel}>{w.label}</Text>
+                  <Text {...oneLine(TextScale.CARD)} style={styles.busyLabel}>{w.label}</Text>
                   {PARTS.map((p) => {
                     const part = `${w.key}-${p.key}` as CourtDayPart;
                     const on = !!busy?.includes(part);
@@ -171,13 +171,13 @@ export default function CourtReport() {
             </View>
           ) : null}
           <View style={[styles.inset, styles.noteCard]}>
-            <Field bare multiline minHeight={52} accessibilityLabel="Rules or anything else" value={notes} onChangeText={(t) => { touched.current = true; setNotes(t.slice(0, 280)); }} placeholder="Rules or anything else (optional)" />
+            <Field bare multiline minHeight={44} accessibilityLabel="Rules or anything else" value={notes} onChangeText={(t) => { touched.current = true; setNotes(t.slice(0, 280)); }} placeholder="Rules or anything else (optional)" />
           </View>
           {error ? <Text style={styles.error}>{error}</Text> : null}
           <View style={styles.footer}>
             {nudge && !anything && courtId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nudge}>Pick at least one</Text> : null}
             {courtId ? (
-              <Button full label={mine ? 'Update' : 'Share'} dim={!anything} loading={saving} onPress={() => {
+              <Button full label={mine ? 'Update' : 'Share'} loading={saving} onPress={() => {
                 if (!anything) { haptics.tap(); setNudge(true); return; }
                 void save();
               }} />
@@ -286,11 +286,11 @@ const styleDefinitions = StyleSheet.create({
   error: { ...typography.small, color: colors.danger, ...font('500') },
   noteHint: { ...typography.small, color: colors.textMuted, marginTop: -spacing.sm },
   // COURT_REPORT_V2: the sign-up and Edit profile redraw's inset lists, label-left rows on hairlines.
-  v2Body: { gap: setupLook.sectionGap, paddingTop: spacing.lg },
+  v2Body: { gap: spacing.lg, paddingTop: spacing.sm },
   group: { gap: spacing.sm },
   caps: { paddingHorizontal: spacing.lg },
   inset: { ...setupLook.inset },
-  row: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingHorizontal: spacing.lg, paddingVertical: 6 },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: 4 },
   rowLabel: { ...typography.body, color: colors.textMuted, width: 80 },
   hairline: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
   track: { flex: 1, flexDirection: 'row', padding: 3, gap: 3, borderRadius: trackCorner(3), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.bg },
@@ -300,14 +300,15 @@ const styleDefinitions = StyleSheet.create({
   segTextOn: { color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },
   // Its labels and cells start where the rows' labels and switches above them do.
-  busyCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md, gap: spacing.sm },
+  busyCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
   busyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   busyLabel: { width: 80 - spacing.sm, ...typography.body, fontSize: 15, color: colors.textMuted },
   busyHead: { flex: 1, textAlign: 'center', ...typography.small, ...font('500'), color: colors.textMuted },
   // A real cell: the page's shade inside the card, a hairline round it; ticked, the brand's green.
-  busyCell: { flex: 1, height: 42, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  busyCell: { flex: 1, height: 36, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
   busyCellOn: { backgroundColor: colors.brand, borderColor: colors.brand },
-  neverRow: { flexDirection: 'row', paddingTop: spacing.xs },
+  // "Never seen it busy" starts under the cells, not the Weekdays/Weekends labels, so the card reads as one grid.
+  neverRow: { flexDirection: 'row', paddingTop: spacing.xs, paddingLeft: 80 },
   chip: { ...setupLook.chip, minHeight: 40 },
   chipOn: { ...setupLook.chipOn },
   chipText: { ...setupLook.chipText },
