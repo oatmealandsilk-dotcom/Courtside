@@ -29,6 +29,7 @@ import { NewHereTag } from '@/components/NewHereTag';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak, streakWords } from '@/features/practice/streakFlame';
 import { isNewHere } from '@/features/feed/newHere';
+import { markShownWhole, usePageCount } from '@/features/feed/pageCount';
 import { PushedDownTag } from '@/components/PushedDownTag';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
 import { Avatar, Chip } from '@/components/ui';
@@ -88,14 +89,14 @@ interface Props {
  * in the app's own type and colours, rather than painted over the picture.
  */
 const desktopWeb = Platform.OS === 'web' && isDesktopBrowser();
-/** Posts whose session strip has already counted up this run. */
+/** Posts whose session strip has already counted up this run (off a Feed page: once per post). */
 const counted = new Set<string>();
 /**
  * A post whose page is already on show with its numbers before it is the page on screen (the Feed's
  * windows growing its feed back to the whole screen): its strip keeps them, never dropping to 0 to
  * count up as its feed takes over.
  */
-export function markStripShown(postId: string) { counted.add(postId); }
+export function markStripShown(postId: string) { counted.add(postId); markShownWhole(postId); }
 /** The breathing room either side of a post on a computer, when the window has it to spare. */
 export const LANE_INSET = 28;
 /**
@@ -148,13 +149,8 @@ function MediaPostPageInner({ post, author, liked, saved, active, preload = fals
   const { comments, currentUser, currentUserId, actions, blockedIds } = useApp();
   const streak = shownStreak(author, currentUserId);
   const footZones = postZones(post.session);
-  // The strip's numbers count up the first time its page is on show this run.
-  const [stripPlay, setStripPlay] = useState(false);
-  useEffect(() => {
-    if (!active || !post.session || counted.has(post.id)) return;
-    counted.add(post.id);
-    setStripPlay(true);
-  }, [active, post.id, post.session]);
+  // The strip's numbers: on a Feed page they count from the moment a decided swipe heads for it, every time it is landed on (usePageCount).
+  const stripPlay = usePageCount(post.id, active, !!post.session, counted);
   // Newest first, the way the sheet lists them; they fill the bottom of the page.
   // Replies stay folded on the page: "View 2 replies" opens the sheet at them.
   // Never one hidden by the owner's Hidden words (migration 117), unless it is yours: the sheet lists those under "Hidden comments".

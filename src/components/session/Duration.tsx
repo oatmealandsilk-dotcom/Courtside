@@ -3,7 +3,7 @@ import { Platform, StyleSheet, Text, View, type StyleProp, type TextStyle, type 
 
 import { durationParts, spokenDuration } from '@/features/activity/format';
 import { font } from '@/theme';
-import { CountUp } from './CountUp';
+import { CountUp, type CountPlay } from './CountUp';
 
 /**
  * How far to lift a small unit so it sits on its figure's baseline, both
@@ -24,7 +24,7 @@ export function Duration({ minutes, size, color, unitColor, play = false, delay 
   size: number;
   color: string;
   unitColor: string;
-  play?: boolean;
+  play?: CountPlay;
   delay?: number;
   duration?: number;
   style?: StyleProp<ViewStyle>;
@@ -75,7 +75,7 @@ export function Figure({ value, unit, size, color, unitColor, play = false, dela
   size: number;
   color: string;
   unitColor: string;
-  play?: boolean;
+  play?: CountPlay;
   delay?: number;
   duration?: number;
   part?: 'int' | 'dec1';
