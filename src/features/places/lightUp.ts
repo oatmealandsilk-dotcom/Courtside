@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
-import type { CourtAccess, CourtRightNow, ID, User } from '@/data/types';
+import type { CourtAccess, CourtNow, CourtRightNow, ID, User } from '@/data/types';
 import { hitShort } from '@/features/hits/format';
 import { isMapCourtId } from '@/features/places/courtName';
 import { checkInEnds, clock } from '@/features/players/checkIn';
@@ -11,6 +11,7 @@ import { milesBetween } from '@/features/players/geo';
 import { canCheckIn } from '@/features/players/mapPrivacy';
 import type { MapModel, Placed } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
+import { courtAt } from '@/features/places/courtReach';
 import { useApp } from '@/store/AppContext';
 
 /*
@@ -62,6 +63,13 @@ import { useApp } from '@/store/AppContext';
  *    count, only "Busy" or "Full" beside it when the answer is what lights it most. Free, Wet, Locked or
  *    older than 90 minutes: nothing from it.
  *
+ *    Only answers given AT the court (Oct 30, owner: "If someone flips it to light it up, we will pop smth up
+ *    like turn on location or smth, and when they turn it on and are within the radius it will turn on"):
+ *    Busy and Full send where the phone is with the answer, and the server says whether that is within the
+ *    court's reach (atCourtMiles; migration 207, which never keeps the spot). Only those light it (litStatus);
+ *    an answer from anywhere else, with Location off, or from an older app still shows on the court's card as
+ *    before (status), it just lights nothing. The sheet asks (app/court-now.tsx; the demo decides with courtReach's atCourtFor).
+ *
  *    Tapping Up to hit while standing at a court (within atCourtMiles of its
  *    pin: further at a big club) also says "I'm playing here" there:
  *    the same tap, never on its own. Not for a teen or at someone's home
@@ -97,51 +105,9 @@ export const litLine = (span: string): string => `Up to hit · ${span}`;
 
 /* ---------------------------------------------------- the court you're at */
 
-/** The map's own rule for the same court (features/places/court sameCourt): within 0.15 mi of its pin. */
-const SAME_COURT_MILES = 0.15;
-/** A big place reaches further: this much more per court past AT_COURT_BASE_COURTS, up to AT_COURT_MAX_MILES. */
-const AT_COURT_PER_COURT_MILES = 0.01;
-const AT_COURT_BASE_COURTS = 4;
-const AT_COURT_MAX_MILES = 0.35;
-
-/**
- * How far from a court's pin you still count as at it (Oct 29, owner: "But what if like my club has 20 courts. The
- * area is much bigger"): SAME_COURT_MILES (about 240 m) for up to 4 courts, about 16 m more for each court past 4,
- * at most 0.35 mi (about 560 m): 8 courts 0.19 mi, 12 courts 0.23 mi, 20 courts 0.31 mi. The server places a friend
- * on a big club's court as far out (migration 206, map_players).
- */
-export const atCourtMiles = (courts: number): number =>
-  Math.min(AT_COURT_MAX_MILES, SAME_COURT_MILES + AT_COURT_PER_COURT_MILES * Math.max(0, courts - AT_COURT_BASE_COURTS));
-
-/** Named courts this close together are one place (a big club's courts can fall into two or three of the map's pins). */
-const ONE_PLACE_MILES = 0.5;
-
-/** How many courts the place a pin stands for has: its own, plus same-named pins close by (an unnamed pin is its own place). */
-/** A name that only says what it is ("Tennis Courts", "Public courts", "Courts"), in any case: not a place's own name. */
-const GENERIC_NAME = /^\s*(public\s+)?(tennis\s+)?courts?\s*$/i;
-
-export function placeCourts(c: Court, courts: Court[]): number {
-  if (!c.name || GENERIC_NAME.test(c.name)) return Math.max(1, c.count);
-  let n = Math.max(1, c.count);
-  for (const o of courts) if (o.id !== c.id && o.name === c.name && milesBetween(o, c) <= ONE_PLACE_MILES) n += Math.max(1, o.count);
-  return n;
-}
-
-/**
- * The court you are standing at: the nearest one within reach of its pin (atCourtMiles: further at a big club), a
- * club's too, never someone's home court; or null. Nearest by how far into its reach you are, so a small park beside
- * a big club still wins when you stand on it.
- */
-export function courtAt(at: LatLng, courts: Court[]): Court | null {
-  let best: Court | null = null;
-  let bestShare = 1;
-  for (const c of courts) {
-    if (!isMapCourtId(c.id) || c.access === 'private') continue;
-    const share = milesBetween(at, c) / atCourtMiles(placeCourts(c, courts));
-    if (share < bestShare) { best = c; bestShare = share; }
-  }
-  return best;
-}
+/* The reach of a court (atCourtMiles, placeCourts, courtAt, atCourtFor): features/places/courtReach, kept free of the
+ * app's store so the store can use it too. */
+export { atCourtFor, atCourtMiles, courtAt, placeCourts } from '@/features/places/courtReach';
 
 /**
  * Lighting up at a court lights the court up too: "I'm playing here" there,
@@ -205,15 +171,19 @@ export const glowLevel = (score: number): GlowLevel | 0 => (score >= 4 ? 3 : sco
 const STATUS_GLOW_MS = 90 * 60_000;
 
 /**
- * How lit the latest "How is it now?" answer makes a court: Busy lit (2), Full hot (3); Free, Wet, Locked,
- * none, or older than 90 minutes: 0. Anonymous, as the answer already shows to everyone.
+ * How lit the latest "How is it now?" answer GIVEN AT THE COURT makes it (litStatus, migration 207): Busy lit (2),
+ * Full hot (3); Free, Wet, Locked, none, or older than 90 minutes: 0. Anonymous, as the answer already shows to
+ * everyone. An answer from anywhere else lights nothing.
  */
-export function statusGlow(row: Pick<CourtRightNow, 'status' | 'statusAt'> | undefined, now: Date = new Date()): GlowLevel | 0 {
-  if (!row?.status || !row.statusAt) return 0;
-  const at = Date.parse(row.statusAt);
+export function statusGlow(row: Pick<CourtRightNow, 'litStatus' | 'litAt'> | undefined, now: Date = new Date()): GlowLevel | 0 {
+  if (!row?.litStatus || !row.litAt) return 0;
+  const at = Date.parse(row.litAt);
   if (!Number.isFinite(at) || now.getTime() - at > STATUS_GLOW_MS) return 0;
-  return row.status === 'full' ? 3 : row.status === 'wait' ? 2 : 0;
+  return row.litStatus === 'full' ? 3 : row.litStatus === 'wait' ? 2 : 0;
 }
+
+/** The answers that can light a court (statusGlow): only these ask where you are. */
+export const lightsCourt = (status: CourtNow | null): boolean => status === 'wait' || status === 'full';
 
 /** Standing on a court: within about 20 m of its pin (the same as pinList's ON_COURT_MILES). */
 const ON_COURT_MILES = 0.0125;
@@ -290,8 +260,8 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, users
     // One or two people: their circles on the court say who and how many, so its words carry no number
     // (Oct 28, owner: "if its 2 or less ppl hitting there. the icons of them should show up instead of it
     // just saying 2ppl"); three or more: the count. The answer lighting it more than they do: "Busy", "Full".
-    const label = said > counted && row?.status
-      ? NOW_LABEL[row.status]
+    const label = said > counted && row?.litStatus
+      ? NOW_LABEL[row.litStatus]
       : people
         ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
         : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
