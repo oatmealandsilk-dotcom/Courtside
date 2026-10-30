@@ -1,10 +1,11 @@
 import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
-import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, withReview, type Seeing } from '@/data/mock/courtLife';
-import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
+import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, demoToday, withReview, type Seeing } from '@/data/mock/courtLife';
+import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
 import { notKnownAdult } from '@/features/players/age';
+import { dayKey, todayStart } from '@/features/places/playedToday';
 import { saidYes } from '@/features/players/mapPrivacy';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
@@ -31,6 +32,8 @@ export interface CourtLifeState {
   courtRegulars: Record<string, ID[]>;
   /** Courts with a post or hit this week, around where the map looked. */
   courtRings: CourtRing[];
+  /** Played here today (features/places/playedToday): what public was at the courts asked about, in your day, by court id. */
+  courtToday: Record<string, CourtToday>;
   /** Your own facts about courts, to fill "Add what you know" back in. */
   myCourtReviews: Record<string, CourtReview>;
   /** The courts you follow, with what is new at each; null until first asked. */
@@ -44,7 +47,7 @@ export interface CourtLifeState {
 }
 
 export const emptyCourtLife: CourtLifeState = {
-  courtFacts: {}, courtFollows: {}, courtNow: {}, courtRegulars: {}, courtRings: [], myCourtReviews: {}, followedCourts: null, courtExtras: null,
+  courtFacts: {}, courtFollows: {}, courtNow: {}, courtRegulars: {}, courtRings: [], courtToday: {}, myCourtReviews: {}, followedCourts: null, courtExtras: null,
 };
 
 /** What the slice reads from the rest of the app's state. */
@@ -86,6 +89,8 @@ export interface CourtLifeActions {
   loadCourtRings: (box: MapBox) => Promise<void>;
   /** Only how up to 50 courts are right now (the map's lit courts, features/places/lightUp). */
   loadCourtsNow: (courtIds: string[]) => Promise<void>;
+  /** Played here today, for up to 50 courts (features/places/playedToday; only while it is switched on). */
+  loadCourtsToday: (courtIds: string[]) => Promise<void>;
 }
 
 const seeing = (s: Reads): Seeing => ({ me: s.currentUserId, users: s.users, followingIds: s.followingIds, blockedIds: s.blockedIds, mutedIds: s.mutedIds });
@@ -321,6 +326,25 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     setState((prev) => ({ ...prev, courtRings: [...prev.courtRings.filter((r) => !inBox(r) && !rings.some((x) => x.courtId === r.courtId)), ...rings].slice(-400) }));
   }, [stateRef, setState, live]);
 
+  const loadCourtsToday = useCallback(async (courtIds: string[]) => {
+    const ids = [...new Set(courtIds.filter(isMapCourtId))].slice(0, 50);
+    const me = stateRef.current.currentUserId;
+    if (!ids.length || !me) return;
+    const now = new Date();
+    const since = todayStart(now);
+    const day = dayKey(now);
+    const s = stateRef.current;
+    const rows = live(me) ? await remote.fetchCourtsToday(ids, since, day).catch(() => null) : demoToday(ids, s.posts, s.hitRequests, seeing(s), since, day);
+    if (!rows || stateRef.current.currentUserId !== me) return;
+    // The courts asked about take this answer (none: nothing public there today); the rest keep theirs.
+    setState((prev) => {
+      const next = { ...prev.courtToday };
+      for (const id of ids) delete next[id];
+      for (const r of rows) next[r.courtId] = r;
+      return { ...prev, courtToday: next };
+    });
+  }, [stateRef, setState, live]);
+
   const loadCourtsNow = useCallback(async (courtIds: string[]) => {
     const ids = [...new Set(courtIds.filter(isMapCourtId))].slice(0, 50);
     const me = stateRef.current.currentUserId;
@@ -343,6 +367,6 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
   }, [stateRef, setState, live]);
 
   return useMemo(() => ({
-    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow,
-  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow]);
+    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow, loadCourtsToday,
+  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow, loadCourtsToday]);
 }

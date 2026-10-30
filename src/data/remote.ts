@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, CourtToday, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -4520,6 +4520,17 @@ export const remote = {
     if (error) { if (!missingFunction(error)) fail('court rings')(error); return null; }
     return ((data ?? []) as { court_id: string; name: string | null; lat: number; lng: number; posts: number; hits: number; last_at: string }[])
       .map((r) => ({ courtId: r.court_id, ...(r.name ? { name: r.name } : {}), lat: r.lat, lng: r.lng, posts: num(r.posts), hits: num(r.hits), lastAt: r.last_at }));
+  },
+  /**
+   * Played here today (migration 205): for up to 50 courts, what public was there since `since` (your
+   * midnight): posts tagged there and open hits there today everyone may see, with who, so the app can leave
+   * out people you muted. Null when it could not be asked (or the database has no such function yet).
+   */
+  async fetchCourtsToday(ids: string[], since: Date, day: string): Promise<CourtToday[] | null> {
+    const { data, error } = await need().rpc('court_played_today', { ids: ids.slice(0, 50), since: since.toISOString() });
+    if (error) { if (!missingFunction(error)) fail('courts today')(error); return null; }
+    return ((data ?? []) as { court_id: string; posts: number; hits: number; last_at: string; author_ids: string[] | null }[])
+      .map((r) => ({ courtId: r.court_id, posts: num(r.posts), hits: num(r.hits), lastAt: r.last_at, authorIds: r.author_ids ?? [], day }));
   },
   /** "Sam and Dev, who you follow, play here", for up to 50 courts. */
   async fetchCourtRegulars(ids: string[]): Promise<CourtRegulars[] | null> {

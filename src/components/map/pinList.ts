@@ -45,7 +45,7 @@ const playerRank = (p: Placed, now: number) =>
  * never gather into anyone (whoever crowds you shows as "+N" beside you);
  * a picked court or hit never gathers at all.
  */
-export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden = false, playing = null, glow = null, meHold = null, land = 0 }: {
+export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden = false, playing = null, glow = null, today = null, meHold = null, land = 0 }: {
   model: MapModel; expanded: boolean; me: User; shown: Placed[]; selectedId: string | null; selectedCourtId: string | null; selectedHitId: string | null;
   /** You chose "Only me": your own pin says so. */
   hidden?: boolean;
@@ -69,6 +69,11 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
    * own beside it (Oct 27 review). Full map only, never the still card. Null: as before.
    */
   glow?: Map<string, CourtGlow> | null;
+  /**
+   * Played here today (features/places/playedToday; off until approved): courts with something public there
+   * today wear a soft warm glow. A lit court (glow) keeps its own look. Null: as before.
+   */
+  today?: Set<string> | null;
 }): CanvasMarker[] {
   const now = Date.now();
   // Full court pins only on the full map (the model draws none on the card either).
@@ -158,7 +163,9 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
     }
     // Something on: never gathered into a court crowd, above the others, and shown at every zoom (as its hit's flag was).
     // `n`: how many courts it is, for the count on a crowd.
-    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag, hits), z: on ? 4 : tag ? 2 : 1, k: 'c' as const, r: (ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag, hitsSaid].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
+    // Played here today: the soft warm glow (and "Played today" by its name, close in), ahead of the quiet courts in a crowd.
+    const played = !!expanded && !!today?.has(c.id);
+    return { id: `c:${c.id}`, lat: c.lat, lng: c.lng, html: courtPinHtml(c, on, ringed, underYou ? undefined : tag, underYou, !!glow && !!tag, hits, played), z: on ? 4 : tag ? 2 : played ? 2 : 1, k: 'c' as const, r: (played ? -1e6 : ringed ? 0 : 1e6) - c.count * 1000 + i, sel: on, solo: !!tag, n: c.count, g: 'c' as const, role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, tag, played ? 'played here today' : null, hitsSaid].filter(Boolean).join(', '), mz: on || tag ? undefined : COURTS_MIN_ZOOM };
   });
   // The still card: your city's courts as quiet dots, under everything.
   // The still card shows people and hits only; courts live on the full map (Oct 3, owner).

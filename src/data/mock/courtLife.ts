@@ -1,4 +1,4 @@
-import type { CourtFacts, CourtFollowCount, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, Notification, Post, TaggedCourt, User } from '../types';
+import type { CourtFacts, CourtFollowCount, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, Notification, Post, TaggedCourt, User } from '../types';
 import { notKnownAdult } from '@/features/players/age';
 import { isMapCourtId } from '@/features/places/courtName';
 import { DEMO_PARK } from './courts';
@@ -131,6 +131,39 @@ export function demoRings(posts: Post[], hits: HitRequest[], s: Seeing, box: { m
   return [...per.values()]
     .filter((r) => r.lat >= box.minLat && r.lat <= box.maxLat && r.lng >= box.minLng && r.lng <= box.maxLng)
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+/**
+ * Played here today (court_played_today, migration 205), for up to 50 courts: public posts tagged there since
+ * your midnight (none to one group, none logged by itself, none taken down, none by a private account but
+ * yours) and open hits there today everyone may see, by the court rule (showsAtCourt), with who.
+ */
+export function demoToday(courtIds: string[], posts: Post[], hits: HitRequest[], s: Seeing, since: Date, day: string): CourtToday[] {
+  const wanted = new Set(courtIds);
+  const from = since.getTime();
+  const until = from + 86_400_000;
+  const per = new Map<string, CourtToday>();
+  const isPublic = (authorId: ID) => authorId === s.me || !s.users.find((u) => u.id === authorId)?.isPrivate;
+  const add = (courtId: string, post: boolean, who: ID, at: string) => {
+    const had = per.get(courtId) ?? { courtId, posts: 0, hits: 0, lastAt: at, authorIds: [], day };
+    if (post) had.posts += 1; else had.hits += 1;
+    if (at > had.lastAt) had.lastAt = at;
+    if (!had.authorIds.includes(who)) had.authorIds.push(who);
+    per.set(courtId, had);
+  };
+  for (const p of posts) {
+    const t = Date.parse(p.createdAt);
+    if (!p.court || !wanted.has(p.court.id) || !(t >= from && t <= Date.now() + 300_000)) continue;
+    if (p.archived || p.removed || p.groupId || p.autoLogged || p.autoHeld || !isPublic(p.authorId) || !showsAtCourt(p.authorId, s)) continue;
+    add(p.court.id, true, p.authorId, p.createdAt);
+  }
+  for (const h of hits) {
+    const t = Date.parse(h.startsAt);
+    if (!h.place.id || !wanted.has(h.place.id) || h.cancelled || (h.audience ?? 'everyone') !== 'everyone' || !(t >= from && t < until)) continue;
+    if (!isPublic(h.authorId) || !showsAtCourt(h.authorId, s)) continue;
+    add(h.place.id, false, h.authorId, h.startsAt);
+  }
+  return [...per.values()];
 }
 
 /** "Sam and Marcus, friends, play here": friends who follow each other with you (since migration 189) who posted, posted a hit or joined one at each court in 90 days (court_people_you_follow). */

@@ -253,7 +253,7 @@ const ASK_MAX = 50;
 const REFRESH_MS = 3 * 60_000;
 
 /** The courts nearest the middle of a list (where the map came to rest), at most ASK_MAX, as one key. */
-function nearestKey(courts: Court[]): string {
+export function nearestKey(courts: Court[]): string {
   const real = courts.filter((c) => isMapCourtId(c.id));
   if (!real.length) return '';
   const mid = { lat: real.reduce((s, c) => s + c.lat, 0) / real.length, lng: real.reduce((s, c) => s + c.lng, 0) / real.length };

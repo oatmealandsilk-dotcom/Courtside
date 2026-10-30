@@ -24,7 +24,9 @@ import { isClosedCourt, type Court, type CourtRow } from '@/features/players/cou
 import { courtSurfaceWord } from '@/features/places/courtSurface';
 import { HitCard } from '@/components/HitCard';
 import { HitGlyph } from '@/components/HitGlyph';
-import type { HitRequest } from '@/data/types';
+import type { HitRequest, Post } from '@/data/types';
+import { MediaPlaceholder } from '@/components/MediaPlaceholder';
+import { PLAYED_TODAY_GLOW, todayClip } from '@/features/places/playedToday';
 import { joinedCount } from '@/features/hits/audience';
 import { FORMAT_LABEL, hitShort } from '@/features/hits/format';
 import { isMapCourtId, labelOf } from '@/features/places/courtName';
@@ -1452,6 +1454,32 @@ function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
 }
 
 /**
+ * Played here today (features/places/playedToday): today's clip from this court at the top of its card. Its
+ * picture, still (the card plays nothing on its own), with "Played here today" and who and when on it; a tap
+ * opens it the way any clip at a court opens (openCourtReel), in the court's reel.
+ */
+function TodayClip({ post, author, mine, onOpen }: { post: Post; author?: User; mine: boolean; onOpen: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const cover = post.thumbnailUrl ?? post.imageUrl;
+  const who = mine ? 'You' : author ? `@${author.handle}` : '';
+  const when = relativeTime(post.createdAt);
+  return (
+    <Pressable accessibilityRole="button" accessibilityLabel={`Played here today: ${who ? `${who}'s clip` : 'a clip'}, ${when}. Play it`} onPress={onOpen} style={({ pressed }) => [styles.todayWrap, pressed && styles.postedPressed]}>
+      <View style={styles.todayClip}>
+        {cover ? <TileCover uri={cover} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : <View style={StyleSheet.absoluteFill}><MediaPlaceholder label={post.mediaLabel ?? 'Clip · 0:15'} seed={post.id} fill /></View>}
+        <View style={styles.todayShade} />
+        <View style={styles.todayTag}>
+          <View style={styles.todayDot} />
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.todayTagText} numberOfLines={1}>Played here today</Text>
+        </View>
+        <View style={styles.todayPlay}><Ionicons name="play" size={18} color={colors.onMedia} /></View>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.todayWho} numberOfLines={1}>{[who, when].filter(Boolean).join(' · ')}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/**
  * A court, picked on the map: what OpenStreetMap knows, who may play there,
  * how it is right now, what players say, the people you follow who play
  * there, what was posted there, and the open hits there. Directions, Play
@@ -1462,7 +1490,7 @@ function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
  * plays its newest clip. A members-only or private court offers no Play
  * here: it is never suggested for a hit.
  */
-export function CourtSheet({ court, miles, ringed = false, onClose }: { court: Court; miles: number; /** Played on this week: the disc wears the story ring. */ ringed?: boolean; onClose: () => void }) {
+export function CourtSheet({ court, miles, ringed = false, today = false, onClose }: { court: Court; miles: number; /** Played on this week: the disc wears the story ring. */ ringed?: boolean; /** Played here today (playedToday): today's clip from here at the top, when there is one. */ today?: boolean; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const { height: windowH } = useWindowDimensions();
   const { currentUserId, users, actions, courtFacts, courtExtras } = useApp();
@@ -1488,6 +1516,9 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
   const place = useMemo(() => ({ id: mapCourt ? court.id : undefined, name: court.name, lat: court.lat, lng: court.lng }), [mapCourt, court.id, court.name, court.lat, court.lng]);
   const { posts: here, more } = useCourtPosts(place);
   const strip = here.filter((p) => p.thumbnailUrl || p.imageUrl).slice(0, 12);
+  // Played here today (PLAYED_TODAY_GLOW): the most-liked public clip posted here today, at the top of the card.
+  const usersById = useMemo(() => new Map(users.map((u) => [u.id, u] as const)), [users]);
+  const todays = PLAYED_TODAY_GLOW && today ? todayClip(here, usersById, currentUserId) : null;
   // Open hits here, the same ones the court's page lists: one beside the clips, two without them.
   const allHits = useCourtHits(place);
   // As Community's boxes (COURT_CARD_HIT_BOXES): every one of them, in a row that swipes.
@@ -1533,6 +1564,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </Pressable>
       </View>
       <GHScrollView style={{ maxHeight: middleMax, flexGrow: 0 }} contentContainerStyle={styles.courtMiddle} showsVerticalScrollIndicator={false} bounces={false}>
+      {todays ? <TodayClip post={todays} author={usersById.get(todays.authorId)} mine={todays.authorId === currentUserId} onOpen={() => openCourtReel(place, todays.id)} /> : null}
       {showTags ? (
         <View style={styles.courtTags}>
           <AccessTag access={access} bookUrl={bookUrl} />
@@ -2171,6 +2203,15 @@ const styleDefinitions = StyleSheet.create({
   // Upright, like the clips themselves, and a touch taller than the players' court photos above.
   postedThumb: { width: 66, height: 88, borderRadius: 12, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   postedPressed: { opacity: PRESS_DIM },
+  // Played here today: today's clip, the card's width, a still picture with its play mark (TodayClip).
+  todayWrap: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  todayClip: { height: 148, borderRadius: 14, overflow: 'hidden', backgroundColor: colors.surfaceAlt, justifyContent: 'center', alignItems: 'center' },
+  todayShade: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.16)' },
+  todayTag: { position: 'absolute', left: 10, top: 10, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, height: 24, borderRadius: radius.pill, backgroundColor: colors.bg },
+  todayDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.sun },
+  todayTagText: { ...typography.smallStrong, fontSize: 12, color: colors.text },
+  todayPlay: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', paddingLeft: 2 },
+  todayWho: { position: 'absolute', left: 12, right: 12, bottom: 9, ...typography.smallStrong, fontSize: 12, color: colors.onMedia, textShadowColor: 'rgba(0,0,0,0.5)', textShadowRadius: 4, textShadowOffset: { width: 0, height: 1 } },
   postedPlay: { position: 'absolute', right: 5, bottom: 5, width: 20, height: 20, borderRadius: 10, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   // The still card's overlay: the city named the way a map names it, with a soft halo of the page colour so it reads over roads.
   // In the middle of the card, where it always sat (Oct 6, owner: the Oct 5 move to the top was unasked).
