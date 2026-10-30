@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Platform, StyleSheet, View, useWindowDimensions } from 'react-native';
-import Reanimated, { useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing, useAnimatedStyle, useFrameCallback, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import { CardCredit, PreviewOverlay } from '@/components/map/MapChrome';
 import type { Look } from '@/components/map/look';
 import type { ClusterTemplates } from '@/components/map/pinEngine';
+import { ZoomChromeCopy } from '@/components/NearbyMap';
 import { swoopCancel } from '@/features/players/checkInZoom';
 import { GrowAwayContext, endGrow, growT } from '@/features/players/mapGrow';
 import type { LatLng } from '@/features/players/positions';
-import { zoomNote, zoomPage } from '@/features/players/zoomTiming';
-import { simAction } from '@/lib/simDriver';
-import { V7, bez, useV7Card, useV7Overlay, v7Drop, v7Flying, v7ForceHand, v7Geo, v7MemoryHold, v7Move, v7Pushed, v7RegisterLayer, v7Scale, v7SetFlying, v7SetLanded, v7StopTimers, v7Ui, type V7Card, type V7PageMsg } from '@/features/players/zoomV7';
+import { zoomFile, zoomNote, zoomPage } from '@/features/players/zoomTiming';
+import { simAction, simLog } from '@/lib/simDriver';
+import { V7, bez, useV7Card, useV7Chrome, useV7Overlay, v7Arrived, v7Bar, v7Chrome, v7Flying, v7ForceHand, v7Geo, v7Hold, v7MemoryHold, v7Move, v7Pushed, v7RegisterLayer, v7Scale, v7SetFlying, v7SetLanded, v7StopTimers, v7Ui, type V7Card, type V7PageMsg } from '@/features/players/zoomV7';
 
 /** Where the full-screen page's camera must be so that the card's middle `K` (its own points) shows `city` at `z0`. */
 function aimed(city: LatLng, z0: number, K: { x: number; y: number }, W: number, H: number): LatLng {
@@ -28,15 +29,25 @@ function aimed(city: LatLng, z0: number, K: { x: number; y: number }, W: number,
  * card's own page: the map rounds its pins to whole points of its page, so only then are they where the card's are. A
  * point spare all round the screen.
  */
-const frac = (v: number) => v - Math.floor(v);
+const frac = (v: number) => { 'worklet'; return v - Math.floor(v); };
 const cornerOf = (r: { x: number; y: number }) => ({ x: frac(r.x + 1) - 1, y: frac(r.y + 1) - 1 });
+/** Where the card's middle is in the web view's own points: the page's camera is aimed so that it shows the card's view. */
+const startOf = (k: V7Card, r: V7Card['rect'], W: number, H: number) => {
+  const c = cornerOf(r);
+  return aimed(k.city, k.zoom, { x: r.x + r.w / 2 - c.x, y: r.y + r.h / 2 - c.y }, W + 2, H + 2);
+};
+/** The tab bar's slide away with the move (AppShell's own is 180 ms, ease out). */
+const BAR_MS = 180;
+/** After the full map has taken over, the layer is aimed back at the card this long after (out of sight, at rest). */
+const RESET_AFTER_HAND_MS = 1500;
 
 /**
  * The check-in zoom's layer on the iPhone (v7, zoomV7): over every page (AppShell, after the pages), never seen and never
  * touched until a move. While the Community card is on show (and admins have the zoom), a full-screen map is drawn here
- * ahead of time at exactly the card's view, hidden; a move shows it through a window that is the card and flies it. It is
- * let go after each move, once Find Players has been out of view for a while, when the app goes to the background, and
- * when the phone is short of memory. Never on the website (ZoomLayer.web) or on Android.
+ * ahead of time at exactly the card's view, hidden, its animations paused; a move shows it through a window that is the
+ * card and flies it, and copies of the full map's buttons slide in over it as it lands. After a move it is kept, and aimed
+ * back at the card once the card is on show again. It is let go once Find Players has been out of view for a while, when
+ * the app goes to the background, and when the phone is short of memory. Never on the website (ZoomLayer.web) or Android.
  */
 export function ZoomLayer() {
   const card = useV7Card();
@@ -65,21 +76,15 @@ function Layer({ card }: { card: V7Card }) {
   const rectNow = useRef(rect);
   const cardNow = useRef(card);
   cardNow.current = card;
-  // Once the card covers the screen the web view's corner goes to whole points (under a point's move, unseen mid-move), so at
-  // the landing its pins round exactly as the full map's do.
-  const [snap, setSnap] = useState(false);
   // Nothing the card says reaches the layer's page while it flies (each new list kept its page busy, and frames dropped):
-  // its pins are the ones it had as the move began, then the full map's (made ahead) as it covers the screen. A ref, not
-  // state: nothing on the JS thread may redraw as the move starts (zoomV7).
+  // its pins are the ones it had as the move began. A ref, not state: nothing on the JS thread may redraw as the move starts.
   const frozen = useRef<unknown[] | null>(null);
+  // A move has been flown in this page: it is put back at the card's view before the next one (resetPage).
+  const spent = useRef(false);
   // While it flies the screen takes no touches (the page under it is on its way out).
   const [flying, setFlying] = useState(false);
-  const [prepTick, setPrepTick] = useState(0);
-  const corner = cornerOf(rect);
-  const [start] = useState(() => {
-    const c = cornerOf(card.rect);
-    return aimed(card.city, card.zoom, { x: card.rect.x + card.rect.w / 2 - c.x, y: card.rect.y + card.rect.h / 2 - c.y }, W + 2, H + 2);
-  });
+  const [paintTick, setPaintTick] = useState(0);
+  const [start] = useState(() => startOf(card, card.rect, W, H));
   const R = useSharedValue(card.rect);
   useEffect(() => { R.value = rect; }, [rect]); // eslint-disable-line react-hooks/exhaustive-deps
   // The simulator's proof only (simDriver, demo builds): the layer shown at rest through the card, or through part of its
@@ -93,7 +98,8 @@ function Layer({ card }: { card: V7Card }) {
     return () => off.forEach((f) => f());
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The move, on the UI thread: the page's scale from the one ease and the wall clock (the web view runs the same function).
+  // The move, on the UI thread: the page's scale from the one ease and the wall clock (the web view runs the same function),
+  // the tab bar sliding away from the first frame, and the map's buttons sliding in over the last stretch.
   const frame = useFrameCallback(() => {
     'worklet';
     const m = v7Move.value;
@@ -103,13 +109,18 @@ function Layer({ card }: { card: V7Card }) {
     if (ms >= 0 && ms <= m.D) {
       const st = v7Ui.value;
       const g = st.last ? now - st.last : 0;
-      v7Ui.value = { n: st.n + 1, gap: Math.max(st.gap, g), last: now, first: st.first < 0 ? ms : st.first, at: g > st.gap ? ms : st.at };
+      const gaps = g >= 30 && st.gaps.length < 10 ? [...st.gaps, [ms - g, g]] : st.gaps;
+      v7Ui.value = { n: st.n + 1, gap: Math.max(st.gap, g), last: now, first: st.first < 0 ? ms : st.first, at: g > st.gap ? ms : st.at, gaps };
     }
     const u = Math.max(0, Math.min(1, ms / m.D));
     const s = Math.min(Math.pow(2, m.dz * bez(u, m.x1, m.y1, m.x2, m.y2)), m.S);
     v7Scale.value = s;
     // The Community page pushes in by the same scale (mapGrow's push-in, round P), and covers the screen until the hand-over.
     growT.value = s <= 1 ? 0.000001 : Math.log(s) / Math.log(m.S);
+    const b = Math.max(0, Math.min(1, ms / BAR_MS));
+    v7Bar.value = 1 - (1 - b) * (1 - b) * (1 - b);
+    const c = Math.max(0, Math.min(1, (ms - (m.D - m.cMs)) / m.cMs));
+    v7Chrome.value = 1 - (1 - c) * (1 - c) * (1 - c);
   }, false);
   const frameNow = useRef(frame);
   frameNow.current = frame;
@@ -121,23 +132,50 @@ function Layer({ card }: { card: V7Card }) {
     frameNow.current.setActive(false);
     v7Move.value = { ...v7Move.value, on: 0, hidden: 1 };
     v7Scale.value = 1;
+    v7Chrome.value = 0;
     setFlying(false);
     v7SetFlying(false);
   };
   const hideNow = useRef(hide);
   hideNow.current = hide;
 
+  // The full map's pins, sent ahead as data (the page makes only the ones the landing needs, as the card covers the screen).
+  const sendItems = () => {
+    const k = cardNow.current;
+    if (frozen.current || !painted.current) return;
+    canvas.current?.v7(`window.__cs.v7items(${JSON.stringify({ items: k.fullMarkers, tpl: k.tpl })})`);
+  };
+  const sendItemsNow = useRef(sendItems);
+  sendItemsNow.current = sendItems;
+  useEffect(() => { sendItemsNow.current(); }, [card.fullMarkers, card.tpl, paintTick]);
+
+  // After a move: the page as it was before it (the card's own pins, at rest), its camera back at the card's view, ready
+  // again once it has drawn there. Never while a move is under way.
+  const resetPage = () => {
+    if (v7Flying()) return;
+    spent.current = false;
+    frozen.current = null;
+    painted.current = false;
+    canvas.current?.v7(`window.__cs.v7reset(${JSON.stringify({ items: cardNow.current.markers, tpl: cardNow.current.tpl })})`);
+    const { W: w, H: h } = size.current;
+    canvas.current?.jump(startOf(cardNow.current, rectNow.current, w, h), cardNow.current.zoom);
+    zoomNote('reaimed');
+  };
+  const resetNow = useRef(resetPage);
+  resetNow.current = resetPage;
+  // The card offering itself again (on show a moment after Back): a page spent by a move is put back now.
+  useEffect(() => { if (spent.current) resetNow.current(); }, [card]);
+
   // The card is somewhere else now (the page scrolled): drawn again where it is (out of sight), and ready once it has.
   const aim = (r: V7Card['rect']) => {
     const was = rectNow.current;
     if (v7Flying() || (Math.abs(r.x - was.x) < 0.01 && Math.abs(r.y - was.y) < 0.01 && Math.abs(r.w - was.w) < 0.01 && Math.abs(r.h - was.h) < 0.01)) return;
-    painted.current = false;
     rectNow.current = r;
     setRect(r);
-    const c = cornerOf(r);
+    if (spent.current) { resetNow.current(); return; }
+    painted.current = false;
     const { W: w, H: h } = size.current;
-    const k = cardNow.current;
-    canvas.current?.jump(aimed(k.city, k.zoom, { x: r.x + r.w / 2 - c.x, y: r.y + r.h / 2 - c.y }, w + 2, h + 2), k.zoom);
+    canvas.current?.jump(startOf(cardNow.current, r, w, h), cardNow.current.zoom);
     zoomNote('reaim');
   };
   const aimNow = useRef(aim);
@@ -145,12 +183,32 @@ function Layer({ card }: { card: V7Card }) {
   // Each time the card hands over where it is (it measures itself as it does).
   useEffect(() => { aimNow.current(card.rect); }, [card.rect.x, card.rect.y, card.rect.w, card.rect.h]);
 
+  // A move stopped part way (the server said no, or it ran out of time before a full map was there): hidden, the page under
+  // it back as it was, and this page put back at the card's view a moment later (the card is on show again).
+  const stopMove = (why: string) => {
+    zoomNote(why);
+    v7StopTimers();
+    canvas.current?.v7('window.__cs.v7stop()');
+    hideNow.current();
+    v7Bar.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
+    endGrow();
+    swoopCancel();
+    v7Arrived();
+    v7Hold(false);
+    // Its timing row goes now (nothing more of the move will come).
+    zoomFile();
+    setTimeout(() => { if (spent.current) resetNow.current(); }, 600);
+  };
+  const stopNow = useRef(stopMove);
+  stopNow.current = stopMove;
+
   useEffect(() => {
     v7RegisterLayer({
-      ready: () => painted.current && !v7Flying(),
+      ready: () => painted.current && !spent.current && !v7Flying(),
       aim: (r) => aimNow.current(r),
       go: (p) => {
         frozen.current = cardNow.current.markers;
+        spent.current = true;
         v7SetFlying(true);
         // Touches off on the JS thread's next turn: a redraw now would hold up the move's start (its first frames).
         setTimeout(() => { if (v7Flying()) setFlying(true); }, 0);
@@ -164,21 +222,21 @@ function Layer({ card }: { card: V7Card }) {
           guard.current = null;
           if (!v7Flying()) return;
           zoomNote('stuck');
-          // The full map is there: it takes over now (its buttons in, your pin landed). Not there: the page goes back.
+          // The full map is there: it takes over now. Not there: the move stops and the page goes back.
           if (v7ForceHand()) return;
-          v7StopTimers();
-          hideNow.current();
-          endGrow();
-          swoopCancel();
-          v7Drop();
-        }, p.t0 - Date.now() + p.D + V7.handMax + 2000);
+          stopNow.current('guard');
+        }, p.t0 - Date.now() + p.D + V7.handMaxLoading + 2000);
       },
-      full: () => {
-        setSnap(true);
-        canvas.current?.v7('window.__cs.v7full()');
-      },
+      retarget: (to) => canvas.current?.v7(`window.__cs.v7re(${to.lat},${to.lng})`),
       warm: (at, z) => canvas.current?.warm(at, z),
-      hide: () => hideNow.current(),
+      stop: () => stopNow.current('serverNo'),
+      handed: () => {
+        hideNow.current();
+        v7Bar.value = 0;
+        // Put back at the card's view once the full map has settled (its first moments never share the phone with this
+        // page's redraw), so a tap after Back finds it ready.
+        setTimeout(() => { if (spent.current && !v7Flying()) resetNow.current(); }, RESET_AFTER_HAND_MS);
+      },
     });
     return () => {
       v7RegisterLayer(null);
@@ -189,18 +247,15 @@ function Layer({ card }: { card: V7Card }) {
         v7StopTimers();
         v7Move.value = { ...v7Move.value, on: 0, hidden: 1 };
         v7Scale.value = 1;
+        v7Chrome.value = 0;
+        v7Bar.value = 0;
         v7SetFlying(false);
-        if (!v7Pushed()) { endGrow(); swoopCancel(); }
+        if (!v7Pushed()) { endGrow(); swoopCancel(); v7Arrived(); }
+        v7Hold(false);
         zoomNote('stopped');
       }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // The full map's pins, made ahead in the same page (all but invisible) and kept up to date while the layer waits.
-  useEffect(() => {
-    if (frozen.current || !painted.current) return;
-    canvas.current?.v7(`window.__cs.v7prep(${JSON.stringify({ items: card.fullMarkers, tpl: card.tpl })})`);
-  }, [card.fullMarkers, card.tpl, prepTick]);
 
   // The window: the card's own box (its corners, its 1 pt edge drawn over what is in it, its fill under it), grown by its
   // real frame as the page pushes in (never by a transform: a rounded clip renders what is in it at the clip's own size, so a
@@ -229,6 +284,14 @@ function Layer({ card }: { card: V7Card }) {
     const q = R.value;
     return { left: -(g.px + (q.x - g.px) * s) - s, top: -(g.py + (q.y - g.py) * s) - s };
   });
+  // The web view's corner: at the card's fraction of a point at rest; on whole points once the card covers the screen (under a
+  // point's move, unseen mid-move), so at the landing its pins round exactly as the full map's do. On the UI thread.
+  const cornerStyle = useAnimatedStyle(() => {
+    const q = R.value;
+    const m = v7Move.value;
+    const covered = m.on === 1 && v7Scale.value >= m.S - 1e-4;
+    return { left: covered ? -1 : frac(q.x + 1) - 1, top: covered ? -1 : frac(q.y + 1) - 1 };
+  });
   // The card's own words, pill, weather and credit, drawn again over the layer's map: the same views as the card's, moved
   // by the same values (the page's push-in round P; each keeps its size and slips out of the card's edge, as on the card).
   const chromeStyle = useAnimatedStyle(() => {
@@ -240,8 +303,11 @@ function Layer({ card }: { card: V7Card }) {
     const away = m.on === 1 && s >= m.S - 1e-4 ? 100000 : 0;
     return { transform: [{ translateX: (g.px - g.kx) * (1 - s) + away }, { translateY: (g.py - g.ky) * (1 - s) }, { scale: s }] };
   });
+  // The full map's buttons drawn over the layer: shown with the window (and hidden with it, in the same frame).
+  const buttonsShown = useAnimatedStyle(() => ({ opacity: v7Move.value.hidden ? 0 : 1 }));
 
   const overlay = useV7Overlay();
+  const buttons = useV7Chrome();
   return (
     <View
       pointerEvents={flying ? 'auto' : 'none'}
@@ -252,7 +318,7 @@ function Layer({ card }: { card: V7Card }) {
     >
       <Reanimated.View style={[styles.window, { borderColor: card.border, backgroundColor: card.bg }, windowStyle]}>
         <Reanimated.View style={[{ position: 'absolute', width: W, height: H }, fixedStyle]}>
-          <View style={{ position: 'absolute', left: snap ? -1 : corner.x, top: snap ? -1 : corner.y, width: W + 2, height: H + 2 }}>
+          <Reanimated.View style={[{ position: 'absolute', width: W + 2, height: H + 2 }, cornerStyle]}>
             <MapCanvas
               ref={canvas}
               layer
@@ -263,14 +329,22 @@ function Layer({ card }: { card: V7Card }) {
               interactive={false}
               markers={(frozen.current ?? card.markers) as CanvasMarker[]}
               tpl={card.tpl as ClusterTemplates}
-              onPainted={() => { painted.current = true; setPrepTick((n) => n + 1); }}
-              onLost={() => { painted.current = false; }}
+              onPainted={() => { painted.current = true; setPaintTick((n) => n + 1); simLog('[v7] layer ready'); }}
+              onLost={() => {
+                painted.current = false;
+                // A fresh page is on its way, at the card's view: nothing of a move is left in it.
+                spent.current = false;
+                if (!v7Flying()) return;
+                // The phone stopped the page mid-move: the full map takes over if it is there, else the move stops.
+                if (v7Pushed() && v7ForceHand()) { zoomNote('lost'); return; }
+                stopNow.current('lost');
+              }}
               onV7={(msg: V7PageMsg) => {
                 if (msg.type === 'v7landed') { zoomPage(msg); v7SetLanded(); }
                 else zoomNote(`page ${msg.e ?? ''}`);
               }}
             />
-          </View>
+          </Reanimated.View>
         </Reanimated.View>
         {overlay ? (
           <Reanimated.View pointerEvents="none" style={[{ position: 'absolute', width: W, height: H }, fixedStyle]}>
@@ -285,6 +359,11 @@ function Layer({ card }: { card: V7Card }) {
           </Reanimated.View>
         ) : null}
       </Reanimated.View>
+      {buttons ? (
+        <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, buttonsShown]}>
+          <ZoomChromeCopy p={buttons} slide={v7Chrome} />
+        </Reanimated.View>
+      ) : null}
     </View>
   );
 }

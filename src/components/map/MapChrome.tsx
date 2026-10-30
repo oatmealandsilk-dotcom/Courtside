@@ -110,7 +110,7 @@ export const PIN_FIT_TOP = 120;
  * see-through fill (MapGlass, Oct 22): never Apple's glass, so never put up
  * again, and the same every time the map opens.
  */
-export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCourt, places, onPickPlace, players = 0, cityName = '', weather = null }: { onBack?: () => void; query: string; onQuery: (next: string) => void; /** The Check in button (useCheckIn, migration 189): the only way your spot is shared. */ checkIn?: CheckInControl; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
+export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCourt, places, onPickPlace, players = 0, cityName = '', weather = null, copy = false }: { /** The check-in zoom's copy over its layer (v8, NearbyMap's ZoomChromeCopy), and the full map it opened until it takes over: no tips of its own. */ copy?: boolean; onBack?: () => void; query: string; onQuery: (next: string) => void; /** The Check in button (useCheckIn, migration 189): the only way your spot is shared. */ checkIn?: CheckInControl; results?: CourtRow[]; onPickCourt?: (c: Court) => void; /** The place search as you type (usePlaceSearch). */ places?: PlaceSearch; onPickPlace?: (p: FoundPlace) => void; /** Players whose names match what is typed. */ players?: number; /** The town the bar names ("Search Los Angeles"); none yet, the bar's own words. */ cityName?: string; /** What it's like to play there today, at the bar's end. */ weather?: Weather | null }) {
   const styles = useThemedStyles(styleDefinitions);
   const input = useRef<TextInput>(null);
   const [focused, setFocused] = useState(false);
@@ -210,13 +210,13 @@ export function MapTopBar({ onBack, query, onQuery, checkIn, results, onPickCour
       </Pressable>
       {checkIn ? (
         <View>
-          <TipPulse where="map" size={44} />
+          {copy ? null : <TipPulse where="map" size={44} />}
           {/* Inside the full map, the round arrow (Oct 27, owner: "when we clicked into the map to make it the circle
               arrow. On the map cover it was fine"): outlined while you are not up to hit, filled on green while you
               are; a tap turns it on or off (UpToHit: it fills from the middle and bounces once). The Find Players
               card keeps its pill. */}
           <UpToHitRound control={checkIn} />
-          <HideTip where="map" style={{ top: 52, right: 0 }} />
+          {copy ? null : <HideTip where="map" style={{ top: 52, right: 0 }} />}
         </View>
       ) : null}
     </View>

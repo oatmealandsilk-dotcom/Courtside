@@ -59,6 +59,7 @@ import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition, recentPosition } from '@/lib/geo';
+import { simCheckIn } from '@/lib/simDriver';
 import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import { smallCoverOf } from '@/lib/smallCover';
@@ -782,8 +783,11 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
    * `instant` (Up to hit for someone who has said yes before, useCheckIn): the button is already on, and its tap already
    * felt; your pin goes down at once where the phone last was when that is under 2 minutes old, then moves to the new
    * reading. A failure takes that early pin away again (the button says why).
+   * `seen` (the check-in zoom, v8): `early`, where the phone already is (that same reading under 2 minutes old), the moment
+   * it is known; `read`, the new reading the moment it is in, before the server is told. Neither is ever told before both
+   * questions have said yes (the new reading only comes after Apple's own).
    */
-  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant?: boolean) => Promise<string | null>;
+  checkInOnMap: (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant?: boolean, seen?: { early?: (at: { lat: number; lng: number }) => void; read?: (at: { lat: number; lng: number }) => void }) => Promise<string | null>;
   /** Check out: your pin goes from friends' maps at once (and any "I'm playing here"). */
   checkOutOfMap: () => Promise<void>;
   /** Asks who is new on CourtSide for you (migration 63); before it, the screen works the list out itself. */
@@ -4314,7 +4318,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const locationTurn = useRef(0);
 
   /* Check in / Check out (migration 189): the only way your spot ever reaches the server. */
-  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant = false): Promise<string | null> => {
+  const checkInOnMap = useCallback(async (onFix?: (at: { lat: number; lng: number }) => void, onAllowed?: () => void, instant = false, seen?: { early?: (at: { lat: number; lng: number }) => void; read?: (at: { lat: number; lng: number }) => void }): Promise<string | null> => {
     const me = stateRef.current.currentUserId;
     if (!me) return 'Sign in first.';
     const ends = checkInEnds().toISOString();
@@ -4323,13 +4327,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       lastSeen: { ...prev.lastSeen, [me]: { userId: me, lat: at.lat, lng: at.lng, place: 'exact', city: nearestPlace(at.lat, at.lng).name.split(',')[0], seenAt: new Date().toISOString(), until } },
     }));
     // Instant: your pin at once where the phone last was, if that is fresh (under 2 minutes), until the new reading
-    // lands; what was there before comes back if it does not go through.
+    // lands; what was there before comes back if it does not go through. Not with the check-in zoom (`seen`): no map on
+    // show draws your pin while it flies (it lands at its end), and each placing redraws the app mid-move.
     const before = stateRef.current.lastSeen[me];
+    const pinEarly = instant && !seen;
     let read = false;
     let early = false;
-    if (instant) {
+    if (pinEarly || seen?.early) {
       void recentPosition(EARLY_PIN_MS).then((at) => {
         if (!at || read || stateRef.current.currentUserId !== me) return;
+        try { seen?.early?.(at); } catch { /* only a head start */ }
+        if (!pinEarly) return;
         early = true;
         placeMine(at, ends);
       });
@@ -4343,8 +4351,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     };
     // onAllowed: the phone said yes to its location question (or had before), and is finding you now (the check-in zoom's pictures).
-    const fix = await getPosition({ onAllowed });
+    let fix = await getPosition({ onAllowed });
+    // The simulator's proof only (simDriver: demo builds with EXPO_PUBLIC_SIM_DRIVER): a reading as slow as a phone's, and
+    // somewhere a little off the last one, so the zoom's own handling of both can be seen.
+    if (simCheckIn.on) fix = await simCheckIn.reading(fix);
     read = true;
+    if (fix.ok) { try { seen?.read?.({ lat: fix.lat, lng: fix.lng }); } catch { /* only a head start */ } }
     if (!fix.ok) {
       undoEarly();
       return fix.reason === 'denied' ? (Platform.OS === 'web' ? 'Location is blocked by your browser.' : 'Location is blocked in your phone’s Settings.')
@@ -4358,16 +4370,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setState((prev) => ({ ...prev, locationEnabled: true, locationAsked: true, detectedLocation: place.name, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
     rememberLocation(true, me);
     if (!live(me)) {
+      // The simulator's proof only: the server's answer as slow as a phone's, or a no.
+      if (simCheckIn.on && !(await simCheckIn.server())) {
+        undoEarly();
+        return 'That didn’t go through. Try again.';
+      }
       if (!instant) haptics.commit();
       placeMine(fix, ends);
       onFix?.({ lat: fix.lat, lng: fix.lng });
       return null;
     }
     // Instant: the pin moves to the new reading now, while the server is told.
-    if (instant) placeMine(fix, ends);
+    if (pinEarly) placeMine(fix, ends);
     const got = await remote.checkInOnMap(fix.lat, fix.lng, place.name, ends);
     if ('error' in got) {
-      if (instant) { early = true; undoEarly(); }
+      if (pinEarly) { early = true; undoEarly(); }
       return got.error === 'ask_first' ? 'Say yes to friends seeing you on the map first.'
         : got.error === 'missing' ? 'Up to hit isn’t available yet. Update the app and try again.'
           : 'That didn’t go through. Try again.';

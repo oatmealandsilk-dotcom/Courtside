@@ -4,8 +4,11 @@
 # ~/Desktop/CourtSide-Onboarding/SIM-HOWTO.md), signs the copy for the simulator and installs it. About 30 s.
 # The bundle is the demo build (no .env: made-up demo data) with the proof's switches on (simDriver):
 #   EXPO_PUBLIC_SIM_DRIVER (commands from the Mac, sim-log.txt), EXPO_PUBLIC_SIM_ADMIN (the demo player an admin),
-#   EXPO_PUBLIC_SIM_ZOOM (the zoom on for that admin; ZOOM_ON_PHONES stays off in the code).
-# Env: SIM (simulator UDID), SRC_APP (the Release .app to copy), OUT (work folder), SIM_ZOOM=0 (the zoom left off).
+#   EXPO_PUBLIC_SIM_ZOOM (the zoom on for that admin; ZOOM_ON_PHONES stays off in the code),
+#   EXPO_PUBLIC_SIM_FIX_MS / EXPO_PUBLIC_SIM_SERVER_MS (Up to hit's new reading and the server's answer as slow as the owner's
+#   phone: his found 335-462 ms; the demo has no server and the Simulator's location answers at once).
+# Env: SIM (simulator UDID), SRC_APP (the Release .app to copy), OUT (work folder), SIM_ZOOM=0 (the zoom left off),
+#   FIX_MS (default 180), SERVER_MS (default 250).
 set -e
 export DEVELOPER_DIR=${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}
 export LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
@@ -21,6 +24,7 @@ rm -rf "$OUT/assets"; mkdir -p "$OUT/assets"
 cd "$ROOT"
 ENTRY=$(node -e "require('expo/scripts/resolveAppEntry')" "$ROOT" ios absolute | tail -n 1)
 TMPDIR=$OUT/metro-tmp NODE_ENV=production EXPO_PUBLIC_SIM_DRIVER=1 EXPO_PUBLIC_SIM_ADMIN=1 EXPO_PUBLIC_SIM_ZOOM=${SIM_ZOOM:-1} \
+  EXPO_PUBLIC_SIM_FIX_MS=${FIX_MS:-180} EXPO_PUBLIC_SIM_SERVER_MS=${SERVER_MS:-250} \
   node "$(node --print "require.resolve('@expo/cli', { paths: [require.resolve('expo/package.json')] })")" export:embed \
   --entry-file "$ENTRY" --platform ios --dev false --minify false --reset-cache \
   --bundle-output "$OUT/js/main.js" --assets-dest "$OUT/assets" > "$OUT/bundle.log" 2>&1 || { tail -30 "$OUT/bundle.log"; exit 1; }

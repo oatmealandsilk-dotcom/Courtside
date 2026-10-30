@@ -360,6 +360,11 @@ export function armGrow() {
 }
 /** Whether a grow was set going just now: the Up to hit pill then plays its quick moment as it slips out. */
 export const growArmed = (): boolean => armedAt > 0 && Date.now() - armedAt < 1000;
+/**
+ * v8 (the iPhone, zoomV7): a move is about to start from the tap itself (the pill turns green at once as it starts to slip
+ * out), so its quick moment is the one; nothing else of a grow is set going yet.
+ */
+export function armQuick() { armedAt = Date.now(); }
 
 /** The push-in's aim: where the page grows round, and how far. Before startGrow; the page is as it was until then. */
 export function aimGrow(p: GrowPlan) {

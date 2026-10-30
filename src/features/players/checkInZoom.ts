@@ -12,16 +12,18 @@ import { useApp } from '@/store/AppContext';
  * it zoomed you into the map and centered yourself in the full screen"; of the feel: "like if your in a
  * rollar coaster pov or like a jets pov taking off").
  *
- *  - Up to hit on the Find Players card (or the For you copy of it): once you are up (your location
- *    found, the server said yes), the full map opens, the way a tap on the card opens it (the same
- *    page pushed on, nothing new), and its camera swoops down from your town to street level over you
- *    (swoop.ts: one move, the map tipping forward into perspective on the way and lying flat and north
- *    up again as it arrives). Your pin lands (the Up to hit drop and its one ring) as the camera settles.
+ *  - Up to hit on the Find Players card (the Community tab's only: the For you copy of the card just puts
+ *    you up, as with the zoom off): the full map opens, the way a tap on the card opens it (the same
+ *    page pushed on, nothing new), and its camera comes down from your town to street level over you.
+ *    Your pin lands (the Up to hit drop and its one ring) as the camera settles. On the iPhone (v8,
+ *    zoomV7) the move starts from the tap itself, from where the phone already is, and the server's
+ *    answer comes while it flies; a no stops it and puts the page back (the button's shake and the
+ *    toast). The website, when its switch is on, waits for the server's yes, as before.
  *  - The round arrow inside the full map: the camera swoops to you the same way, from wherever the map is.
- *  - Turning it off never opens or moves anything. Location refused or failed, "Not now" on "Who can
- *    see you on the map?", or the server saying no: nothing opens (the button's shake and the toast,
- *    as before). The first time, "Who can see you on the map?" and then Apple's prompt come exactly as
- *    they always have (Apple 5.1.2(i)): the zoom only ever starts after both.
+ *  - Turning it off never opens or moves anything. Location refused, "Not now" on "Who can see you on
+ *    the map?", or no reading at all: nothing opens (the button's shake and the toast, as before). The
+ *    first time, "Who can see you on the map?" and then Apple's prompt come exactly as they always have
+ *    (Apple 5.1.2(i)): the zoom only ever starts after both (the first time, from the new reading).
  *  - A teen: the same, on themselves.
  *  - Reduce Motion (the system's own setting): the full map opens straight onto you, close in, no swoop.
  *

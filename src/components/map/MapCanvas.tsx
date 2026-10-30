@@ -15,6 +15,7 @@ import { GROW_CAMERA_JS, PUSH_JS, REVEAL_MS, type GrowFollow } from '@/features/
 import { V7_CAMERA_JS, type V7PageMsg } from '@/features/players/zoomV7';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
+import { SIM_DRIVER, simLog } from '@/lib/simDriver';
 
 export type { CanvasMarker, MapLoadStatus };
 
@@ -137,15 +138,24 @@ interface Props {
  * hidden; unveiled, the streets come in over the pictures under it, and the page is solid again once they have.
  */
 const VEIL_CSS = `html.cs-veil,html.cs-veil body,html.cs-veil #m{background:transparent!important}html.cs-hide .maplibregl-canvas{opacity:0}html.cs-veil .maplibregl-canvas{transition:opacity ${REVEAL_MS}ms cubic-bezier(.2,.7,.3,1)}`;
-/** The zoom layer's page (v7): the full map's pins made ahead are all but invisible (still drawn) until the switch, then the card's go. */
-const V7_CSS = '.cs-v7card .cs-v7f{opacity:.002!important}.cs-v7full .maplibregl-marker:not(.cs-v7f){opacity:0!important}';
+/**
+ * The zoom layer's page (v8): at rest (hidden) every animation in it is paused, so an unseen map never keeps working; the
+ * move takes the class off and sets them all to the wall clock's phase again (PHASE_LOCK_JS's __csRelock).
+ */
+const V7_CSS = '.cs-v7rest *,.cs-v7rest *::before,.cs-v7rest *::after{animation-play-state:paused!important}';
 /**
  * Every endless animation in the page (pins' pulses and lights) set once to the wall clock's phase (as it starts, and every
- * 250 ms for any missed): `Date.now()` is the phone's one clock, so pages that do the same pulse together.
+ * 250 ms for any missed, unless the page is at rest): `Date.now()` is the phone's one clock, so pages that do the same pulse
+ * together. `__csRelock()` sets every running one again (the zoom layer, as its animations start again). Once per page.
  */
-const PHASE_LOCK_JS = "(function(){var seen=typeof WeakSet==='function'?new WeakSet():null;function lock(){try{if(!seen||!document.getAnimations)return;var as=document.getAnimations(),w=Date.now()%3600000;for(var i=0;i<as.length;i++){var a=as[i],t=a.effect&&a.effect.getTiming?a.effect.getTiming():null;if(!t||t.iterations!==Infinity||a.playState!=='running'||seen.has(a))continue;seen.add(a);a.currentTime=w}}catch(e){}}document.addEventListener('animationstart',lock,true);setInterval(lock,250)})();";
-/** The place names the card takes off (look.ts cardLook): in the zoom layer's page they show from zoom 15 only. */
+const PHASE_LOCK_JS = "(function(){if(window.__csLocked)return;window.__csLocked=1;var seen=typeof WeakSet==='function'?new WeakSet():null;function lock(all){try{if(!seen||!document.getAnimations)return;var as=document.getAnimations(),w=Date.now()%3600000;for(var i=0;i<as.length;i++){var a=as[i],t=a.effect&&a.effect.getTiming?a.effect.getTiming():null;if(!t||t.iterations!==Infinity||a.playState!=='running'||(!all&&seen.has(a)))continue;seen.add(a);a.currentTime=w}}catch(e){}}window.__csRelock=function(){lock(true)};document.addEventListener('animationstart',function(){lock(false)},true);setInterval(function(){if(!document.documentElement.classList.contains('cs-v7rest'))lock(false)},250)})();";
+/**
+ * The place names the card takes off (look.ts cardLook): in the zoom layer's page they are placed from zoom 14.6 and fade in
+ * by zoom to 15, so they come in softly with the houses rather than all in one frame (the full map has them at 15.25 too).
+ */
 const PLACE_NAMES = ['label_city', 'label_city_capital', 'label_town', 'label_village', 'label_other'];
+const NAMES_FROM = 14.6;
+const NAMES_IN = 15;
 
 /**
  * The phone's map: the same MapLibre vector map the browser draws, inside
@@ -251,6 +261,18 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   const holdNow = useRef(holdPins);
   holdNow.current = holdPins;
   useEffect(() => { send(`window.__cs.hold(${holdPins ? 'true' : 'false'})`); }, [holdPins]);
+  // Whether this try's page was made with its pulses on the wall clock's phase (phaseLock is read as the page is made). Turned
+  // on later (an admin known only after the card first drew), the page is given it then: the zoom layer's and the card's
+  // rings never jump as one takes over from the other.
+  const lockBuilt = useRef(phaseLock);
+  const phaseLockNow = useRef(phaseLock);
+  phaseLockNow.current = phaseLock;
+  const lockLate = () => {
+    if (!phaseLockNow.current || lockBuilt.current || !ready.current) return;
+    lockBuilt.current = true;
+    send(PHASE_LOCK_JS);
+  };
+  useEffect(() => { lockLate(); }, [phaseLock]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The page is built once per try; everything after arrives as messages. The theme's
   // colours go on as soon as the style's layers exist ('style.load'), before
@@ -260,11 +282,11 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // The map's code and stylesheet arrive by ENGINE_JS, at the end; PAINT_WATCH_JS
   // says when the map is up and when it has drawn (and fetches again any streets
   // that failed on the way), so the card can show its loading look till then.
-  const html = useMemo(() => `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  const html = useMemo(() => { lockBuilt.current = phaseLock; return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}${GROW_CLEAR_CSS}${VEIL_CSS}${layer ? V7_CSS : ''}</style></head>
 <body><div id="m"></div><script>
-var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
-var PUSH=${full || veilNow.current ? PUSH_JS : 'null'},LENS=null,LZ=0,VEIL=${veilNow.current ? JSON.stringify(veilNow.current) : 'null'};${phaseLock ? PHASE_LOCK_JS : ''}${layer ? 'var V7S=null,FULLE=null;' : ''}
+var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var WARMED={};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
+var PUSH=${full || veilNow.current ? PUSH_JS : 'null'},LENS=null,LZ=0,VEIL=${veilNow.current ? JSON.stringify(veilNow.current) : 'null'};${phaseLock ? PHASE_LOCK_JS : ''}${layer ? "var V7S=null,FULLE=null,FULLI=null,V7IN=null,V7ME=null,V7OUT=0;document.documentElement.classList.add('cs-v7rest');" : ''}
 if(VEIL)document.documentElement.classList.add('cs-veil','cs-hide');
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
@@ -287,9 +309,11 @@ map.on('webglcontextrestored',function(){if(LOSTT){clearTimeout(LOSTT);LOSTT=0}t
 function blank(c){try{var k=document.createElement('canvas');k.width=8;k.height=8;var g=k.getContext('2d');g.drawImage(c,0,0,8,8);var p=g.getImageData(0,0,8,8).data,lo=999,hi=0;for(var j=0;j<p.length;j+=4){var v=p[j]+p[j+1]+p[j+2];if(v<lo)lo=v;if(v>hi)hi=v}return hi-lo<6}catch(e){return false}}
 map.touchZoomRotate.disableRotation();
 function P(id,k,v){map.setPaintProperty(id,k+'-transition',{duration:0,delay:0});map.setPaintProperty(id,k,v)}
-${layer ? `// The zoom layer's place names: from zoom 15 in only (each layer's range set once, as the style loads, never again).
-var NAMES=${JSON.stringify(PLACE_NAMES)};function names15(id,mn,mx){var L=map.getLayer(id);if(!L)return;var a=Math.max(15,mn);if(L.minzoom!==a||L.maxzoom!==mx)map.setLayerZoomRange(id,a,mx)}
-function lift(l){NAMES.forEach(function(id){var L=map.getLayer(id),r=l[id];if(!L)return;try{if(r&&r.hide){map.setLayoutProperty(id,'visibility','none');return}names15(id,r&&r.minZoom!=null?r.minZoom:(L.minzoom||0),r&&r.minZoom!=null?24:(L.maxzoom!=null?L.maxzoom:24))}catch(e){}})}
+${layer ? `// The zoom layer's place names: placed from zoom ${NAMES_FROM} only (never earlier: a name nobody sees still pushes other
+// words off the map) and faded in by zoom to ${NAMES_IN}; each layer's range set as the style loads, its ramp with it.
+var NAMES=${JSON.stringify(PLACE_NAMES)},RAMP=['interpolate',['linear'],['zoom'],${NAMES_FROM},0,${NAMES_IN},1];
+function namesIn(id,mn,mx){var L=map.getLayer(id);if(!L)return;var a=Math.max(${NAMES_FROM},mn);if(L.minzoom!==a||L.maxzoom!==mx)map.setLayerZoomRange(id,a,mx);if(!L.__ramp){L.__ramp=1;P(id,'text-opacity',RAMP);try{P(id,'icon-opacity',RAMP)}catch(e){}}}
+function lift(l){NAMES.forEach(function(id){var L=map.getLayer(id),r=l[id];if(!L)return;try{if(r&&r.hide){map.setLayoutProperty(id,'visibility','none');return}namesIn(id,r&&r.minZoom!=null?r.minZoom:(L.minzoom||0),r&&r.minZoom!=null?24:(L.maxzoom!=null?L.maxzoom:24))}catch(e){}})}
 ` : ''}function look(l){${layer ? 'lift(l);' : ''}for(var id in l){if(!map.getLayer(id))continue;var r=l[id];${layer ? 'if(NAMES.indexOf(id)>=0&&!r.hide){r=Object.assign({},r,{minZoom:null})}' : ''}try{if(r.hide){map.setLayoutProperty(id,'visibility','none');continue}if(r.minZoom!=null)map.setLayerZoomRange(id,r.minZoom,24);if(r.fill)P(id,id==='background'?'background-color':'fill-color',r.fill);if(r.fill&&id!=='background')P(id,'fill-outline-color',r.fill);if(r.line)P(id,'line-color',r.line);if(r.opacity!=null)P(id,'line-opacity',r.opacity);if(r.text)P(id,'text-color',r.text);if(r.halo)P(id,'text-halo-color',r.halo)}catch(e){}}}
 map.on('style.load',function(){look(LOOK)});
 // A theme change that lands while tiles are still coming in is applied once they settle too
@@ -320,20 +344,37 @@ window.__cs={
   // The check-in zoom (swoop.ts): one swoop at a time; the pins come in as it lands, if they had not yet.
   swoop:function(a){MOVES++;var was=SWOOP;SWOOP=null;if(was)try{was.stop()}catch(e){}a.up=LOADED;var s=null,fin=false;s=SWOOPER(map,a,function(ok){fin=true;if(SWOOP===s)SWOOP=null;try{engine.wake()}catch(e){}post({type:'swooped',ok:ok,sw:a.id})});if(!fin)SWOOP=s},
   shot:function(){try{var c=map.getCanvas();post({type:'shot',data:c.toDataURL('image/jpeg',0.92),blank:blank(c)})}catch(e){}},
-  warm:function(a){try{(${WARM_JS})(map,a,{})}catch(e){}},
+  // Each street asked for once per page (a tap asks for where the phone was and then where you are: mostly the same streets).
+  warm:function(a){try{(${WARM_JS})(map,a,WARMED)}catch(e){}},
   lens:function(t0,S){if(LENS&&LENS.raf)cancelAnimationFrame(LENS.raf);if(t0==null||!PUSH){LENS=null;LZ=0;try{engine.lens(1)}catch(e){}zoomClass();return}LENS={t0:t0,S:S};lensTick()},
   unveil:function(){var root=document.documentElement;if(VEIL&&VEIL.raf)cancelAnimationFrame(VEIL.raf);VEIL=null;box.style.clipPath='';root.classList.remove('cs-hide');setTimeout(function(){root.classList.remove('cs-veil')},${REVEAL_MS + 60})}${layer ? `,
-  // The zoom layer (v7): the move, flown from the wall clock (zoomV7's V7_CAMERA_JS); stopped part way, if asked.
-  v7go:function(o){try{if(V7S)V7S.stop();V7S=(${V7_CAMERA_JS})(map,o,post)}catch(e){post({type:'v7err',e:'go '+e})}},
-  v7stop:function(){try{if(V7S)V7S.stop();V7S=null}catch(e){}},
-  // The full map's pins, made ahead in this page by a second engine with the full map's options (all but invisible, tagged).
-  v7prep:function(p){try{if(!FULLE){document.documentElement.classList.add('cs-v7card');FULLE=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(){},gathered:function(){},popIn:false,hold:false,quiet:false,full:false,now:true,tag:'cs-v7f',box:${JSON.stringify(FULL_MAP_BOX)},pad:null})}FULLE.set(p)}catch(e){post({type:'v7err',e:'prep '+e})}},
-  // The card covers the screen: the full map's pins show and the card's go, in one frame (a class, nothing made or moved).
-  v7full:function(){var r=document.documentElement;r.classList.remove('cs-v7card');r.classList.add('cs-v7full')}` : ''}
+  // The zoom layer (v8). The full map's pins, kept here as data only until the move needs them.
+  v7items:function(p){FULLI=p},
+  // The move, flown from the wall clock (zoomV7's V7_CAMERA_JS): the page's animations going again first, on the wall clock's phase.
+  v7go:function(o){try{document.documentElement.classList.remove('cs-v7rest');if(window.__csRelock)window.__csRelock();if(V7S)V7S.stop();V7ME=o.me||null;V7S=(${V7_CAMERA_JS})(map,o,post,{cover:v7cover,land:v7land,move:v7move,pinsIn:function(){return V7IN?V7IN.length:0},pinsOut:function(){return V7OUT}})}catch(e){post({type:'v7err',e:'go '+e})}},
+  // A newer reading: the landing moves there.
+  v7re:function(la,ln){try{if(V7S)V7S.re(la,ln)}catch(e){}},
+  v7stop:function(){try{if(V7S)V7S.stop()}catch(e){}},
+  // After a move: back as it was before it (the card's own pins, none of the full map's, the animations at rest); the app jumps the camera back.
+  v7reset:function(p){try{if(V7S)V7S.stop()}catch(e){}V7S=null;if(FULLE){try{FULLE.destroy()}catch(e){}FULLE=null}V7IN=null;V7ME=null;V7OUT=0;document.documentElement.classList.add('cs-v7rest');if(p)INIT=p;try{engine.set(INIT)}catch(e){}}` : ''}
 };
+${layer ? `function v7wx(lng,z){return (lng+180)/360*512*Math.pow(2,z)}
+function v7wy(lat,z){var s=Math.sin(Math.max(-85,Math.min(85,lat))*Math.PI/180);return (0.5-Math.log((1+s)/(1-s))/(4*Math.PI))*512*Math.pow(2,z)}
+// The card covers the screen: only what will be on screen where the camera lands changes. The card's own pins there step
+// aside (the engine's own fade); the rest carry on out of the frame. The full map's own pins there come in (its pop-in).
+function v7cover(L){var M=80,inView=function(it){var x=v7wx(it.lng,L.z)-L.cx+L.W/2,y=v7wy(it.lat,L.z)-L.cy+L.H/2;return x>-M&&x<L.W+M&&y>-M&&y<L.H+M};
+  var mine=(INIT&&INIT.items)||[],keep=mine.filter(function(it){return !inView(it)});V7OUT=mine.length-keep.length;
+  if(V7OUT){try{engine.set({items:keep,tpl:INIT.tpl})}catch(e){}}
+  V7IN=((FULLI&&FULLI.items)||[]).filter(inView);if(V7IN.length)v7full()}
+function v7tpl(){return (FULLI&&FULLI.tpl)||(INIT&&INIT.tpl)}
+function v7full(){if(FULLE)return;FULLE=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(){},gathered:function(){},popIn:true,hold:false,quiet:false,full:false,now:true,tag:'cs-v7f',box:${JSON.stringify(FULL_MAP_BOX)},pad:null});if(V7IN&&V7IN.length)FULLE.set({items:V7IN,tpl:v7tpl()})}
+// As the camera settles: your pin lands (the pin engine's own landing), as the full map draws it.
+function v7land(la,ln){if(!V7ME)return;v7full();V7ME=Object.assign({},V7ME,{lat:la,lng:ln,up:true,land:Date.now()});FULLE.set({items:(V7IN||[]).concat([V7ME]),tpl:v7tpl()})}
+function v7move(la,ln){if(!V7ME||!FULLE)return;V7ME=Object.assign({},V7ME,{lat:la,lng:ln});FULLE.set({items:(V7IN||[]).concat([V7ME]),tpl:v7tpl()})}
+` : ''}
 }
 ${ENGINE_JS}
-</script></body></html>`, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+</script></body></html>`; }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // The engine the app fetched during the splash (engineCopy), in place before the page starts: the
   // page then goes straight to its streets. Without it yet, the page fetches the engine itself.
   const engine = useMemo(() => engineInjection(), [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -361,6 +402,8 @@ ${ENGINE_JS}
         onMessage={(e) => {
           let msg: { type: string; ok?: boolean; sw?: number; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
+          // The simulator's proof only: how each map's page is getting on (its kind, what it said), into sim-log.txt.
+          if (SIM_DRIVER && msg.type !== 'move' && msg.type !== 'v7landed' && msg.type !== 'shot' && msg.type !== 'tap' && msg.type !== 'maptap') simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] ${msg.type}${msg.why ? ` ${msg.why}` : ''}${msg.stage ? ` ${msg.stage}` : ''}${msg.detail ? ` ${msg.detail}` : ''}`);
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
           if (msg.type === 'online') { load.online(); return; }
@@ -385,6 +428,7 @@ ${ENGINE_JS}
             styled.current = true;
             const swoop = takeSwoop();
             if (swoop) send(swoop);
+            lockLate();
             // All of it is on the page now: its first drawing may be reported.
             send('window.__cs.synced()');
           }

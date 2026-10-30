@@ -5,7 +5,7 @@ import { AppState, PixelRatio, Platform, Pressable, StyleSheet, View, useWindowD
 import { Image as PhotoImage } from 'expo-image';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { File, Paths } from 'expo-file-system';
-import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,8 +25,10 @@ import { livePin } from '@/features/activity/liveSession';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
 import { milesBetween } from '@/features/players/geo';
-import { COURTS_MIN_ZOOM, useMapModel, type MapFilter } from '@/features/players/mapModel';
-import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap } from '@/features/players/mapPrivacy';
+import { COURTS_MIN_ZOOM, useMapModel, type Listed, type MapFilter } from '@/features/players/mapModel';
+import { askWhoSeesYou, canChooseVisibility, nearbyLock, onTeenMap, type NearbyLock } from '@/features/players/mapPrivacy';
+import type { CourtRow } from '@/features/players/courts';
+import type { Weather } from '@/lib/weather';
 import { useCheckIn, useOpenToHitToggle, type CheckInControl, type CheckInZoomHooks } from '@/features/players/useLocationToggle';
 import { useFindPlayersVisit, tipVisit, upToHitTipOn } from '@/features/players/upToHitTip';
 import { useNoOneReaskDue } from '@/features/players/noOneReask';
@@ -34,9 +36,9 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
-import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
-import { V7, V7_WARM_MID, coverU, v7Away, v7Drop, v7Flying, v7Geo, v7Later, v7Layer, v7Move, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Reset, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7Ui, type V7Params } from '@/features/players/zoomV7';
-import { zoomGo, zoomHanded, zoomMark, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
+import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
+import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Move, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
+import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
 import { SIM_DRIVER, simAction } from '@/lib/simDriver';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
@@ -124,8 +126,12 @@ export function NearbyMap(props: NearbyMapProps) {
   const growBusy = useRef(false);
   // The Community tab's card grows into the full map (mapGrow); what sits on it slips out of it as it does.
   const growsHere = !!props.grow && !expanded;
+  // Reduce Motion (the phone's own setting): read here, before anything of the zoom (the iPhone's opens the full map straight
+  // onto you then, with no layer drawn ahead).
+  const still = useReducedMotion();
   // The iPhone (v7, zoomV7): the plain card stays exactly as it is (the city words in its middle, its own pins, the pill), and
   // a map drawn ahead in the zoom layer (ZoomLayer) flies the move from it. The zoom is the iPhone's only on a phone now.
+  // Still v7 with Reduce Motion (never the picture path's card, fullCard), but with no layer and no move.
   const v7On = growsHere && zoomOn && Platform.OS === 'ios';
   // The card drawing the full map's own pins (v5, mapGrow: its courts, lit ones too, open hits, friends up to hit and you,
   // laid out as the full map lays them out) was the picture path's, which no phone takes any more (the website has its own,
@@ -203,7 +209,8 @@ export function NearbyMap(props: NearbyMapProps) {
     }).catch(() => undefined);
   };
   const swoopOnUp = (here: LatLng): boolean => {
-    if (!expanded && v7On) return v7Up(here);
+    // Reduce Motion takes the plain way in below (the full map opens straight onto you, close in, no swoop).
+    if (!expanded && v7On && !still) return v7Up(here);
     if (expanded) { swoopTo(here, false); return false; }
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
     if (!onExpand || !seen) return false;
@@ -277,47 +284,76 @@ export function NearbyMap(props: NearbyMapProps) {
       return here() ? 'plain' : 'gone';
     }
   };
-  /** v7: where the page and the card were as you tapped (measured while you are found, used the moment you are). */
-  const v7Pre = useRef<{ pageAt: Rect; cardAt: Rect } | null>(null);
-  /** v7: whether this tap reached the moment you are up (else its row says the check-in did not go through). */
-  const v7Found = useRef(false);
   /**
-   * v7, as finding you starts (you said yes to "Who can see you"): the page and the card are measured now, never once you
-   * are found, and the layer is aimed at the card (drawn again out of sight if the page had moved); the streets where you
-   * were last are asked for.
+   * v8 (zoomV7): this tap's move. Measured as finding you starts; started as soon as there is somewhere to go (where the phone
+   * already is, else the new reading, else the server's yes), from the tap itself; or given up, with the reason. `arrival`:
+   * over once the move has been handed over or stopped, or at once if none started (the toast and the one tip wait for it).
    */
+  const v7Now = useRef<V7Tap | null>(null);
   const v7Finding = () => {
     zoomMark('finding');
-    v7Pre.current = null;
-    v7Found.current = false;
+    const old = v7Now.current;
+    if (old && !old.over && !old.started) old.arrive();
     const cardNode = spot.ref.current;
     const page = growHost();
-    if (cardNode && page) {
-      void Promise.all([rectOf(page), rectOf(cardNode)]).then(([pageAt, cardAt]) => {
-        if (!fits(pageAt) || !fits(cardAt)) return;
-        v7Pre.current = { pageAt, cardAt };
+    const pre: Promise<V7Pre | null> = cardNode && page
+      ? Promise.all([rectOf(page), rectOf(cardNode)]).then(([pageAt, cardAt]) => {
+        if (!fits(pageAt) || !fits(cardAt)) return null;
         v7Layer()?.aim(cardAt);
         zoomMark('aimed');
-      }).catch(() => undefined);
-    }
+        return { pageAt, cardAt };
+      }).catch(() => null)
+      : Promise.resolve(null);
+    let arrive = () => undefined as void;
+    const arrival = new Promise<void>((done) => { arrive = done; });
+    v7Now.current = { pre, started: false, over: false, trying: false, next: null, found: false, arrival, arrive };
+    // Nothing new reaches the layer from here (a new list sent to its page as the move starts held up its first frames).
+    v7Hold(true);
+    // The pill's quick moment as it slips out (it turns green on this very tap), when a move is likely.
+    if (v7Layer()?.ready()) armQuick();
     const guess = lastSeen[me.id] ?? at ?? null;
     if (guess) { v7Layer()?.warm(guess, CHECKIN_ZOOM); v7Layer()?.warm(guess, V7_WARM_MID); }
   };
-  const v7Over = () => { if (!v7Found.current) zoomPath('none', 'server'); };
+  /** v8: the tap's move given up before it started (the reason goes in its timing row); nothing opens, you are simply up. */
+  const v7Give = (t: V7Tap, why: ZoomReason) => {
+    if (t.over) return;
+    t.over = true;
+    zoomPath('none', why);
+    v7Hold(false);
+    t.arrive();
+  };
   /**
-   * v7, the moment you are found, all at once (nothing measured or waited for now): the layer drawn ahead shows through the
-   * card and flies the whole move, the page pushing in round your spot, the tab bar sliding away, the card's words fading
-   * and what sits on it slipping out (mapGrow). Nothing opens and you are simply up if the layer has not drawn yet, the card
-   * was not measured, is out of view, or you are not on it.
+   * v8: a spot to start from (where the phone already is, the new reading, or the server's yes). The page and the card are
+   * measured by now (or in a moment); a layer not drawn yet (the first tap after opening, or drawn again where the card has
+   * moved to) is waited for, V7.readyWait at most. A newer spot that comes meanwhile is the one started from.
    */
-  const v7Up = (here: LatLng): boolean => {
-    zoomMark('found');
-    v7Found.current = true;
+  const v7Try = async (here: LatLng, mark: 'early' | 'read' | 'found') => {
+    const t = v7Now.current;
+    if (!t || t.started || t.over) return;
+    zoomMark(mark);
+    if (t.trying) { t.next = here; return; }
+    t.trying = true;
+    const pre = await t.pre;
+    const since = Date.now();
+    while (v7Now.current === t && !t.over && !v7Layer()?.ready() && Date.now() - since < V7.readyWait) await wait(16);
+    t.trying = false;
+    if (v7Now.current !== t || t.over || t.started) return;
+    if (Date.now() - since > 20) zoomWord(`waited ${Date.now() - since}ms`);
+    const to = t.next ?? here;
+    t.next = null;
+    v7Go(t, to, pre);
+  };
+  /**
+   * v8, the move, all at once (nothing measured or waited for now): the layer drawn ahead shows through the card and flies
+   * the whole move, the page pushing in round your spot, the tab bar sliding away, the card's words fading and what sits on it
+   * slipping out (mapGrow). Nothing opens and you are simply up if the layer has not drawn, the card was not measured, is out
+   * of view, or you are not on it.
+   */
+  const v7Go = (t: V7Tap, here: LatLng, pre: V7Pre | null) => {
     const layer = v7Layer();
-    const pre = v7Pre.current;
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
     const why: ZoomReason | null = !layer ? 'noLayer' : !layer.ready() ? 'notReady' : !pre || !growHost() ? 'measure' : !seen ? 'notSeen' : null;
-    if (why || !layer || !pre) { zoomPath('none', why ?? 'measure'); return false; }
+    if (why || !layer || !pre) { v7Give(t, why ?? 'measure'); return; }
     const { pageAt, cardAt } = pre;
     // You on the card (window points): its middle shows its town at its zoom.
     const z0 = CARD_ZOOM;
@@ -325,55 +361,112 @@ export function NearbyMap(props: NearbyMapProps) {
     const wy = (ll: LatLng) => { const k = Math.sin((Math.max(-85, Math.min(85, ll.lat)) * Math.PI) / 180); return (0.5 - Math.log((1 + k) / (1 - k)) / (4 * Math.PI)) * 512 * 2 ** z0; };
     const K = { x: cardAt.x + cardAt.w / 2, y: cardAt.y + cardAt.h / 2 };
     const q0 = { x: K.x + wx(here) - wx(view.center), y: K.y + wy(here) - wy(view.center) };
-    if (q0.x < cardAt.x || q0.x > cardAt.x + cardAt.w || q0.y < cardAt.y || q0.y > cardAt.y + cardAt.h) { zoomPath('none', 'offCard'); return false; }
+    if (q0.x < cardAt.x || q0.x > cardAt.x + cardAt.w || q0.y < cardAt.y || q0.y > cardAt.y + cardAt.h) { v7Give(t, 'offCard'); return; }
     // The push-in grows round your own spot (kept in from the card's edges, so it covers the screen soon), as far as the card
     // needs to cover the screen and a touch more (its corners and edge go off the screen).
     const M = V7.margin;
     const P = { x: Math.min(Math.max(q0.x, cardAt.x + M), cardAt.x + cardAt.w - M), y: Math.min(Math.max(q0.y, cardAt.y + M), cardAt.y + cardAt.h - M) };
     const S = 1.03 * Math.max(P.x / (P.x - cardAt.x), (windowW - P.x) / (cardAt.x + cardAt.w - P.x), P.y / (P.y - cardAt.y), (windowH - P.y) / (cardAt.y + cardAt.h - P.y));
     const t0 = Date.now() + V7.lead;
-    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: view.center, you: here, uc: 0, tg: 0, pitch: V7.pitch, peak: V7.peak, turn: V7.turn, turnPeak: V7.turnPeak, h0: 0, h1: V7.h1, trace: SIM_DRIVER };
+    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: view.center, you: here, uc: 0, tg: 0, landLead: V7.landLead, me: v7MeAt(here), trace: SIM_DRIVER };
     p.uc = coverU(p);
-    p.h0 = p.uc;
     p.tg = p.uc * V7.D + V7.glide;
-    v7Reset();
-    // Only the web view and the UI thread are told now, and nothing redraws on the JS thread this turn (the tab bar going,
-    // the pages that listen): a redraw now held the move's start back by about 55 ms on the simulator, as both hear of it
-    // only once the JS thread is free. The web view first (it has further to go), then the page and the window.
+    t.started = true;
+    v7Reset(t0 + V7.D - V7.landLead + V7.ringMs);
+    v7SetTarget(here);
+    void v7Arrival()?.then(t.arrive);
+    // Only the web view and the UI thread are told now, and nothing redraws on the JS thread this turn (the tab bar's slide
+    // is the UI thread's own, the pages that listen hear of it on the next turn): a redraw now held the move's start back.
     layer.go(p);
-    v7Ui.value = { n: 0, gap: 0, last: 0, first: -1, at: 0 };
+    v7Ui.value = { n: 0, gap: 0, last: 0, first: -1, at: 0, gaps: [] };
     v7Geo.value = { kx: K.x, ky: K.y, px: P.x, py: P.y };
-    v7Move.value = { on: 1, t0, D: V7.D, x1: V7.ease[0], y1: V7.ease[1], x2: V7.ease[2], y2: V7.ease[3], dz: CHECKIN_ZOOM - z0, S, hidden: 0 };
+    v7Move.value = { on: 1, t0, D: V7.D, x1: V7.ease[0], y1: V7.ease[1], x2: V7.ease[2], y2: V7.ease[3], dz: CHECKIN_ZOOM - z0, S, hidden: 0, cMs: V7.chromeMs };
     aimGrowAt(pageAt, P, S);
     labelsOut();
     startSlip();
-    // The tab bar goes as the push-in starts (AppShell redraws, on the JS thread's next turn).
     setTimeout(armGrow, 0);
-    // The full map that opens takes this swoop: your pin waits, and lands at the hand-over (the toast waits for it too).
-    swoopTo(here, true, true);
     zoomGo(t0);
     zoomPath('grown');
     // The streets where it lands, asked for at once.
     layer.warm(here, CHECKIN_ZOOM);
     layer.warm(here, V7_WARM_MID);
-    // As the card covers the screen: the full map's pins, and the web view on whole points.
-    v7Later(() => { v7Layer()?.full(); zoomMark('cover'); }, t0 + p.uc * V7.D - Date.now());
-    // Just before the camera lands, the full map opens under the layer (no slide) at the landing view, with the card's courts.
-    const plan = growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, center: here, zoom: CHECKIN_ZOOM });
+    v7Later(() => zoomMark('cover'), t0 + p.uc * V7.D - Date.now());
+    // Once the camera has landed (your pin landing, the buttons in), the full map opens under the layer at the landing view,
+    // with the card's courts: its web view is made off the move (made mid-move it stalled the layer's frames).
     const courts = model.courtPool;
-    v7Later(() => {
-      setGrowPlan({ ...plan, center: here, zoom: CHECKIN_ZOOM, started: t0, courts, v7: true });
+    v7OnLanded(() => {
+      if (t.over || v7Pushed()) return;
+      const to = v7Target() ?? here;
+      const plan = growPlan({ page: pageAt, card: cardAt, screen: { w: windowW, h: windowH }, center: to, zoom: CHECKIN_ZOOM });
+      setGrowPlan({ ...plan, center: to, zoom: CHECKIN_ZOOM, started: t0, courts, v7: true });
       v7SetPushed();
       router.push({ pathname: '/map', params: { grow: '1' } });
       zoomMark('push');
-    }, t0 + V7.D - V7.pushBefore - Date.now());
+    });
+  };
+  /** v8: your own pin as the full map draws it (its look and its tag), at `at`, for the layer to land as the camera settles. */
+  const v7MeAt = (spotAt: LatLng): CanvasMarker | null => {
+    if (hiddenMe) return null;
+    // Only the courts round you count for it (the one you stand on): the rest of the list is never made.
+    const near = model.courts.filter((c) => milesBetween(c, spotAt) < 0.2);
+    const list = mapMarkers({ model: { ...model, mePos: spotAt, courts: near, hits: [] }, expanded: true, me, shown: [], selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: false, playing, glow: null });
+    return list.find((m) => m.id === 'me') ?? null;
+  };
+  /** v8: where the phone already is (a reading under 2 minutes old): the move starts from there, now. */
+  const v7Early = (here: LatLng) => { void v7Try(here, 'early'); };
+  /**
+   * v8: the new reading. Not started yet: it starts from here. Under way: it lands here instead if this is more than
+   * V7.retargetM from where it was going (moved during the move's tail, never while the card's edge is on screen).
+   */
+  const v7Read = (here: LatLng) => {
+    const t = v7Now.current;
+    if (!t || t.over) return;
+    if (!t.started) { void v7Try(here, 'read'); return; }
+    zoomMark('read');
+    const was = v7Target();
+    if (!was) return;
+    const off = metresApart(was, here);
+    if (off <= V7.retargetM) return;
+    v7SetTarget(here);
+    v7Layer()?.retarget(here);
+    zoomWord(`retarget ${Math.round(off)}m`);
+  };
+  /** v8: the server said yes. Under way: it lands on this reading. Not started (the layer was drawing): it may start now. */
+  const v7Up = (here: LatLng): boolean => {
+    zoomMark('found');
+    const t = v7Now.current;
+    if (!t || t.over) return false;
+    t.found = true;
+    if (t.started) { v7Read(here); return true; }
+    void v7Try(here, 'found');
     return true;
   };
+  /**
+   * v8: it could not put you up after all. Not started: nothing opens. Under way: the move stops and the page goes back (the
+   * button then shakes, the toast says why); the full map already open under it takes over instead (it says you are not up).
+   */
+  const v7Failed = () => {
+    const t = v7Now.current;
+    if (!t || t.over) return;
+    if (!t.started) { v7Give(t, 'server'); return; }
+    t.over = true;
+    zoomWord('serverNo');
+    if (v7Pushed() && v7ForceHand()) return;
+    v7Layer()?.stop();
+  };
+  /** v8: the tap is over, however it went: a move that never started (and is not waiting for the layer) is given up. */
+  const v7Over = () => {
+    const t = v7Now.current;
+    if (!t || t.started || t.trying || t.over) return;
+    v7Give(t, t.found ? 'notReady' : 'server');
+  };
+  const v7Landing = (): Promise<void> | null => v7Now.current?.arrival ?? null;
   // Which of the zoom's hooks Up to hit has here: the Community card's move (v7 on the iPhone), the full map's round arrow
   // (its swoop to you), or none (the For you copy of the card: you are simply up, as with the zoom off; a phone never slides
   // the map in for it).
+  // With Reduce Motion the Community card opens the full map straight onto you (swoopOnUp's plain way).
   const zoomHooks: CheckInZoomHooks | undefined = !zoomOn ? undefined
-    : v7On ? { up: swoopOnUp, finding: v7Finding, over: v7Over }
+    : v7On ? (still ? { up: swoopOnUp, instant: true } : { instant: true, finding: v7Finding, early: v7Early, read: v7Read, up: swoopOnUp, failed: v7Failed, over: v7Over, landed: v7Landing })
       : expanded || growsHere ? { up: swoopOnUp, finding: growWarm, allowed: growReady, over: dropPrep }
         : undefined;
   const checkIn = useCheckIn(expanded ? 'map' : 'card', zoomHooks);
@@ -540,7 +633,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const [growDue, setGrowDue] = useState(false);
   const [growLate, setGrowLate] = useState(false);
   const growPicture = useGrowPicture();
-  const chromeIn = useSharedValue(growFrom ? 0 : 1);
+  // v7: the buttons are already in when the full map takes over (their copies slid in over the layer as it landed).
+  const chromeIn = useSharedValue(growFrom && !growFrom.v7 ? 0 : 1);
   const topAway = -(insets.top + 150);
   const bottomAway = insets.bottom + 170;
   const topSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - chromeIn.value) * topAway }] }));
@@ -573,37 +667,53 @@ export function NearbyMap(props: NearbyMapProps) {
   // map's buttons slide in. Drawn or not, it takes over V7.handMax after the landing (its own loading look then shows), and
   // at once if the app is put away.
   const v7Handed = useRef(false);
+  // v8: until it has taken over, this map's buttons show what their copies over the layer show (ChromeData), so the two are
+  // one picture; its own from then on (any difference then is this map's own data arriving, as on any opening).
+  const [v7Live, setV7Live] = useState(!growFrom?.v7);
+  const chromeControl = useV7ChromeControl(!!growFrom?.v7 && !v7Live) as CheckInControl | null;
   const v7Hand = (forced: boolean) => {
     if (!growFrom?.v7 || v7Handed.current) return;
     v7Handed.current = true;
     v7OffHand();
-    v7Layer()?.hide();
+    v7SetHanded();
+    v7Layer()?.handed();
     zoomHanded(forced);
     growing.current = false;
     growEnd();
-    chromeIn.value = withTiming(1, { duration: CHROME_MS, easing: Easing.out(Easing.cubic) });
+    setV7Live(true);
     swoop.done(swoopRun.current?.id);
+    // The layer is kept (aimed back at the card once it is on show again); the card's next offer reaches it then.
+    v7Hold(false, false);
+    v7Arrived();
     props.onGrown?.();
-    // The layer is let go once the buttons are in (drawn afresh the next time Find Players is on show).
-    v7Drop(V7.dropAfter, true);
   };
   const v7HandNow = useRef(v7Hand);
   v7HandNow.current = v7Hand;
+  const mapStatusNow = useRef(mapStatus);
+  mapStatusNow.current = mapStatus;
   useEffect(() => {
     if (!growFrom?.v7) return undefined;
     v7OnHand((forced) => v7HandNow.current(forced));
     let late: ReturnType<typeof setTimeout> | null = null;
-    const offLanded = v7OnLanded(() => { late = setTimeout(() => v7HandNow.current(true), V7.handMax); });
+    // Not drawn V7.handMax after the landing: it takes over then only if its page gave up; one still loading is given until
+    // V7.handMaxLoading (the layer meanwhile shows the very same view, finished, so taking over early would only show this
+    // map's own loading look in its place).
+    const offLanded = v7OnLanded(() => {
+      late = setTimeout(() => {
+        if (mapStatusNow.current === 'failed') { v7HandNow.current(true); return; }
+        late = setTimeout(() => v7HandNow.current(true), V7.handMaxLoading - V7.handMax);
+      }, V7.handMax);
+    });
     // However the layer's camera goes, never later than this after the move was due to land.
-    const latest = setTimeout(() => v7HandNow.current(true), growFrom.started + V7.D + V7.handMax + 1000 - Date.now());
+    const latest = setTimeout(() => v7HandNow.current(true), growFrom.started + V7.D + V7.handMaxLoading + 1000 - Date.now());
     const app = AppState.addEventListener('change', (st) => { if (st === 'background') v7HandNow.current(true); });
     return () => {
       offLanded();
       if (late) clearTimeout(late);
       clearTimeout(latest);
       app.remove();
-      // Left before it took over: the layer goes with it.
-      if (!v7Handed.current) { v7Handed.current = true; v7OffHand(); v7Layer()?.hide(); zoomHanded(true); v7Drop(0, true); }
+      // Left before it took over: the layer is put away (kept, aimed back at the card later).
+      if (!v7Handed.current) { v7Handed.current = true; v7OffHand(); v7SetHanded(); v7Layer()?.handed(); zoomHanded(true); v7Hold(false, false); v7Arrived(); }
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -657,7 +767,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // Everything drawn on the map, the same list the browser's map draws (pinList).
   const markers = useMemo<CanvasMarker[]>(
     () => {
-      if (!fullCard) return mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: swoop.meHold, land: swoop.land });
+      // v7: your pin has landed in the zoom layer already, so here it is simply there (never held, never landed again).
+      if (!fullCard) return mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: growFrom?.v7 ? null : swoop.meHold, land: growFrom?.v7 ? 0 : swoop.land });
       // The card drawing the full map's pins: the full map's own list, nothing picked; your pin out once the push-in starts.
       return onTheCard(mapMarkers({ model, expanded: true, me, shown, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: meOut ? 'out' : null }));
     },
@@ -669,7 +780,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // it is out of sight otherwise): a new list sent while the full map covered it left the card blank for up to 0.17 s as
   // Back slid the page in, while its page drew again (simulator). It gets the latest as it is on show again.
   const cardPins = useRef(markers);
-  if (!v7On || (onScreen && !v7Flying())) cardPins.current = markers;
+  if (!v7On || (onScreen && !v7Flying() && !v7Held())) cardPins.current = markers;
   // v7: the full map's own pins (its courts, lit ones too, open hits, friends up to hit; your pin waits to land), for the
   // zoom layer to switch to as the card covers the screen. The card keeps its own.
   const glowFull = useCourtGlow(model, false, v7On ? model.ranked : [], playing?.courtId, v7On ? { full: true, seen: inViewNow } : undefined);
@@ -680,7 +791,7 @@ export function NearbyMap(props: NearbyMapProps) {
   );
   // v7: the zoom layer (ZoomLayer) is drawn ahead from this card while it is drawn and on show: its pins and the full map's,
   // the full map's look, its town and where it is on the screen (measured each time). Out of view a while, it is let go.
-  const v7Shown = v7On && cardUp && coverGone && onScreen && props.visible !== false;
+  const v7Shown = v7On && !still && cardUp && coverGone && onScreen && props.visible !== false;
   // Only once the card has been on show a moment (V7.settleMs): never while the page is still sliding in.
   const [v7Warm, setV7Warm] = useState(false);
   useEffect(() => {
@@ -691,7 +802,8 @@ export function NearbyMap(props: NearbyMapProps) {
   const fullLook = useMemo(() => lookFor(themes[theme]), [theme]);
   useEffect(() => {
     if (!growsHere) return undefined;
-    if (!v7On) { v7Drop(); return undefined; }
+    // No zoom, or Reduce Motion (the full map opens straight onto you): no layer drawn ahead.
+    if (!v7On || still) { v7Drop(); return undefined; }
     if (!v7Warm) { v7Away(); return undefined; }
     const node = spot.ref.current;
     if (!node) return undefined;
@@ -701,13 +813,12 @@ export function NearbyMap(props: NearbyMapProps) {
       v7Offer({ markers, fullMarkers, tpl, fullLook, city: view.center, zoom: CARD_ZOOM, rect, radius: radius.xl, border: themes[theme].border, bg: themes[theme].bgElevated });
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [growsHere, v7On, v7Warm, markers, fullMarkers, tpl, fullLook, theme, view.center.lat, view.center.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [growsHere, v7On, still, v7Warm, markers, fullMarkers, tpl, fullLook, theme, view.center.lat, view.center.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   // The card gone (its tab let go): the layer goes with it.
   useEffect(() => () => { if (growsHere) v7Drop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The card's picture (cardShot): for exactly this look (who, theme, centre, size, lock, Reduce Motion);
   // one with its pins only while they are exactly the ones about to be drawn (the marker list's hash).
-  const still = useReducedMotion();
   const scale = PixelRatio.get();
   const cardWidth = cardW || Math.round(windowW - 2 * spacing.lg);
   // The map's look itself is in the key, so a picture is never shown over a map that draws differently now (an update).
@@ -924,6 +1035,14 @@ export function NearbyMap(props: NearbyMapProps) {
   // What sits on the card (its words, Up to hit, the weather): one set of props, the card's and (v7) the zoom layer's copy.
   const overlayProps = { cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length, weather, checkIn: onToggleLocation ? cardCheckIn : undefined, lock, inviting: invitingShown.current, uthTip, reask, chip: fullCard };
   useEffect(() => { if (v7Warm) v7SetOverlay({ ...overlayProps, uthTip: false, reask: false }); });
+  // v8: the full map's buttons as they will be when it opens, for the copies over the layer (and the full map itself until it
+  // has taken over); held still from the tap. The Up to hit control is the card's own, live.
+  useEffect(() => {
+    if (!v7Warm) return;
+    const c: ChromeData = { cityName, homeKnown: model.homeKnown, weather, filter: 'all', courtsOn: true, courtsLoading: false, zoomNote: false, tray: model.tray, nearestCourts: model.nearestCourts, lock, nearTown: model.nearTown };
+    v7SetChrome(c as unknown as V7Chrome);
+    v7SetChromeControl(cardCheckIn);
+  });
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
     return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
@@ -1029,7 +1148,9 @@ export function NearbyMap(props: NearbyMapProps) {
     trayAt.current = 0;
     setListOpen(true);
   };
-  const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={model.tray} query={model.query} filter={model.filter} courts={model.nearestCourts} lock={lock} nearTown={model.nearTown} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
+  // v8: opened by the zoom and not yet taken over, the buttons show their copies' picture (fz: ChromeData), never their own yet.
+  const fz = growFrom?.v7 && !v7Live ? (v7ChromeNow() as unknown as ChromeData | null) : null;
+  const buttons = (pill: boolean) => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={pill ? <PlayersPill items={fz ? fz.tray : model.tray} query={model.query} filter={fz ? fz.filter : model.filter} courts={fz ? fz.nearestCourts : model.nearestCourts} lock={fz ? fz.lock : lock} nearTown={fz ? fz.nearTown : model.nearTown} onOpen={() => { setListTall(false); trayAt.current = 0; setListOpen(true); }} /> : undefined} onRecentre={() => { model.select(null); model.selectCourt(null); model.selectHit(null); model.clearPlace(); canvas.current?.flyTo(model.homeView.center, model.homeView.zoom ?? CITY_ZOOM, 600); }} /></View>;
   // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
   const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
@@ -1053,17 +1174,17 @@ export function NearbyMap(props: NearbyMapProps) {
       {mapView}
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
-        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? checkIn : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={model.homeKnown ? cityName : ''} weather={model.homeKnown ? weather : null} />
+        <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? (fz && chromeControl ? chromeControl : checkIn) : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={fz ? (fz.homeKnown ? fz.cityName : '') : model.homeKnown ? cityName : ''} weather={fz ? (fz.homeKnown ? fz.weather : null) : model.homeKnown ? weather : null} copy={!!fz} />
         <View onLayout={(e) => { const { y, height } = e.nativeEvent.layout; setChipsEnd(Math.round(y + height)); }}>
-          <FilterChips filter={model.filter} onFilter={pickFilter} onAgain={(key) => { if (key !== 'all') pickFilter(key); }} courtsOn={model.courtsOn} onCourts={model.toggleCourts} courtsLoading={model.courtsLoading} />
+          <FilterChips filter={fz ? fz.filter : model.filter} onFilter={pickFilter} onAgain={(key) => { if (key !== 'all') pickFilter(key); }} courtsOn={fz ? fz.courtsOn : model.courtsOn} onCourts={model.toggleCourts} courtsLoading={fz ? fz.courtsLoading : model.courtsLoading} />
         </View>
         {/* Only while zoomed out: "Zoom in to see courts", under the chips. */}
         <ChipsNoteLine>
-          {zoomNote ? <CourtsZoomNote /> : null}
+          {(fz ? fz.zoomNote : zoomNote) ? <CourtsZoomNote /> : null}
         </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         {/* The check-in zoom on its way down: the map is up, its streets come as it lands, so no "Loading map…" meanwhile. */}
-        <MapLoadPill status={swoop.busy && mapStatus === 'loading' ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
+        <MapLoadPill status={fz || (swoop.busy && mapStatus === 'loading') ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
       </Reanimated.View>
@@ -1099,6 +1220,63 @@ export function NearbyMap(props: NearbyMapProps) {
 }
 
 type Cover = { uri: string | null; kind: 'card' | 'streets' | 'sketch'; hash: string };
+
+/** v8: where the page and the card were as you tapped (window points). */
+interface V7Pre { pageAt: Rect; cardAt: Rect }
+/** v8: one tap's move (NearbyMap's v7Now). */
+interface V7Tap {
+  pre: Promise<V7Pre | null>;
+  /** Set going (the layer flying), or given up (`over`); `trying`: waiting for the measures or the layer, `next` the newest spot meanwhile. */
+  started: boolean;
+  over: boolean;
+  trying: boolean;
+  next: LatLng | null;
+  /** The server has said yes. */
+  found: boolean;
+  /** Over once the move has been handed over or stopped, or none started. */
+  arrival: Promise<void>;
+  arrive: () => void;
+}
+/** v8: the full map's buttons as they will be when it opens (zoomV7's V7Chrome, in this file's own types). */
+interface ChromeData { cityName: string; homeKnown: boolean; weather: Weather | null; filter: MapFilter; courtsOn: boolean; courtsLoading: boolean; zoomNote: boolean; tray: Listed[]; nearestCourts: CourtRow[]; lock: NearbyLock; nearTown: string }
+
+/**
+ * v8: the full map's buttons as they will be when it opens (its top bar, its filters, and along the bottom the players pill
+ * and Back to me, at rest), drawn by the zoom layer over its map as the move lands (ZoomLayer). They slide in with `slide`
+ * (0 off the screen, 1 in place: the full map's own slide, never a fade: their fill is the map's see-through one, MapGlass),
+ * laid out exactly as the full map lays out its own, from the same parts, so when it takes over nothing moves. Never
+ * touched, and no tips.
+ */
+export function ZoomChromeCopy({ p, slide }: { p: V7Chrome; slide: SharedValue<number> }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const insets = useSafeAreaInsets();
+  const control = useV7ChromeControl(true) as CheckInControl | null;
+  const d = p as unknown as ChromeData;
+  const topAway = -(insets.top + 150);
+  const bottomAway = insets.bottom + 170;
+  const topSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - slide.value) * topAway }] }));
+  const bottomSlide = useAnimatedStyle(() => ({ transform: [{ translateY: (1 - slide.value) * bottomAway }] }));
+  const none = () => undefined;
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, topSlide]}>
+        <MapTopBar onBack={none} query="" onQuery={none} checkIn={control ?? undefined} players={0} cityName={d.homeKnown ? d.cityName : ''} weather={d.homeKnown ? d.weather : null} copy />
+        <View>
+          <FilterChips filter={d.filter} onFilter={none} courtsOn={d.courtsOn} onCourts={none} courtsLoading={d.courtsLoading} />
+        </View>
+        <ChipsNoteLine>
+          {d.zoomNote ? <CourtsZoomNote /> : null}
+        </ChipsNoteLine>
+        <MapLoadPill status="painted" onRetry={none} />
+      </Reanimated.View>
+      <Reanimated.View pointerEvents="box-none" style={[styles.bottom, bottomSlide]}>
+        <CardStage cardKey="bare" kind="tray" crown={() => <View pointerEvents="box-none" style={styles.crown}><MapButtons lead={<PlayersPill items={d.tray} query="" filter={d.filter} courts={d.nearestCourts} lock={d.lock} nearTown={d.nearTown} onOpen={none} />} onRecentre={none} /></View>}>
+          <View pointerEvents="none" style={{ height: Math.max(insets.bottom, spacing.md) }} />
+        </CardStage>
+      </Reanimated.View>
+    </View>
+  );
+}
 
 /** The grow's pictures on the phone (mapGrow) that the full map shows: gone once it has taken over. */
 const planShots = (p: GrowPlan | null) => (p ? [p.shot, p.box?.shot] : []);

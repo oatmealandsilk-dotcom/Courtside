@@ -9,10 +9,39 @@
  *  - EXPO_PUBLIC_SIM_ZOOM=1: the check-in zoom on for that admin (checkInZoom), its switches staying off in the code.
  * The website has none of it (simDriver.web.ts).
  */
+import type { GeoResult } from '@/lib/geo';
 import { isSupabaseConfigured } from '@/lib/supabase';
 
 export const SIM_DRIVER = !isSupabaseConfigured && process.env.EXPO_PUBLIC_SIM_DRIVER === '1';
 export const SIM_ZOOM = !isSupabaseConfigured && process.env.EXPO_PUBLIC_SIM_ZOOM === '1';
+
+const waitMs = (ms: number) => new Promise<void>((done) => setTimeout(done, Math.max(0, ms)));
+/**
+ * The demo's Up to hit, made as slow as the owner's phone (the check-in zoom's proof, v8): the demo has no server, and the
+ * Simulator's own location answers at once, so the zoom's start could never show the phone's wait. Bundled with
+ * EXPO_PUBLIC_SIM_FIX_MS (the new reading takes this long) and EXPO_PUBLIC_SIM_SERVER_MS (then the server's answer); the
+ * Mac's "checkin fix=150&server=280&shift=30&fail=1" changes them (`shift`: the new reading this many metres north of
+ * where the phone last was; `fail`: the next answer is a no). Nothing at all outside the harness.
+ */
+export const simCheckIn = {
+  on: SIM_DRIVER,
+  fixMs: Number(process.env.EXPO_PUBLIC_SIM_FIX_MS ?? '') || 0,
+  serverMs: Number(process.env.EXPO_PUBLIC_SIM_SERVER_MS ?? '') || 0,
+  shiftM: 0,
+  fail: false,
+  async reading(fix: GeoResult): Promise<GeoResult> {
+    await waitMs(simCheckIn.fixMs);
+    if (!fix.ok || !simCheckIn.shiftM) return fix;
+    return { ...fix, lat: fix.lat + simCheckIn.shiftM / 111320 };
+  },
+  /** The server's answer: true, or (once, after "fail=1") no. */
+  async server(): Promise<boolean> {
+    await waitMs(simCheckIn.serverMs);
+    if (!simCheckIn.fail) return true;
+    simCheckIn.fail = false;
+    return false;
+  },
+};
 
 const actions = new Map<string, (args: Record<string, string>) => void>();
 /** What a command does (`name`), while whoever registered it is up; the returned function unregisters it. */

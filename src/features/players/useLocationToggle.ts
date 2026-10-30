@@ -94,6 +94,19 @@ export interface CheckInZoomHooks {
   allowed?: () => void;
   /** The tap is over, however it went: anything readied and not used is let go. */
   over?: () => void;
+  /**
+   * The check-in zoom starts from where the phone already is (v8, the iPhone): the button goes on the moment the finger
+   * lifts, as with the zoom off, for someone who has said yes to both questions before.
+   */
+  instant?: boolean;
+  /** Where the phone already is (a reading under 2 minutes old), the moment it is known: the zoom may start from there. */
+  early?: (at: LatLng) => void;
+  /** The new reading, the moment it is in, before the server is told: the zoom starts there, or lands there instead. */
+  read?: (at: LatLng) => void;
+  /** It could not put you up after all (the server said no, or no reading came): a zoom under way stops. */
+  failed?: () => void;
+  /** The zoom's own arrival, for the toast and the one tip to wait for (null: none under way). */
+  landed?: () => Promise<void> | null;
 }
 
 /**
@@ -171,17 +184,26 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
     // The zoom on: an open full map holds your pin, and stays where it is, while you are found.
     const zooming = !!zoomRef.current;
     if (zooming) { swoopFinding(); zoomRef.current?.finding?.(); }
-    // Said yes to both before, and no check-in zoom to play (its own pictures wait for where you are): on at once.
-    const instant = !first && !zooming && allowed.current;
+    // Said yes to both before: on at once. With a check-in zoom whose pictures wait for where you are (the website's), not.
+    const instant = !first && allowed.current && (!zooming || !!zoomRef.current?.instant);
     if (instant) { setInstantOn(true); haptics.commit(); }
     setBusy(true);
     try {
       let at: { lat: number; lng: number } | null = null;
       // Both questions said yes and the phone finding you: the card readies its grow meanwhile (never before).
       const allowedNow = () => { if (turn.current === tap) zoomRef.current?.allowed?.(); };
-      const problem = await actions.checkInOnMap((fix) => { at = fix; }, zooming ? allowedNow : undefined, instant);
+      // The check-in zoom (v8) hears where the phone already is, and the new reading, as soon as each is known.
+      // Where the phone already is only once the phone has said yes before this tap (the first time, Apple's own question
+      // comes first, and the zoom then starts from the new reading).
+      const seen = zooming && (zoomRef.current?.early || zoomRef.current?.read) ? {
+        early: allowed.current ? (a: LatLng) => { if (turn.current === tap) zoomRef.current?.early?.(a); } : undefined,
+        read: (a: LatLng) => { if (turn.current === tap) zoomRef.current?.read?.(a); },
+      } : undefined;
+      const problem = await actions.checkInOnMap((fix) => { at = fix; }, zooming ? allowedNow : undefined, instant, seen);
       // It could not put you up: the button shakes once (UpToHit), the hand feels the same, and the toast says why.
       if (problem) {
+        // A zoom already under way stops first (the page back as it was), so the shake is seen on the card.
+        if (zooming && turn.current === tap) zoomRef.current?.failed?.();
         // Instant: back off again first (the green going back out), so the shake reads as "that didn't take".
         if (instant) setInstantOn(false);
         if (problem.startsWith('Location is blocked')) allowed.current = false;
@@ -197,8 +219,10 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
       const asks = swoopAsks();
       const opened = spot && turn.current === tap ? zoomRef.current?.up(spot) ?? false : false;
       // A swoop set off: the toast and the one tip wait for your pin to land, so nothing slides in over the top mid-swoop.
-      // Listened for now, before the court below is looked up: a short swoop can land first.
-      const landing = swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null;
+      // Listened for now, before the court below is looked up: a short swoop can land first. The iPhone's zoom (v8) says
+      // when it has arrived itself.
+      const own = opened ? zoomRef.current?.landed?.() ?? null : null;
+      const landing = own ?? (swoopAsks() !== asks ? new Promise<void>((done) => afterLanding(done)) : null);
       // Standing at a court: it lights up too, from this same tap (courts lighting up, admins first).
       const court = spot ? await lightUpCourtHere(spot, { me: currentUser, accessOf: (id) => courtFacts[id]?.access, checkIn: actions.checkInAtCourt }) : null;
       const say = () => {
