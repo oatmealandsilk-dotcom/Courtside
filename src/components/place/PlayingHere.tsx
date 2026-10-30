@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { CourtAccess } from '@/data/types';
 import { useAtCourtPrompt, usePlayingHere } from '@/features/places/playingHere';
+import { courtTimeGone } from '@/features/places/courtTime';
+import { lightUpZoom } from '@/features/players/checkInZoom';
+import { simAction } from '@/lib/simDriver';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, radius, spacing, TextScale, typography } from '@/theme';
 
@@ -57,12 +60,24 @@ export function AtCourtPrompt({ active }: { active: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { court, close } = useAtCourtPrompt(active);
   const p = usePlayingHere(court?.id ?? null, court?.access ?? 'unknown', court?.name);
+  // The simulator's proof (simDriver, demo builds only): its "light" is a tap of this row's Light it up.
+  const goNow = useRef<() => void>(() => undefined);
+  const offer = !!court && p.can;
+  useEffect(() => (offer ? simAction('light', () => goNow.current()) : undefined), [offer]);
   if (!court || !p.can) return null;
   const name = court.name && court.name !== 'Tennis courts' ? court.name : 'a court';
-  // "How long are you here?" first; once the court has lit on that card, this row has done its job.
+  // "How long are you here?" first; once the court has lit on that card, this row has done its job. With the check-in zoom
+  // on (the iPhone's, admins first: lightUpZoom), the card having gone, the Find Players map flies down to the court, as
+  // Up to hit does (Oct 30, owner: "When you light up a court it should take you in the map with the zoom animation as well").
   const go = async () => {
-    if (await p.start()) close();
+    const at = { lat: court.lat, lng: court.lng };
+    if (!(await p.start())) return;
+    close();
+    if (!lightUpZoom()) return;
+    await Promise.race([courtTimeGone(), new Promise<void>((done) => setTimeout(done, 1000))]);
+    await lightUpZoom()?.(at);
   };
+  goNow.current = () => { if (!p.busy) void go(); };
   return (
     <View style={styles.prompt}>
       <View style={styles.promptRow}>

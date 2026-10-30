@@ -213,3 +213,16 @@ export function useMapSwoop(on: boolean, pinNow: boolean): MapSwoop {
   const meHold = !busy ? null : run?.fresh ? 'out' : had.current ? 'keep' : 'out';
   return { run: on ? run : null, meHold, land, busy, done };
 }
+
+/* ------------------------------------------------------- lighting a court (Oct 30) */
+
+/**
+ * Lighting a court from the Community page (owner, Oct 30: "When you light up a court it should take you in the map with
+ * the zoom animation as well"): the Find Players card, when its zoom is on (the iPhone's v7, not with Reduce Motion), says
+ * here how to fly to a court; "You're at <court>? · Light it up" calls it once the court has lit and "How long are you
+ * here?" has gone. Resolves once the full map has taken over (or at once: no move). Null: no zoom here (behaviour as before).
+ */
+type LightUpZoom = (court: LatLng) => Promise<void>;
+let lightUp: LightUpZoom | null = null;
+export function setLightUpZoom(fn: LightUpZoom | null) { lightUp = fn; }
+export const lightUpZoom = (): LightUpZoom | null => lightUp;

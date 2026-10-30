@@ -15,6 +15,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { useHoldTour } from '@/features/tour/tourHold';
 import * as haptics from '@/lib/haptics';
 import { useModalOpenWhile } from '@/lib/modalOpen';
+import { simAction } from '@/lib/simDriver';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale, buttonShape, colors, font, radius, spacing, typography } from '@/theme';
@@ -210,6 +211,11 @@ export function CourtTimeHost() {
     AccessibilityInfo.announceForAccessibility?.(`You’re here, ${tillWords(ends) ?? ''}`);
     setTimeout(() => { if (live.current === asked) leave(true); }, LIT_HOLD_MS);
   };
+
+  // The simulator's proof (simDriver, demo builds only): its "lit" is a tap of this card's Light it up.
+  const lightUpNow = useRef(lightUp);
+  lightUpNow.current = lightUp;
+  useEffect(() => (request ? simAction('lit', () => { void lightUpNow.current(); }) : undefined), [request]);
 
   // A keyboard on a computer: Escape is Not now; the arrows (and − and +) change the time; nothing beneath the card hears a key.
   useEffect(() => {
