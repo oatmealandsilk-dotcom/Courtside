@@ -27,7 +27,7 @@ import { colors } from '@/theme';
  *
  * Off until the owner has seen the pictures: everything here is behind PLAYED_TODAY_GLOW.
  */
-export const PLAYED_TODAY_GLOW = false;
+export const PLAYED_TODAY_GLOW = true;
 
 /** A `#RRGGBB` colour's hue in degrees (0–360), null for anything else or a grey. */
 function hueOf(hex: string): number | null {
