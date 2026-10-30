@@ -10,4 +10,4 @@
  * Off: the sheet is exactly as before. Turned on for everyone by setting this to true and shipping an
  * over-the-air update: no database change.
  */
-export const COURT_REPORT_V2 = false;
+export const COURT_REPORT_V2 = true;

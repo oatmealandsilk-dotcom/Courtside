@@ -109,7 +109,7 @@ export const openCourtReview: OpenCourtReview = (courtId, options) => {
 };
 
 /**
- * "How is it right now?": Free, A wait, Full, Wet or Locked, and "I'm
+ * "How is it right now?": Free, Busy, Full, Wet or Locked, and "I'm
  * playing here". Who may play there goes along, so the sheet offers the
  * check-in only where anyone may play.
  */

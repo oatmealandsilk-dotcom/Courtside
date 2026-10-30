@@ -12,7 +12,7 @@ export const ACCESS_LABEL: Record<CourtAccess, string> = { public: 'Public', mem
 /** The sheet's own words for each answer: a player picks what they found. */
 export const ACCESS_CHOICE: Record<Exclude<CourtAccess, 'unknown'>, string> = { public: 'Anyone can play', members: 'Members only', pay: 'Pay to book', private: 'Someone’s home' };
 
-export const NOW_LABEL: Record<CourtNow, string> = { free: 'Free', wait: 'A wait', full: 'Full', wet: 'Wet', locked: 'Locked' };
+export const NOW_LABEL: Record<CourtNow, string> = { free: 'Free', wait: 'Busy', full: 'Full', wet: 'Wet', locked: 'Locked' };
 export const NOW_ICON: Record<CourtNow, keyof typeof Ionicons.glyphMap> = { free: 'checkmark-circle', wait: 'time', full: 'people', wet: 'water', locked: 'lock-closed' };
 
 export const DAY_PART_LABEL: Record<CourtDayPart, string> = {
