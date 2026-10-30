@@ -56,7 +56,7 @@ export function AccessTag({ access, bookUrl }: { access: CourtAccess; bookUrl?: 
  * The icons stay one quiet colour: each answer has its own shape and word,
  * and no one status colour reads the same in every theme.
  */
-export function NowTags({ courtId, name, access }: { courtId: string; name: string; access: CourtAccess }) {
+export function NowTags({ courtId, name, access, hereTag = true }: { courtId: string; name: string; access: CourtAccess; /** "You're here · Hide"; off on the map's court card, whose "You're playing here · Leave" says it (PlayingHereRow). */ hereTag?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { courtNow, users, actions } = useApp();
   if (access === 'private') return null;
@@ -75,7 +75,7 @@ export function NowTags({ courtId, name, access }: { courtId: string; name: stri
           <Text style={styles.tagText}>{playing}</Text>
         </View>
       ) : null}
-      {now?.youHere ? <HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
+      {now?.youHere && hereTag ? <HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
     </>
   );
 }

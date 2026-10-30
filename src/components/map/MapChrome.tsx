@@ -55,6 +55,7 @@ import { agoLabel, agoShort } from '@/components/map/markers';
 import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
+import { PlayingHereRow } from '@/components/place/PlayingHere';
 import { sheetFling } from '@/components/map/sheetFling';
 import { useGlideHeight } from '@/components/map/glide';
 import { CrownFade, CrownLead } from '@/components/map/stageLayers';
@@ -1460,7 +1461,8 @@ function CourtHitBoxes({ hits, miles }: { hits: HitRequest[]; miles: number }) {
  * the heart (follow it) and Send (into any of your chats: "meet here"). A
  * court played on this week wears the green ring here too, and a tap on it
  * plays its newest clip. A members-only or private court offers no Play
- * here: it is never suggested for a hit.
+ * here: it is never suggested for a hit. Above the buttons, "I'm playing
+ * here" (PlayingHereRow): one tap, a club's court too, never someone's home.
  */
 export function CourtSheet({ court, miles, ringed = false, onClose }: { court: Court; miles: number; /** Played on this week: the disc wears the story ring. */ ringed?: boolean; onClose: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -1536,7 +1538,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       {showTags ? (
         <View style={styles.courtTags}>
           <AccessTag access={access} bookUrl={bookUrl} />
-          {extras ? <NowTags courtId={court.id} name={court.name} access={access} /> : null}
+          {extras ? <NowTags courtId={court.id} name={court.name} access={access} hereTag={false} /> : null}
         </View>
       ) : null}
       {extras ? <View style={styles.courtBlock}><CourtFactsLine courtId={court.id} name={court.name} note={false} lines={1} /></View> : null}
@@ -1578,6 +1580,8 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
         </View>
       ) : null}
       </GHScrollView>
+      {/* "I'm playing here" in one tap, right above Directions (Oct 29, owner: "There's not a I'm playing here button on the courts page"). */}
+      {extras ? <PlayingHereRow courtId={court.id} access={access} /> : null}
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, styles.pillTight, pressed && styles.glassPressed]}>

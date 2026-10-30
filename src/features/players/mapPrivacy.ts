@@ -78,12 +78,15 @@ export const seenByOnMap = (mapLive: boolean | null, me: User | null | undefined
 
 /**
  * Whether "I'm playing here" is on offer at a court (the court sheet's rule,
- * app/court-now): never for someone not known to be an adult, whose spot is
- * never put on the map for anyone, nor at a club's or someone's home court.
- * The server holds the same rules ('adults_only', 'closed_court').
+ * app/court-now, and the map's court card): never for someone not known to be
+ * an adult, whose spot is never put on the map for anyone, nor at someone's
+ * home court (it would show where a person lives). A club's members-only court
+ * is fine since Oct 29 (owner: "it shouldn't matter if it's a club, if your
+ * playing there your playing there right?"). The server holds the same rules
+ * ('adults_only', 'closed_court'; migration 203).
  */
 export const canCheckIn = (me: User | null | undefined, access?: CourtAccess) =>
-  !!me && !notKnownAdult(me) && access !== 'members' && access !== 'private';
+  !!me && !notKnownAdult(me) && access !== 'private';
 
 /** Whether the map's teen rule (friends who follow each other only) applies to you. */
 export const onTeenMap = (me: User | null | undefined, teenMap: TeenMap) => !!me && notKnownAdult(me) && teenMap === 'on';

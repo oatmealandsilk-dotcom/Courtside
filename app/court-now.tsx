@@ -8,7 +8,7 @@ import { Toggle } from '@/components/ui';
 import { Section, SheetTitle, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtNow } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
-import { canCheckIn, seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
+import { usePlayingHere } from '@/features/places/playingHere';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
@@ -23,19 +23,21 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
  * "How is it right now?" for one court: Free, A wait, Full, Wet or Locked,
  * shown to everyone as "Free · 20 min ago" for an hour and a half, never
  * with your name (said right under the tiles, so it is plainly about the
- * answer). Under it, for adults and only at a court anyone may play at,
+ * answer). Under it, for adults, at any court but someone's home (a club's
+ * too since Oct 29: "if your playing there your playing there"),
  * "I'm playing here": two hours, gone the moment Location goes off; people
  * who follow each other with you see your name, anyone else only a count,
  * and only once two or more are there. It needs a yes to "Who can see you on
  * the map?" (migration 191): with no answer yet, turning it on asks first,
- * and nothing happens without a yes; No one cannot check in. With the check-in on offer, a pick
+ * and nothing happens without a yes; No one cannot check in. Location off: the
+ * switch turns it on (usePlayingHere, the map card's own tap). With the check-in on offer, a pick
  * keeps the sheet open (with thanks) so the switch is still in reach;
  * without it, a pick closes the sheet.
  */
 export default function CourtNowSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const params = useLocalSearchParams<{ id?: string; name?: string; access?: string }>();
-  const { actions, courtNow, courtFacts, users, currentUser, currentUserId, locationEnabled, mapLive, mapVisibility, teenMap } = useApp();
+  const { actions, courtNow, courtFacts, users, currentUserId, locationEnabled } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
   const name = params.name?.trim() || 'This court';
   // With "Who can see you on the map?" up over it (I'm playing here), Escape is that sheet's alone, never this one's too.
@@ -50,16 +52,15 @@ export default function CourtNowSheet() {
   const now = courtId ? courtNow[courtId] : undefined;
   const standing = nowStatus(now);
   const playing = playingLine(now, users);
-  const here = !!now?.youHere && locationEnabled;
   // Who may play: the facts' answer once loaded, else what the card that opened this knew.
   const said = courtId ? courtFacts[courtId]?.access : undefined;
   const access: CourtAccess = said && said !== 'unknown' ? said : ACCESS.includes(params.access ?? '') ? (params.access as CourtAccess) : 'unknown';
   // A teen never checks in: their spot is never put on the map for anyone.
-  // Nor does anyone at a club's or someone's home court.
-  const checkInHere = canCheckIn(currentUser, access);
-  // Who sees you here follows who can see you on the map, once you have said (migration 63).
-  const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
-  const hereNote = !locationEnabled ? 'Turn on Location first.'
+  // Nor does anyone at someone's home court (a club's is fine: canCheckIn). The same tap as the map's court card.
+  const playingHere = usePlayingHere(courtId, access);
+  const { here, seenBy } = playingHere;
+  const checkInHere = playingHere.can;
+  const hereNote = !locationEnabled ? 'For 2 hours. Switching it on turns on Location too.'
     : seenBy === 'none' ? 'You chose No one on the map, so no one sees you here.'
       // Since migration 189: names only to friends; anyone else only a count, never a face.
       : 'For 2 hours. Friends who follow you back see your name; others only see a count, once 2 or more are here.';
@@ -78,11 +79,9 @@ export default function CourtNowSheet() {
   const flipHere = async (next: boolean) => {
     if (!courtId) return;
     setError('');
-    if (!next) { await actions.checkOutOfCourt(); return; }
+    if (!next) { await playingHere.leave(); return; }
     // No yes yet: "Who can see you on the map?" first, and nothing without a yes (Apple 5.1.2(i), migration 191).
-    if (!(await yesFirst(mapVisibility, 'court'))) return;
-    const problem = await actions.checkInAtCourt(courtId);
-    if (problem) setError(problem);
+    await playingHere.start();
   };
 
   return (
@@ -121,7 +120,7 @@ export default function CourtNowSheet() {
             </View>
           </Section>
         ) : null}
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error || playingHere.error ? <Text style={styles.error}>{error || playingHere.error}</Text> : null}
       </ScrollView>
     </DragSheet>
   );

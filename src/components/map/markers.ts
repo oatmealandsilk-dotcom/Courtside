@@ -87,6 +87,8 @@ export const LIT_CSS = `
 .cs-lit-sheen{transform:translateX(-110%);opacity:0}
 .cs-lit-wave,.cs-lit-ground,.cs-lit-tide{opacity:0}
 .cs-far .cs-lit{scale:.84}
+.cs-lit-a{--cs-rim:1.5px;--cs-gap:1px}
+.cs-close .cs-lit-a{--cs-rim:3px;--cs-gap:2px}
 .cs-lit-run .cs-lit-glow{animation:cs-lit-breathe 2.6s ease-in-out infinite alternate}
 .cs-lit-run.cs-lit-1 .cs-lit-glow{animation-duration:3.2s}
 .cs-lit-run.cs-lit-3 .cs-lit-glow{animation-duration:1.8s}
@@ -528,6 +530,7 @@ const courtLines = (px: number, ink: string) => {
  * proportions: the doubles and singles sidelines, the service boxes, and the net, a bolder line reaching past
  * the sidelines to its posts.
  */
+// Centred in its box, so a thinner frame zoomed out (--cs-rim) leaves the lines in the middle.
 function courtFromAbove(w: number, h: number, ink: string): string {
   const f = (n: number) => n.toFixed(1);
   const x0 = w * 0.15;
@@ -538,7 +541,7 @@ function courtFromAbove(w: number, h: number, ink: string): string {
   const box = (y1 - y0) * 0.23;
   const net = (y0 + y1) / 2;
   const line = (ax: number, ay: number, bx: number, by: number) => `<line x1="${f(ax)}" y1="${f(ay)}" x2="${f(bx)}" y2="${f(by)}"/>`;
-  return `<svg width="${f(w)}" height="${f(h)}" viewBox="0 0 ${f(w)} ${f(h)}" aria-hidden="true" style="position:absolute;left:0;top:0;z-index:2"><g fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="square">`
+  return `<svg width="${f(w)}" height="${f(h)}" viewBox="0 0 ${f(w)} ${f(h)}" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2"><g fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="square">`
     + `<rect x="${f(x0)}" y="${f(y0)}" width="${f(x1 - x0)}" height="${f(y1 - y0)}"/>`
     + line(x0 + alley, y0, x0 + alley, y1) + line(x1 - alley, y0, x1 - alley, y1)
     + line(x0 + alley, y0 + box, x1 - alley, y0 + box) + line(x0 + alley, y1 - box, x1 - alley, y1 - box)
@@ -643,7 +646,7 @@ export function litCourtPinHtml(court: Court, pin: LitPin): string {
 const litClass = (look: LitLook, { level, live, on }: LitPin) =>
   `cs-court cs-pin cs-live cs-lit cs-lit-${look.toLowerCase()} cs-lit-${level}${live ? ' cs-lit-run' : ''}${on ? ' cs-on' : ''}`;
 /** Picked: a ring of the page and of the ink round it. */
-const litPicked = (on: boolean) => (on ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.text},` : '');
+const litPicked = (on: boolean) => (on ? `0 0 0 var(--cs-gap,2px) ${colors.bg},0 0 0 calc(var(--cs-gap,2px) + 2px) ${colors.text},` : '');
 
 /** `n` + 1 colour stops across `period` px, coloured `at(v)` as v eases 1 → 0 → 1 (a cosine), so nothing in it has an edge. */
 function softStops(period: number, at: (v: number) => string, n = 16): string {
@@ -741,7 +744,9 @@ function litFloodlit(court: Court, pin: LitPin): string {
     + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${litGlowFill(k, level)};pointer-events:none;animation-delay:-${delay}ms"></i>`
     + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:${r}px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;animation-delay:-${delay}ms"></i>` : '')
     + `<div style="position:absolute;inset:0;border-radius:${r}px;background:${colors.bg};box-shadow:${litPicked(on)}0 4px 14px rgba(0,0,0,.3)">`
-    + `<div style="position:absolute;inset:${rim}px;border-radius:${r - rim}px;${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
+    // Its white frame (--cs-rim, LIT_CSS): 3 px up close, half that zoomed out (Oct 29, owner: "When you zoom out this
+    // white corner around the court is too big"). The picked ring's white gap (--cs-gap) steps down with it.
+    + `<div style="position:absolute;inset:var(--cs-rim,${rim}px);border-radius:calc(${r}px - var(--cs-rim,${rim}px));${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
     + litFlowLayer(litFlow(), w - rim * 2, h - rim * 2, level, k, delay)
     + courtFromAbove(w - rim * 2, h - rim * 2, withAlpha(k.ink, closed ? 0.7 : 0.92))
     + `</div></div>`

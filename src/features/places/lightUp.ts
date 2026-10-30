@@ -5,7 +5,7 @@ import type { CourtAccess, CourtRightNow, ID, User } from '@/data/types';
 import { hitShort } from '@/features/hits/format';
 import { isMapCourtId } from '@/features/places/courtName';
 import { checkInEnds, clock } from '@/features/players/checkIn';
-import { fetchCourts, isClosedCourt, peekCourts, type Court } from '@/features/players/courts';
+import { fetchCourts, peekCourts, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import { canCheckIn } from '@/features/players/mapPrivacy';
 import type { MapModel, Placed } from '@/features/players/mapModel';
@@ -56,8 +56,9 @@ import { useApp } from '@/store/AppContext';
  *
  *    Tapping Up to hit while standing at a court (within SAME_COURT_MILES of its
  *    pin, the map's own same-court rule) also says "I'm playing here" there:
- *    the same tap, never on its own. Not for a teen, a club's court or
- *    someone's home court (canCheckIn, the server's own rule too). Turn off
+ *    the same tap, never on its own. Not for a teen or at someone's home
+ *    court (canCheckIn, the server's own rule too; a club's court is fine since
+ *    Oct 29, migration 203). Turn off
  *    takes both away (checkOutOfMap; the server drops both).
  *
  * Turned on for everyone by setting the switch to true and shipping an
@@ -91,12 +92,12 @@ export const litLine = (span: string): string => `Up to hit · ${span}`;
 /** The map's own rule for the same court (features/places/court sameCourt): within 0.15 mi of its pin. */
 const SAME_COURT_MILES = 0.15;
 
-/** The court you are standing at: the nearest open one within SAME_COURT_MILES, or null. */
+/** The court you are standing at: the nearest one within SAME_COURT_MILES (a club's too, never someone's home court), or null. */
 export function courtAt(at: LatLng, courts: Court[]): Court | null {
   let best: Court | null = null;
   let bestMiles = SAME_COURT_MILES;
   for (const c of courts) {
-    if (!isMapCourtId(c.id) || isClosedCourt(c)) continue;
+    if (!isMapCourtId(c.id) || c.access === 'private') continue;
     const miles = milesBetween(at, c);
     if (miles < bestMiles) { best = c; bestMiles = miles; }
   }

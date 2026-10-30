@@ -23,6 +23,7 @@ import { InboxButton, NotificationButton } from '@/components/InboxButton';
 
 import { LevelPill } from '@/components/LevelPill';
 import { NearbyMap } from '@/components/NearbyMap';
+import { AtCourtPrompt } from '@/components/place/PlayingHere';
 import { useGrowHost, useGrowHostStyle } from '@/features/players/mapGrow';
 import { GuestFindPlayers } from '@/features/guest/GuestFindPlayers';
 import { GuestSignIn } from '@/features/guest/GuestSignIn';
@@ -732,6 +733,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
+        {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
+            only when the phone already knows you're standing at one; one tap, nothing shared before it. */}
+        {currentUser && pane === 'players' && !search ? <AtCourtPrompt active={!previewSection || section === 'players'} /> : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
             right under it, so its button shows without scrolling (Oct 5: it
             sat under the bar, below Open to hit). For a teen with no friend
