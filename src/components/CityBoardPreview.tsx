@@ -39,8 +39,9 @@ const IN_RUN = 5;
  *     board" (never whether one other is there), and the way to invite.
  *   - No town the boards know: how to pick one.
  * Under the ranked cities, every other city at 0 (owner, Oct 28: "Also add
- * the other cities on the list. You can just put them at 0"), nearest to
- * yours first, so the board is never one lonely row: a dash for a place,
+ * the other cities on the list. You can just put them at 0"), yours first,
+ * then the biggest cities (owner, Oct 30: "Let's put like the bigger cities
+ * in the country first"), so the board is never one lonely row: a dash for a place,
  * 0 sessions. They come from the phone's own list (catalog.ts), never the
  * server, so a city with too few players to rank looks exactly like one
  * with nobody. Yours, not ranked yet, is among them, tinted, its number a
@@ -57,7 +58,7 @@ export function CityBoardPreview() {
   const ranked = useMemo(() => rankCities(cities, 'total'), [cities]);
   const me = board?.me ?? null;
   const homeId = me?.cityId ?? null;
-  // The ranked cities, then every other at 0, nearest to yours first (never by anything they did). In a month
+  // The ranked cities, then every other at 0: yours first, then the biggest (never by anything they did). In a month
   // with none ranked yet (the first days of one), every city at 0, yours first.
   const ready = status === 'ready';
   const rows = useMemo<Row[]>(() => (ready ? [...ranked, ...zeroCities(new Set(ranked.map((c) => c.id)), homeId)] : []), [ready, ranked, homeId]);

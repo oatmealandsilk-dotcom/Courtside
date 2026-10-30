@@ -67,7 +67,8 @@ const rect = (node: unknown): DOMRect | null => {
  *   - the week's moments on top ("Raleigh passed Atlanta · today");
  *   - under the ranked cities, every other city at 0 (owner, Oct 28: "Also
  *     add the other cities on the list. You can just put them at 0"): a dash
- *     for a place, 0, nearest to yours first, else A to Z; never ordered by
+ *     for a place, 0, yours first, then the biggest cities (owner, Oct 30:
+ *     "Let's put like the bigger cities in the country first"); never ordered by
  *     anything they did. They come from the phone's own list (catalog.ts),
  *     never the server, so a city with too few players to rank looks exactly
  *     like one where nobody has played. "214 cities · 1 ranked" over the
@@ -83,7 +84,7 @@ export default function CityBoard() {
   const { status, stale, month, board: data, cities, mySessions, countsHere, retry } = useCityBoard();
   const board = useMemo(() => rankCities(cities, mode), [cities, mode]);
   const homeId = data?.me.cityId ?? null;
-  // Every other city at 0, nearest to yours first: the same on both tabs (nothing they did can move them). In a
+  // Every other city at 0, yours first, then the biggest: the same on both tabs (nothing they did can move them). In a
   // month with none ranked yet, every city (keyed by the ids, so a new count of yours does not sort them again).
   const rankedIds = useMemo(() => cities.map((c) => c.id).sort().join(','), [cities]);
   const zeros = useMemo(() => zeroCities(new Set(rankedIds ? rankedIds.split(',') : []), homeId), [rankedIds, homeId]);
@@ -392,7 +393,7 @@ const ZERO_H = 54;
 const ZERO_BATCH = 50;
 
 /**
- * Every other city at 0, under the ranked ones, nearest to yours first. A
+ * Every other city at 0, under the ranked ones, yours first, then the biggest. A
  * dash for a place (no place yet: not 200 cities tied for 2nd), the name,
  * 0. Yours, not ranked yet, is among them, tinted, with what it needs and
  * a dash for its number (you know you played there). A tap opens the city.

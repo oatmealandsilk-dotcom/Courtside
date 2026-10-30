@@ -1,5 +1,3 @@
-import { milesBetween } from '@/features/players/geo';
-
 /**
  * Every city a board can ever show (owner, Oct 28: "Also add the other
  * cities on the list. You can just put them at 0"): the server's own
@@ -15,10 +13,12 @@ import { milesBetween } from '@/features/players/geo';
  * (MIN_PLAYERS) is not ranked, so it is not sent, so it shows here exactly
  * as a city where nobody has played: "–", 0, in the same order.
  *
- * Their order is never by activity: nearest first to the city on your
- * profile (from these fixed spots), else by name. A city added to
+ * Their order is never by activity: your own city first (when it is not
+ * ranked yet), then the biggest metro areas first (owner, Oct 30: "Let's
+ * put like the bigger cities in the country first to make it seem cooler"),
+ * by the fixed populations in METRO_POP below. A city added to
  * board_cities later and ranked still shows (the server sends its row);
- * add it here too so it shows at 0 before then.
+ * add it here too (and to METRO_POP) so it shows at 0 before then.
  */
 
 /** [board id, name, state, lat, lng], as migration 196 inserts them. */
@@ -241,6 +241,232 @@ const ROWS: Row[] = [
   ['kahului-hi', 'Maui', 'HI', 20.89, -156.47],
 ];
 
+/**
+ * Each board city's metro-area population, in thousands: the U.S. Census
+ * Bureau's Vintage 2024 estimates for July 1, 2024 (Population Estimates
+ * Program, "cbsa-est2024-alldata.csv": www2.census.gov/programs-surveys/
+ * popest/datasets/2020-2024/metro/totals/), the metropolitan statistical
+ * area named for the city (Dallas–Fort Worth: Dallas-Fort Worth-Arlington,
+ * Sarasota: North Port-Bradenton-Sarasota…), rounded to thousands. Only
+ * ever used to order the cities at 0, biggest first; never shown.
+ */
+const METRO_POP: Record<string, number> = {
+  'new-york-ny': 19940,
+  'los-angeles-ca': 12928,
+  'chicago-il': 9409,
+  'dallas-tx': 8344,
+  'houston-tx': 7796,
+  'washington-dc': 6436,
+  'philadelphia-pa': 6330,
+  'miami-fl': 6458,
+  'atlanta-ga': 6411,
+  'boston-ma': 5026,
+  'phoenix-az': 5187,
+  'san-francisco-ca': 4648,
+  'riverside-ca': 4744,
+  'detroit-mi': 4401,
+  'seattle-wa': 4145,
+  'minneapolis-mn': 3758,
+  'san-diego-ca': 3299,
+  'tampa-fl': 3425,
+  'denver-co': 3052,
+  'baltimore-md': 2859,
+  'st-louis-mo': 2812,
+  'orlando-fl': 2941,
+  'charlotte-nc': 2883,
+  'san-antonio-tx': 2763,
+  'portland-or': 2538,
+  'sacramento-ca': 2463,
+  'pittsburgh-pa': 2430,
+  'austin-tx': 2551,
+  'las-vegas-nv': 2399,
+  'cincinnati-oh': 2303,
+  'kansas-city-mo': 2254,
+  'columbus-oh': 2225,
+  'indianapolis-in': 2175,
+  'cleveland-oh': 2172,
+  'san-jose-ca': 1995,
+  'nashville-tn': 2151,
+  'virginia-beach-va': 1794,
+  'providence-ri': 1701,
+  'jacksonville-fl': 1761,
+  'milwaukee-wi': 1574,
+  'raleigh-nc': 1562,
+  'oklahoma-city-ok': 1498,
+  'memphis-tn': 1339,
+  'richmond-va': 1370,
+  'louisville-ky': 1394,
+  'new-orleans-la': 966,
+  'salt-lake-city-ut': 1301,
+  'hartford-ct': 1169,
+  'buffalo-ny': 1160,
+  'birmingham-al': 1193,
+  'rochester-ny': 1057,
+  'grand-rapids-mi': 1179,
+  'tucson-az': 1080,
+  'honolulu-hi': 999,
+  'tulsa-ok': 1060,
+  'fresno-ca': 1190,
+  'worcester-ma': 881,
+  'omaha-ne': 1001,
+  'bridgeport-ct': 973,
+  'greenville-sc': 997,
+  'albuquerque-nm': 926,
+  'bakersfield-ca': 923,
+  'albany-ny': 913,
+  'knoxville-tn': 958,
+  'el-paso-tx': 879,
+  'baton-rouge-la': 883,
+  'mcallen-tx': 915,
+  'new-haven-ct': 577,
+  'allentown-pa': 886,
+  'oxnard-ca': 835,
+  'columbia-sc': 870,
+  'sarasota-fl': 935,
+  'dayton-oh': 822,
+  'charleston-sc': 870,
+  'greensboro-nc': 801,
+  'stockton-ca': 816,
+  'cape-coral-fl': 861,
+  'boise-id': 846,
+  'colorado-springs-co': 778,
+  'little-rock-ar': 769,
+  'lakeland-fl': 853,
+  'akron-oh': 702,
+  'des-moines-ia': 754,
+  'springfield-ma': 464,
+  'ogden-ut': 668,
+  'madison-wi': 708,
+  'winston-salem-nc': 705,
+  'daytona-beach-fl': 740,
+  'syracuse-ny': 655,
+  'provo-ut': 761,
+  'toledo-oh': 601,
+  'wichita-ks': 661,
+  'durham-nc': 621,
+  'augusta-ga': 637,
+  'palm-bay-fl': 658,
+  'jackson-ms': 606,
+  'harrisburg-pa': 615,
+  'spokane-wa': 605,
+  'scranton-pa': 574,
+  'chattanooga-tn': 588,
+  'lancaster-pa': 563,
+  'modesto-ca': 557,
+  'portland-me': 572,
+  'fayetteville-ar': 606,
+  'lexington-ky': 533,
+  'fayetteville-nc': 394,
+  'pensacola-fl': 539,
+  'lansing-mi': 480,
+  'huntsville-al': 542,
+  'santa-rosa-ca': 485,
+  'myrtle-beach-sc': 413,
+  'port-st-lucie-fl': 556,
+  'reno-nv': 575,
+  'asheville-nc': 422,
+  'ann-arbor-mi': 374,
+  'wilmington-nc': 481,
+  'savannah-ga': 432,
+  'naples-fl': 416,
+  'tallahassee-fl': 398,
+  'corpus-christi-tx': 450,
+  'anchorage-ak': 407,
+  'fort-wayne-in': 463,
+  'boulder-co': 330,
+  'gainesville-fl': 360,
+  'santa-barbara-ca': 444,
+  'hilton-head-sc': 237,
+  'tyler-tx': 249,
+  'athens-ga': 224,
+  'charlottesville-va': 227,
+  'montgomery-al': 388,
+  'manchester-nh': 430,
+  'burlington-vt': 229,
+  'charleston-wv': 202,
+  'lincoln-ne': 351,
+  'sioux-falls-sd': 308,
+  'fargo-nd': 268,
+  'billings-mt': 193,
+  'springfield-mo': 497,
+  'columbia-mo': 219,
+  'peoria-il': 365,
+  'champaign-il': 242,
+  'bloomington-in': 163,
+  'south-bend-in': 325,
+  'evansville-in': 272,
+  'kalamazoo-mi': 265,
+  'flint-mi': 402,
+  'rockford-il': 337,
+  'green-bay-wi': 335,
+  'cedar-rapids-ia': 279,
+  'davenport-ia': 382,
+  'shreveport-la': 383,
+  'lafayette-la': 420,
+  'mobile-al': 412,
+  'beaumont-tx': 399,
+  'killeen-tx': 509,
+  'waco-tx': 307,
+  'lubbock-tx': 367,
+  'amarillo-tx': 275,
+  'brownsville-tx': 432,
+  'laredo-tx': 273,
+  'college-station-tx': 287,
+  'midland-tx': 189,
+  'salem-or': 443,
+  'eugene-or': 382,
+  'bend-or': 264,
+  'olympia-wa': 303,
+  'kennewick-wa': 319,
+  'visalia-ca': 484,
+  'salinas-ca': 436,
+  'san-luis-obispo-ca': 282,
+  'santa-cruz-ca': 262,
+  'redding-ca': 181,
+  'chico-ca': 208,
+  'yuma-az': 220,
+  'prescott-az': 252,
+  'flagstaff-az': 145,
+  'las-cruces-nm': 229,
+  'santa-fe-nm': 158,
+  'st-george-ut': 208,
+  'fort-collins-co': 375,
+  'greeley-co': 370,
+  'pueblo-co': 170,
+  'topeka-ks': 233,
+  'lawrence-ks': 122,
+  'portsmouth-nh': 457,  // Rockingham County-Strafford County, NH: Boston's metropolitan division it sits in
+  'trenton-nj': 392,
+  'atlantic-city-nj': 373,
+  'salisbury-md': 132,
+  'hagerstown-md': 311,
+  'reading-pa': 439,
+  'york-pa': 471,
+  'state-college-pa': 160,
+  'erie-pa': 268,
+  'utica-ny': 288,
+  'binghamton-ny': 244,
+  'ithaca-ny': 106,
+  'poughkeepsie-ny': 712,
+  'kingsport-tn': 529,  // Kingsport-Bristol, TN-VA + Johnson City, TN (the two metros the name covers)
+  'clarksville-tn': 346,
+  'roanoke-va': 316,
+  'lynchburg-va': 266,
+  'greenville-nc': 181,
+  'hickory-nc': 373,
+  'spartanburg-sc': 396,
+  'macon-ga': 238,
+  'columbus-ga': 324,
+  'tuscaloosa-al': 282,
+  'gulfport-ms': 427,
+  'ocala-fl': 429,
+  'panama-city-fl': 226,
+  'vero-beach-fl': 172,
+  'punta-gorda-fl': 212,
+  'key-west-fl': 81,  // Key West-Key Largo, FL (a micropolitan area: Monroe County)
+  'kahului-hi': 164,
+};
+
 /** A city with no row on this month's board, shown at 0. Everything here is from the fixed list above. */
 export interface ZeroCity {
   id: string;
@@ -276,20 +502,14 @@ export function catalogSpot(id: string): { lat: number; lng: number } | null {
 
 /**
  * The cities at 0 under the ranked ones: every board city the server did
- * not send a row for, nearest first to `fromId` (the board city on your
- * profile, which is among them when it is not ranked yet), else A to Z.
+ * not send a row for. `homeId` (the board city on your profile, which is
+ * among them when it is not ranked yet) leads them, then the biggest metro
+ * areas first (METRO_POP: New York, Los Angeles, Chicago…), ties A to Z.
  * Nothing about a city's own activity can move it: it is not known here.
  */
-export function zeroCities(rankedIds: ReadonlySet<string>, fromId: string | null): ZeroCity[] {
-  const from = fromId ? BY_ID.get(fromId) ?? null : null;
+export function zeroCities(rankedIds: ReadonlySet<string>, homeId: string | null): ZeroCity[] {
+  const pop = (r: Row) => METRO_POP[r[0]] ?? 0;
   const rest = ROWS.filter((r) => !rankedIds.has(r[0]));
-  const byName = (a: Row, b: Row) => a[1].localeCompare(b[1]) || a[2].localeCompare(b[2]);
-  if (from) {
-    const spot = { lat: from[3], lng: from[4] };
-    const miles = new Map(rest.map((r) => [r[0], milesBetween(spot, { lat: r[3], lng: r[4] })]));
-    rest.sort((a, b) => miles.get(a[0])! - miles.get(b[0])! || byName(a, b));
-  } else {
-    rest.sort(byName);
-  }
+  rest.sort((a, b) => Number(b[0] === homeId) - Number(a[0] === homeId) || pop(b) - pop(a) || a[1].localeCompare(b[1]) || a[2].localeCompare(b[2]));
   return rest.map((r) => ({ id: r[0], name: r[1], region: r[2], zero: true }));
 }
