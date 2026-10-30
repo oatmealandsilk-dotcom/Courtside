@@ -3,10 +3,14 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 
 import { DragSheet } from '@/components/DragSheet';
-import { Field } from '@/components/ui';
+import Ionicons from '@expo/vector-icons/Ionicons';
+
+import { CapsLabel, setupLook } from '@/components/setup/SetupBits';
+import { Button, Field } from '@/components/ui';
 import { Chips, Fine, Section, SheetTitle, Submit, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtDayPart, CourtReview } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
+import { COURT_REPORT_V2 } from '@/features/places/courtReportV2';
 import { notKnownAdult } from '@/features/players/age';
 import { ACCESS_CHOICE } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
@@ -14,6 +18,9 @@ import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { trackCorner } from '@/theme/look';
+import { PRESS_DIM } from '@/theme/press';
+import { TextScale, oneLine } from '@/theme/textScale';
 
 const entries = <K extends string>(labels: Record<K, string>) => Object.entries(labels) as [K, string][];
 const WHEN: { key: 'weekday' | 'weekend'; label: string }[] = [{ key: 'weekday', label: 'Weekdays' }, { key: 'weekend', label: 'Weekends' }];
@@ -50,6 +57,8 @@ export default function CourtReport() {
   const [notes, setNotes] = useState(had?.notes ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  // COURT_REPORT_V2: Share (always drawn solid, so it never reads as broken) tapped with nothing picked yet, so the sheet says what it needs.
+  const [nudge, setNudge] = useState(false);
   // Your earlier answers fill the sheet in once they arrive, unless you have already started.
   const touched = useRef(false);
   const touch = <T,>(set: (v: T) => void) => (v: T) => { touched.current = true; set(v); };
@@ -92,6 +101,95 @@ export default function CourtReport() {
       setSaving(false);
     }
   };
+
+  if (COURT_REPORT_V2) {
+    const lightsValue = lights === undefined ? undefined : lights ? 'yes' : 'no';
+    return (
+      <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.9}
+        header={<SheetTitle title="Tell players about this court" titleSize={21} line={name} onClose={() => setCloseSignal((n) => n + 1)} />}>
+        <ScrollView contentContainerStyle={[formBody, styles.v2Body]} keyboardShouldPersistTaps="handled">
+          {/* The court itself: three label-left rows, each a small switch. Tap the chosen side again to take it back. */}
+          <View style={styles.inset}>
+            <View style={styles.row}>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Lights</Text>
+              <Switch label="Lights" value={lightsValue} onChange={(v) => touch(setLights)(v === undefined ? undefined : v === 'yes')} options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} />
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.row}>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Nets</Text>
+              <Switch label="Nets" value={nets} onChange={touch(setNets)} options={[{ value: 'good', label: 'Good' }, { value: 'bad', label: 'Bad' }]} />
+            </View>
+            <View style={styles.hairline} />
+            <View style={styles.row}>
+              <Text {...oneLine(TextScale.CARD)} style={styles.rowLabel}>Surface</Text>
+              <Switch label="Surface" value={surface} onChange={touch(setSurface)} options={[{ value: 'good', label: 'Good' }, { value: 'cracked', label: 'Cracked' }, { value: 'wet-prone', label: 'Puddles', a11y: 'Puddles after rain' }]} />
+            </View>
+          </View>
+          {/* When it gets busy: six real cells, any number ticked, or "Never seen it busy" on its own. */}
+          <View style={styles.group}>
+            <View style={styles.caps}><CapsLabel>When is it busy?</CapsLabel></View>
+            <View style={[styles.inset, styles.busyCard]}>
+              <View style={styles.busyRow}>
+                <View style={styles.busyLabel} />
+                {PARTS.map((p) => <Text key={p.key} maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.busyHead}>{p.label}</Text>)}
+              </View>
+              {WHEN.map((w) => (
+                <View key={w.key} style={styles.busyRow}>
+                  <Text {...oneLine(TextScale.CARD)} style={styles.busyLabel}>{w.label}</Text>
+                  {PARTS.map((p) => {
+                    const part = `${w.key}-${p.key}` as CourtDayPart;
+                    const on = !!busy?.includes(part);
+                    return (
+                      <Pressable key={part} accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={`Busy on ${w.label.toLowerCase()} in the ${p.label.toLowerCase()}`} hitSlop={2} onPress={() => flipPart(part)} style={({ pressed }) => [styles.busyCell, on && styles.busyCellOn, pressed && !on && styles.pressed]}>
+                        {on ? <Ionicons name="checkmark" size={18} color={colors.brandInk} /> : null}
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ))}
+              <View style={styles.neverRow}>
+                <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: never }} accessibilityLabel="Never seen it busy" hitSlop={4} onPress={() => { haptics.tap(); flipNever(!never); }} style={({ pressed }) => [styles.chip, never && styles.chipOn, pressed && !never && styles.pressed]}>
+                  <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.chipText, never && styles.chipTextOn]}>Never seen it busy</Text>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+          {/* Who may play: asked of adults only, as before (only their answers can grey a court out). */}
+          {adult ? (
+            <View style={styles.group}>
+              <View style={styles.caps}><CapsLabel>Who can play here?</CapsLabel></View>
+              <View style={styles.accessGrid} accessibilityRole="radiogroup" accessibilityLabel="Who can play here?">
+                {entries(ACCESS_CHOICE).map(([value, label]) => {
+                  const on = access === value;
+                  return (
+                    <Pressable key={value} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={label} hitSlop={2} onPress={() => { haptics.tap(); touch(setAccess)(on ? undefined : value); }} style={({ pressed }) => [styles.chip, styles.accessChip, on && styles.chipOn, pressed && !on && styles.pressed]}>
+                      <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.chipText, on && styles.chipTextOn]}>{label}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          ) : null}
+          <View style={[styles.inset, styles.noteCard]}>
+            <Field bare multiline minHeight={44} accessibilityLabel="Rules or anything else" value={notes} onChangeText={(t) => { touched.current = true; setNotes(t.slice(0, 280)); }} placeholder="Rules or anything else (optional)" />
+          </View>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
+          <View style={styles.footer}>
+            {nudge && !anything && courtId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nudge}>Pick at least one</Text> : null}
+            {courtId ? (
+              <Button full label={mine ? 'Update' : 'Share'} loading={saving} onPress={() => {
+                if (!anything) { haptics.tap(); setNudge(true); return; }
+                void save();
+              }} />
+            ) : (
+              <Button full label="This place isn’t on the map yet" disabled onPress={() => {}} />
+            )}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.privacy}>{adult ? 'Your name never shows. Notes appear as written.' : 'Your name never shows. Only adults’ notes appear.'}</Text>
+          </View>
+        </ScrollView>
+      </DragSheet>
+    );
+  }
 
   return (
     <DragSheet fitContent closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.9}
@@ -153,6 +251,27 @@ export default function CourtReport() {
   );
 }
 
+/**
+ * COURT_REPORT_V2's small switch: the Edit profile Rating's NTRP | UTR look (a hairline track, the chosen side
+ * filled in green), right of a row's label. Unlike that one it can sit with nothing chosen, and tapping the chosen
+ * side again takes it back, as the chips it replaces did.
+ */
+function Switch<T extends string>({ label, options, value, onChange }: { label: string; options: { value: T; label: string; a11y?: string }[]; value: T | undefined; onChange: (v: T | undefined) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View style={styles.track} accessibilityRole="radiogroup" accessibilityLabel={label}>
+      {options.map((o) => {
+        const on = value === o.value;
+        return (
+          <Pressable key={o.value} accessibilityRole="radio" accessibilityState={{ checked: on, selected: on }} accessibilityLabel={o.a11y ?? o.label} hitSlop={{ top: 6, bottom: 6 }} onPress={() => { haptics.tap(); onChange(on ? undefined : o.value); }} style={({ pressed }) => [styles.seg, on && styles.segOn, pressed && !on && styles.pressed]}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={[styles.segText, on && styles.segTextOn]}>{o.label}</Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
   pair: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.lg },
   half: { flex: 1 },
@@ -166,4 +285,38 @@ const styleDefinitions = StyleSheet.create({
   cellDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.bg },
   error: { ...typography.small, color: colors.danger, ...font('500') },
   noteHint: { ...typography.small, color: colors.textMuted, marginTop: -spacing.sm },
+  // COURT_REPORT_V2: the sign-up and Edit profile redraw's inset lists, label-left rows on hairlines.
+  v2Body: { gap: spacing.lg, paddingTop: spacing.sm },
+  group: { gap: spacing.sm },
+  caps: { paddingHorizontal: spacing.lg },
+  inset: { ...setupLook.inset },
+  row: { flexDirection: 'row', alignItems: 'center', minHeight: 44, paddingHorizontal: spacing.lg, paddingVertical: 4 },
+  rowLabel: { ...typography.body, color: colors.textMuted, width: 80 },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
+  track: { flex: 1, flexDirection: 'row', padding: 3, gap: 3, borderRadius: trackCorner(3), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.bg },
+  seg: { flex: 1, minHeight: 32, paddingHorizontal: 4, borderRadius: radius.chip, alignItems: 'center', justifyContent: 'center' },
+  segOn: { backgroundColor: colors.brand },
+  segText: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted },
+  segTextOn: { color: colors.brandInk },
+  pressed: { opacity: PRESS_DIM },
+  // Its labels and cells start where the rows' labels and switches above them do.
+  busyCard: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, gap: spacing.sm },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  busyLabel: { width: 80 - spacing.sm, ...typography.body, fontSize: 15, color: colors.textMuted },
+  busyHead: { flex: 1, textAlign: 'center', ...typography.small, ...font('500'), color: colors.textMuted },
+  // A real cell: the page's shade inside the card, a hairline round it; ticked, the brand's green.
+  busyCell: { flex: 1, height: 36, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
+  busyCellOn: { backgroundColor: colors.brand, borderColor: colors.brand },
+  // "Never seen it busy" starts under the cells, not the Weekdays/Weekends labels, so the card reads as one grid.
+  neverRow: { flexDirection: 'row', paddingTop: spacing.xs, paddingLeft: 80 },
+  chip: { ...setupLook.chip, minHeight: 40 },
+  chipOn: { ...setupLook.chipOn },
+  chipText: { ...setupLook.chipText },
+  chipTextOn: { color: colors.brandInk },
+  accessGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  accessChip: { flexBasis: '47%', flexGrow: 1, paddingHorizontal: spacing.sm },
+  noteCard: { paddingHorizontal: spacing.lg, paddingVertical: 4 },
+  footer: { gap: spacing.sm, marginTop: -spacing.xs },
+  nudge: { ...typography.small, ...font('500'), color: colors.textMuted, textAlign: 'center' },
+  privacy: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
 });

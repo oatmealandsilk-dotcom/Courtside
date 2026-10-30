@@ -305,7 +305,7 @@ function TopBar({ name, top, offsetY, strip, solidAt }: { name: string; top: num
 
 /**
  * How it is right now, as one card a tap opens ("How is it right now?":
- * Free, A wait, Full, Wet, Locked, and I'm playing here, by that sheet's own
+ * Free, Busy, Full, Wet, Locked, and I'm playing here, by that sheet's own
  * rules). The status's own icon leads it, so its state reads at a glance on
  * every court; then the answer and how long ago, and who is on court now as
  * much as the server lets you see (words only, never a face). Nobody has

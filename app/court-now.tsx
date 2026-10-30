@@ -21,7 +21,7 @@ const CHOICES: CourtNow[] = ['free', 'wait', 'full', 'wet', 'locked'];
 const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
 
 /**
- * "How is it right now?" for one court: Free, A wait, Full, Wet or Locked,
+ * "How is it right now?" for one court: Free, Busy, Full, Wet or Locked,
  * shown to everyone as "Free · 20 min ago" for an hour and a half, never
  * with your name (said right under the tiles, so it is plainly about the
  * answer). Under it, for adults, at any court but someone's home (a club's

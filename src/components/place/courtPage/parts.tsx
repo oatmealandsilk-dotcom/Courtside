@@ -199,7 +199,7 @@ export function CourtActions({ view }: { view: CourtView }) {
 
 /* ------------------------------ Right now ------------------------------ */
 
-const NOW_WORD: Record<CourtNow, string> = { free: 'Free', wait: 'A wait', full: 'Full', wet: 'Wet', locked: 'Locked' };
+const NOW_WORD: Record<CourtNow, string> = { free: 'Free', wait: 'Busy', full: 'Full', wet: 'Wet', locked: 'Locked' };
 
 /**
  * How the court is right now, in words for one row, by the same rules as
@@ -224,7 +224,7 @@ export function useCourtNow(courtId: string | undefined, access: CourtAccess) {
   return { now, standing, playing, said, title, sub, icon, a11y, youHere: !!now?.youHere, youUntil: now?.youHere ? now.youUntil : undefined };
 }
 
-/** The status's own mark on a dim tile: its icon (Free, A wait, Full, Wet, Locked), the live dot when only who's playing is known, else the pulse. */
+/** The status's own mark on a dim tile: its icon (Free, Busy, Full, Wet, Locked), the live dot when only who's playing is known, else the pulse. */
 export function NowMark({ icon, size = 40 }: { icon: IconName | 'live'; size?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
