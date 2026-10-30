@@ -140,10 +140,19 @@ function Column({ items, index, onIndex, label, rowHeight, flex, align, plain }:
     if (now >= 0 && now <= last) runOnJS(tick)();
   }, [rowHeight, last]);
 
-  const settle = (target: number) => {
+  /**
+   * Rolls to a row. `speed` is how fast the finger was going when it let go (points a second):
+   * the roll starts at that same speed and slows to a stop on the row, so a flick glides on
+   * instead of stopping dead.
+   */
+  const settle = (target: number, speed = 0) => {
     'worklet';
-    const distance = Math.abs(target * rowHeight - pos.value) / rowHeight;
-    pos.value = withTiming(target * rowHeight, { duration: Math.min(900, 260 + distance * 28), easing: Easing.out(Easing.cubic) });
+    const distancePx = Math.abs(target * rowHeight - pos.value);
+    const rows = distancePx / rowHeight;
+    // An ease-out-cubic roll starts at 3 × distance ÷ duration, so this duration matches the flick's speed.
+    const matched = speed > 50 && distancePx > 1 ? (3 * distancePx / speed) * 1000 : 0;
+    const duration = Math.max(260 + rows * 20, Math.min(1800, matched));
+    pos.value = withTiming(target * rowHeight, { duration: Math.min(1800, duration), easing: Easing.out(Easing.cubic) });
     runOnJS(commit)(target);
   };
   const max = last * rowHeight;
@@ -155,11 +164,17 @@ function Column({ items, index, onIndex, label, rowHeight, flex, align, plain }:
       pos.value = next < 0 ? next / 3 : next > max ? max + (next - max) / 3 : next;
     })
     .onEnd((e) => {
-      const projected = pos.value - e.velocityY * 0.2;
-      settle(Math.max(0, Math.min(last, Math.round(projected / rowHeight))));
+      // Momentum like the iPhone's own picker (Oct 29, owner: "need to be able to flick and let it kinda
+      // scroll. Like apples, right now you have to keep flicking it a bunch for it to move a little"):
+      // a flick carries on about 0.4 s worth of its speed, so a hard flick runs through dozens of years.
+      const projected = pos.value - e.velocityY * 0.4;
+      settle(Math.max(0, Math.min(last, Math.round(projected / rowHeight))), Math.abs(e.velocityY));
     })
-    .onFinalize(() => {
-      // A finger that stopped a spinning wheel and let go without dragging: it still lands on a row.
+    .onFinalize((_e, success) => {
+      // Only a touch that never became a drag (a finger that stopped a spinning wheel and let go):
+      // it lands on the nearest row. A real drag or flick was already sent on its way in onEnd, and
+      // re-settling here is what used to cut every flick short at the row under the finger.
+      if (success) return;
       const row = Math.round(pos.value / rowHeight);
       if (Math.abs(pos.value - row * rowHeight) > 0.5) settle(Math.max(0, Math.min(last, row)));
     });
