@@ -152,7 +152,7 @@ export function mapMarkers({ model, expanded, me, shown, selectedId, selectedCou
       return {
         id: `c:${c.id}`, lat: c.lat, lng: c.lng,
         html: litCourtPinHtml(c, { level: g.level, on, label: underYou ? undefined : g.label, faces, others, live: g.live, hits }),
-        z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, n: c.count, cw: half, g: 'c' as const,
+        z: on ? 5 : 4, k: 'c' as const, r: -g.level * 1e7 - g.people * 1000 + i, sel: on, solo: true, lit: true, n: c.count, cw: half, g: 'c' as const,
         role: 'button', label: [c.name, LESS_AI_COURTS && surfaceKind(c.surface) ? `${surfaceAdjective[surfaceKind(c.surface)!]} court${c.count === 1 ? '' : 's'}` : null, g.label, hitsSaid].filter(Boolean).join(', '),
       };
     }
