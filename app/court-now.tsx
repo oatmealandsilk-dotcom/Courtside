@@ -8,6 +8,7 @@ import { Toggle } from '@/components/ui';
 import { Section, SheetTitle, formBody } from '@/components/sheet/SheetForm';
 import type { CourtAccess, CourtNow } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
+import { useCourtTimeUp } from '@/features/places/courtTime';
 import { usePlayingHere } from '@/features/places/playingHere';
 import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/courtSummary';
 import { show as showToast } from '@/lib/toast';
@@ -25,7 +26,9 @@ const ACCESS: readonly string[] = ['public', 'members', 'pay', 'private'];
  * with your name (said right under the tiles, so it is plainly about the
  * answer). Under it, for adults, at any court but someone's home (a club's
  * too since Oct 29: "if your playing there your playing there"),
- * "I'm playing here": two hours, gone the moment Location goes off; people
+ * "I'm playing here": for as long as "How long are you here?" says (30
+ * minutes to 4 hours, CourtTimeHost; the switch opens it), gone the moment
+ * Location goes off; people
  * who follow each other with you see your name, anyone else only a count,
  * and only once two or more are there. It needs a yes to "Who can see you on
  * the map?" (migration 191): with no answer yet, turning it on asks first,
@@ -41,7 +44,9 @@ export default function CourtNowSheet() {
   const courtId = isMapCourtId(params.id) ? params.id : null;
   const name = params.name?.trim() || 'This court';
   // With "Who can see you on the map?" up over it (I'm playing here), Escape is that sheet's alone, never this one's too.
+  // The same while "How long are you here?" is up over it (CourtTimeHost).
   const focused = useIsFocused();
+  const timeUp = useCourtTimeUp();
   const [closeSignal, setCloseSignal] = useState(0);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -57,16 +62,18 @@ export default function CourtNowSheet() {
   const access: CourtAccess = said && said !== 'unknown' ? said : ACCESS.includes(params.access ?? '') ? (params.access as CourtAccess) : 'unknown';
   // A teen never checks in: their spot is never put on the map for anyone.
   // Nor does anyone at someone's home court (a club's is fine: canCheckIn). The same tap as the map's court card.
-  const playingHere = usePlayingHere(courtId, access);
+  const playingHere = usePlayingHere(courtId, access, params.name?.trim() || undefined);
   const { here, seenBy } = playingHere;
   const checkInHere = playingHere.can;
   // Not on offer for you here (No one on the map): the map card's own line says why, and no switch (the same rule as the card).
   const hereWhy = playingHere.why && !here ? playingHere.why : null;
   const hereNote = hereWhy ? `${hereWhy}.`
-    : !locationEnabled ? 'For 2 hours. Switching it on turns on Location too.'
+    // On: until when, as you chose it.
+    : here ? `You’re here${playingHere.till ? ` · ${playingHere.till}` : ''}. Friends who follow you back see your name.`
+    : !locationEnabled ? 'Pick how long you’re here. Switching it on turns on Location too.'
     : seenBy === 'none' ? 'You chose No one on the map, so no one sees you here.'
       // Since migration 189: names only to friends; anyone else only a count, never a face.
-      : 'For 2 hours. Friends who follow you back see your name; others only see a count, once 2 or more are here.';
+      : 'Pick how long you’re here. Friends who follow you back see your name; others only see a count, once 2 or more are here.';
 
   const pick = async (status: CourtNow) => {
     if (!courtId || busy) return;
@@ -88,7 +95,7 @@ export default function CourtNowSheet() {
   };
 
   return (
-    <DragSheet fitContent active={focused} closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
+    <DragSheet fitContent active={focused && !timeUp} closeSignal={closeSignal} onDismissed={() => router.back()} peekFraction={0.7} contentHeight={contentH || undefined}
       header={<SheetTitle title="How is it right now?" line={standing ? `${name} · ${standing.line}` : name} onClose={() => setCloseSignal((n) => n + 1)} />}>
       <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         <View style={styles.choices} accessibilityRole="radiogroup">

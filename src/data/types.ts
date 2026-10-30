@@ -1549,6 +1549,8 @@ export interface LastSeen {
   mutual?: boolean;
   /** Your own row only (migration 189): when your check-in ends (until 10pm, or 2 hours late in the day). */
   until?: string;
+  /** Playing at their court (place 'court') until then, as they chose it ("here till 6:30pm", migration 204). */
+  hereUntil?: string;
 }
 
 /** How exact a player's pin is. */
@@ -1652,6 +1654,8 @@ export interface CourtRightNow {
   friendIds: ID[];
   /** Whether you are checked in there. */
   youHere: boolean;
+  /** When yours there ends, as you chose it ("How long are you here?", migration 204); absent when not, or unknown. */
+  youUntil?: string;
 }
 
 /** "6 players follow this court": a count, never names (court_follow_counts). */

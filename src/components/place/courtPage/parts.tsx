@@ -221,7 +221,7 @@ export function useCourtNow(courtId: string | undefined, access: CourtAccess) {
   const a11y = standing
     ? `Right now: ${standing.line}${playing ? `, ${playing}` : ''}. Update it`
     : playing ? `${playing}. Say how it is` : 'How is it right now? Tell players';
-  return { now, standing, playing, said, title, sub, icon, a11y, youHere: !!now?.youHere };
+  return { now, standing, playing, said, title, sub, icon, a11y, youHere: !!now?.youHere, youUntil: now?.youHere ? now.youUntil : undefined };
 }
 
 /** The status's own mark on a dim tile: its icon (Free, A wait, Full, Wet, Locked), the live dot when only who's playing is known, else the pulse. */

@@ -597,6 +597,24 @@ function litColours(level: 1 | 2 | 3) {
   return { brand, light, a, b, glow: b, ink: colors.brandInk };
 }
 
+/**
+ * A lit court's paint for the app's own drawing of one (the "How long are you here?" card's court, CourtTimeHost):
+ * the floodlit court's (A) surface top to bottom, its glow from the middle out, and its lines, in the theme now on.
+ */
+export function litTilePaint(level: 1 | 2 | 3 = 2) {
+  const k = litColours(level);
+  return {
+    top: k.b, mid: k.a, low: mix(k.a, k.brand, 0.5), ink: k.ink,
+    glow: [withAlpha(k.glow, level === 1 ? 0.5 : 0.7), withAlpha(k.glow, level === 1 ? 0.3 : 0.42), withAlpha(k.brand, 0.14), withAlpha(k.brand, 0)] as const,
+  };
+}
+
+/**
+ * Drawn dimmer when lit: only someone's home court. A club's (members-only) court lit by people playing there
+ * is as bright as a public one (Oct 29, owner: "it shouldn't matter if it's a club").
+ */
+const dimLit = (court: Court) => court.access === 'private';
+
 /** The soft glow behind a lit court, in its light: stronger from lit up. */
 const litGlowFill = (k: ReturnType<typeof litColours>, level: 1 | 2 | 3) =>
   `radial-gradient(closest-side,${withAlpha(k.glow, level === 1 ? 0.5 : 0.7)} 0%,${withAlpha(k.glow, level === 1 ? 0.3 : 0.42)} 48%,${withAlpha(k.brand, 0.14)} 74%,${withAlpha(k.brand, 0)} 100%)`;
@@ -735,7 +753,7 @@ function litFloodlit(court: Court, pin: LitPin): string {
   const h = Math.round(w * 1.42);
   const r = Math.round(w * 0.2);
   const rim = 3;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const reach = Math.round(w * (0.3 + level * 0.1));
   const px = WHO_PX[level];
@@ -770,7 +788,7 @@ function litRing(court: Court, pin: LitPin): string {
   const d = litAcross(level, on, 'B');
   const ring = [0, 4.5, 5, 5.5][level];
   const gap = 2.5;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const spin = Math.ceil(d * 1.5);
   const conic = level === 3
@@ -809,7 +827,7 @@ function litRaised(court: Court, pin: LitPin): string {
   const s = litAcross(level, on, 'C');
   const r = Math.round(s * 0.3);
   const rim = 2.5;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const gw = Math.round(s * 0.86);
   const gh = Math.round(gw * 0.36);

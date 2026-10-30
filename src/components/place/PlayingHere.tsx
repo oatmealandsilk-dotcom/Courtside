@@ -5,20 +5,19 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import type { CourtAccess } from '@/data/types';
 import { useAtCourtPrompt, usePlayingHere } from '@/features/places/playingHere';
-import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, radius, spacing, TextScale, typography } from '@/theme';
 
 /**
  * "I'm playing here" on a court's card on the map (Oct 29, owner: "There's not a I'm playing here button on
  * the courts page ... Like when you go into map"): one tap, under what the card says about the court and above
- * Directions. On: "You're playing here · till 6:40pm" with Leave. Where it is not on offer (someone's home
+ * Directions, opens "How long are you here?" (CourtTimeHost). On: "You're here · till 6:30pm" with Leave. Where it is not on offer (someone's home
  * court, a teen, no birthday on file, No one on the map), one quiet line says why. The same tap as the court
  * sheet's switch (usePlayingHere).
  */
-export function PlayingHereRow({ courtId, access }: { courtId: string; access: CourtAccess }) {
+export function PlayingHereRow({ courtId, access, name }: { courtId: string; access: CourtAccess; name?: string }) {
   const styles = useThemedStyles(styleDefinitions);
-  const p = usePlayingHere(courtId, access);
+  const p = usePlayingHere(courtId, access, name);
   if (p.why && !p.here) {
     return (
       <View style={styles.why} accessibilityLabel={p.why}>
@@ -33,7 +32,7 @@ export function PlayingHereRow({ courtId, access }: { courtId: string; access: C
       {p.here ? (
         <View style={[styles.row, styles.rowOn]}>
           <View style={styles.dot} />
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.onText} numberOfLines={1}>{p.till ? `You’re playing here · ${p.till}` : 'You’re playing here'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.onText} numberOfLines={1}>{p.till ? `You’re here · ${p.till}` : 'You’re here'}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Leave: stop showing you’re playing here" hitSlop={10} onPress={() => { void p.leave(); }} style={({ pressed }) => [styles.leave, pressed && styles.pressed]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.leaveText}>Leave</Text>
           </Pressable>
@@ -51,19 +50,18 @@ export function PlayingHereRow({ courtId, access }: { courtId: string; access: C
 
 /**
  * "You're at <court>? · Light it up" on Find Players (AT_COURT_PROMPT): when the phone already knows you are
- * standing at a court (useAtCourtPrompt), one tap says you're playing there, exactly as the court card's button
- * does. Nothing is shared until that tap; the (x) puts it away.
+ * standing at a court (useAtCourtPrompt), one tap opens "How long are you here?", exactly as the court card's
+ * button does. Nothing is shared until Light it up on that card; the (x) puts it away.
  */
 export function AtCourtPrompt({ active }: { active: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { court, close } = useAtCourtPrompt(active);
-  const p = usePlayingHere(court?.id ?? null, court?.access ?? 'unknown');
+  const p = usePlayingHere(court?.id ?? null, court?.access ?? 'unknown', court?.name);
   if (!court || !p.can) return null;
   const name = court.name && court.name !== 'Tennis courts' ? court.name : 'a court';
+  // "How long are you here?" first; once the court has lit on that card, this row has done its job.
   const go = async () => {
-    if (!(await p.start())) return;
-    close();
-    showToast({ title: 'You’re playing here', body: `${name === 'a court' ? 'The court' : name} is lit for 2 hours. Friends who follow you back see your name.`, icon: 'checkmark-circle-outline' });
+    if (await p.start()) close();
   };
   return (
     <View style={styles.prompt}>

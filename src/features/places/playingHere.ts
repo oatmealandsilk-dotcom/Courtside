@@ -3,10 +3,10 @@ import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import type { CourtAccess, User } from '@/data/types';
-import { clock } from '@/features/players/checkIn';
 import { fetchCourts, peekCourts, type Court } from '@/features/players/courts';
 import { ageUnknown, notKnownAdult } from '@/features/players/age';
 import { canCheckIn, seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
+import { askCourtTime, tillWords } from '@/features/places/courtTime';
 import { courtAt, lightUpCourtsOn } from '@/features/places/lightUp';
 import type { LatLng } from '@/features/players/positions';
 import { getPosition, locationAllowed, recentPosition } from '@/lib/geo';
@@ -22,9 +22,11 @@ import { useApp } from '@/store/AppContext';
  * court sheet's "Playing here?" switch, the "You're at <court>? Light it up"
  * row on Find Players): a yes to "Who can see you on the map?" first when there
  * is none (nothing without a yes; No one cannot), then Location if it is off
- * (the phone's own prompt, only on this tap), then the check-in itself
- * (checkInAtCourt: 2 hours; friends who follow each other with you see your
- * name, anyone else only a count once 2 or more are there). Never automatic
+ * (the phone's own prompt, only on Light it up), then the check-in itself,
+ * for as long as the "How long are you here?" card says (courtTime: 30
+ * minutes to 4 hours, 1h 30m to start or your last choice; friends who
+ * follow each other with you see your name and until when, anyone else only
+ * a count once 2 or more are there). Never automatic
  * (Apple 5.1.2(i)): every check-in is a tap. Never for a teen, never at
  * someone's home court (canCheckIn; the server's own rule, migration 203).
  */
@@ -37,12 +39,6 @@ import { useApp } from '@/store/AppContext';
  */
 export const AT_COURT_PROMPT = true;
 
-/** How long "I'm playing here" lasts (check_in_at_court: 2 hours). */
-const HERE_MS = 2 * 60 * 60_000;
-
-/** When yours ends at each court, from a check-in made on this phone (the server does not say it again). */
-const tills = new Map<string, number>();
-
 /** Why "I'm playing here" is not on offer, in a short quiet line; null when it is. */
 export function playingHereWhy(me: User | null | undefined, access: CourtAccess, seenBy: string | null | undefined): string | null {
   if (!me) return null;
@@ -53,8 +49,11 @@ export function playingHereWhy(me: User | null | undefined, access: CourtAccess,
   return null;
 }
 
-/** "I'm playing here" at one court: whether it is on offer (and if not, why), whether you are, until when, and the taps. */
-export function usePlayingHere(courtId: string | null, access: CourtAccess) {
+/**
+ * "I'm playing here" at one court: whether it is on offer (and if not, why), whether you are, until when
+ * ("till 6:30pm"), and the taps. `name`: the court's, for the "How long are you here?" card.
+ */
+export function usePlayingHere(courtId: string | null, access: CourtAccess, name?: string) {
   const { actions, courtNow, currentUser, locationEnabled, mapLive, mapVisibility, teenMap } = useApp();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -62,12 +61,11 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess) {
   const can = !!courtId && canCheckIn(currentUser, access);
   const why = courtId ? playingHereWhy(currentUser, access, seenBy) : null;
   const here = !!courtId && !!courtNow[courtId]?.youHere && locationEnabled;
-  const ends = courtId ? tills.get(courtId) : undefined;
-  const till = here && ends && ends > Date.now() ? `till ${clock(new Date(ends))}` : null;
+  const till = here && courtId ? tillWords(courtNow[courtId]?.youUntil) : null;
   const latest = useRef({ mapVisibility, locationEnabled });
   latest.current = { mapVisibility, locationEnabled };
 
-  /** Says you're playing here. Resolves whether it went through. */
+  /** Says you're playing here, after "How long are you here?". Resolves whether it went through (false: put away, or refused). */
   const start = useCallback(async (): Promise<boolean> => {
     if (!courtId || !can) return false;
     setError('');
@@ -79,28 +77,29 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess) {
         if (latest.current.mapVisibility === 'none') setError('You chose No one on the map. Change it in Settings → Privacy.');
         return false;
       }
-      let at: LatLng | undefined;
-      if (!latest.current.locationEnabled) {
-        // Location off: this tap turns it on (the phone's own prompt, if it has never been asked), then checks in from that spot.
-        const problem = await actions.setLocationEnabled(true);
-        if (problem) { setError(`Location is off: ${problem}.`); return false; }
-        at = (await recentPosition(60_000)) ?? undefined;
-        if (!at) { setError('Couldn’t find you. Try again.'); return false; }
-      }
-      const problem = await actions.checkInAtCourt(courtId, at);
-      if (problem) { setError(problem); return false; }
-      tills.set(courtId, Date.now() + HERE_MS);
-      return true;
     } finally {
       setBusy(false);
     }
-  }, [courtId, can, actions]);
+    // How long you're here; Light it up on that card is the check-in itself (anything refused shows on the card).
+    const lit = await askCourtTime(name ?? '', async (minutes) => {
+      let at: LatLng | undefined;
+      if (!latest.current.locationEnabled) {
+        // Location off: Light it up turns it on (the phone's own prompt, if it has never been asked), then checks in from that spot.
+        const problem = await actions.setLocationEnabled(true);
+        if (problem) return `Location is off: ${problem}.`;
+        at = (await recentPosition(60_000)) ?? undefined;
+        if (!at) return 'Couldn’t find you. Try again.';
+      }
+      return actions.checkInAtCourt(courtId, at, minutes);
+    });
+    if (typeof lit === 'string') { setError(lit); return false; }
+    return lit;
+  }, [courtId, can, actions, name]);
 
   const leave = useCallback(async () => {
     setError('');
-    if (courtId) tills.delete(courtId);
     await actions.checkOutOfCourt();
-  }, [courtId, actions]);
+  }, [actions]);
 
   return { can, why, here, till, busy, error, seenBy, start, leave };
 }

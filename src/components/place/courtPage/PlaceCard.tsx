@@ -334,7 +334,7 @@ function PlaceNow({ courtId, name, access }: { courtId: string; name: string; ac
           <Ionicons name="chevron-forward" size={17} color={colors.textMuted} />
         )}
       </Pressable>
-      {now.youHere ? <HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
+      {now.youHere ? <HereTag until={now.youUntil} onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
     </View>
   );
 }

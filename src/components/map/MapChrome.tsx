@@ -56,6 +56,7 @@ import { MAP_CREDITS } from '@/components/map/credits';
 import { AccessTag, CourtFactsLine, FollowHeart, NowTags, RegularsRow } from '@/components/place/CourtLife';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { PlayingHereRow } from '@/components/place/PlayingHere';
+import { tillWords } from '@/features/places/courtTime';
 import { sheetFling } from '@/components/map/sheetFling';
 import { useGlideHeight } from '@/components/map/glide';
 import { CrownFade, CrownLead } from '@/components/map/stageLayers';
@@ -1203,9 +1204,11 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
 export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, onFollow, onAddToGroup, onAskToHit }: { placed: Placed; following: boolean; onClose: () => void; onProfile: () => void; onMessage: () => void; onFollow: () => void; onAddToGroup?: () => void; /** Only for someone you may message: an adult, or a teen who follows you. */ onAskToHit?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const pull = useDragToClose(onClose);
-  const { user, miles, seenAt, seenCity, rough, court } = placed;
+  const { user, miles, seenAt, seenCity, rough, court, hereUntil } = placed;
   // Their "till 7pm" (and the line below) go by themselves at 7pm, the card still open.
-  useOpenClock([user.openToHitUntil]);
+  useOpenClock([user.openToHitUntil, hereUntil]);
+  // At a court: until when they're playing there, as they chose ("here till 6:30pm", migration 204); else how long ago.
+  const hereTill = court ? tillWords(hereUntil) : null;
   // Farther than they'd like to go for a hit (migration 120): one friendly line, never a warning, and Ask to hit stays as it is.
   const farLine = hitsWithinLine(user, miles, seenCity || user.location);
   const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;
@@ -1258,7 +1261,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           {/* "Follows you" joins whichever line is short: this one at a court (no town on it, and the
               court's name below needs its room), the "Active" line otherwise. */}
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[`@${user.handle}`, court ? null : seenCity || user.location || null, formatSpotMiles(miles, rough), court && followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text>
-          {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
+          {court ? <View style={styles.openRow}><CourtGlyph size={13} color={colors.court} /><Text style={styles.atCourt} numberOfLines={1}>At {court.name}{hereTill ? ` · here ${hereTill}` : seenAt ? ` · ${agoLabel(seenAt)}` : ''}</Text></View>
             : seenAt || followsYou ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personMeta} numberOfLines={1}>{[seenAt ? activeLabel(seenAt) : null, followsYou ? 'Follows you' : null].filter(Boolean).join(' · ')}</Text> : null}
           {isOpenToHit(user) ? <View style={styles.openRow}><View style={styles.openDot} /><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openText}>{till ? `Open to hit ${till}` : 'Open to hit today'}</Text></View> : null}
         </Pressable>
@@ -1583,7 +1586,7 @@ export function CourtSheet({ court, miles, ringed = false, onClose }: { court: C
       ) : null}
       </GHScrollView>
       {/* "I'm playing here" in one tap, right above Directions (Oct 29, owner: "There's not a I'm playing here button on the courts page"). */}
-      {extras ? <PlayingHereRow courtId={court.id} access={access} /> : null}
+      {extras ? <PlayingHereRow courtId={court.id} access={access} name={court.name} /> : null}
       <View style={styles.personActions}>
         {/* Three pills, a little tighter than the player card's, so they fit a 320pt phone. */}
         <Pressable accessibilityRole="link" accessibilityLabel="Directions" onPress={() => directionsTo(court)} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, styles.pillTight, pressed && styles.glassPressed]}>

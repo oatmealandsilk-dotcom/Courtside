@@ -38,6 +38,7 @@ import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
 import { ConfirmHost } from '@/components/ConfirmHost';
+import { CourtTimeHost } from '@/components/place/CourtTimeHost';
 import { AlertsWhyHost } from '@/components/AlertsWhyHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
@@ -95,6 +96,8 @@ export default function RootLayout() {
         <SignOutCurtainHost />
         {/* "Why turn on alerts" before the phone's own question (alertsWhy.ts; off until he picks it). Under "are you sure?". */}
         <AlertsWhyHost />
+        {/* "How long are you here?" before "I'm playing here" (courtTime.ts): over every sheet, under "are you sure?". */}
+        <CourtTimeHost />
         {/* "Delete post?" and the like: the app's own card, last so it sits above every sheet, menu and the tab bar. */}
         <ConfirmHost />
       </AppProvider>

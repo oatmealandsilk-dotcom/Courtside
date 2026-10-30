@@ -11,6 +11,7 @@ import { askToHit, openCourtNow, openCourtReview } from '@/features/players/cour
 import { ACCESS_LABEL, NOW_ICON, courtNoteKey, nowStatus, playingLine, regularsLine, summarizeFacts } from '@/features/players/courtSummary';
 import { afterReport } from '@/features/moderation/reportThanks';
 import { confirmReport } from '@/lib/confirm';
+import { tillWords } from '@/features/places/courtTime';
 import type { CourtToFollow } from '@/store/courtLife';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -75,22 +76,24 @@ export function NowTags({ courtId, name, access, hereTag = true }: { courtId: st
           <Text style={styles.tagText}>{playing}</Text>
         </View>
       ) : null}
-      {now?.youHere && hereTag ? <HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
+      {now?.youHere && hereTag ? <HereTag until={now.youUntil} onCheckOut={() => { void actions.checkOutOfCourt(); }} /> : null}
     </>
   );
 }
 
 /**
- * "You're here · Check out": you are checked in at this court; one tap ends
- * it. On a small card (Your courts) the words shrink to "Here · Check out",
- * the court's name right above saying where.
+ * "You're here · till 6:30pm · Hide": you are checked in at this court, until
+ * when you chose ("How long are you here?"); one tap ends it. On a small card
+ * (Your courts) the words shrink to "Here · Hide", the court's name right
+ * above saying where.
  */
-export function HereTag({ onCheckOut, small = false }: { onCheckOut: () => void; small?: boolean }) {
+export function HereTag({ onCheckOut, small = false, until }: { onCheckOut: () => void; small?: boolean; /** When yours ends (CourtRightNow.youUntil). */ until?: string }) {
   const styles = useThemedStyles(styleDefinitions);
+  const till = small ? null : tillWords(until);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="You’re here. Hide" hitSlop={6} onPress={onCheckOut} style={({ pressed }) => [styles.tag, styles.tagLink, small && styles.tagSmall, pressed && styles.pressed]}>
+    <Pressable accessibilityRole="button" accessibilityLabel={`You’re here${till ? `, ${till}` : ''}. Hide`} hitSlop={6} onPress={onCheckOut} style={({ pressed }) => [styles.tag, styles.tagLink, small && styles.tagSmall, pressed && styles.pressed]}>
       {small ? null : <View style={styles.liveDot} />}
-      <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Hide' : 'You’re here · Hide'}</Text>
+      <Text style={[styles.tagText, styles.tagLinkText, small && styles.tagSmallText]} numberOfLines={1}>{small ? 'Here · Hide' : `You’re here${till ? ` · ${till}` : ''} · Hide`}</Text>
     </Pressable>
   );
 }

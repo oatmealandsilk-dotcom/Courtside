@@ -3,6 +3,8 @@ import { DEMO_PARK } from './courts';
 import { endOfToday } from '@/features/players/openToHit';
 
 const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+/** When a check-in made `ago` minutes back for `long` minutes ends ("here till 6:30pm", migration 204). */
+const hereTill = (ago: number, long: number) => new Date(Date.now() + (long - ago) * 60_000).toISOString();
 
 /** On a demo court, the way map_players (migration 63) snaps someone there: the court's own spot, with its name. */
 const atPark = (n: number, name: string) => {
@@ -21,7 +23,7 @@ const atPark = (n: number, name: string) => {
  * who is playing). Never a row for Ella, the teen.
  */
 export const demoLastSeen: Record<ID, LastSeen> = Object.fromEntries(([
-  { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday(), mutual: true },
+  { userId: 'u-sam', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(12), openUntil: endOfToday(), mutual: true, hereUntil: hereTill(12, 90) },
   { userId: 'u-omar', ...atPark(2, 'Bellwood Recreation Center'), city: 'Los Angeles', seenAt: minutesAgo(48), mutual: true },
-  { userId: 'u-marcus', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(25), mutual: true },
+  { userId: 'u-marcus', ...atPark(1, 'Alder Park'), city: 'Los Angeles', seenAt: minutesAgo(25), mutual: true, hereUntil: hereTill(25, 120) },
 ] satisfies LastSeen[]).map((r) => [r.userId, r]));
