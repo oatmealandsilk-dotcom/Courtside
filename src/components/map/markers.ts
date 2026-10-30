@@ -233,6 +233,7 @@ export const MAP_PIN_CSS = `
 .cs-nn .cs-name{opacity:0;pointer-events:none}
 .cs-spot{pointer-events:none}
 .cs-anchor .cs-court-name,.cs-anchor .cs-court-tag{display:none}
+.cs-notag .cs-court-tag{display:none}
 .cs-pf{position:absolute;translate:calc(var(--cs-pv,17px) * var(--cs-sx,1)) calc(var(--cs-pv,17px) * var(--cs-sy,0));transition:translate .42s cubic-bezier(.3,1.45,.5,1);animation:cs-pf-in .3s cubic-bezier(.3,1.45,.5,1) both}
 @keyframes cs-pf-in{0%{opacity:0;scale:.6}100%{opacity:1;scale:1}}
 .cs-move.cs-spring{transition:translate .5s cubic-bezier(.3,1.42,.5,1),transform .15s ease-out;animation:cs-grow .42s cubic-bezier(.3,1.42,.5,1) both}
@@ -503,6 +504,77 @@ export function litHalf(level: 1 | 2 | 3, on: boolean, who: boolean): number {
   const look = litLook();
   return Math.round(litAcross(level, on, look) / 2 + (look === 'C' && who ? 26 : 0));
 }
+/** About how wide `text` is in the system font at `size` px (bold), for the pin engine's room: no page to measure it on. */
+function textAcross(text: string, size = 11): number {
+  let w = 0;
+  for (const ch of text) {
+    w += ' '.includes(ch) ? 3.1 : 'il.,:;|!\'·'.includes(ch) ? 3.3 : 'fjrtI()'.includes(ch) ? 4.3 : 'mwMW'.includes(ch) ? 9.6 : /[A-Z]/.test(ch) ? 7.6 : /[0-9+]/.test(ch) ? 6.7 : 6.3;
+  }
+  return w * (size / 11);
+}
+
+/**
+ * Where a lit court's pin reaches round its spot (CanvasMarker.lb): its court, who is there (the faces row, and "+5"), its
+ * open hits badge and its words under it, each a box [left, top, right, bottom] in px from its spot, full size, flattened.
+ * The pin engine keeps lit courts this far apart zoomed out, so no face, number or words sit on another lit court's.
+ */
+export function litFootprint(court: Court, pin: LitPin, /** Close in (CLOSE_ZOOM_NAMES), where its words start with its name. */ named = false): number[] {
+  const look = litLook();
+  const { level, on, label, faces, others, hits = 0 } = pin;
+  const out: number[] = [];
+  const px = WHO_PX[level] - (look === 'C' ? 2 : 0);
+  const who = whoCircles(faces, others);
+  const lap = Math.round(px * 0.28);
+  const row = !who ? 0 : px + (who.shown.length - 1) * (px - lap)
+    + (!who.more ? 0 : look === 'C' ? 12 + textAcross(`+${who.more}`, 14) : Math.max(px, lap + 16 + textAcross(`+${who.more}`, 12.5)) - lap);
+  const nameText = (on || named) && court.name && court.name !== 'Tennis courts' ? `${court.name} · ` : '';
+  const words = label ? Math.min(200, 28 + textAcross(nameText + label)) : 0;
+  const badge = hits > 0 ? (HIT_BADGE_MARK ? 36 : 22) : 0;
+  if (look === 'B') {
+    const d = litAcross(level, on, 'B');
+    out.push(-d / 2, -d / 2, d / 2, d / 2);
+    if (row) out.push(-row / 2, d / 2 - Math.round(px * 0.62), row / 2, d / 2 + Math.round(px * 0.38));
+    const top = d / 2 + (row ? Math.round(px * 0.38) + 7 : 8);
+    if (words) out.push(-words / 2, top, words / 2, top + 19);
+    if (badge) out.push(-d / 2 + 19 - badge, -d / 2 - 3, -d / 2 + 19, -d / 2 + 19);
+    return out;
+  }
+  if (look === 'C') {
+    const s = litAcross(level, on, 'C');
+    const gh = Math.round(Math.round(s * 0.86) * 0.36);
+    const cardTop = -(gh / 2 + 1) - (s + 10);
+    out.push(-s / 2, cardTop, s / 2, gh / 2);
+    if (row) out.push(s / 2 - 12, cardTop - Math.round(px * 0.55), s / 2 - 12 + row + 6, cardTop - Math.round(px * 0.55) + px + 6);
+    if (words) out.push(-words / 2, gh / 2 + 6, words / 2, gh / 2 + 25);
+    if (badge) out.push(-s / 2 + 13 - badge, cardTop - 9, -s / 2 + 13, cardTop + 13);
+    return out;
+  }
+  const w = litAcross(level, on, 'A');
+  const h = Math.round(w * 1.42);
+  out.push(-w / 2, -h / 2, w / 2, h / 2);
+  if (row) {
+    const left = w / 2 - Math.round(px * 0.8);
+    const top = -h / 2 - Math.round(px * 0.45);
+    out.push(left, top, left + row, top + px);
+  }
+  if (words) out.push(-words / 2, h / 2 + 8, words / 2, h / 2 + 27);
+  if (badge) out.push(-w / 2 + 13 - badge, -h / 2 - 9, -w / 2 + 13, -h / 2 + 13);
+  return out;
+}
+
+/**
+ * Where a quiet court with words beside it ("Hit Tomorrow 6pm") reaches round its spot (CanvasMarker.lb): its square and the
+ * words to its right, as litFootprint's boxes. `glowing`: the words sit a little further out, past its glow. `named`: close
+ * in, where its words start with its name.
+ */
+export function tagFootprint(court: Court, on: boolean, tag: string, glowing: boolean, named = false): number[] {
+  const half = (on ? 28 : 22) / 2;
+  const left = half + (glowing ? 10 : 5);
+  const nameText = (on || named) && court.name && court.name !== 'Tennis courts' ? `${court.name} · ` : '';
+  const words = Math.min(glowing ? 190 : 150, 24 + textAcross(nameText + tag));
+  return [-half, -half, half, half, left, -10, left + words, 10];
+}
+
 /** Who is there, each circle across, by level: bigger on a bigger court (Oct 28, owner: "make the icons a bit bigger"). */
 const WHO_PX = [0, 24, 26, 28] as const;
 const SANS = '-apple-system,BlinkMacSystemFont,system-ui,sans-serif';
