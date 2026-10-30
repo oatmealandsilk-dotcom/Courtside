@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type TextStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import Animated, { Easing, ReduceMotion, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, ReduceMotion, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { FullWindowOverlay } from 'react-native-screens';
 import Svg, { Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop, Circle } from 'react-native-svg';
 
@@ -31,6 +31,25 @@ const RIM = 3;
 const GLOW = Math.round(TILE_W * 2.3);
 /** When the clock moves on a minute, "till 6:30pm" under the number follows. */
 const MINUTE = 60_000;
+/**
+ * The card's living wash (Oct 29, owner: "Give the how long your here a gradient slight tiny. Maybe we can even
+ * make it like slightly moving so it's like 'living'. But the design is solid"): two soft glows of the court's
+ * own colours (the brand, and the court colour) at a whisper on the card's own ground, drifting slowly the way a
+ * lit court's light drifts on the map (LIT_FLOW drift), never a flash. Two slow loops, unequal so it never
+ * visibly repeats: the layer wanders across and back, and down and up, with a slight turn.
+ */
+const WASH_LOOP_X = 10_000;
+const WASH_LOOP_Y = 12_800;
+/** How far it wanders, px each way, and how far it turns. The layer is twice the card, so no edge ever shows. */
+const WASH_DRIFT_X = 44;
+const WASH_DRIFT_Y = 30;
+const WASH_TURN = 7;
+/**
+ * The glows' strength at their middles: a whisper (the card's words and buttons keep their contrast). On a light
+ * card the brand's own pale tint (brandDim) and the lit court's light; on a dark one the brand and the court
+ * colour, which lift the dark ground where a pale tint would muddy it.
+ */
+const WASH_ALPHA = { light: [0.9, 0.08], dark: [0.07, 0.18] } as const;
 
 /**
  * "How long are you here?" (courtTime.ts; Oct 29, owner: "should a card pop up that's satisfying with a like +
@@ -44,6 +63,9 @@ const MINUTE = 60_000;
  * "You're here · till 6:30pm", and the card goes on its own a moment later. Refused: why, in a line on the
  * card, which stays. Not now, a tap outside, Escape or Android's back: nothing is said.
  *
+ * Behind it all, a whisper of the court's colours drifts slowly across the card while it is up (the living wash,
+ * WASH_LOOP_X), transform only, its own layer; the words and buttons over it never move.
+ *
  * Motion is only on the card's own parts (never a parent of the glass tab bar or of any blur). The card comes
  * and goes the way every pop-up card here does (popMotion). Reduce Motion: the same, with fades in place of
  * the grow, the bloom and the sweep.
@@ -53,7 +75,7 @@ const MINUTE = 60_000;
  */
 export function CourtTimeHost() {
   const styles = useThemedStyles(styleDefinitions);
-  const { theme } = useTheme();
+  const { theme, dark } = useTheme();
   const reduce = useReducedMotion();
   const [request, setRequest] = useState<CourtTimeRequest | null>(null);
   const [minutes, setMinutes] = useState(90);
@@ -74,6 +96,8 @@ export function CourtTimeHost() {
   const pop = useSharedValue(1);
   const sweep = useSharedValue(0);
   const bump = useSharedValue(0);
+  const driftX = useSharedValue(0.5);
+  const driftY = useSharedValue(0.5);
 
   useEffect(() => {
     setCourtTimeHost((next) => {
@@ -108,6 +132,25 @@ export function CourtTimeHost() {
     const clock = setInterval(() => tick((n) => n + 1), MINUTE);
     return () => { clearTimeout(t); clearInterval(clock); };
   }, [request]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The wash drifts only while the card is up: it starts as the card opens and stops when the card has gone.
+  useEffect(() => {
+    if (!request || reduce) return undefined;
+    const ease = Easing.inOut(Easing.sin);
+    driftX.value = 0;
+    driftY.value = 0.35;
+    driftX.value = withRepeat(withTiming(1, { duration: WASH_LOOP_X, easing: ease, reduceMotion: NEVER }), -1, true);
+    driftY.value = withSequence(
+      withTiming(1, { duration: WASH_LOOP_Y * 0.65, easing: ease, reduceMotion: NEVER }),
+      withRepeat(withTiming(0, { duration: WASH_LOOP_Y, easing: ease, reduceMotion: NEVER }), -1, true),
+    );
+    return () => {
+      cancelAnimation(driftX);
+      cancelAnimation(driftY);
+      driftX.value = 0.5;
+      driftY.value = 0.5;
+    };
+  }, [request, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const gone = () => {
     setRequest(null);
@@ -188,6 +231,14 @@ export function CourtTimeHost() {
   const tileStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const sweepStyle = useAnimatedStyle(() => ({ opacity: sweep.value > 0 && sweep.value < 1 ? 1 : 0, transform: [{ translateX: -TILE_W * 1.6 + sweep.value * TILE_W * 3.2 }, { rotate: '24deg' }] }));
   const numberStyle = useAnimatedStyle(() => ({ transform: [{ translateY: bump.value * 5 }] }));
+  // Transform only, on the wash's own layer: nothing over the words moves, and no opacity changes.
+  const washStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: (driftX.value * 2 - 1) * WASH_DRIFT_X },
+      { translateY: (driftY.value * 2 - 1) * WASH_DRIFT_Y },
+      { rotate: `${(driftX.value * 2 - 1) * WASH_TURN}deg` },
+    ],
+  }));
 
   // The map's own colours for a lit court, in the theme now on.
   const paint = useMemo(() => litTilePaint(2), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -209,6 +260,9 @@ export function CourtTimeHost() {
         {...(Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID } : {})}
       >
         <Animated.View style={[styles.card, cardStyle]}>
+          <Animated.View pointerEvents="none" style={[styles.wash, washStyle]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+            <LivingWash id={`ctw${theme.replace(/[^a-zA-Z0-9]/g, '')}`} dark={dark} light={paint.top} />
+          </Animated.View>
           <ScrollView style={styles.scroll} contentContainerStyle={styles.words} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
             {/* The court, as the map draws it: quiet, then lit. */}
             <View style={styles.stage} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -313,6 +367,38 @@ export function CourtTimeHost() {
 }
 
 /**
+ * The wash's drawing, on a layer twice the card's size: one glow high on the left, one low on the right (see
+ * WASH_ALPHA for their colours), each feathered to nothing, in the theme now on. The id carries the theme (iOS keeps a
+ * gradient by its id and would not repaint one whose colours changed under the same name).
+ */
+function LivingWash({ id, dark, light }: { id: string; dark: boolean; light: string }) {
+  const [a, b] = dark ? WASH_ALPHA.dark : WASH_ALPHA.light;
+  const one = dark ? colors.brand : colors.brandDim;
+  const two = dark ? colors.court : light;
+  const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS === 'web'
+    ? { cx: 0, cy: 0, r: 1, gradientTransform: `translate(${cx} ${cy}) scale(${rx} ${ry})` }
+    : { cx, cy, rx, ry });
+  return (
+    <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">
+      <Defs>
+        <RadialGradient id={`${id}a`} {...ellipse(36, 34, 26, 22)} gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={one} stopOpacity={a} />
+          <Stop offset="0.55" stopColor={one} stopOpacity={a * 0.45} />
+          <Stop offset="1" stopColor={one} stopOpacity={0} />
+        </RadialGradient>
+        <RadialGradient id={`${id}b`} {...ellipse(64, 66, 28, 24)} gradientUnits="userSpaceOnUse">
+          <Stop offset="0" stopColor={two} stopOpacity={b} />
+          <Stop offset="0.55" stopColor={two} stopOpacity={b * 0.45} />
+          <Stop offset="1" stopColor={two} stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}a)`} />
+      <Rect x="0" y="0" width="100" height="100" fill={`url(#${id}b)`} />
+    </Svg>
+  );
+}
+
+/**
  * A court from above filling the tile inside its white frame, as the map's floodlit court draws it
  * (markers' courtFromAbove): the doubles and singles sidelines, the service boxes and the net reaching
  * past the sidelines to its posts. A plain fill (quiet), or the lit court's gradient, top to bottom.
@@ -375,6 +461,7 @@ const styleDefinitions = StyleSheet.create({
     overflow: 'hidden',
     boxShadow: '0px 2px 8px rgba(0, 0, 0, 0.12)',
   },
+  wash: { position: 'absolute', top: '-50%', left: '-50%', width: '200%', height: '200%' },
   scroll: { flexGrow: 0, flexShrink: 1 },
   words: { alignItems: 'center', paddingHorizontal: CARD_PAD, paddingTop: spacing.lg },
   stage: { width: '100%', height: TILE_H + 34, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs },
