@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { AppState } from 'react-native';
 
-import type { CourtAccess, CourtRightNow, ID, User } from '@/data/types';
+import type { CourtAccess, CourtNow, CourtRightNow, ID, User } from '@/data/types';
 import { hitShort } from '@/features/hits/format';
 import { isMapCourtId } from '@/features/places/courtName';
 import { checkInEnds, clock } from '@/features/players/checkIn';
-import { fetchCourts, isClosedCourt, peekCourts, type Court } from '@/features/players/courts';
+import { fetchCourts, peekCourts, type Court } from '@/features/players/courts';
+import { NOW_LABEL } from '@/features/players/courtSummary';
 import { milesBetween } from '@/features/players/geo';
 import { canCheckIn } from '@/features/players/mapPrivacy';
 import type { MapModel, Placed } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
+import { courtAt } from '@/features/places/courtReach';
 import { useApp } from '@/store/AppContext';
 
 /*
@@ -54,10 +56,25 @@ import { useApp } from '@/store/AppContext';
  *    only a plain disc and the "+5"); a teen is never counted, and a teen sees no one else's
  *    count.
  *
- *    Tapping Up to hit while standing at a court (within SAME_COURT_MILES of its
- *    pin, the map's own same-court rule) also says "I'm playing here" there:
- *    the same tap, never on its own. Not for a teen, a club's court or
- *    someone's home court (canCheckIn, the server's own rule too). Turn off
+ *    Busy and Full light a court too (Oct 29, owner: "It should glow when someone taps busy or full"): the
+ *    latest "How is it now?" answer there, for 90 minutes, Busy as lit (2) and Full as hot (3), taking the
+ *    higher of that and what the people and hits there make it. That answer is already shown to everyone,
+ *    teens too, with no name on it (court_right_now's status), so the glow carries no one: no face, no
+ *    count, only "Busy" or "Full" beside it when the answer is what lights it most. Free, Wet, Locked or
+ *    older than 90 minutes: nothing from it.
+ *
+ *    Only answers given AT the court (Oct 30, owner: "If someone flips it to light it up, we will pop smth up
+ *    like turn on location or smth, and when they turn it on and are within the radius it will turn on"):
+ *    Busy and Full send where the phone is with the answer, and the server says whether that is within the
+ *    court's reach (atCourtMiles; migration 207, which never keeps the spot). Only those light it (litStatus);
+ *    an answer from anywhere else, with Location off, or from an older app still shows on the court's card as
+ *    before (status), it just lights nothing. The sheet asks (app/court-now.tsx; the demo decides with courtReach's atCourtFor).
+ *
+ *    Tapping Up to hit while standing at a court (within atCourtMiles of its
+ *    pin: further at a big club) also says "I'm playing here" there:
+ *    the same tap, never on its own. Not for a teen or at someone's home
+ *    court (canCheckIn, the server's own rule too; a club's court is fine since
+ *    Oct 29, migration 203). Turn off
  *    takes both away (checkOutOfMap; the server drops both).
  *
  * Turned on for everyone by setting the switch to true and shipping an
@@ -88,20 +105,9 @@ export const litLine = (span: string): string => `Up to hit · ${span}`;
 
 /* ---------------------------------------------------- the court you're at */
 
-/** The map's own rule for the same court (features/places/court sameCourt): within 0.15 mi of its pin. */
-const SAME_COURT_MILES = 0.15;
-
-/** The court you are standing at: the nearest open one within SAME_COURT_MILES, or null. */
-export function courtAt(at: LatLng, courts: Court[]): Court | null {
-  let best: Court | null = null;
-  let bestMiles = SAME_COURT_MILES;
-  for (const c of courts) {
-    if (!isMapCourtId(c.id) || isClosedCourt(c)) continue;
-    const miles = milesBetween(at, c);
-    if (miles < bestMiles) { best = c; bestMiles = miles; }
-  }
-  return best;
-}
+/* The reach of a court (atCourtMiles, placeCourts, courtAt, atCourtFor): features/places/courtReach, kept free of the
+ * app's store so the store can use it too. */
+export { atCourtFor, atCourtMiles, courtAt, placeCourts } from '@/features/places/courtReach';
 
 /**
  * Lighting up at a court lights the court up too: "I'm playing here" there,
@@ -113,7 +119,7 @@ export async function lightUpCourtHere(at: LatLng, a: {
   me: User | null | undefined;
   /** Who may play there, as players said (courtFacts), when the map's own answer is unknown. */
   accessOf: (courtId: string) => CourtAccess | undefined;
-  checkIn: (courtId: string, at: LatLng) => Promise<string | null>;
+  checkIn: (courtId: string, at: LatLng) => Promise<{ until: string } | string>;
 }): Promise<string | null> {
   if (!lightUpCourtsOn(a.me) || !canCheckIn(a.me)) return null;
   const list = peekCourts(at) ?? await Promise.race([
@@ -124,8 +130,8 @@ export async function lightUpCourtHere(at: LatLng, a: {
   if (!court) return null;
   const said = a.accessOf(court.id);
   if (!canCheckIn(a.me, said && said !== 'unknown' ? said : court.access)) return null;
-  const problem = await a.checkIn(court.id, at).catch(() => 'failed');
-  return problem ? null : court.name && court.name !== 'Tennis courts' ? court.name : 'The court';
+  const got = await a.checkIn(court.id, at).catch(() => 'failed');
+  return typeof got === 'string' ? null : court.name && court.name !== 'Tennis courts' ? court.name : 'The court';
 }
 
 /* ------------------------------------------------------- the courts' glow */
@@ -135,7 +141,7 @@ export type GlowLevel = 1 | 2 | 3;
 /** A court with something on right now, as the map draws it. */
 export interface CourtGlow {
   level: GlowLevel;
-  /** "4 here", "You + 2 here", "You’re here", "Playing now" (one or two: their circles say who), "Hit 6pm", "2 hits today". */
+  /** "4 here", "You + 2 here", "You’re here", "Playing now" (one or two: their circles say who), "Hit 6pm", "2 hits today", "Busy", "Full". */
   label: string;
   court: Court;
   /** How many people are there now, you included (strangers only as the server counts them). */
@@ -160,6 +166,24 @@ export const LIVE_MAX = 6;
 
 /** Quiet (0), warm (1), lit (2 or 3), hot (4 or more). */
 export const glowLevel = (score: number): GlowLevel | 0 => (score >= 4 ? 3 : score >= 2 ? 2 : score >= 1 ? 1 : 0);
+
+/** How long a "How is it now?" answer lights its court: as long as it shows (court_right_now: 90 minutes). */
+const STATUS_GLOW_MS = 90 * 60_000;
+
+/**
+ * How lit the latest "How is it now?" answer GIVEN AT THE COURT makes it (litStatus, migration 207): Busy lit (2),
+ * Full hot (3); Free, Wet, Locked, none, or older than 90 minutes: 0. Anonymous, as the answer already shows to
+ * everyone. An answer from anywhere else lights nothing.
+ */
+export function statusGlow(row: Pick<CourtRightNow, 'litStatus' | 'litAt'> | undefined, now: Date = new Date()): GlowLevel | 0 {
+  if (!row?.litStatus || !row.litAt) return 0;
+  const at = Date.parse(row.litAt);
+  if (!Number.isFinite(at) || now.getTime() - at > STATUS_GLOW_MS) return 0;
+  return row.litStatus === 'full' ? 3 : row.litStatus === 'wait' ? 2 : 0;
+}
+
+/** The answers that can light a court (statusGlow): only these ask where you are. */
+export const lightsCourt = (status: CourtNow | null): boolean => status === 'wait' || status === 'full';
 
 /** Standing on a court: within about 20 m of its pin (the same as pinList's ON_COURT_MILES). */
 const ON_COURT_MILES = 0.0125;
@@ -228,14 +252,19 @@ export function courtGlows({ courts, courtNow, hits, shown, me, playingAt, users
     const you = !!row?.youHere || playingAt === c.id;
     const people = others + (you ? 1 : 0);
     const times = (hitsAt.get(c.id) ?? []).sort();
-    const level = glowLevel(people + times.length);
+    const counted = glowLevel(people + times.length);
+    // Busy or Full said there in the last 90 minutes: at least lit or hot (the higher of the two wins).
+    const said = statusGlow(row, now);
+    const level = Math.max(counted, said) as GlowLevel | 0;
     if (!level) continue;
     // One or two people: their circles on the court say who and how many, so its words carry no number
     // (Oct 28, owner: "if its 2 or less ppl hitting there. the icons of them should show up instead of it
-    // just saying 2ppl"); three or more: the count.
-    const label = people
-      ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
-      : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
+    // just saying 2ppl"); three or more: the count. The answer lighting it more than they do: "Busy", "Full".
+    const label = said > counted && row?.litStatus
+      ? NOW_LABEL[row.litStatus]
+      : people
+        ? people <= 2 ? (you ? 'You’re here' : 'Playing now') : you ? `You + ${others} here` : `${people} here`
+        : times.length > 1 ? `${times.length} hits today` : `Hit ${hitShort(times[0], now).replace(/^Today /, '')}`;
     // Faces: friends the map places here (most recently seen first), then friends only the server names here.
     const seen = (faceAt.get(c.id) ?? []).slice().sort((a, b) => (Date.parse(b.seenAt ?? '') || 0) - (Date.parse(a.seenAt ?? '') || 0)).map((p) => p.user);
     const extra = [...friendIds].filter((id) => !seen.some((u) => u.id === id)).map((id) => byId.get(id)).filter((u): u is User => !!u);
@@ -253,7 +282,7 @@ const ASK_MAX = 50;
 const REFRESH_MS = 3 * 60_000;
 
 /** The courts nearest the middle of a list (where the map came to rest), at most ASK_MAX, as one key. */
-function nearestKey(courts: Court[]): string {
+export function nearestKey(courts: Court[]): string {
   const real = courts.filter((c) => isMapCourtId(c.id));
   if (!real.length) return '';
   const mid = { lat: real.reduce((s, c) => s + c.lat, 0) / real.length, lng: real.reduce((s, c) => s + c.lng, 0) / real.length };

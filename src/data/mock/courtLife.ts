@@ -1,6 +1,7 @@
-import type { CourtFacts, CourtFollowCount, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, Notification, Post, TaggedCourt, User } from '../types';
+import type { CourtFacts, CourtFollowCount, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, Notification, Post, TaggedCourt, User } from '../types';
 import { notKnownAdult } from '@/features/players/age';
 import { isMapCourtId } from '@/features/places/courtName';
+import { demotedPosts } from '@/features/feed/demoted';
 import { DEMO_PARK } from './courts';
 import { CURRENT_USER_ID } from './users';
 
@@ -67,8 +68,13 @@ export const demoFactsFor = (courtId: string): CourtFacts => DEMO_FACTS[courtId]
 export const DEMO_NOW: Record<string, CourtRightNow> = {
   [park(1).id]: { courtId: park(1).id, status: 'free', statusAt: minutesAgo(20), playing: 7, friendIds: ['u-sam', 'u-marcus'], youHere: false },
   [park(2).id]: { courtId: park(2).id, playing: 0, friendIds: ['u-omar'], youHere: false },
-  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
+  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), litStatus: 'wait', litAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
   [park(5).id]: { courtId: park(5).id, playing: 4, friendIds: [], youHere: false },
+  // "How is it now?" answers lighting courts on their own (no one checked in): Marigold said Busy (lit), Larkspur
+  // Full (hot), Hillcrest Free (quiet, nothing from it). All three said at the court (migration 207: only those light it).
+  [park(4).id]: { courtId: park(4).id, status: 'wait', statusAt: minutesAgo(15), litStatus: 'wait', litAt: minutesAgo(15), playing: 0, friendIds: [], youHere: false },
+  [park(6).id]: { courtId: park(6).id, status: 'full', statusAt: minutesAgo(30), litStatus: 'full', litAt: minutesAgo(30), playing: 0, friendIds: [], youHere: false },
+  [park(7).id]: { courtId: park(7).id, status: 'free', statusAt: minutesAgo(10), playing: 0, friendIds: [], youHere: false },
 };
 export const demoNowFor = (courtId: string): CourtRightNow => DEMO_NOW[courtId] ?? { courtId, playing: 0, friendIds: [], youHere: false };
 
@@ -131,6 +137,41 @@ export function demoRings(posts: Post[], hits: HitRequest[], s: Seeing, box: { m
   return [...per.values()]
     .filter((r) => r.lat >= box.minLat && r.lat <= box.maxLat && r.lng >= box.minLng && r.lng <= box.maxLng)
     .sort((a, b) => b.lastAt.localeCompare(a.lastAt));
+}
+
+/**
+ * Played here today (court_played_today, migration 205), for up to 50 courts: public posts tagged there since
+ * your midnight (none to one group, none logged by itself, none taken down or pushed to the bottom, none by a
+ * private account but yours) and open hits there everyone may see that started today (an upcoming hit is not
+ * "played" yet), by the court rule (showsAtCourt), with who.
+ */
+export function demoToday(courtIds: string[], posts: Post[], hits: HitRequest[], s: Seeing, since: Date, day: string): CourtToday[] {
+  const wanted = new Set(courtIds);
+  const from = since.getTime();
+  const now = Date.now();
+  const down = demotedPosts();
+  const per = new Map<string, CourtToday>();
+  const isPublic = (authorId: ID) => authorId === s.me || !s.users.find((u) => u.id === authorId)?.isPrivate;
+  const add = (courtId: string, post: boolean, who: ID, at: string) => {
+    const had = per.get(courtId) ?? { courtId, posts: 0, hits: 0, lastAt: at, authorIds: [], day };
+    if (post) had.posts += 1; else had.hits += 1;
+    if (at > had.lastAt) had.lastAt = at;
+    if (!had.authorIds.includes(who)) had.authorIds.push(who);
+    per.set(courtId, had);
+  };
+  for (const p of posts) {
+    const t = Date.parse(p.createdAt);
+    if (!p.court || !wanted.has(p.court.id) || !(t >= from && t <= now + 300_000)) continue;
+    if (p.archived || p.removed || p.groupId || p.autoLogged || p.autoHeld || down.has(p.id) || !isPublic(p.authorId) || !showsAtCourt(p.authorId, s)) continue;
+    add(p.court.id, true, p.authorId, p.createdAt);
+  }
+  for (const h of hits) {
+    const t = Date.parse(h.startsAt);
+    if (!h.place.id || !wanted.has(h.place.id) || h.cancelled || (h.audience ?? 'everyone') !== 'everyone' || !(t >= from && t <= now)) continue;
+    if (!isPublic(h.authorId) || !showsAtCourt(h.authorId, s)) continue;
+    add(h.place.id, false, h.authorId, h.startsAt);
+  }
+  return [...per.values()];
 }
 
 /** "Sam and Marcus, friends, play here": friends who follow each other with you (since migration 189) who posted, posted a hit or joined one at each court in 90 days (court_people_you_follow). */

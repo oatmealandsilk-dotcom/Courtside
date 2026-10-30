@@ -21,6 +21,8 @@ import { STYLE, cardLook, lookFor } from '@/components/map/look';
 import { MAP_PIN_CSS, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers, onTheCard } from '@/components/map/pinList';
 import { glowKey, useCourtGlow } from '@/features/places/lightUp';
+import { playedTodayKey } from '@/features/places/playedToday';
+import { usePlayedToday } from '@/features/places/usePlayedToday';
 import { livePin } from '@/features/activity/liveSession';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { placeZoom } from '@/features/places/geocode';
@@ -764,15 +766,18 @@ export function NearbyMap(props: NearbyMapProps) {
   // Courts light up by what is on there right now (Light up, admins first; null: as before).
   const glow = useCourtGlow(model, expanded, shown, playing?.courtId, fullCard ? { full: true, seen: inViewNow } : undefined);
   const glowNow = glowKey(glow);
+  // Played here today (playedToday; off until approved; null: as before).
+  const today = usePlayedToday(model, expanded, fullCard ? { full: true, seen: inViewNow } : undefined);
+  const todayNow = playedTodayKey(today);
   // Everything drawn on the map, the same list the browser's map draws (pinList).
   const markers = useMemo<CanvasMarker[]>(
     () => {
       // v7: your pin has landed in the zoom layer already, so here it is simply there (never held, never landed again).
-      if (!fullCard) return mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: growFrom?.v7 ? null : swoop.meHold, land: growFrom?.v7 ? 0 : swoop.land });
+      if (!fullCard) return mapMarkers({ model, expanded, me, shown, selectedId, selectedCourtId, selectedHitId, hidden: hiddenMe || !checkIn.on, playing, glow, today, meHold: growFrom?.v7 ? null : swoop.meHold, land: growFrom?.v7 ? 0 : swoop.land });
       // The card drawing the full map's pins: the full map's own list, nothing picked; your pin out once the push-in starts.
-      return onTheCard(mapMarkers({ model, expanded: true, me, shown, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow, meHold: meOut ? 'out' : null }));
+      return onTheCard(mapMarkers({ model, expanded: true, me, shown, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow, today, meHold: meOut ? 'out' : null }));
     },
-    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow, swoop.meHold, swoop.land, fullCard, meOut], // eslint-disable-line react-hooks/exhaustive-deps
+    [model.courts, model.ringed, model.cardCourts, model.cardRinged, model.hits, shown, selectedId, selectedCourtId, selectedHitId, expanded, me, theme, openToHit, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowNow, todayNow, swoop.meHold, swoop.land, fullCard, meOut], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // What "+N" pins look like, in this theme's colours.
   const tpl = useMemo(() => clusterTemplates(), [theme]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -785,9 +790,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // zoom layer to switch to as the card covers the screen. The card keeps its own.
   const glowFull = useCourtGlow(model, false, v7On ? model.ranked : [], playing?.courtId, v7On ? { full: true, seen: inViewNow } : undefined);
   const glowFullNow = glowKey(glowFull);
+  // And its "Played here today" glow (playedToday), as the full map draws it.
+  const todayFull = usePlayedToday(model, false, v7On ? { full: true, seen: inViewNow } : undefined);
+  const todayFullNow = playedTodayKey(todayFull);
   const fullMarkers = useMemo<CanvasMarker[]>(
-    () => (v7On ? onTheCard(mapMarkers({ model, expanded: true, me, shown: model.ranked, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow: glowFull, meHold: 'out' })) : NO_MARKERS),
-    [v7On, model.courts, model.ringed, model.hits, model.ranked, me, theme, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowFullNow], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (v7On ? onTheCard(mapMarkers({ model, expanded: true, me, shown: model.ranked, selectedId: null, selectedCourtId: null, selectedHitId: null, hidden: hiddenMe || !checkIn.on, playing, glow: glowFull, today: todayFull, meHold: 'out' })) : NO_MARKERS),
+    [v7On, model.courts, model.ringed, model.hits, model.ranked, me, theme, model.mePos, hiddenMe, checkIn.on, playing?.courtId, playing?.courtName, pinClock, glowFullNow, todayFullNow], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // v7: the zoom layer (ZoomLayer) is drawn ahead from this card while it is drawn and on show: its pins and the full map's,
   // the full map's look, its town and where it is on the screen (measured each time). Out of view a while, it is let go.
@@ -1207,7 +1215,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : model.selected ? (
             <PlayerSheet placed={model.selected} following={followingIds.includes(model.selected.user.id)} onClose={() => model.select(null)} onProfile={() => onOpen(model.selected!.user.id)} onMessage={() => message(model.selected!.user.id)} onAskToHit={actions.canMessage(model.selected.user.id) ? () => askToHit([model.selected!.user.id]) : undefined} onAddToGroup={() => addToGroup(model.selected!.user.id)} onFollow={() => { const who = model.selected!.user; if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id)); else actions.toggleFollow(who.id); }} />
           ) : model.selectedCourt ? (
-            <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
+            <CourtSheet court={model.selectedCourt} miles={milesBetween(home, model.selectedCourt)} ringed={model.ringed.has(model.selectedCourt.id)} today={!!today?.has(model.selectedCourt.id)} onClose={() => model.selectCourt(null)} />
           ) : model.selectedHit ? (
             <HitSheet hit={model.selectedHit.hit} miles={milesBetween(home, model.selectedHit.at)} onClose={() => model.selectHit(null)} />
           ) : model.place ? (

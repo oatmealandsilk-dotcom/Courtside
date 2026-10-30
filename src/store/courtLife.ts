@@ -1,11 +1,14 @@
 import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
-import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, withReview, type Seeing } from '@/data/mock/courtLife';
-import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
+import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, demoToday, withReview, type Seeing } from '@/data/mock/courtLife';
+import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
+import { atCourtFor } from '@/features/places/courtReach';
 import { notKnownAdult } from '@/features/players/age';
+import { dayKey, todayStart } from '@/features/places/playedToday';
 import { saidYes } from '@/features/players/mapPrivacy';
+import type { LatLng } from '@/features/players/positions';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -31,6 +34,8 @@ export interface CourtLifeState {
   courtRegulars: Record<string, ID[]>;
   /** Courts with a post or hit this week, around where the map looked. */
   courtRings: CourtRing[];
+  /** Played here today (features/places/playedToday): what public was at the courts asked about, in your day, by court id. */
+  courtToday: Record<string, CourtToday>;
   /** Your own facts about courts, to fill "Add what you know" back in. */
   myCourtReviews: Record<string, CourtReview>;
   /** The courts you follow, with what is new at each; null until first asked. */
@@ -44,7 +49,7 @@ export interface CourtLifeState {
 }
 
 export const emptyCourtLife: CourtLifeState = {
-  courtFacts: {}, courtFollows: {}, courtNow: {}, courtRegulars: {}, courtRings: [], myCourtReviews: {}, followedCourts: null, courtExtras: null,
+  courtFacts: {}, courtFollows: {}, courtNow: {}, courtRegulars: {}, courtRings: [], courtToday: {}, myCourtReviews: {}, followedCourts: null, courtExtras: null,
 };
 
 /** What the slice reads from the rest of the app's state. */
@@ -60,6 +65,9 @@ interface Reads {
 export type CourtToFollow = TaggedCourt & { access?: CourtAccess };
 
 /** A box of the map, for court rings. */
+/** "I'm playing here" went through: when it ends, as the server said it (ISO time). */
+export interface CheckedIn { until: string }
+
 export interface MapBox { minLat: number; minLng: number; maxLat: number; maxLng: number }
 
 export interface CourtLifeActions {
@@ -73,23 +81,44 @@ export interface CourtLifeActions {
   toggleCourtFollow: (court: CourtToFollow) => void;
   /** "Your courts" on Find Players. */
   loadFollowedCourts: () => Promise<void>;
-  /** "How is it right now?" Null takes your answer back. Resolves a sentence when it did not go through. */
-  reportCourtNow: (courtId: string, status: CourtNow | null) => Promise<string | null>;
   /**
-   * "I'm playing here", for two hours. Resolves a sentence when it is refused.
-   * `at`: where the phone was found a moment ago by the same tap (Light up at a
-   * court, features/places/lightUp), so it is not asked again.
+   * "How is it right now?" Null takes your answer back. `at`: where the phone is, for Busy and Full, so the server
+   * can say whether you are at the court (migration 207: only answers given there light it up; the spot is never
+   * kept). Resolves whether it counted as at the court, or a sentence when it did not go through.
    */
-  checkInAtCourt: (courtId: string, at?: { lat: number; lng: number }) => Promise<string | null>;
+  reportCourtNow: (courtId: string, status: CourtNow | null, at?: LatLng) => Promise<CourtNowSaved | string>;
+  /**
+   * "I'm playing here", for `minutes` (the "How long are you here?" card: 30
+   * minutes to 4 hours, migration 204), or two hours when not said. Resolves
+   * when it ends, as the server said it ({ until }; the demo works it out the
+   * way the server would), or a sentence when it is refused, so whatever shows
+   * "till 6:30pm" from it says what every other place says. `at`: where the phone was found a moment ago
+   * by the same tap (Light up at a court, features/places/lightUp), so it is
+   * not asked again. With `minutes`, the card that asked buzzes as the court
+   * lights, so this does not.
+   */
+  checkInAtCourt: (courtId: string, at?: { lat: number; lng: number }, minutes?: number) => Promise<CheckedIn | string>;
   checkOutOfCourt: () => Promise<void>;
   /** Court rings in a box of the map. */
   loadCourtRings: (box: MapBox) => Promise<void>;
   /** Only how up to 50 courts are right now (the map's lit courts, features/places/lightUp). */
   loadCourtsNow: (courtIds: string[]) => Promise<void>;
+  /** Played here today, for up to 50 courts (features/places/playedToday; only while it is switched on). */
+  loadCourtsToday: (courtIds: string[]) => Promise<void>;
 }
 
 const seeing = (s: Reads): Seeing => ({ me: s.currentUserId, users: s.users, followingIds: s.followingIds, blockedIds: s.blockedIds, mutedIds: s.mutedIds });
+/** The demo's answer for a court, its friends only those you follow (a player who just joined, ?new=1, has none there). */
+const demoNow = (id: string, s: Reads): CourtRightNow => { const r = demoNowFor(id); return { ...r, friendIds: r.friendIds.filter((f) => s.followingIds.includes(f)) }; };
 const byCourt = <T extends { courtId: string }>(rows: T[]) => Object.fromEntries(rows.map((r) => [r.courtId, r]));
+/**
+ * Right now at courts as the server says it, keeping when yours ends where this phone knows it and the server
+ * did not say (a database before migration 204): "You're here · till 6:30pm" stays right.
+ */
+const nowKeepingTill = (prev: Record<string, CourtRightNow>, rows: CourtRightNow[]): CourtRightNow[] => rows.map((r) => {
+  const was = prev[r.courtId]?.youUntil;
+  return r.youHere && !r.youUntil && was && Date.parse(was) > Date.now() ? { ...r, youUntil: was } : r;
+});
 /** Nothing said in a review: the sheet needs at least one answer. */
 const saysNothing = (r: CourtReview) => r.lights === undefined && !r.nets && !r.surface && !r.busy && !r.access && !r.notes?.trim();
 
@@ -111,7 +140,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
         courtExtras: true,
         courtFacts: { ...Object.fromEntries(ids.map((id) => [id, demoFactsFor(id)])), ...prev.courtFacts },
         courtFollows: { ...Object.fromEntries(ids.map((id) => [id, demoFollowsFor(id)])), ...prev.courtFollows },
-        courtNow: { ...Object.fromEntries(ids.map((id) => [id, demoNowFor(id)])), ...prev.courtNow },
+        courtNow: { ...Object.fromEntries(ids.map((id) => [id, demoNow(id, s)])), ...prev.courtNow },
         courtRegulars: { ...prev.courtRegulars, ...regulars },
       }));
       return;
@@ -130,7 +159,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       courtExtras: any ? true : prev.courtExtras ?? false,
       courtFacts: facts ? { ...prev.courtFacts, ...byCourt(facts) } : prev.courtFacts,
       courtFollows: follows ? { ...prev.courtFollows, ...byCourt(follows) } : prev.courtFollows,
-      courtNow: now ? { ...prev.courtNow, ...byCourt(now) } : prev.courtNow,
+      courtNow: now ? { ...prev.courtNow, ...byCourt(nowKeepingTill(prev.courtNow, now)) } : prev.courtNow,
       courtRegulars: regulars ? { ...prev.courtRegulars, ...Object.fromEntries(ids.map((id) => [id, regulars.find((r) => r.courtId === id)?.userIds ?? []])) } : prev.courtRegulars,
     }));
   }, [stateRef, setState, live]);
@@ -198,7 +227,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       const s = stateRef.current;
       // Your followed courts as they stand here (the demo's two to begin with), with what is new at each worked out afresh.
       const kept = s.followedCourts ?? Object.values(DEMO_FOLLOWED_AT).map((c) => ({ courtId: c.id, name: c.name, lat: c.lat, lng: c.lng, access: 'unknown' as const, followedAt: c.at, newPosts: 0, upcomingHits: 0 }));
-      const now = { ...Object.fromEntries(kept.map((c) => [c.courtId, demoNowFor(c.courtId)])), ...s.courtNow };
+      const now = { ...Object.fromEntries(kept.map((c) => [c.courtId, demoNow(c.courtId, s)])), ...s.courtNow };
       const list = demoMyCourts(kept.map((c) => ({ id: c.courtId, name: c.name ?? 'Tennis courts', lat: c.lat, lng: c.lng, at: c.followedAt, access: s.courtFacts[c.courtId]?.access ?? demoFactsFor(c.courtId).access })), s.posts, s.hitRequests, now, seeing(s));
       setState((prev) => ({ ...prev, courtExtras: true, followedCourts: list, courtNow: now, courtFollows: { ...Object.fromEntries(list.map((c) => [c.courtId, demoFollowsFor(c.courtId)])), ...prev.courtFollows } }));
       return;
@@ -216,11 +245,11 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     }));
   }, [stateRef, setState, live]);
 
-  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null) => {
+  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null, at?: LatLng): Promise<CourtNowSaved | string> => {
     const me = stateRef.current.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
     const was = stateRef.current.courtNow[courtId];
-    const at = new Date().toISOString();
+    const stamp = new Date().toISOString();
     const put = (row: CourtRightNow | undefined) => setState((prev) => ({
       ...prev,
       courtNow: row ? { ...prev.courtNow, [courtId]: row } : prev.courtNow,
@@ -228,16 +257,30 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     }));
     haptics.commit();
     const base = was ?? { courtId, playing: 0, friendIds: [], youHere: false };
-    put(status ? { ...base, status, statusAt: at } : { ...base, status: undefined, statusAt: undefined });
-    if (!live(me)) return null;
-    const problem = await remote.reportCourtStatus(courtId, status);
-    if (problem) { put(was); return problem; }
-    // Taking yours back can leave someone else's answer standing: ask again.
-    if (!status) void loadCourtInfo([courtId]);
-    return null;
+    // The card's line at once; the court lights only once the answer is known to be given there (migration 207).
+    const said: CourtRightNow = status ? { ...base, status, statusAt: stamp } : { ...base, status: undefined, statusAt: undefined };
+    // A calmer answer (Free, Wet, Locked) from anywhere turns the glow off at once, as the server does (migration 207).
+    if (status && status !== 'wait' && status !== 'full') { said.litStatus = undefined; said.litAt = undefined; }
+    const lit = (row: CourtRightNow): CourtRightNow => (status ? { ...row, litStatus: status, litAt: stamp } : row);
+    put(said);
+    // Only a spot sent with the answer can count; the demo works it out the way the server does. Only a known adult's
+    // can (the teen rule, migration 207): anyone else's answer goes without one, and never lights the court.
+    const self = stateRef.current.users.find((u) => u.id === me);
+    const sent = status && at && self && !notKnownAdult(self) ? at : undefined;
+    if (!live(me)) {
+      const atCourt = !!sent && await atCourtFor(courtId, sent);
+      if (atCourt) put(lit(said));
+      return { atCourt };
+    }
+    const got = await remote.reportCourtStatus(courtId, status, sent);
+    if (typeof got === 'string') { put(was); return got; }
+    if (got.atCourt) put(lit(said));
+    // Taking yours back, or an answer from elsewhere replacing yours from the court, can change what lights it: ask again.
+    else if (!status || base.litStatus) void loadCourtInfo([courtId]);
+    return got;
   }, [stateRef, setState, live, loadCourtInfo]);
 
-  const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }) => {
+  const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }, minutes?: number): Promise<CheckedIn | string> => {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
@@ -250,38 +293,41 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (!saidYes(s.mapVisibility)) return 'Say who can see you on the map first.';
     // A spot from the same tap (Light up) is Location on already, whatever this render last saw.
     if (!at && !s.locationEnabled) return 'Turn on Location first, so players know you’re really here.';
+    // When it ends: the server's answer; in the demo, as the server would hold it (30 minutes to 4 hours, else 2).
+    let ends = new Date(Date.now() + (minutes == null ? 120 : Math.min(240, Math.max(30, Math.round(minutes)))) * 60_000).toISOString();
     if (live(me)) {
       // Where the phone is now, not where it was when the app opened: the
       // server checks you are within 5 km of the court (migration 189) and
       // never keeps it. Your pin is the court; nothing else is shared.
       const fix = at ? { ok: true as const, ...at } : await getPosition({ recentMs: 2 * 60_000 });
       if (!fix.ok) return fix.reason === 'denied' ? 'Location is blocked, so we can’t tell you’re here.' : 'Couldn’t find you. Try again.';
-      if (stateRef.current.currentUserId !== me) return null;
+      if (stateRef.current.currentUserId !== me) return 'That didn’t go through. Try again.';
       setState((prev) => ({ ...prev, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
-      const got = await remote.checkInAtCourt(courtId, { lat: fix.lat, lng: fix.lng });
+      const got = await remote.checkInAtCourt(courtId, { lat: fix.lat, lng: fix.lng }, minutes);
       if ('error' in got) {
         return got.error === 'too_far' ? 'You need to be at the court for that.'
           : got.error === 'location_off' ? 'Turn on Location first, so players know you’re really here.'
             : got.error === 'adults_only' ? '“I’m playing here” is for adults only.'
-              : got.error === 'closed_court' ? 'Only for courts anyone can play at.'
+              : got.error === 'closed_court' ? 'Not at someone’s home court.'
                 : got.error === 'slow_down' ? 'That’s a lot of courts today. Try again tomorrow.'
                   : got.error === 'hidden' ? 'You chose No one on the map. Change it in Settings → Privacy.'
                   : got.error === 'ask_first' ? 'Say who can see you on the map first.'
                   : 'That didn’t go through. Try again.';
       }
+      ends = got.until;
     }
-    // From a light-up's own tap (`at`), that tap has buzzed already: one buzz, not two.
-    if (!at) haptics.commit();
+    // From a light-up's own tap (`at`), that tap has buzzed already; from the card (`minutes`), it buzzes as the court lights: one buzz, not two.
+    if (!at && minutes == null) haptics.commit();
     // One court at a time: checking in here checks you out anywhere else.
     setState((prev) => ({
       ...prev,
       courtNow: Object.fromEntries([
         ...Object.entries(prev.courtNow).map(([id, row]) => [id, { ...row, youHere: false }] as const),
-        [courtId, { ...(prev.courtNow[courtId] ?? { courtId, playing: 0, friendIds: [] }), youHere: true }],
+        [courtId, { ...(prev.courtNow[courtId] ?? { courtId, playing: 0, friendIds: [] }), youHere: true, youUntil: ends }],
       ]),
       followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: c.courtId === courtId })) ?? null,
     }));
-    return null;
+    return { until: ends };
   }, [stateRef, setState, live]);
 
   const checkOutOfCourt = useCallback(async () => {
@@ -321,6 +367,25 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     setState((prev) => ({ ...prev, courtRings: [...prev.courtRings.filter((r) => !inBox(r) && !rings.some((x) => x.courtId === r.courtId)), ...rings].slice(-400) }));
   }, [stateRef, setState, live]);
 
+  const loadCourtsToday = useCallback(async (courtIds: string[]) => {
+    const ids = [...new Set(courtIds.filter(isMapCourtId))].slice(0, 50);
+    const me = stateRef.current.currentUserId;
+    if (!ids.length || !me) return;
+    const now = new Date();
+    const since = todayStart(now);
+    const day = dayKey(now);
+    const s = stateRef.current;
+    const rows = live(me) ? await remote.fetchCourtsToday(ids, since, day).catch(() => null) : demoToday(ids, s.posts, s.hitRequests, seeing(s), since, day);
+    if (!rows || stateRef.current.currentUserId !== me) return;
+    // The courts asked about take this answer (none: nothing public there today); the rest keep theirs.
+    setState((prev) => {
+      const next = { ...prev.courtToday };
+      for (const id of ids) delete next[id];
+      for (const r of rows) next[r.courtId] = r;
+      return { ...prev, courtToday: next };
+    });
+  }, [stateRef, setState, live]);
+
   const loadCourtsNow = useCallback(async (courtIds: string[]) => {
     const ids = [...new Set(courtIds.filter(isMapCourtId))].slice(0, 50);
     const me = stateRef.current.currentUserId;
@@ -329,7 +394,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       // The demo's answers for courts not yet seen; anything changed here (yours, a light-up) stays.
       setState((prev) => {
         const add = ids.filter((id) => !prev.courtNow[id]);
-        return add.length ? { ...prev, courtNow: { ...Object.fromEntries(add.map((id) => [id, demoNowFor(id)])), ...prev.courtNow } } : prev;
+        return add.length ? { ...prev, courtNow: { ...Object.fromEntries(add.map((id) => [id, demoNow(id, stateRef.current)])), ...prev.courtNow } } : prev;
       });
       return;
     }
@@ -337,12 +402,12 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (!now || stateRef.current.currentUserId !== me) return;
     setState((prev) => {
       // Nothing new at any of them: the same state, so nothing on screen redraws.
-      const changed = now.filter((r) => JSON.stringify(prev.courtNow[r.courtId]) !== JSON.stringify(r));
+      const changed = nowKeepingTill(prev.courtNow, now).filter((r) => JSON.stringify(prev.courtNow[r.courtId]) !== JSON.stringify(r));
       return changed.length ? { ...prev, courtNow: { ...prev.courtNow, ...byCourt(changed) } } : prev;
     });
   }, [stateRef, setState, live]);
 
   return useMemo(() => ({
-    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow,
-  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow]);
+    loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow, loadCourtsToday,
+  }), [loadCourtInfo, loadMyCourtReview, saveCourtReview, toggleCourtFollow, loadFollowedCourts, reportCourtNow, checkInAtCourt, checkOutOfCourt, loadCourtRings, loadCourtsNow, loadCourtsToday]);
 }

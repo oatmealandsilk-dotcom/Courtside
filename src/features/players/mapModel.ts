@@ -30,7 +30,7 @@ export type MapFilter = 'all' | 'following' | 'open' | 'near' | 'level' | 'coach
  * friend who follows each other with you (migration 98), on the map at
  * any distance.
  */
-export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string; rough: boolean; court?: { id: string; name: string }; mutual?: boolean }
+export interface Placed { user: User; at: LatLng; miles: number; seenAt?: string; seenCity?: string; rough: boolean; court?: { id: string; name: string }; mutual?: boolean; /** Playing at `court` until then, as they chose ("here till 6:30pm", migration 204). */ hereUntil?: string }
 /**
  * A row in the full map's players list: a friend checked in (Placed: on the
  * map, with how far), or, under Near me, a player whose own profile town is
@@ -241,7 +241,7 @@ export function useMapModel(me: User, players: User[], fix?: LatLng | null, focu
         // Miles to the spot they shared, not to the nudged pin, so a player
         // reads the same distance here as under Near you on Community.
         const miles = seen ? milesBetween(home, { lat: seen.lat, lng: seen.lng }) : milesBetween(home, at);
-        return [{ user, at, miles, seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court, mutual: !!seen?.mutual }];
+        return [{ user, at, miles, seenAt: seen?.seenAt, seenCity: seen?.city, rough: isRoughSpot(seen), court, mutual: !!seen?.mutual, ...(court && seen?.hereUntil ? { hereUntil: seen.hereUntil } : {}) }];
       })
       // In the order the distances read: a rough "~1 mi" never after "1.1 mi".
       .sort((a, b) => spotMilesKey(a.miles, a.rough) - spotMilesKey(b.miles, b.rough) || a.miles - b.miles),

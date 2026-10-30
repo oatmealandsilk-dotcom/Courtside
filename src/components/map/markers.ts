@@ -6,6 +6,7 @@ import { initials } from '@/lib/format';
 import { colors, surfaceColorFor, withAlpha } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { surfaceKind } from '@/features/places/courtSurface';
+import { PLAYED_TODAY_GLOW, playedTodayTone } from '@/features/places/playedToday';
 
 /**
  * A court pin's colour by what it is played on (Oct 24, owner: "the courts near me hard grass
@@ -87,6 +88,8 @@ export const LIT_CSS = `
 .cs-lit-sheen{transform:translateX(-110%);opacity:0}
 .cs-lit-wave,.cs-lit-ground,.cs-lit-tide{opacity:0}
 .cs-far .cs-lit{scale:.84}
+.cs-lit-a{--cs-rim:1.5px;--cs-gap:1px}
+.cs-close .cs-lit-a{--cs-rim:3px;--cs-gap:2px}
 .cs-lit-run .cs-lit-glow{animation:cs-lit-breathe 2.6s ease-in-out infinite alternate}
 .cs-lit-run.cs-lit-1 .cs-lit-glow{animation-duration:3.2s}
 .cs-lit-run.cs-lit-3 .cs-lit-glow{animation-duration:1.8s}
@@ -123,6 +126,18 @@ export const LIT_CSS = `
 @keyframes cs-lit-ground{0%{transform:scale(.4);opacity:.95}100%{transform:scale(1.9);opacity:0}}
 .cs-still .cs-lit-run [class*="cs-lit-"]{animation:none!important}
 @media (prefers-reduced-motion:reduce){.cs-lit-run [class*="cs-lit-"]{animation:none!important}}
+`;
+
+/**
+ * Played here today (features/places/playedToday): the halo behind the court breathes very slowly, a
+ * change of light only (7 s each way, opacity alone, so the compositor runs it); still with Reduce Motion.
+ * Kept out of MAP_PIN_CSS (which keys the card's saved pictures) while switched off.
+ */
+const TODAY_CSS = `
+.cs-today-glow{animation:cs-today 7s ease-in-out infinite alternate}
+@keyframes cs-today{0%{opacity:.5}100%{opacity:1}}
+.cs-still .cs-today-glow{animation:none}
+@media (prefers-reduced-motion:reduce){.cs-today-glow{animation:none}}
 `;
 
 /**
@@ -225,7 +240,7 @@ export const MAP_PIN_CSS = `
 .cs-still .cs-pf{transition:none;animation-name:cs-fade-in}
 .cs-still .cs-spring{animation:none}
 @media (prefers-reduced-motion:reduce){.cs-pf{transition:none;animation-name:cs-fade-in}.cs-move.cs-spring{animation:none;transition:translate .4s cubic-bezier(.2,.8,.2,1),transform .15s ease-out}}
-${LIT_CSS}`;
+${LIT_CSS}${PLAYED_TODAY_GLOW ? TODAY_CSS : ''}`;
 
 /**
  * The check-in zoom (mapGrow): as the Community card grows into the full map, its pins step aside with its words, a quick
@@ -351,7 +366,7 @@ const storyRing = (gap: number, width: number) => `0 0 0 ${gap}px ${colors.bg},0
  * their lit courts with litCourtPinHtml): the words beside it with no glow at
  * all (an open hit on another day).
  */
-export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, plain = false, hits = 0): string {
+export function courtPinHtml(court: Court, on: boolean, ring = false, live?: string, glowOnly = false, plain = false, hits = 0, /** Played here today (playedToday): the soft warm glow, never on a glowing court. */ today = false): string {
   // A light rounded square with the court drawn in its colour: a place, not a person (Oct 5, owner: courts and
   // players looked too alike). Picked, it fills in. People stay round, bigger, with their faces.
   const size = on ? 28 : 22;
@@ -359,18 +374,39 @@ export function courtPinHtml(court: Court, on: boolean, ring = false, live?: str
   const nameText = court.name && court.name !== 'Tennis courts' ? `${esc(court.name)}${closed ? ` · ${court.access === 'private' ? 'private' : 'members'}` : ''}` : '';
   const pill = `position:absolute;left:calc(100% + ${live ? 10 : ring ? 9 : 5}px);top:50%;transform:translateY(-50%);max-width:${live ? 190 : 150}px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 7px;border-radius:999px;background:${colors.bg};box-shadow:0 1px 3px rgba(0,0,0,.14);${FONT}`;
   const glowing = (!!live || glowOnly) && !plain;
+  const warm = today && !glowing;
   const dot = plain ? colors.brand : colors.open;
   const name = live
     ? `<span class="cs-court-tag" style="${pill};color:${colors.text}"><i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${dot}"></i>${nameText ? `<span class="cs-court-nm" style="color:${colors.textMuted};font-weight:500">${nameText} · </span>` : ''}${esc(live)}</span>`
+    : warm && !glowOnly ? `<span class="cs-court-name" style="${pill};left:calc(100% + 9px);color:${colors.text}">${todayWords()}Played today${nameText ? `<span style="color:${colors.textMuted};font-weight:500"> · ${nameText}</span>` : ''}</span>`
     : nameText && !glowOnly ? `<span class="cs-court-name" style="${pill};color:${closed ? colors.textMuted : colors.text}">${nameText}</span>` : '';
-  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : ring ? storyRing(2, 2.5) : '';
+  const glow = glowing ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.open},0 0 12px 4px ${colors.open}66,` : warm ? todayRing() : ring ? storyRing(2, 2.5) : '';
   const tint = courtTone(court);
   const tone = closed ? colors.borderStrong : tint;
   const fill = on ? tone : colors.bg;
   const glyph = on ? (closed ? colors.bg : tint === colors.court ? colors.brandInk : colors.bg) : closed ? colors.textMuted : tint;
   const edge = on ? `2px solid ${colors.bg}` : `1.5px solid ${tone}`;
-  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, -8, 20)}</div>`;
+  return `<div class="cs-court cs-pin${on ? ' cs-on' : ''}${glowing ? ' cs-live' : ''}" style="position:relative;width:${size}px;height:${size}px;border-radius:${on ? 8 : 6}px;background:${fill};border:${edge};box-sizing:border-box;display:flex;align-items:center;justify-content:center;box-shadow:${glow}0 2px 6px rgba(0,0,0,${on ? '.3' : '.2'});cursor:pointer${closed && !on ? ';opacity:.75' : ''}">${warm ? todayHalo(size) : ''}${courtGlyph(glyph)}${name}${hitDot()}${hitsBadge(hits, -8, 20)}</div>`;
 }
+
+
+/**
+ * A court played on today (features/places/playedToday), around its pin: a thin ring in the played-today
+ * tone (playedTodayTone: the warm gold, or the rose where gold would read as a lit court) a gap of the page
+ * out, and a soft halo of it behind, much quieter
+ * than a lit court's light. The halo is its own layer, behind the court, so only it breathes.
+ */
+const todayRing = () => {
+  const tone = playedTodayTone();
+  return `0 0 0 2px ${colors.bg},0 0 0 3.5px ${withAlpha(tone, 0.75)},0 0 10px 3px ${withAlpha(tone, 0.3)},`;
+};
+const todayHalo = (size: number) => {
+  const reach = Math.round(size * 0.55);
+  const tone = playedTodayTone();
+  return `<i class="cs-today-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;z-index:-1;pointer-events:none;background:radial-gradient(closest-side,${withAlpha(tone, 0.34)} 0%,${withAlpha(tone, 0.16)} 55%,${withAlpha(tone, 0)} 100%)"></i>`;
+};
+/** "Played today" before a court's name, zoomed in (or picked), so a long name never cuts it off: a small warm dot before it. */
+const todayWords = () => `<i style="display:inline-block;width:6px;height:6px;margin-right:4px;border-radius:3px;vertical-align:1px;background:${playedTodayTone()}"></i>`;
 
 /* --------------------------------------------------------------- lit courts */
 
@@ -528,6 +564,7 @@ const courtLines = (px: number, ink: string) => {
  * proportions: the doubles and singles sidelines, the service boxes, and the net, a bolder line reaching past
  * the sidelines to its posts.
  */
+// Centred in its box, so a thinner frame zoomed out (--cs-rim) leaves the lines in the middle.
 function courtFromAbove(w: number, h: number, ink: string): string {
   const f = (n: number) => n.toFixed(1);
   const x0 = w * 0.15;
@@ -538,7 +575,7 @@ function courtFromAbove(w: number, h: number, ink: string): string {
   const box = (y1 - y0) * 0.23;
   const net = (y0 + y1) / 2;
   const line = (ax: number, ay: number, bx: number, by: number) => `<line x1="${f(ax)}" y1="${f(ay)}" x2="${f(bx)}" y2="${f(by)}"/>`;
-  return `<svg width="${f(w)}" height="${f(h)}" viewBox="0 0 ${f(w)} ${f(h)}" aria-hidden="true" style="position:absolute;left:0;top:0;z-index:2"><g fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="square">`
+  return `<svg width="${f(w)}" height="${f(h)}" viewBox="0 0 ${f(w)} ${f(h)}" aria-hidden="true" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2"><g fill="none" stroke="${ink}" stroke-width="1.3" stroke-linecap="square">`
     + `<rect x="${f(x0)}" y="${f(y0)}" width="${f(x1 - x0)}" height="${f(y1 - y0)}"/>`
     + line(x0 + alley, y0, x0 + alley, y1) + line(x1 - alley, y0, x1 - alley, y1)
     + line(x0 + alley, y0 + box, x1 - alley, y0 + box) + line(x0 + alley, y1 - box, x1 - alley, y1 - box)
@@ -594,6 +631,24 @@ function litColours(level: 1 | 2 | 3) {
   return { brand, light, a, b, glow: b, ink: colors.brandInk };
 }
 
+/**
+ * A lit court's paint for the app's own drawing of one (the "How long are you here?" card's court, CourtTimeHost):
+ * the floodlit court's (A) surface top to bottom, its glow from the middle out, and its lines, in the theme now on.
+ */
+export function litTilePaint(level: 1 | 2 | 3 = 2) {
+  const k = litColours(level);
+  return {
+    top: k.b, mid: k.a, low: mix(k.a, k.brand, 0.5), ink: k.ink,
+    glow: [withAlpha(k.glow, level === 1 ? 0.5 : 0.7), withAlpha(k.glow, level === 1 ? 0.3 : 0.42), withAlpha(k.brand, 0.14), withAlpha(k.brand, 0)] as const,
+  };
+}
+
+/**
+ * Drawn dimmer when lit: only someone's home court. A club's (members-only) court lit by people playing there
+ * is as bright as a public one (Oct 29, owner: "it shouldn't matter if it's a club").
+ */
+const dimLit = (court: Court) => court.access === 'private';
+
 /** The soft glow behind a lit court, in its light: stronger from lit up. */
 const litGlowFill = (k: ReturnType<typeof litColours>, level: 1 | 2 | 3) =>
   `radial-gradient(closest-side,${withAlpha(k.glow, level === 1 ? 0.5 : 0.7)} 0%,${withAlpha(k.glow, level === 1 ? 0.3 : 0.42)} 48%,${withAlpha(k.brand, 0.14)} 74%,${withAlpha(k.brand, 0)} 100%)`;
@@ -643,7 +698,7 @@ export function litCourtPinHtml(court: Court, pin: LitPin): string {
 const litClass = (look: LitLook, { level, live, on }: LitPin) =>
   `cs-court cs-pin cs-live cs-lit cs-lit-${look.toLowerCase()} cs-lit-${level}${live ? ' cs-lit-run' : ''}${on ? ' cs-on' : ''}`;
 /** Picked: a ring of the page and of the ink round it. */
-const litPicked = (on: boolean) => (on ? `0 0 0 2px ${colors.bg},0 0 0 4px ${colors.text},` : '');
+const litPicked = (on: boolean) => (on ? `0 0 0 var(--cs-gap,2px) ${colors.bg},0 0 0 calc(var(--cs-gap,2px) + 2px) ${colors.text},` : '');
 
 /** `n` + 1 colour stops across `period` px, coloured `at(v)` as v eases 1 → 0 → 1 (a cosine), so nothing in it has an edge. */
 function softStops(period: number, at: (v: number) => string, n = 16): string {
@@ -732,7 +787,7 @@ function litFloodlit(court: Court, pin: LitPin): string {
   const h = Math.round(w * 1.42);
   const r = Math.round(w * 0.2);
   const rim = 3;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const reach = Math.round(w * (0.3 + level * 0.1));
   const px = WHO_PX[level];
@@ -741,7 +796,9 @@ function litFloodlit(court: Court, pin: LitPin): string {
     + `<i class="cs-lit-glow" style="position:absolute;left:-${reach}px;top:-${reach}px;right:-${reach}px;bottom:-${reach}px;border-radius:999px;background:${litGlowFill(k, level)};pointer-events:none;animation-delay:-${delay}ms"></i>`
     + (level === 3 ? `<i class="cs-lit-wave" style="position:absolute;inset:0;box-sizing:border-box;border-radius:${r}px;border:2px solid ${withAlpha(k.glow, 0.9)};pointer-events:none;animation-delay:-${delay}ms"></i>` : '')
     + `<div style="position:absolute;inset:0;border-radius:${r}px;background:${colors.bg};box-shadow:${litPicked(on)}0 4px 14px rgba(0,0,0,.3)">`
-    + `<div style="position:absolute;inset:${rim}px;border-radius:${r - rim}px;${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
+    // Its white frame (--cs-rim, LIT_CSS): 3 px up close, half that zoomed out (Oct 29, owner: "When you zoom out this
+    // white corner around the court is too big"). The picked ring's white gap (--cs-gap) steps down with it.
+    + `<div style="position:absolute;inset:var(--cs-rim,${rim}px);border-radius:calc(${r}px - var(--cs-rim,${rim}px));${CLIP};background:linear-gradient(170deg,${k.b} 0%,${k.a} 46%,${mix(k.a, k.brand, 0.5)} 100%)">`
     + litFlowLayer(litFlow(), w - rim * 2, h - rim * 2, level, k, delay)
     + courtFromAbove(w - rim * 2, h - rim * 2, withAlpha(k.ink, closed ? 0.7 : 0.92))
     + `</div></div>`
@@ -765,7 +822,7 @@ function litRing(court: Court, pin: LitPin): string {
   const d = litAcross(level, on, 'B');
   const ring = [0, 4.5, 5, 5.5][level];
   const gap = 2.5;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const spin = Math.ceil(d * 1.5);
   const conic = level === 3
@@ -804,7 +861,7 @@ function litRaised(court: Court, pin: LitPin): string {
   const s = litAcross(level, on, 'C');
   const r = Math.round(s * 0.3);
   const rim = 2.5;
-  const closed = isClosedCourt(court);
+  const closed = dimLit(court);
   const delay = beat(court.id);
   const gw = Math.round(s * 0.86);
   const gh = Math.round(gw * 0.36);

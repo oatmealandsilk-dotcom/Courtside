@@ -24,7 +24,7 @@ import { blankVideoLocation } from '@/lib/videoLocation';
 import { noteStep } from '@/lib/crashReporting';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Crypto from 'expo-crypto';
-import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
+import type { AutoLogAudience, Answer, FriendStreak, ChatEvent, ChatPhoto, Coach, CoachResult, CoachReview, CoachService, CoachSpecialty, DailyHealth, DetectedActivity, IntegrationProvider, CoachQuestion, CoachReply, CoachingRequest, Comment, Conversation, HiddenWords, HiddenWordsKind, ID, Message, Notification, PaymentMethod, PlayerProfile, PlayerStats, Post, PracticeSession, HitRequest, CourtNote, LastSeen, MapPlace, MapVisibility, TaggedCourt, Question, Removed, RemovedItem, ReviewRequest, ReviewStatus, Story, SurfacePreference, TakedownKind, TakedownReason, Tip, TournamentEntry, User, PublicStreak, CoachApplication, CourtAccess, CourtAccessSource, CourtDayPart, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtKings, CityBoard, CityPage, CourtRegulars, CourtReview, CourtSurfaceAnswer, CourtRightNow, CourtRing, CourtToday, FlybyPerson, FollowedCourt, SessionTag, SessionTagRefusal, SessionTagRole, FeedGroup, FeedGroupCard, FeedGroupInvite, GroupInviteAnswer, DiscoverGroup, GroupLook, Invitee, AffiliateStats, ContactMatch, HeadToHead, PartnerStreak, MatchSet, SessionWith, FoundVia } from './types';
 import { canScore, splitTiebreaks, validSets, withTiebreaks } from '@/features/activity/score';
 import { keptAvgHr, keptKcal } from '@/features/activity/manualStats';
 import { TERMS_VERSION } from '@/lib/legal';
@@ -813,7 +813,7 @@ const toCoach = (r: CoachRow, services: CoachServiceRow[], me: ID): Coach => ({
   listed: r.listed, payoutsReady: r.payouts_ready, payoutsStarted: r.payouts_started,
 });
 /** One pin from map_players (migration 63; `mutual` since 98; `until`, your own check-in's end, since 189). */
-interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null }
+interface MapPlayerRow { user_id: ID; lat: number; lng: number; place: MapPlace | string; court_id: string | null; court_name: string | null; city: string | null; seen_at: string | null; open_until: string | null; mutual?: boolean | null; until?: string | null; here_until?: string | null }
 interface NotificationRow { id: string; user_id: string; actor_id: string; kind: string; target_id: string; target_kind: string; preview: string | null; read: boolean; created_at: string }
 interface UserStateRow { muted_ids: string[]; blocked_ids: string[]; saved_question_ids: string[]; payment_methods: PaymentMethod[]; default_payment_id: string | null; show_activity: boolean; push_likes: boolean; push_coach: boolean; push_messages?: boolean | null; push_activity?: boolean | null; push_map_friends?: boolean | null; push_map_hits?: boolean | null; push_map_players?: boolean | null; push_courts?: boolean | null; contacts_findable?: boolean | null; push_recap?: boolean | null; push_joined?: boolean | null; push_streak?: boolean | null; push_hit_nudges?: boolean | null; push_partner_streak?: boolean | null; push_catch_up?: boolean | null; auto_log?: boolean | null; auto_log_audience?: string | null; push_questions?: boolean | null; city_boards?: boolean | null; private_profile?: { constraints?: PlayerProfile['constraints']; tournaments?: unknown } | null; map_visibility?: string | null;
   /** Your own age group, readable only by you (migration 64). Absent before it. */
@@ -4294,6 +4294,7 @@ export const remote = {
       courtId: r.court_id ?? undefined, courtName: r.court_name ?? undefined, openUntil: r.open_until ?? undefined,
       ...(r.mutual ? { mutual: true } : {}),
       ...(r.until ? { until: r.until } : {}),
+      ...(r.here_until ? { hereUntil: r.here_until } : {}),
     }));
   },
   /**
@@ -4482,23 +4483,45 @@ export const remote = {
   async fetchCourtRightNow(ids: string[]): Promise<CourtRightNow[] | null> {
     const { data, error } = await need().rpc('court_right_now', { ids: ids.slice(0, 50) });
     if (error) { if (!missingFunction(error)) fail('court right now')(error); return null; }
-    return ((data ?? []) as { court_id: string; status: string | null; status_at: string | null; playing: number; friend_ids: string[] | null; you_here: boolean }[])
-      .map((r) => ({ courtId: r.court_id, ...(asNow(r.status) ? { status: asNow(r.status), statusAt: r.status_at ?? undefined } : {}), playing: num(r.playing), friendIds: r.friend_ids ?? [], youHere: !!r.you_here }));
+    // you_until: when yours ends, since migration 204. lit_status, lit_at: the latest answer given at the court, since 207.
+    return ((data ?? []) as { court_id: string; status: string | null; status_at: string | null; playing: number; friend_ids: string[] | null; you_here: boolean; you_until?: string | null; lit_status?: string | null; lit_at?: string | null }[])
+      .map((r) => ({
+        courtId: r.court_id, ...(asNow(r.status) ? { status: asNow(r.status), statusAt: r.status_at ?? undefined } : {}),
+        ...(asNow(r.lit_status) && r.lit_at ? { litStatus: asNow(r.lit_status), litAt: r.lit_at } : {}),
+        playing: num(r.playing), friendIds: r.friend_ids ?? [], youHere: !!r.you_here, ...(r.you_here && r.you_until ? { youUntil: r.you_until } : {}),
+      }));
   },
-  /** "How is it right now?" No status takes yours back. Null when it went through, else a sentence. */
-  async reportCourtStatus(courtId: string, status: CourtNow | null): Promise<string | null> {
-    const { error } = await need().rpc('report_court_status', { p_court: courtId, p_status: status });
-    if (!error) return null;
+  /**
+   * "How is it right now?" No status takes yours back. `at`: where the phone is, sent only so the server can say
+   * whether you are at the court (migration 207; it never keeps it). Resolves whether the server counted the answer
+   * as given at the court (only those light it up), else a sentence.
+   */
+  async reportCourtStatus(courtId: string, status: CourtNow | null, at?: { lat: number; lng: number }): Promise<CourtNowSaved | string> {
+    let { data, error } = await need().rpc('report_court_status', at ? { p_court: courtId, p_status: status, p_lat: at.lat, p_lng: at.lng } : { p_court: courtId, p_status: status });
+    // Before migration 207 the server takes no spot: the answer still goes in, but it can't say whether you're at the
+    // court, so the sheet says a plain thanks rather than "answer from the court".
+    let unchecked = false;
+    if (error && at && missingFunction(error)) {
+      ({ data, error } = await need().rpc('report_court_status', { p_court: courtId, p_status: status }));
+      unchecked = true;
+    }
+    if (!error) return unchecked ? { atCourt: false, unchecked: true } : { atCourt: data === true };
     fail('court status')(error);
     if (missingFunction(error)) return 'This isn’t switched on yet. Try again soon.';
     if (/private_court/.test(error.message)) return 'This is someone’s home court, so it doesn’t take reports.';
     if (/slow down/.test(error.message)) return 'That’s a lot of courts this hour. Try again later.';
     return 'That didn’t go through. Try again.';
   },
-  /** "I'm playing here": when it ends, or why not, as the server says it. */
-  async checkInAtCourt(courtId: string, at: { lat: number; lng: number }): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'ask_first' | 'failed' }> {
+  /**
+   * "I'm playing here": when it ends, or why not, as the server says it. `minutes`: how long you are here
+   * ("How long are you here?"; the server holds it to 30 minutes ... 4 hours, migration 204). A database
+   * without 204 has no such answer: asked again without it, for its 2 hours.
+   */
+  async checkInAtCourt(courtId: string, at: { lat: number; lng: number }, minutes?: number): Promise<{ until: string } | { error: 'adults_only' | 'location_off' | 'too_far' | 'closed_court' | 'slow_down' | 'hidden' | 'ask_first' | 'failed' }> {
     // Where the phone is now, only so the server can check you are at the court (migration 189): it is never kept; the pin is the court.
-    const { data, error } = await need().rpc('check_in_at_court', { p_court: courtId, p_lat: at.lat, p_lng: at.lng });
+    const base = { p_court: courtId, p_lat: at.lat, p_lng: at.lng };
+    let { data, error } = await need().rpc('check_in_at_court', minutes != null ? { ...base, p_minutes: Math.round(minutes) } : base);
+    if (error && minutes != null && missingFunction(error)) ({ data, error } = await need().rpc('check_in_at_court', base));
     if (!error && typeof data === 'string') return { until: data };
     if (error) fail('check in')(error);
     const said = error?.message ?? '';
@@ -4520,6 +4543,17 @@ export const remote = {
     if (error) { if (!missingFunction(error)) fail('court rings')(error); return null; }
     return ((data ?? []) as { court_id: string; name: string | null; lat: number; lng: number; posts: number; hits: number; last_at: string }[])
       .map((r) => ({ courtId: r.court_id, ...(r.name ? { name: r.name } : {}), lat: r.lat, lng: r.lng, posts: num(r.posts), hits: num(r.hits), lastAt: r.last_at }));
+  },
+  /**
+   * Played here today (migration 205): for up to 50 courts, what public was there since `since` (your
+   * midnight): posts tagged there and open hits there today everyone may see, with who, so the app can leave
+   * out people you muted. Null when it could not be asked (or the database has no such function yet).
+   */
+  async fetchCourtsToday(ids: string[], since: Date, day: string): Promise<CourtToday[] | null> {
+    const { data, error } = await need().rpc('court_played_today', { ids: ids.slice(0, 50), since: since.toISOString() });
+    if (error) { if (!missingFunction(error)) fail('courts today')(error); return null; }
+    return ((data ?? []) as { court_id: string; posts: number; hits: number; last_at: string; author_ids: string[] | null }[])
+      .map((r) => ({ courtId: r.court_id, posts: num(r.posts), hits: num(r.hits), lastAt: r.last_at, authorIds: r.author_ids ?? [], day }));
   },
   /** "Sam and Dev, who you follow, play here", for up to 50 courts. */
   async fetchCourtRegulars(ids: string[]): Promise<CourtRegulars[] | null> {

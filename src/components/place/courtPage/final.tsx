@@ -134,7 +134,7 @@ export function NowRow({ view }: { view: CourtView }) {
         </View>
         {now.said ? <Text style={styles.update}>Update</Text> : <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
       </Pressable>
-      <Collapse open={now.youHere}><View style={styles.here}><HereTag onCheckOut={() => { void actions.checkOutOfCourt(); }} /></View></Collapse>
+      <Collapse open={now.youHere}><View style={styles.here}><HereTag until={now.youUntil} onCheckOut={() => { void actions.checkOutOfCourt(); }} /></View></Collapse>
     </View>
   );
 }
