@@ -38,18 +38,19 @@ const MINUTE = 60_000;
  * lit court's light drifts on the map (LIT_FLOW drift), never a flash. Two slow loops, unequal so it never
  * visibly repeats: the layer wanders across and back, and down and up, with a slight turn.
  */
-const WASH_LOOP_X = 10_000;
-const WASH_LOOP_Y = 12_800;
+// Livelier (Oct 30, owner: "The drift can be a bit livelier"): quicker loops, a wider wander, a touch more colour.
+const WASH_LOOP_X = 6_200;
+const WASH_LOOP_Y = 7_900;
 /** How far it wanders, px each way, and how far it turns. The layer is twice the card, so no edge ever shows. */
-const WASH_DRIFT_X = 44;
-const WASH_DRIFT_Y = 30;
-const WASH_TURN = 7;
+const WASH_DRIFT_X = 64;
+const WASH_DRIFT_Y = 42;
+const WASH_TURN = 10;
 /**
  * The glows' strength at their middles: a whisper (the card's words and buttons keep their contrast). On a light
  * card the brand's own pale tint (brandDim) and the lit court's light; on a dark one the brand and the court
  * colour, which lift the dark ground where a pale tint would muddy it.
  */
-const WASH_ALPHA = { light: [0.9, 0.08], dark: [0.07, 0.18] } as const;
+const WASH_ALPHA = { light: [1, 0.11], dark: [0.09, 0.22] } as const;
 
 /**
  * "How long are you here?" (courtTime.ts; Oct 29, owner: "should a card pop up that's satisfying with a like +
