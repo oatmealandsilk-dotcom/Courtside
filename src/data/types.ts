@@ -1643,11 +1643,27 @@ export interface CourtFacts extends CourtAccessInfo {
 export type CourtNow = 'free' | 'wait' | 'full' | 'wet' | 'locked';
 
 /** Right now at a court (court_right_now). */
+/**
+ * A "How is it right now?" answer that went through: whether the server counted it as given at the court (only those
+ * light it up, migration 207). `unchecked`: the server could not check yet (207 not in), so say nothing either way.
+ */
+export interface CourtNowSaved {
+  atCourt: boolean;
+  unchecked?: boolean;
+}
+
 export interface CourtRightNow {
   courtId: string;
   /** The latest answer in the last 90 minutes, and when. */
   status?: CourtNow;
   statusAt?: string;
+  /**
+   * The latest answer given AT the court in the last 90 minutes, and when (migration 207: the server works out
+   * whether an answer was given there, from where the phone was; it never keeps the spot). Only this lights the
+   * court up on the map; `status` above is what the court card says.
+   */
+  litStatus?: CourtNow;
+  litAt?: string;
   /** Other adults checked in there: 0, or 2 and up (one stranger is never shown). Always 0 for a teen. */
   playing: number;
   /** People checked in there who follow each other with you. */

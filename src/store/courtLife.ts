@@ -2,11 +2,13 @@ import { useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
 import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, demoToday, withReview, type Seeing } from '@/data/mock/courtLife';
-import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
+import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
+import { atCourtFor } from '@/features/places/courtReach';
 import { notKnownAdult } from '@/features/players/age';
 import { dayKey, todayStart } from '@/features/places/playedToday';
 import { saidYes } from '@/features/players/mapPrivacy';
+import type { LatLng } from '@/features/players/positions';
 import { getPosition } from '@/lib/geo';
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
@@ -79,8 +81,12 @@ export interface CourtLifeActions {
   toggleCourtFollow: (court: CourtToFollow) => void;
   /** "Your courts" on Find Players. */
   loadFollowedCourts: () => Promise<void>;
-  /** "How is it right now?" Null takes your answer back. Resolves a sentence when it did not go through. */
-  reportCourtNow: (courtId: string, status: CourtNow | null) => Promise<string | null>;
+  /**
+   * "How is it right now?" Null takes your answer back. `at`: where the phone is, for Busy and Full, so the server
+   * can say whether you are at the court (migration 207: only answers given there light it up; the spot is never
+   * kept). Resolves whether it counted as at the court, or a sentence when it did not go through.
+   */
+  reportCourtNow: (courtId: string, status: CourtNow | null, at?: LatLng) => Promise<CourtNowSaved | string>;
   /**
    * "I'm playing here", for `minutes` (the "How long are you here?" card: 30
    * minutes to 4 hours, migration 204), or two hours when not said. Resolves
@@ -239,11 +245,11 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     }));
   }, [stateRef, setState, live]);
 
-  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null) => {
+  const reportCourtNow = useCallback(async (courtId: string, status: CourtNow | null, at?: LatLng): Promise<CourtNowSaved | string> => {
     const me = stateRef.current.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
     const was = stateRef.current.courtNow[courtId];
-    const at = new Date().toISOString();
+    const stamp = new Date().toISOString();
     const put = (row: CourtRightNow | undefined) => setState((prev) => ({
       ...prev,
       courtNow: row ? { ...prev.courtNow, [courtId]: row } : prev.courtNow,
@@ -251,13 +257,27 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     }));
     haptics.commit();
     const base = was ?? { courtId, playing: 0, friendIds: [], youHere: false };
-    put(status ? { ...base, status, statusAt: at } : { ...base, status: undefined, statusAt: undefined });
-    if (!live(me)) return null;
-    const problem = await remote.reportCourtStatus(courtId, status);
-    if (problem) { put(was); return problem; }
-    // Taking yours back can leave someone else's answer standing: ask again.
-    if (!status) void loadCourtInfo([courtId]);
-    return null;
+    // The card's line at once; the court lights only once the answer is known to be given there (migration 207).
+    const said: CourtRightNow = status ? { ...base, status, statusAt: stamp } : { ...base, status: undefined, statusAt: undefined };
+    // A calmer answer (Free, Wet, Locked) from anywhere turns the glow off at once, as the server does (migration 207).
+    if (status && status !== 'wait' && status !== 'full') { said.litStatus = undefined; said.litAt = undefined; }
+    const lit = (row: CourtRightNow): CourtRightNow => (status ? { ...row, litStatus: status, litAt: stamp } : row);
+    put(said);
+    // Only a spot sent with the answer can count; the demo works it out the way the server does. Only a known adult's
+    // can (the teen rule, migration 207): anyone else's answer goes without one, and never lights the court.
+    const self = stateRef.current.users.find((u) => u.id === me);
+    const sent = status && at && self && !notKnownAdult(self) ? at : undefined;
+    if (!live(me)) {
+      const atCourt = !!sent && await atCourtFor(courtId, sent);
+      if (atCourt) put(lit(said));
+      return { atCourt };
+    }
+    const got = await remote.reportCourtStatus(courtId, status, sent);
+    if (typeof got === 'string') { put(was); return got; }
+    if (got.atCourt) put(lit(said));
+    // Taking yours back, or an answer from elsewhere replacing yours from the court, can change what lights it: ask again.
+    else if (!status || base.litStatus) void loadCourtInfo([courtId]);
+    return got;
   }, [stateRef, setState, live, loadCourtInfo]);
 
   const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }, minutes?: number): Promise<CheckedIn | string> => {

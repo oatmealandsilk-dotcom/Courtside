@@ -68,12 +68,12 @@ export const demoFactsFor = (courtId: string): CourtFacts => DEMO_FACTS[courtId]
 export const DEMO_NOW: Record<string, CourtRightNow> = {
   [park(1).id]: { courtId: park(1).id, status: 'free', statusAt: minutesAgo(20), playing: 7, friendIds: ['u-sam', 'u-marcus'], youHere: false },
   [park(2).id]: { courtId: park(2).id, playing: 0, friendIds: ['u-omar'], youHere: false },
-  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
+  [park(3).id]: { courtId: park(3).id, status: 'wait', statusAt: minutesAgo(45), litStatus: 'wait', litAt: minutesAgo(45), playing: 2, friendIds: [], youHere: false },
   [park(5).id]: { courtId: park(5).id, playing: 4, friendIds: [], youHere: false },
   // "How is it now?" answers lighting courts on their own (no one checked in): Marigold said Busy (lit), Larkspur
-  // Full (hot), Hillcrest Free (quiet, nothing from it).
-  [park(4).id]: { courtId: park(4).id, status: 'wait', statusAt: minutesAgo(15), playing: 0, friendIds: [], youHere: false },
-  [park(6).id]: { courtId: park(6).id, status: 'full', statusAt: minutesAgo(30), playing: 0, friendIds: [], youHere: false },
+  // Full (hot), Hillcrest Free (quiet, nothing from it). All three said at the court (migration 207: only those light it).
+  [park(4).id]: { courtId: park(4).id, status: 'wait', statusAt: minutesAgo(15), litStatus: 'wait', litAt: minutesAgo(15), playing: 0, friendIds: [], youHere: false },
+  [park(6).id]: { courtId: park(6).id, status: 'full', statusAt: minutesAgo(30), litStatus: 'full', litAt: minutesAgo(30), playing: 0, friendIds: [], youHere: false },
   [park(7).id]: { courtId: park(7).id, status: 'free', statusAt: minutesAgo(10), playing: 0, friendIds: [], youHere: false },
 };
 export const demoNowFor = (courtId: string): CourtRightNow => DEMO_NOW[courtId] ?? { courtId, playing: 0, friendIds: [], youHere: false };
