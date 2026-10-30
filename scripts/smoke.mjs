@@ -1746,7 +1746,11 @@ const STEPS = [
       // other cities on the list. You can just put them at 0"): "214 cities · 15 ranked".
       await page.waitFor({ text: /^\d+ cities · \d+ ranked$/ }, 20000);
       await page.waitFor({ label: 'Rank, City, Sessions' });
-      // A city at 0 (nearest Los Angeles first: Riverside) opens its own quiet page, then back to the board.
+      // The cities at 0 come biggest first (owner, Oct 30: "Let's put like the bigger cities in the country first"):
+      // under the demo's ranked ones (New York, Los Angeles, Chicago, Miami, Atlanta… among them), Dallas–Fort Worth.
+      const firstZeros = await page.eval(`[...document.querySelectorAll('[aria-label^="Not ranked, "]')].slice(0, 3).map((e) => e.getAttribute('aria-label').split(', ')[1]).join(' · ')`);
+      if (firstZeros !== 'Dallas–Fort Worth · Washington · Philadelphia') throw new Error(`the cities at 0 start "${firstZeros}" (want the biggest first: "Dallas–Fort Worth · Washington · Philadelphia", src/features/cityBoard/catalog.ts METRO_POP)`);
+      // A city at 0 (the biggest first, owner, Oct 30: Riverside is among them) opens its own quiet page, then back to the board.
       await page.reveal({ label: 'Not ranked, Riverside, 0 sessions' }, 20000);
       await page.tap({ label: 'Not ranked, Riverside, 0 sessions' });
       await page.waitFor({ text: 'Not ranked yet' }, 20000);
@@ -1784,8 +1788,8 @@ const STEPS = [
       }
       await page.waitFor({ text: 'Find Players' }, 45000);
       await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
-      // The card: your city first (a dash: not ranked yet), then the nearest at 0.
-      await page.waitFor({ label: /Not ranked, Los Angeles, your city\. Not ranked, [^.]+, 0 sessions\..* See all cities$/ }, 20000);
+      // The card: your city first (a dash: not ranked yet), then the biggest at 0 (New York, Chicago…).
+      await page.waitFor({ label: /Not ranked, Los Angeles, your city\. Not ranked, New York, 0 sessions\. Not ranked, Chicago, 0 sessions\..* See all cities$/ }, 20000);
       await page.reveal({ label: /See all cities$/ }, 20000);
       await page.tap({ label: /See all cities$/ });
       await page.waitFor({ text: /^\d+ cities · 0 ranked$/ }, 20000);
