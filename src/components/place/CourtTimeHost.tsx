@@ -146,12 +146,15 @@ export function CourtTimeHost() {
     if (!asked || busy || lit || Date.now() - openedAt.current < POP_SETTLE_MS) return;
     setBusy(true);
     setProblem('');
-    const why = await asked.go(minutes).catch(() => 'That didn’t go through. Try again.');
+    const got = await asked.go(minutes).catch(() => 'That didn’t go through. Try again.');
     if (live.current !== asked) return;
     setBusy(false);
-    if (why) { setProblem(why); haptics.reject(); return; }
+    if (typeof got === 'string') { setProblem(got); haptics.reject(); return; }
     // Lit: the court lights as it does on the map, one light tap, then the card goes by itself.
-    setLit(new Date(Date.now() + minutes * 60_000).toISOString());
+    // "till 6:30pm" is when the server said it ends (what the map, the sheet and friends all show), not the
+    // minutes chosen here: a server that still gives 2 hours says 2 hours on the card too.
+    const ends = Number.isFinite(Date.parse(got.until)) ? got.until : new Date(Date.now() + minutes * 60_000).toISOString();
+    setLit(ends);
     haptics.tap();
     const ease = { duration: 520, easing: Easing.out(Easing.cubic), reduceMotion: NEVER };
     on.value = withTiming(1, ease);
@@ -160,7 +163,7 @@ export function CourtTimeHost() {
       pop.value = withSequence(withTiming(1.1, { duration: 170, easing: Easing.out(Easing.quad), reduceMotion: NEVER }), withSpring(1, { damping: 11, stiffness: 260, mass: 0.7, reduceMotion: NEVER }));
       sweep.value = withDelay(180, withTiming(1, { duration: 700, easing: Easing.inOut(Easing.quad), reduceMotion: NEVER }));
     }
-    AccessibilityInfo.announceForAccessibility?.(`You’re here, ${tillWords(new Date(Date.now() + minutes * 60_000).toISOString()) ?? ''}`);
+    AccessibilityInfo.announceForAccessibility?.(`You’re here, ${tillWords(ends) ?? ''}`);
     setTimeout(() => { if (live.current === asked) leave(true); }, LIT_HOLD_MS);
   };
 

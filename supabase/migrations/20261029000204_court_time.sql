@@ -5,6 +5,11 @@
 -- All-or-nothing: if a check fails, it stops and nothing at all changes. Safe
 -- to run more than once. Undo: supabase/rollback/204_undo.sql (back to 203).
 --
+-- SHIP ORDER (hard rule): apply 203, then 204, on live BEFORE the branch
+-- feat/map-court-playing-here is merged to main. That branch's privacy page
+-- (public/privacy.html) says a court check-in lasts "30 minutes to 4 hours";
+-- until 204 is in, the server still gives every check-in 2 hours.
+--
 -- Why (owner, Oct 29): "Right now if you tap in here at a court, should a
 -- card pop up that's satisfying with a like + and - screen that asks like how
 -- long you're going to be there." Then: "Build it". Tapping "I'm playing here"

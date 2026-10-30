@@ -114,7 +114,7 @@ export async function lightUpCourtHere(at: LatLng, a: {
   me: User | null | undefined;
   /** Who may play there, as players said (courtFacts), when the map's own answer is unknown. */
   accessOf: (courtId: string) => CourtAccess | undefined;
-  checkIn: (courtId: string, at: LatLng) => Promise<string | null>;
+  checkIn: (courtId: string, at: LatLng) => Promise<{ until: string } | string>;
 }): Promise<string | null> {
   if (!lightUpCourtsOn(a.me) || !canCheckIn(a.me)) return null;
   const list = peekCourts(at) ?? await Promise.race([
@@ -125,8 +125,8 @@ export async function lightUpCourtHere(at: LatLng, a: {
   if (!court) return null;
   const said = a.accessOf(court.id);
   if (!canCheckIn(a.me, said && said !== 'unknown' ? said : court.access)) return null;
-  const problem = await a.checkIn(court.id, at).catch(() => 'failed');
-  return problem ? null : court.name && court.name !== 'Tennis courts' ? court.name : 'The court';
+  const got = await a.checkIn(court.id, at).catch(() => 'failed');
+  return typeof got === 'string' ? null : court.name && court.name !== 'Tennis courts' ? court.name : 'The court';
 }
 
 /* ------------------------------------------------------- the courts' glow */

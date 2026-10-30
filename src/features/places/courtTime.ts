@@ -75,13 +75,19 @@ function keepCourtTime(minutes: number) {
 
 /* ------------------------------------------------------------------ the card */
 
+/** Lit: when it ends, as the server said it (ISO time). */
+export interface CourtTimeLit { until: string }
+
 export interface CourtTimeRequest {
   /** The court's name, under the question ("Riverside Park"). */
   courtName: string;
   /** Where the card starts. */
   minutes: number;
-  /** Says you're playing there for that long: null when it went through, else a sentence for the card. */
-  go: (minutes: number) => Promise<string | null>;
+  /**
+   * Says you're playing there for that long: when it ends, as the server said it ({ until }), else a sentence
+   * for the card. The card's "You're here · till 6:30pm" is that `until`, so it never says other than the map.
+   */
+  go: (minutes: number) => Promise<CourtTimeLit | string>;
   /** Lit (true), or put away (false). */
   done: (lit: boolean) => void;
 }
@@ -112,12 +118,12 @@ export function useCourtTimeUp(): boolean {
  * stays up (with what went wrong) until it goes through or is put away. Resolves whether the court was lit.
  * With no card drawn (it never is before the app has), `go` runs at once for the last choice.
  */
-export async function askCourtTime(courtName: string, go: (minutes: number) => Promise<string | null>): Promise<boolean | string> {
+export async function askCourtTime(courtName: string, go: (minutes: number) => Promise<CourtTimeLit | string>): Promise<boolean | string> {
   const minutes = await lastCourtTime();
   if (!host || up) {
     if (up) return false;
-    const problem = await go(minutes);
-    return problem ?? true;
+    const got = await go(minutes);
+    return typeof got === 'string' ? got : true;
   }
   const show = host;
   return new Promise<boolean>((resolve) => {
@@ -125,9 +131,9 @@ export async function askCourtTime(courtName: string, go: (minutes: number) => P
       courtName,
       minutes,
       go: async (m) => {
-        const problem = await go(m);
-        if (!problem) keepCourtTime(m);
-        return problem;
+        const got = await go(m);
+        if (typeof got !== 'string') keepCourtTime(m);
+        return got;
       },
       done: resolve,
     });

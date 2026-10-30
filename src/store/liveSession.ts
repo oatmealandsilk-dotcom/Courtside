@@ -124,7 +124,8 @@ export function useLiveSession<S extends LiveSessionState & Reads>(
       seenBy: seenByOnMap(st.mapLive, me, st.teenMap, st.mapVisibility),
     });
     if (!plan.checkIn || !s.court) return null;
-    const problem = await courts.checkInAtCourt(s.court.id);
+    const got = await courts.checkInAtCourt(s.court.id);
+    const problem = typeof got === 'string' ? got : null;
     patch(s.id, problem ? { checkedIn: false, checkInProblem: problem } : { checkedIn: true, checkedInAt: new Date().toISOString(), checkInProblem: undefined });
     return problem;
   }, [stateRef, courts, patch]);

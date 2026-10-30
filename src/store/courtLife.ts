@@ -60,6 +60,9 @@ interface Reads {
 export type CourtToFollow = TaggedCourt & { access?: CourtAccess };
 
 /** A box of the map, for court rings. */
+/** "I'm playing here" went through: when it ends, as the server said it (ISO time). */
+export interface CheckedIn { until: string }
+
 export interface MapBox { minLat: number; minLng: number; maxLat: number; maxLng: number }
 
 export interface CourtLifeActions {
@@ -77,13 +80,15 @@ export interface CourtLifeActions {
   reportCourtNow: (courtId: string, status: CourtNow | null) => Promise<string | null>;
   /**
    * "I'm playing here", for `minutes` (the "How long are you here?" card: 30
-   * minutes to 4 hours, migration 204), or two hours when not said. Resolves a
-   * sentence when it is refused. `at`: where the phone was found a moment ago
+   * minutes to 4 hours, migration 204), or two hours when not said. Resolves
+   * when it ends, as the server said it ({ until }; the demo works it out the
+   * way the server would), or a sentence when it is refused, so whatever shows
+   * "till 6:30pm" from it says what every other place says. `at`: where the phone was found a moment ago
    * by the same tap (Light up at a court, features/places/lightUp), so it is
    * not asked again. With `minutes`, the card that asked buzzes as the court
    * lights, so this does not.
    */
-  checkInAtCourt: (courtId: string, at?: { lat: number; lng: number }, minutes?: number) => Promise<string | null>;
+  checkInAtCourt: (courtId: string, at?: { lat: number; lng: number }, minutes?: number) => Promise<CheckedIn | string>;
   checkOutOfCourt: () => Promise<void>;
   /** Court rings in a box of the map. */
   loadCourtRings: (box: MapBox) => Promise<void>;
@@ -248,7 +253,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     return null;
   }, [stateRef, setState, live, loadCourtInfo]);
 
-  const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }, minutes?: number) => {
+  const checkInAtCourt = useCallback(async (courtId: string, at?: { lat: number; lng: number }, minutes?: number): Promise<CheckedIn | string> => {
     const s = stateRef.current;
     const me = s.currentUserId;
     if (!me || !isMapCourtId(courtId)) return 'This place isn’t on the map yet.';
@@ -269,7 +274,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       // never keeps it. Your pin is the court; nothing else is shared.
       const fix = at ? { ok: true as const, ...at } : await getPosition({ recentMs: 2 * 60_000 });
       if (!fix.ok) return fix.reason === 'denied' ? 'Location is blocked, so we can’t tell you’re here.' : 'Couldn’t find you. Try again.';
-      if (stateRef.current.currentUserId !== me) return null;
+      if (stateRef.current.currentUserId !== me) return 'That didn’t go through. Try again.';
       setState((prev) => ({ ...prev, detectedCoords: { lat: fix.lat, lng: fix.lng } }));
       const got = await remote.checkInAtCourt(courtId, { lat: fix.lat, lng: fix.lng }, minutes);
       if ('error' in got) {
@@ -295,7 +300,7 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       ]),
       followedCourts: prev.followedCourts?.map((c) => ({ ...c, youHere: c.courtId === courtId })) ?? null,
     }));
-    return null;
+    return { until: ends };
   }, [stateRef, setState, live]);
 
   const checkOutOfCourt = useCallback(async () => {
