@@ -12,7 +12,7 @@ import { GrowAwayContext, endGrow, growT } from '@/features/players/mapGrow';
 import type { LatLng } from '@/features/players/positions';
 import { zoomFile, zoomNote, zoomPage } from '@/features/players/zoomTiming';
 import { simAction, simLog } from '@/lib/simDriver';
-import { V7, bez, useV7Card, useV7Chrome, useV7Overlay, v7Arrived, v7Bar, v7Chrome, v7Flying, v7ForceHand, v7Geo, v7Hold, v7MemoryHold, v7Move, v7Pushed, v7RegisterLayer, v7Scale, v7SetFlying, v7SetLanded, v7StopTimers, v7Ui, type V7Card, type V7PageMsg } from '@/features/players/zoomV7';
+import { V7, bez, useV7Card, useV7Chrome, useV7Overlay, v7Arrived, v7Bar, v7Chrome, v7Flying, v7ForceHand, v7Geo, v7Hold, v7Lock, v7MemoryHold, v7Move, v7Pushed, v7RegisterLayer, v7Scale, v7SetFlying, v7SetLanded, v7StopTimers, v7Ui, type V7Card, type V7PageMsg } from '@/features/players/zoomV7';
 
 /** Where the full-screen page's camera must be so that the card's middle `K` (its own points) shows `city` at `z0`. */
 function aimed(city: LatLng, z0: number, K: { x: number; y: number }, W: number, H: number): LatLng {
@@ -112,14 +112,26 @@ function Layer({ card }: { card: V7Card }) {
       const gaps = g >= 30 && st.gaps.length < 10 ? [...st.gaps, [ms - g, g]] : st.gaps;
       v7Ui.value = { n: st.n + 1, gap: Math.max(st.gap, g), last: now, first: st.first < 0 ? ms : st.first, at: g > st.gap ? ms : st.at, gaps };
     }
-    const u = Math.max(0, Math.min(1, ms / m.D));
+    // In step with the map (v7Lock): on a phone drawing at 120, only on the map's frames (or the ones after), each to where
+    // the map's last frame put it. Never two frames running skipped (a phone at 60 moves every frame).
+    let at = ms;
+    const L = v7Lock.value;
+    if (L.slot >= 0 && L.at > 0) {
+      const P60 = 1000 / 60;
+      const d = (((now - L.at) % P60) + P60) % P60;
+      const after = d > P60 / 4 && d < (P60 * 3) / 4;
+      if ((after !== (L.slot === 1)) && L.last && now - L.last < 14) return;
+      v7Lock.value = { ...L, last: now };
+      at = ms - d;
+    }
+    const u = Math.max(0, Math.min(1, at / m.D));
     const s = Math.min(Math.pow(2, m.dz * bez(u, m.x1, m.y1, m.x2, m.y2)), m.S);
     v7Scale.value = s;
     // The Community page pushes in by the same scale (mapGrow's push-in, round P), and covers the screen until the hand-over.
     growT.value = s <= 1 ? 0.000001 : Math.log(s) / Math.log(m.S);
-    const b = Math.max(0, Math.min(1, ms / BAR_MS));
+    const b = Math.max(0, Math.min(1, at / BAR_MS));
     v7Bar.value = 1 - (1 - b) * (1 - b) * (1 - b);
-    const c = Math.max(0, Math.min(1, (ms - (m.D - m.cMs)) / m.cMs));
+    const c = Math.max(0, Math.min(1, (at - (m.D - m.cMs)) / m.cMs));
     v7Chrome.value = 1 - (1 - c) * (1 - c) * (1 - c);
   }, false);
   const frameNow = useRef(frame);
@@ -340,7 +352,8 @@ function Layer({ card }: { card: V7Card }) {
                 stopNow.current('lost');
               }}
               onV7={(msg: V7PageMsg) => {
-                if (msg.type === 'v7landed') { zoomPage(msg); v7SetLanded(); }
+                if (msg.type === 'v7tick') { if (typeof msg.at === 'number') v7Lock.value = { ...v7Lock.value, at: msg.at }; }
+                else if (msg.type === 'v7landed') { zoomPage(msg); v7SetLanded(); }
                 else zoomNote(`page ${msg.e ?? ''}`);
               }}
             />

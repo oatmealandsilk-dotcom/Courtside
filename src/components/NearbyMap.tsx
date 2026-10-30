@@ -39,7 +39,7 @@ import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
-import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Move, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
+import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
 import { SIM_DRIVER, simAction } from '@/lib/simDriver';
 import { askToHit } from '@/features/players/courtLink';
@@ -379,6 +379,10 @@ export function NearbyMap(props: NearbyMapProps) {
     void v7Arrival()?.then(t.arrive);
     // Only the web view and the UI thread are told now, and nothing redraws on the JS thread this turn (the tab bar's slide
     // is the UI thread's own, the pages that listen hear of it on the next turn): a redraw now held the move's start back.
+    // In step with the map (v7Lock): its frames' timing comes from the page once the move is handed to it.
+    const lock = v7NextLock();
+    v7Lock.value = { at: 0, slot: lock, last: 0 };
+    zoomWord(lock < 0 ? 'lockOff' : `lock${lock}`);
     layer.go(p);
     v7Ui.value = { n: 0, gap: 0, last: 0, first: -1, at: 0, gaps: [] };
     v7Geo.value = { kx: K.x, ky: K.y, px: P.x, py: P.y };

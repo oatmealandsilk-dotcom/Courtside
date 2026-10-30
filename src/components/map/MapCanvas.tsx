@@ -438,7 +438,7 @@ ${ENGINE_JS}
           else if (msg.type === 'gathered') haptics.tap();
           else if (msg.type === 'swooped' && typeof msg.sw === 'number') latest.current.onSwooped?.(!!msg.ok, msg.sw);
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
-          else if (msg.type === 'v7landed' || msg.type === 'v7err') latest.current.onV7?.(msg as V7PageMsg);
+          else if (msg.type === 'v7landed' || msg.type === 'v7err' || msg.type === 'v7tick') latest.current.onV7?.(msg as V7PageMsg);
           else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {
             latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom, { minLat: msg.s ?? msg.lat, minLng: msg.w ?? msg.lng, maxLat: msg.n ?? msg.lat, maxLng: msg.e ?? msg.lng });

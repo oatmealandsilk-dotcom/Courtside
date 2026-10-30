@@ -113,6 +113,8 @@ export const V7 = {
    * again) as Back slides the Community page in kept the card's own map from drawing for 120-170 ms on the simulator.
    */
   settleMs: 900,
+  /** The UI thread's step with the map, taking turns move by move (v7Lock): the frame after the map's, the same one, every frame. */
+  lockSlots: [1, 0, -1],
 };
 
 /** The streets asked for ahead at two zooms: where the camera lands (CHECKIN_ZOOM), and this one on the way down. */
@@ -128,7 +130,9 @@ export function metresApart(a: LatLng, b: LatLng): number {
 
 /** What the layer's page says about its move: landed (its frames: how many, the longest gap, the first after t0, every gap of 30 ms or more as [ms after t0, gap]), or an error. */
 export interface V7PageMsg {
-  type: 'v7landed' | 'v7err';
+  type: 'v7landed' | 'v7err' | 'v7tick';
+  /** v7tick: when one of the page's frames began (wall clock, ms). */
+  at?: number;
   n?: number;
   gap?: number;
   first?: number;
@@ -188,6 +192,18 @@ export const v7Bar = makeMutable(0);
  * every gap of 30 ms or more ([ms after t0, gap], the first ten).
  */
 export const v7Ui = makeMutable({ n: 0, gap: 0, last: 0, first: -1, at: 0, gaps: [] as number[][] });
+/**
+ * In step with the map (Oct 30, owner on his iPhone: "The animation is correct just super choppy"). His phone draws the
+ * app 120 times a second, the map's web view only 60 (the Simulator draws both at 60, so its video was smooth): the page
+ * pushing in moved twice for each step of the map inside it. With `at` (when one of the web view's frames began, wall
+ * clock, from the page's 'v7tick'), the UI thread moves the page only on every other frame, on `slot` 0 (the same frame
+ * as the map) or 1 (the one after), each time to where the map's last frame put it; -1: every frame, as before. A phone
+ * drawing the app at 60 moves it every frame either way. Which slot matches his phone is not known yet: the moves take
+ * turns (V7.lockSlots) and each timing row says which it was ("lock0", "lock1", "lockOff").
+ */
+export const v7Lock = makeMutable({ at: 0, slot: -1, last: 0 });
+let lockTurn = 0;
+export function v7NextLock(): number { const s = V7.lockSlots[lockTurn % V7.lockSlots.length]; lockTurn += 1; return s; }
 
 /* ------------------------------------------------- what the card hands the layer */
 
@@ -502,6 +518,7 @@ return function(map,o,post,on){
   function glide(){if(!late)return;RT={f:late,t:late,t1:0,t2:1};late=null;var e=cam(o.D);map.easeTo({center:e.center,zoom:o.z1,duration:260,easing:function(t){return t*(2-t)},essential:true})}
   function begin(){if(over)return;var end=cam(o.D);map.easeTo({center:end.center,zoom:end.zoom,pitch:0,bearing:0,duration:Math.max(50,o.D+80+Math.max(0,o.t0-Date.now())),easing:function(t){return t},essential:true});
     map.once('moveend',function(){if(over)return;over=true;setHook(null);map.jumpTo(cam(o.D));post({type:'v7landed',n:n,gap:maxGap,first:first,gaps:gaps,recv:recv,hook0:hook0,pinsIn:on.pinsIn?on.pinsIn():undefined,pinsOut:on.pinsOut?on.pinsOut():undefined,frames:o.trace?frames:undefined});glide()})}
+  requestAnimationFrame(function(ts){post({type:'v7tick',at:Date.now()-(performance.now()-ts)})});
   var wait=o.t0-Date.now()-90;if(wait>0)setTimeout(begin,wait);else begin();
   return {
     stop:function(){if(over)return;over=true;late=null;setHook(null);try{map.stop()}catch(e){}},
