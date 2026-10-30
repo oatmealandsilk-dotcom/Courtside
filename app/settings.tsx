@@ -31,6 +31,23 @@ import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI, corner } from '@/theme/look';
 
+/**
+ * Friend alerts (Oct 30, owner: "Make it hard to turn off friend alerts"): on is
+ * one tap, off asks first. The app's own "are you sure?" card, the other way
+ * round: "Keep on" is the bold answer on top, "Turn off" the plain one under
+ * it, and a tap outside (or Escape, or Android's Back) keeps them on.
+ */
+function confirmFriendAlertsOff(turnOff: () => void) {
+  confirm({
+    title: 'Turn off friend alerts?',
+    message: 'You won’t know when friends are up for a hit or playing at a court.',
+    confirmLabel: 'Keep on',
+    onConfirm: () => undefined,
+    cancelLabel: 'Turn off',
+    onCancel: turnOff,
+  });
+}
+
 interface Row {
   icon: keyof typeof Ionicons.glyphMap;
   /** Drawn in place of the icon when a row has something better to show (the theme's own colours). */
@@ -199,7 +216,7 @@ export default function Settings() {
       note: 'At most one a day each.',
       rows: [
         ...(mapAdult || mapTeen ? [
-          { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => actions.setPref('pushMapFriends', v) } },
+          { icon: 'people-outline' as const, leading: <HitGlyph size={20} color={colors.textMuted} />, label: 'Friends up for a hit', toggle: { value: prefs.pushMapFriends, onChange: (v: boolean) => (v ? actions.setPref('pushMapFriends', true) : confirmFriendAlertsOff(() => actions.setPref('pushMapFriends', false))) } },
         ] : []),
         ...(mapAdult ? [
           { icon: 'navigate-outline' as const, label: 'New open hits', detail: 'Within 15 miles', toggle: { value: prefs.pushMapHits, onChange: (v: boolean) => actions.setPref('pushMapHits', v) } },

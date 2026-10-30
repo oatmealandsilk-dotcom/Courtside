@@ -89,6 +89,8 @@ const ICON: Record<NotificationKind, { name: keyof typeof Ionicons.glyphMap | 'h
   // The outline: filled, the dial closes up at badge size.
   activity: { name: 'stopwatch-outline', tint: 'court' },
   'map-friend-hit': { name: 'hit', tint: 'brand' },
+  // A friend playing at a court (migration 208): the map's pin.
+  'friend-court': { name: 'location', tint: 'brand' },
   'map-new-hit': { name: 'navigate', tint: 'brand' },
   'map-new-player': { name: 'location', tint: 'court' },
   // The court's own heart: the one you tapped to follow it.
@@ -141,6 +143,8 @@ const VERB: Record<NotificationKind, string> = {
   'hit-left': 'can’t make it',
   activity: LESS_AI ? '' : 'Tap to log it.',
   'map-friend-hit': 'is up for a hit today',
+  // The court's name comes from the row's preview; see verbFor.
+  'friend-court': 'is playing at a court',
   'map-new-hit': 'posted an open hit near you',
   // Never how near (Oct 27 audit #8); the owner's word for the button (Oct 28: "Up to hit").
   'map-new-player': 'is new to CourtSide and up to hit',
@@ -175,7 +179,8 @@ function routeFor(group: Group, hits: HitRequest[]): string {
   // Several workouts found at once: their list, each with its own Log it.
   if (group.found) return foundHref(group.found.activityIds);
   // The map's alerts open the map: on the player, or on the hit with its card up.
-  if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player') return `/map?user=${group.actorIds[0]}`;
+  // A friend playing at a court opens the map on them: their pin is on that court.
+  if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player' || group.kind === 'friend-court') return `/map?user=${group.actorIds[0]}`;
   // A hit with no spot to show (Flexible: no court yet, features/hits/flexible) opens its own page instead.
   if (group.kind === 'map-new-hit') {
     const hit = hits.find((h) => h.id === group.targetId);
@@ -462,6 +467,8 @@ export default function Notifications() {
     if (group.kind === 'session-tag') return `tagged you in a ${group.preview === 'match' ? 'match' : 'practice'}`;
     // "Mira invited you to Silver Lake sunrise" (the name is the row's preview).
     if (group.kind === 'group-invite') return group.preview ? `invited you to ${group.preview}` : VERB['group-invite'];
+    // "Robert is playing at Rowena Courts", "Robert and Sam are playing at …" (the court is the row's preview).
+    if (group.kind === 'friend-court') return `${group.actorIds.length > 1 ? 'are' : 'is'} playing at ${group.preview ?? 'a court'}`;
     // A workout you have since logged (the tap opens the post for it), hidden or gone: no longer "Tap to log it".
     if (group.kind === 'activity') {
       const now = nowOf(detectedActivities.find((a) => a.id === group.targetId));
@@ -544,7 +551,10 @@ export default function Notifications() {
         ? `${n.kind}:${n.actorId}`
         : n.kind === 'like' || n.kind === 'upvote' || n.kind === 'share' || n.kind === 'helpful'
           ? (fresh(n) ? `${n.kind}-new:${n.targetKind}:${n.targetId}:${day}` : `${n.kind}:${n.targetKind}:${n.targetId}:${day}`)
-          : `one:${n.id}`;
+          // Friends playing at one court that day: one row, "Robert and Sam are playing at …" (migration 208).
+          : n.kind === 'friend-court'
+            ? `${n.kind}:${n.targetId}:${day}`
+            : `one:${n.id}`;
       const existing = byTarget.get(key);
       if (existing) {
         if (!existing.actorIds.includes(n.actorId)) existing.actorIds.push(n.actorId);
@@ -787,7 +797,7 @@ export default function Notifications() {
                     </>
                   ) : group.kind === 'review' ? (
                     <Text style={styles.preview} numberOfLines={2}>Thanks for asking. It’s back where it was.</Text>
-                  ) : group.kind === 'review-request' || group.kind === 'group-invite' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
+                  ) : group.kind === 'review-request' || group.kind === 'group-invite' || group.kind === 'friend-court' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
                     <Text style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>

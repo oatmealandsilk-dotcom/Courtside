@@ -91,8 +91,9 @@ export const DEMO_FOLLOWED_AT: Record<string, TaggedCourt & { at: string }> = {
   [park(3).id]: { ...park(3), at: minutesAgo(60 * 24 * 4) },
 };
 
-/** Two of the new alerts in the demo's Notifications: Sam is up for a hit, and a new clip at a court you follow. */
+/** The map's alerts in the demo's Notifications: Marcus is playing at a court, Sam is up for a hit, and a new clip at a court you follow. */
 export const DEMO_MAP_ALERTS: Notification[] = [
+  { id: 'n-map-3', userId: CURRENT_USER_ID, actorId: 'u-marcus', kind: 'friend-court', targetId: park(3).id, targetKind: 'court', createdAt: minutesAgo(12), read: false, preview: park(3).name },
   { id: 'n-map-1', userId: CURRENT_USER_ID, actorId: 'u-sam', kind: 'map-friend-hit', targetId: 'u-sam', targetKind: 'profile', createdAt: minutesAgo(35), read: false, preview: '1 mi from you' },
   { id: 'n-map-2', userId: CURRENT_USER_ID, actorId: 'u-sam', kind: 'court-activity', targetId: park(1).id, targetKind: 'court', createdAt: minutesAgo(60 * 5), read: true, preview: `New clip at ${park(1).name}` },
 ];

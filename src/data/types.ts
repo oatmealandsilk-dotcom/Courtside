@@ -1926,9 +1926,13 @@ export interface FollowedCourt {
  *   map-new-hit     a new open hit near you; actor the poster, target the hit ('hit-request')
  *   map-new-player  a new player shared their spot near you; actor them, target their profile
  *   court-activity  a new hit or post at a court you follow; actor the poster, target the court ('court')
- * At most one a day from the three map- kinds together, and one a day from court-activity.
+ *   friend-court    a friend who follows you back said "I'm playing here" at a court; actor them, target the
+ *                   court ('court'), preview the court's name (migration 208). Several friends at one court fold
+ *                   into one row. Under the same switch as map-friend-hit (push_map_friends).
+ * At most one a day from the three map- kinds together, and one a day from court-activity; friend-court has
+ * its own rules (one per session at a court, migration 208).
  */
-export type MapAlertKind = 'map-friend-hit' | 'map-new-hit' | 'map-new-player' | 'court-activity';
+export type MapAlertKind = 'map-friend-hit' | 'map-new-hit' | 'map-new-player' | 'court-activity' | 'friend-court';
 
 /** One switch each in Settings for those alerts (user_state push_map_friends, push_map_hits, push_map_players, push_courts). On unless turned off. */
 export interface MapAlertPrefs { pushMapFriends: boolean; pushMapHits: boolean; pushMapPlayers: boolean; pushCourts: boolean }
