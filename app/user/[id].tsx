@@ -16,7 +16,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
-import { hasSessionStats } from '@/features/activity/format';
+import { hasSessionStats, sessionOnly } from '@/features/activity/format';
 import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
@@ -115,7 +115,7 @@ function UserProfile() {
     // A post shared to a group lives in that group's feed only (migration 67).
     const own = posts.filter((p) => p.authorId === userId && !p.archived && !p.groupId);
     return {
-      Posts: [...own].sort(newestFirst),
+      Posts: own.filter((p) => !sessionOnly(p)).sort(newestFirst),
       Clips: own.filter((p) => p.kind === 'clip').sort(newestFirst),
       Activity: own.filter((p) => !!p.session && hasSessionStats(p.session)).sort(newestFirst),
       Tagged: posts.filter((p) => isTaggedIn(p, userId) && !p.archived && !p.groupId).sort(newestFirst),

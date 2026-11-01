@@ -57,7 +57,7 @@ import { markFeedSwiped } from '@/features/feed/firstSwipe';
 import { BAR_TUCK, barCompact, setBarCompact } from '@/features/navigation/barShrink';
 import { BAR_OVERLAY_PX, useBarInset } from '@/features/navigation/barInset';
 import { setFeedOnPicture } from '@/features/navigation/barOverMedia';
-import { hasSessionStats } from '@/features/activity/format';
+import { hasSessionStats, sessionOnly } from '@/features/activity/format';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { TipPage } from '@/components/TipPage';
 import { isLive } from '@/features/stories/stories';
@@ -257,15 +257,6 @@ const onPictureLook = (item: FeedItem | undefined) => (item?.type === 'hit'
   ? !!(item.story.imageUrl || item.story.videoUrl)
   : item?.type === 'post' && item.post.kind === 'clip' && !!(item.post.videoUrl || item.post.thumbnailUrl || item.post.imageUrl));
 const forYou = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[]; groupId?: string; removed?: unknown; session?: unknown; kind?: string; mediaLabel?: string }) => reachable(p) && !p.groupId && !p.removed && !sessionOnly(p);
-/**
- * A session posted with no photo or clip (its numbers only) is dealt into
- * Activities, never For you (Oct 12, owner: "since people are auto loggin
- * their sessions now, its just filled with abunch of session" / "on the for
- * you page, only sessions with videos or pictures can be there. activity tab
- * is all sessions"). One with a photo or clip goes to both, as on Strava.
- */
-const sessionOnly = (p: { imageUrl?: string; videoUrl?: string; session?: unknown; kind?: string; mediaLabel?: string }) =>
-  !!p.session && !p.imageUrl && !p.videoUrl && p.kind !== 'clip' && !p.mediaLabel;
 
 // On a phone — the app or a phone's browser — a vertical clip fills the whole
 // page, edge to edge. The tall 9:16 box in the middle is for computer windows.
@@ -692,7 +683,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
             .filter((p) => (set === 'archived'
               ? p.archived && p.authorId === userId && userId === data.currentUserId
               // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
-              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set === 'clips' ? p.kind === 'clip' : set === 'activity' ? !!p.session && hasSessionStats(p.session) : true))))
+              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set === 'clips' ? p.kind === 'clip' : set === 'activity' ? !!p.session && hasSessionStats(p.session) : !sessionOnly(p) || p.id === scope.start))))
             // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
             // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
             .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));

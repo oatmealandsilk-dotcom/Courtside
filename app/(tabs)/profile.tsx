@@ -17,7 +17,7 @@ import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
-import { hasSessionStats } from '@/features/activity/format';
+import { hasSessionStats, sessionOnly } from '@/features/activity/format';
 import type { Post } from '@/data/types';
 import Reanimated, { Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
@@ -64,9 +64,9 @@ const tallButton = { minHeight: buttonShape.profileHeight };
 /** The messages tip's pointer from the right edge of the page's content (the header's own right edge): the menu button (38), the gap (14), then half the paper plane (35), less half the pointer (12). */
 const INBOX_POINTER = 38 + 14 + 17 - 6;
 
-/** Whether a post of yours belongs in a section of the grid: All has every one, Clips the clips, Activity those carrying a hit's or a match's numbers. */
+/** Whether a post of yours belongs in a section of the grid: Posts has every one but a session with no photo or clip (sessionOnly: those are Activity's alone), Clips the clips, Activity those carrying a hit's or a match's numbers. */
 function inSection(p: Post, section: string): boolean {
-  return section === 'Clips' ? p.kind === 'clip' : section === 'Activity' ? !!p.session && hasSessionStats(p.session) : true;
+  return section === 'Clips' ? p.kind === 'clip' : section === 'Activity' ? !!p.session && hasSessionStats(p.session) : !sessionOnly(p);
 }
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
@@ -116,9 +116,10 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // the grid (Oct 24, owner: "The bar under needs to be more seeable right now it's super thin": the
  // grid below was covering half of it).
  const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
- // 'Posts' holds everything, clips included, so it is shown as All. Activity (Oct 24, owner): the posts
+ // 'Posts' holds every post but a session with no photo or clip, so it is Posts, as on anyone else's profile
+ // (Nov 1, owner: "on my profile it says all on others it says posts"). Activity (Oct 24, owner): the posts
  // that carry a hit's or a match's numbers, the way Strava's profile shows activities.
- const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'All', Clips: 'Clips', Activity: 'Activity', Tagged: 'Tagged' };
+ const LABEL: Record<(typeof TABS)[number], string> = { Posts: 'Posts', Clips: 'Clips', Activity: 'Activity', Tagged: 'Tagged' };
  const tabIndex = TABS.indexOf(tab);
  const [tabWidth, setTabWidth] = useState(0);
  const underline = useTabUnderline(tabIndex, TABS.length, tabWidth);

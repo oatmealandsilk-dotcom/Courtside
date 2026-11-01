@@ -251,6 +251,17 @@ export function statsLine(s: SessionDetail, hidden: ID[] = []): string {
 /** A post carries a session's stats: one from a tracker, or one from your own log. A plain "minutes on court" does not count. */
 export const hasSessionStats = (s: SessionDetail | undefined): boolean => !!s && (!!s.activityId || !!s.sessionId);
 
+/**
+ * A session posted with no photo or clip (its numbers only). It is dealt into
+ * Activities, never For you (Oct 12, owner: "on the for you page, only
+ * sessions with videos or pictures can be there. activity tab is all
+ * sessions"), and on a profile it sits under Activity, never Posts (Nov 1,
+ * owner: "activities without a picture should only go under activities,
+ * shouldn't go under posts"). One with a photo or clip goes to both, as on Strava.
+ */
+export const sessionOnly = (p: { imageUrl?: string; videoUrl?: string; session?: unknown; kind?: string; mediaLabel?: string }) =>
+  !!p.session && !p.imageUrl && !p.videoUrl && p.kind !== 'clip' && !p.mediaLabel;
+
 /* ------------------------------------------------- sessions you logged */
 
 export const KIND_LABEL: Record<PracticeSession['kind'], string> = { practice: 'Practice', match: 'Match', drills: 'Drills', fitness: 'Fitness' };
