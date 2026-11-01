@@ -64,7 +64,12 @@ module.exports = {
       // iOS 18+ lets people pick a light, dark or tinted home screen. Each gets its own
       // drawing of the refined icon (Oct 6) instead of iOS guessing the dark and tinted
       // looks (its guessed tinted icon was a solid amber square). Next App Store build.
-      icon: green ? './assets/icon.png' : { light: './assets/icon-a.png', dark: './assets/icon-a-dark.png', tinted: './assets/icon-a-tinted.png' },
+      // Oct 29 (owner: "fuzzy and dark and blurry" next to Instagram): iOS 26+ draws a flat
+      // picture icon through its glass system and softens it. The layered Icon Composer file
+      // (scripts/make-app-icon.py) gives the phone the cream background and the same green
+      // mark as sharp vector layers, with its own Dark, Clear and Tinted looks. Older iPhones
+      // get pictures Xcode makes from the same file. Android and the website keep icon-a.png.
+      icon: green ? './assets/icon.png' : './assets/CourtSideIcon.icon',
       // Apple Health may wake the app the moment a workout is saved, so "Workout detected"
       // comes even with CourtSide closed (modules/workout-watch, Oct 5). The react-native-health
       // plugin below adds the HealthKit entitlement itself; this adds background delivery only.
