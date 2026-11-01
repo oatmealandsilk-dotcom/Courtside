@@ -1,6 +1,6 @@
-import React, { useEffect, useLayoutEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet } from 'react-native';
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { cubicBezier } from 'react-native-reanimated';
 
 import { curtainHasLifted, isCurtainDown, useCurtainReady } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -26,6 +26,15 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
  * thread's alone, and an iPhone that loses that end value (a long busy moment
  * just after the lift) falls back to the section's own style, which is then
  * simply shown rather than see-through.
+ *
+ * And never left see-through by the animation library (Nov 1, owner's iPhone:
+ * "It just loaded without the bottom ... even after I refreshed"). Reanimated
+ * copies an animated value that has sat still for a second into the view's own
+ * style and never takes that copy back; a busy phone that missed the copy of
+ * the end value kept the start one (see-through) until the app was closed. So
+ * the rise is a transition of the section's own style (Reanimated's CSS
+ * transitions, which nothing copies): what the section's style says, opacity 1
+ * and in place, is where it always ends, however busy the phone is.
  */
 const STEP_MS = 30;
 const LAST_STEP = 3;
@@ -37,6 +46,8 @@ const RISE = 7;
  * this only ever counts when the curtain's clocks are gone.
  */
 const HOLD_MAX_MS = 4000;
+/** Easing.out(Easing.cubic), the rise's curve, as a transition's curve. */
+const OUT_CUBIC = cubicBezier(0.33, 1, 0.68, 1);
 
 /** Whether the first showing has played: from then on every section is simply there. */
 let played = false;
@@ -54,34 +65,34 @@ export function FirstReveal({ order, children }: { order: number; children: Reac
     const t = setTimeout(() => setOverdue(true), HOLD_MAX_MS);
     return () => clearTimeout(t);
   }, [hold, lifting]);
-  // Three steps, so the animation thread only ever holds a value while it is moving:
-  // 'held' under the curtain is a plain style (an animated "hidden" left still for a
-  // second gets copied into the view's own style on an iPhone, and can then outlast
-  // the rise); 'rising' puts the animated style on, at the same place, and starts it;
-  // 'up' is the section with no style at all.
-  const [phase, setPhase] = useState<'held' | 'rising' | 'up'>(hold ? 'held' : 'up');
-  const still = useReducedMotion();
-  const shown = useSharedValue(0);
+  // Built held, then up from the next moment on (never up from the start: a section built as
+  // the curtain lifts still rises, as before). Up is the section's own style, for good.
+  const [up, setUp] = useState(false);
   useEffect(() => {
-    if (phase !== 'held' || !(lifting || overdue)) return;
+    if (!hold || up || !(lifting || overdue)) return;
     played = true;
-    setPhase('rising');
-  }, [phase, lifting, overdue]);
-  useLayoutEffect(() => {
-    if (phase !== 'rising') return undefined;
-    const delay = Math.min(order, LAST_STEP) * STEP_MS;
-    shown.value = withDelay(delay, withTiming(1, { duration: RISE_MS, easing: Easing.out(Easing.cubic) }, (finished) => { if (finished) runOnJS(setPhase)('up'); }));
-    // Its end never heard (a long busy moment on the phone): it is up all the same.
-    const t = setTimeout(() => setPhase('up'), delay + RISE_MS + 1000);
-    return () => clearTimeout(t);
-  }, [phase, order, shown]);
-  const style = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: still ? 0 : (1 - shown.value) * RISE }] }));
+    setUp(true);
+  }, [hold, up, lifting, overdue]);
+  const still = useReducedMotion();
   if (!hold) return <>{children}</>;
-  // The same view throughout (its children are never built again); only its style changes.
-  return <Animated.View style={phase === 'held' ? (still ? styles.heldStill : styles.held) : phase === 'rising' ? style : undefined}>{children}</Animated.View>;
+  // The same view throughout (its children are never built again); only its own style changes,
+  // and the change is the transition (with Reduce Motion on, a plain fade).
+  const delay = Math.min(order, LAST_STEP) * STEP_MS;
+  return (
+    <Animated.View
+      style={[
+        up ? (still ? styles.upStill : styles.up) : still ? styles.heldStill : styles.held,
+        { transitionProperty: still ? 'opacity' : ['opacity', 'transform'], transitionDuration: RISE_MS, transitionDelay: delay, transitionTimingFunction: OUT_CUBIC },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
 }
 
 const styles = StyleSheet.create({
   held: { opacity: 0, transform: [{ translateY: RISE }] },
   heldStill: { opacity: 0 },
+  up: { opacity: 1, transform: [{ translateY: 0 }] },
+  upStill: { opacity: 1 },
 });
