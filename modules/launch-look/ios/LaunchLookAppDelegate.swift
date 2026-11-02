@@ -19,7 +19,7 @@ public class LaunchLookAppDelegate: ExpoAppDelegateSubscriber {
   }
 
   public func applicationDidBecomeActive(_ application: UIApplication) {
-    LaunchLook.shared.dissolve()
+    LaunchLook.shared.becameActive()
   }
 
   public func applicationDidEnterBackground(_ application: UIApplication) {

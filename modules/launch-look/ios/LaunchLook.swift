@@ -76,6 +76,14 @@ final class LaunchLook: NSObject {
   private weak var standIn: UIView?
   private weak var cover: UIView?
   private var syncTimer: Timer?
+  /// When each step of this open happened (ms since 1970), for the simulator checks: prepared, visible, active, dissolved.
+  private var times: [String: Double] = [:]
+  /// What started the early dissolve this open: "active" (the app came on screen) or "fallback" (0.6 s after its window).
+  private var dissolvedBy: String?
+
+  private func mark(_ step: String) {
+    if times[step] == nil { times[step] = (Date().timeIntervalSince1970 * 1000).rounded() }
+  }
 
   /// The look the app's own drawn copies must be in this open: the one saved (the native copies end in it).
   var applied: LaunchLookStyle? { stored }
@@ -91,6 +99,7 @@ final class LaunchLook: NSObject {
     dispatchPrecondition(condition: .onQueue(.main))
     guard !prepared else { return }
     prepared = true
+    mark("prepared")
     stored = UserDefaults.standard.string(forKey: Self.lookKey).flatMap(LaunchLookStyle.init(rawValue:))
     phoneAtOpen = LaunchLookStyle(UIScreen.main.traitCollection.userInterfaceStyle)
     guard let stored else {
@@ -115,10 +124,11 @@ final class LaunchLook: NSObject {
 
   @objc private func windowBecameVisible(_ note: Notification) {
     guard let window = note.object as? UIWindow, let root = window.rootViewController?.view else { return }
+    mark("visible")
     restyle(root)
     // Should the app never be told it is active (it always is, on a real open), the dissolve still comes.
     if startedIn != stored {
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.dissolve() }
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.dissolve(by: "fallback") }
     }
   }
 
@@ -168,10 +178,12 @@ final class LaunchLook: NSObject {
    * The app is on screen: where its copies started in the phone's look (iOS's picture was not ours),
    * they dissolve into the look saved now, once.
    */
-  func dissolve() {
+  func dissolve(by: String) {
     dispatchPrecondition(condition: .onQueue(.main))
     guard let stored, let current, current != stored, !dissolved else { return }
     dissolved = true
+    dissolvedBy = by
+    mark("dissolved")
     self.current = stored
     let seconds = max(0, UserDefaults.standard.object(forKey: Self.dissolveKey) as? Double ?? 250) / 1000
     for view in [standIn, cover].compactMap({ $0 }) where view.window != nil {
@@ -197,6 +209,13 @@ final class LaunchLook: NSObject {
   private func setStatusBar(_ look: LaunchLookStyle, animated: Bool) {
     let style: UIStatusBarStyle = look == .dark ? .lightContent : .darkContent
     UIApplication.shared.setStatusBarStyle(style, animated: animated)
+  }
+
+  /// The app came on screen (active): the early dissolve, where one is due.
+  func becameActive() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    if prepared && stored != nil { mark("active") }
+    dissolve(by: "active")
   }
 
   // MARK: Saving (from the app's code)
@@ -276,6 +295,8 @@ final class LaunchLook: NSObject {
       "dissolved": dissolved,
       "pictures": LaunchSnapshots.shared.lastReport,
       "iOS": UIDevice.current.systemVersion,
+      "dissolvedBy": dissolvedBy ?? NSNull(),
+      "times": times,
     ]
   }
 }
