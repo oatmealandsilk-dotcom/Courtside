@@ -2413,10 +2413,14 @@ function dropComment(prev: AppState, commentId: ID): AppState {
  * Demo build in a browser: `?as=handle` on any address signs that fixture in
  * and keeps it for the tab, so a screen can be opened straight from its
  * address — which is how the design checks take their pictures. Never with a
- * real database, never on a phone.
+ * real database, never on a phone. The iPhone Simulator's proof build (simDriver), bundled with
+ * EXPO_PUBLIC_SIM_DRIVER=1 and EXPO_PUBLIC_SIM_SIGNED_IN=1, opens signed in to the demo every time, as a
+ * phone keeps its session (Nov 2: the launch look follows the theme of a signed-in player from one open to
+ * the next, which the demo's sign-in, forgotten at every open, could not show).
  */
 const demoHandle: string | null = (() => {
-  if (isSupabaseConfigured || Platform.OS !== 'web') return null;
+  if (isSupabaseConfigured) return null;
+  if (Platform.OS !== 'web') return process.env.EXPO_PUBLIC_SIM_DRIVER === '1' && process.env.EXPO_PUBLIC_SIM_SIGNED_IN === '1' ? 'you' : null;
   try {
     const asked = new URLSearchParams(window.location.search).get('as');
     if (asked) { window.sessionStorage.setItem('courtside-demo-as', asked); return asked; }
