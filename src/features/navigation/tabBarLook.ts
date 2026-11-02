@@ -118,6 +118,28 @@ export function newBarFoot(bottom: number): number {
 }
 
 /**
+ * Apple's own tab bar (Nov 2, barLens's A; components/NativeBar), whose size and place the phone decides. On an
+ * iPhone with a home bar it is laid out as iOS has always laid a tab bar out, 49 points over the bottom strip,
+ * and on iOS 26 its glass capsule fills the top 62 of that: measured from his screenshot of Strava's (Apple's
+ * own bar), 62 high, 21 in from each side, its foot 21 above the screen's bottom edge (34 + 49 - 62 = 21).
+ * Our round + sits in the middle of that capsule, and the bar's box is exactly the room the phone's bar takes
+ * (the box swallows touches meant for the page under it, so it is never bigger). Unproven until it is seen
+ * in the Simulator: if the capsule stands anywhere else, these are the numbers to change.
+ *   frame    the bar's own height over the bottom strip;
+ *   capsule  the glass capsule's height, from the frame's top;
+ *   side     how far in from each side the capsule's ends are (the tutorial's lit tabs are measured on it);
+ *   icon     the tab icons' size.
+ * Its top (34 + 49 = 83 up) stays below today's bar's (34 + BAR_METRICS.height = 90 up), which every page's
+ * bottom room is measured from.
+ */
+export const NATIVE_BAR = { frame: 49, capsule: 62, side: 21, icon: 25 } as const;
+
+/** The room Apple's bar takes above the screen's bottom edge, from the phone's bottom strip (`inset`, 0 with no home bar). */
+export function nativeBarRoom(inset: number): number {
+  return Math.max(inset + NATIVE_BAR.frame, NATIVE_BAR.capsule + 12);
+}
+
+/**
  * The new bar's + (Oct 28, owner: "I like keeping + as a solid thing"):
  *   'icon'   a plain + in a ring in the row with the word "Create" under it, in the tabs' own colour, as
  *            Strava's Record (lit in the brand's colour while the Create box is up);

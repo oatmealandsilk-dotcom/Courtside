@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 import { Easing, ReduceMotion, cancelAnimation, makeMutable, withSpring, withTiming } from 'react-native-reanimated';
 
 import { useApp } from '@/store/AppContext';
+import { liquidGlass } from '@/components/ui/Glass';
+import { isSupabaseConfigured } from '@/lib/supabase';
 
 /**
  * The lens under the lit tab (Oct 26, owner: "Also can we experiment with building Liquid Glass for
@@ -67,6 +69,51 @@ export function useBarIg(): boolean {
 }
 
 /**
+ * Nov 2, owner: "Let's make the bottom bar even more like instagrams Liquid Glass. The animation especially."
+ * Two ways, each with its own switch, both iPhone only (the website keeps today's bar):
+ *
+ *   A. Apple's own iOS 26 tab bar (components/NativeBar): the real Liquid Glass and Apple's own tab-switch
+ *      motion, press and slide included, drawn by the phone itself. Our solid round + sits on top of its
+ *      middle slot. Off for everyone, admins included, until he has seen it (BAR_NATIVE_FOR_ADMINS); its
+ *      native code is already in the app (react-native-screens' tabs and expo-font's icon pictures, both in
+ *      every build since Sep 12), so turning it on is an over-the-air update.
+ *   B. The new bar's own motion rebuilt after Apple's (LENS_MOTION 'apple', StretchLens): at the touch the
+ *      capsule swells into a bubble a little bigger than the bar, travels stretched like a drop of gel,
+ *      wobbles a hair as it lands and sinks back into the flat capsule once the finger is up; the icon
+ *      under it grows as under a lens. Admins first, on the iPhone (BAR_APPLE_MOTION_FOR_EVERYONE).
+ *
+ * With A on, B is not drawn (A replaces the bar). In a demo build for the iPhone Simulator (no Supabase:
+ * the made-up demo data), EXPO_PUBLIC_SIM_BAR=native|apple|liquid picks one for the recording, the switches
+ * here staying as they are; a store build or an over-the-air update never reads it.
+ */
+export const BAR_NATIVE_FOR_EVERYONE = false;
+export const BAR_NATIVE_FOR_ADMINS = false;
+export const BAR_APPLE_MOTION_FOR_EVERYONE = false;
+
+/** The demo build's pick for the Simulator's recording (see above); undefined everywhere else. */
+const SIM_BAR = !isSupabaseConfigured && Platform.OS !== 'web'
+  ? (process.env.EXPO_PUBLIC_SIM_BAR as 'native' | 'apple' | 'liquid' | undefined)
+  : undefined;
+
+/** Whether this person's bar is Apple's own (A): iOS 26 only, where the phone has Liquid Glass. */
+export function useBarNative(): boolean {
+  const { currentUser } = useApp();
+  if (Platform.OS !== 'ios' || !liquidGlass) return false;
+  const admin = !!currentUser?.isAdmin;
+  if (SIM_BAR) return SIM_BAR === 'native' && admin;
+  return BAR_NATIVE_FOR_EVERYONE || (BAR_NATIVE_FOR_ADMINS && admin);
+}
+
+/** Whether the new bar's capsule moves Apple's way (B): on an iPhone only. */
+export function useBarAppleMotion(): boolean {
+  const { currentUser } = useApp();
+  if (Platform.OS !== 'ios') return false;
+  const admin = !!currentUser?.isAdmin;
+  if (SIM_BAR) return SIM_BAR !== 'liquid' && admin;
+  return BAR_APPLE_MOTION_FOR_EVERYONE || admin;
+}
+
+/**
  * On iOS 26: 'fill', the quiet capsule as everywhere else, inside the bar's Liquid Glass; 'glass', a
  * second piece of Apple's glass inside the bar's own. 'fill' by default (review, Oct 26): Apple's own
  * advice is never to lay glass on glass (glass cannot see through other glass, so a lens of it inside
@@ -103,40 +150,57 @@ const LENS_SPRING = { dampingRatio: 1, duration: 420, overshootClamping: true } 
  *
  * In all three the lit colour follows the capsule (a tab tints by how near it is), a soft tap as it lands
  * (on a phone), and Reduce Motion is a quick plain slide.
+ *
+ *   'apple'   (Nov 2, B above; iPhone only, by useBarAppleMotion, never through LENS_MOTION) Apple's iOS 26 tab
+ *             bar, step by step: at the touch the capsule swells into a bubble a little bigger than the bar
+ *             (out past its top and bottom edge, on a quick spring with a touch of give), slides to the tab on a
+ *             spring of about 380 ms, stretched like gel by its own speed (its back chases its front on a soft
+ *             spring, so it runs a hair past as it stops: the wobble), the icon under it a size bigger as
+ *             under a lens; once the finger is up and it has landed it sinks back into the flat capsule.
  */
-export type LensMotion = 'liquid' | 'lens' | 'tuned';
+export type LensMotion = 'liquid' | 'lens' | 'tuned' | 'apple';
 export const LENS_MOTION = 'liquid' as LensMotion;
-const MOTIONS: readonly LensMotion[] = ['tuned', 'liquid', 'lens'];
+const MOTIONS: readonly LensMotion[] = ['tuned', 'liquid', 'lens', 'apple'];
 let motionChosen: LensMotion | null = null;
 /**
  * The motion in use: LENS_MOTION, or in the web demo one picked with ?barmotion=liquid|lens|tuned (kept for
- * the visit), so the three can be filmed side by side from one build.
+ * the visit), so the three can be filmed side by side from one build. `apple`: B's switch is on for this
+ * person (useBarAppleMotion, an iPhone's), which decides it whatever LENS_MOTION says.
  */
-export function lensMotion(): LensMotion {
+export function lensMotion(apple = false): LensMotion {
+  if (apple) return 'apple';
   if (motionChosen) return motionChosen;
   motionChosen = LENS_MOTION;
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
     try {
+      // (Not 'apple': the website keeps today's bar.)
       const asked = new URLSearchParams(window.location.search).get('barmotion') as LensMotion | null;
-      if (asked && MOTIONS.includes(asked)) { window.sessionStorage.setItem('courtside-barmotion', asked); motionChosen = asked; }
+      if (asked && asked !== 'apple' && MOTIONS.includes(asked)) { window.sessionStorage.setItem('courtside-barmotion', asked); motionChosen = asked; }
       else {
         const kept = window.sessionStorage.getItem('courtside-barmotion') as LensMotion | null;
-        if (kept && MOTIONS.includes(kept)) motionChosen = kept;
+        if (kept && kept !== 'apple' && MOTIONS.includes(kept)) motionChosen = kept;
       }
     } catch { /* no storage: the default */ }
   }
   return motionChosen;
 }
-/** The motion as a number the animation thread reads (MOTIONS' order: 0 tuned, 1 liquid, 2 lens). Set by the bar on show. */
+/** The motion as a number the animation thread reads (MOTIONS' order: 0 tuned, 1 liquid, 2 lens, 3 apple). Set by the bar on show. */
 export const lensKind = makeMutable(1);
 export function lensKindOf(motion: LensMotion): number {
   return MOTIONS.indexOf(motion);
 }
-/** Each motion's leading spring (critically damped: no bounce, never past the tab). */
+/** The 'apple' motion's place in MOTIONS (lensKind's number for it). */
+export const APPLE_KIND = 3;
+/**
+ * Each motion's leading spring (the first three critically damped: no bounce, never past the tab). Apple's
+ * (UIKit's own springs are about this: a response near 0.38 s, damped to 0.86) ends half a point past the tab
+ * at most, too little to see as a bounce; its give is in the shape (StretchLens), not the place.
+ */
 const NEW_SPRINGS = [
   { dampingRatio: 1, duration: 240, overshootClamping: true },
   { dampingRatio: 1, duration: 250, overshootClamping: true },
   { dampingRatio: 1, duration: 320, overshootClamping: true },
+  { dampingRatio: 0.86, duration: 380, overshootClamping: false },
 ] as const;
 /** 1 from the moment a tap or a slide along the bar sends the new bar's lens to a tab until it lands there (its soft tap on landing). */
 export const lensLanding = makeMutable(0);

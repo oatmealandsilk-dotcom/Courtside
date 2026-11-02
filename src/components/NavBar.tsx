@@ -29,8 +29,9 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
-import { useBarIg, useBarLens } from '@/features/navigation/barLens';
+import { useBarAppleMotion, useBarIg, useBarLens, useBarNative } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
+import { NativeBar, useNativeBarIcons } from './NativeBar';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -128,6 +129,10 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const barLens = useBarLens();
   // The new bar, after Instagram's and Strava's (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first). It always has the lens.
   const barIg = useBarIg();
+  // Nov 2 (barLens): A, Apple's own bar (iOS 26; switched off for everyone until he has seen it), drawn once its
+  // icons are ready (until then the bar as it was); B, the new bar's capsule moving Apple's way (admins first, iPhone).
+  const nativeIcons = useNativeBarIcons(useBarNative() && isPhone, ITEMS, colors.text);
+  const appleMotion = useBarAppleMotion();
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -235,6 +240,29 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onTab = useCallback((route: string) => navigation.navigate(route), [navigation]);
   const onTabPressIn = useCallback((route: string) => navigation.prepare?.(route), [navigation]);
   const outerStyle = useMemo(() => [lift === 'up' ? null : styles.held, lift === 'held' ? null : duck], [lift, styles.held, duck]);
+  // Apple's own bar (A), where it is on and its icons are ready.
+  if (isPhone && nativeIcons) {
+    return (
+      <NativeBar
+        items={ITEMS}
+        icons={nativeIcons}
+        activeRoute={activeRoute}
+        feedUnder={feedUnder}
+        tabsUnder={tabsUnder}
+        profileAlerts={profileAlerts}
+        onTab={onTab}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        inset={insets.bottom}
+        outerStyle={outerStyle}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={closeVeil}
+      />
+    );
+  }
   // The quiet pill in place of the round one (tabBarLook, Oct 25): the same bar and the same glass, a new shape.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (
@@ -260,6 +288,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         follow={swipeFollow}
         lens={barLens || barIg}
         newBar={barIg}
+        appleMotion={appleMotion}
       />
     );
   }

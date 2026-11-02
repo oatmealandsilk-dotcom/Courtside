@@ -7,7 +7,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 
 import { BrandWash } from '@/components/ui/BrandWash';
 import { CLEAR_GLASS_ALPHA, Glass, LIGHT_GLASS_ALPHA, liquidGlass } from '@/components/ui/Glass';
-import { BAR_SLIDE, LENS_LOOK, LENS_TABS, lensAt, lensFeel, lensFollow, lensGoal, lensHeld, lensKind, lensKindOf, lensLag, lensLanding, lensLift, lensMotion, lensPlace, lensPress, lensReset, lensRide, lensRides, lensRow, lensSettle, lensTo, lensTrail } from '@/features/navigation/barLens';
+import { APPLE_KIND, BAR_SLIDE, LENS_LOOK, LENS_TABS, lensAt, lensFeel, lensFollow, lensGoal, lensHeld, lensKind, lensKindOf, lensLag, lensLanding, lensLift, lensMotion, lensPlace, lensPress, lensReset, lensRide, lensRides, lensRow, lensSettle, lensTo, lensTrail } from '@/features/navigation/barLens';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { BAR_SHAPE, NEW_BAR, PLUS_LOOK, SHAPE, newBarFoot } from '@/features/navigation/tabBarLook';
@@ -86,7 +86,7 @@ export interface LookItem {
  */
 export const LookBar = React.memo(function LookBar({
   items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false,
+  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false, appleMotion = false,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -119,6 +119,8 @@ export const LookBar = React.memo(function LookBar({
   lens?: boolean;
   /** The new bar (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first): its own shape, colours and lens. */
   newBar?: boolean;
+  /** The new bar's capsule moving Apple's way (barLens's useBarAppleMotion, B; an iPhone's, admins first). */
+  appleMotion?: boolean;
 }) {
   const { theme } = useTheme();
   // Where each tab's middle is along the bar, from the pill's width (worked out from the window's
@@ -134,8 +136,8 @@ export const LookBar = React.memo(function LookBar({
   const look = newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : QUIET_LOOK;
   // The new bar's lens with the phone's Reduce Motion (the app's own answer: useReducedMotion): a quick plain slide.
   const calm = useReducedMotion();
-  // How it travels (barLens's LENS_MOTION): read once.
-  const [motion] = useState(lensMotion);
+  // How it travels (barLens's LENS_MOTION, or Apple's way where that switch is on for this person).
+  const motion = useMemo(() => lensMotion(appleMotion), [appleMotion]);
   const kind = lensKindOf(motion);
   useLayoutEffect(() => { lensFeel.value = newBar ? (calm ? 2 : 1) : 0; lensKind.value = kind; }, [newBar, calm, kind]);
   // The new bar's words as drawn, each tab's own width (the lit capsule is sized to the lit tab's word).
@@ -356,7 +358,8 @@ export const LookBar = React.memo(function LookBar({
     // and it has landed (StretchLens). Not with Reduce Motion.
     if (now.current.newBar) {
       lensPress.value = 1;
-      if (!now.current.calm) lensLift.value = withTiming(1, LIFT_UP);
+      // Apple's motion (B) swelled it already, on the animation thread at the touch itself (`slide`'s onBegin).
+      if (!now.current.calm && !appleEarly.current) lensLift.value = withTiming(1, LIFT_UP);
       // It sets off at the touch itself, before the bar has redrawn with the tab lit (the redraw then finds it on its way).
       const place = lensPlace(route);
       if (place >= 0 && route !== now.current.activeRoute) {
@@ -431,6 +434,12 @@ export const LookBar = React.memo(function LookBar({
   // untouched: the two gestures never share the finger (whichever starts first has it; a hold that has
   // the windows up is never taken over). Never while the Create box is up.
   const slideOn = newBar && !!lensGeo && BAR_SLIDE;
+  // Apple's motion (B): a finger coming down on a tab swells the bubble and sends it there on the animation
+  // thread (`slide`'s onBegin), not after the tab's own press has reached the app.
+  const appleEarly = useRef(false);
+  appleEarly.current = kind === APPLE_KIND && slideOn;
+  // 1 from such a touch until the finger is up.
+  const earlyPress = useSharedValue(0);
   const slideAt = useSharedValue<number[]>(lensGeo ? [...lensGeo.centers] : [0, 1, 2, 3]);
   useLayoutEffect(() => { if (lensGeo) slideAt.value = [...lensGeo.centers]; }, [lensGeo, slideAt]);
   // The tab on show, for a slide taken away part way (it goes back there).
@@ -461,6 +470,21 @@ export const LookBar = React.memo(function LookBar({
     .enabled(slideOn && !veilBlocks)
     .activeOffsetX([-12, 12])
     .failOffsetY([-24, 24])
+    .onBegin((e) => {
+      'worklet';
+      // Apple's motion (B) only: the finger has just come down. On one of the four tabs (not the round +), the
+      // bubble swells and sets off for that tab now, on this thread; the tab's own press follows (tabPressIn).
+      if (lensKind.value !== APPLE_KIND || lensFeel.value !== 1 || winFinger.value) return;
+      const cs = slideAt.value;
+      const slot = cs[1] - cs[0];
+      let place = -1;
+      for (let i = 0; i < cs.length; i++) if (Math.abs(e.x - cs[i]) < slot / 2) place = i;
+      if (place < 0) return;
+      earlyPress.value = 1;
+      lensPress.value = 1;
+      lensLift.value = liftUp(APPLE_KIND);
+      if (place !== homePlace.value) lensTo(place, true);
+    })
     .onStart((e) => {
       'worklet';
       // The Feed's hold has the finger (its windows are up): the slide is theirs.
@@ -469,7 +493,7 @@ export const LookBar = React.memo(function LookBar({
       sliding.value = 1;
       lensRide(at);
       lensPress.value = 1;
-      if (lensFeel.value === 1) lensLift.value = withTiming(1, LIFT_UP);
+      if (lensFeel.value === 1) lensLift.value = liftUp(lensKind.value);
       const near = Math.round(at);
       slideOver.value = near;
       runOnJS(slideBegin)(LENS_TABS[near]);
@@ -497,6 +521,11 @@ export const LookBar = React.memo(function LookBar({
     })
     .onFinalize(() => {
       'worklet';
+      // A touch Apple's motion answered at once, and that never became a slide: the finger is up.
+      if (earlyPress.value) {
+        earlyPress.value = 0;
+        if (!sliding.value) lensPress.value = 0;
+      }
       // Taken away part way (never let go of): back to the tab on show.
       if (!sliding.value) return;
       sliding.value = 0;
@@ -504,7 +533,7 @@ export const LookBar = React.memo(function LookBar({
       const home = homePlace.value;
       if (home >= 0) lensSettle(home, SLIDE_LAND_MS);
       runOnJS(slideEnd)(null);
-    }), [slideOn, veilBlocks, slideAt, homePlace, sliding, slideOver, slideBegin, slideMove, slideEnd]);
+    }), [slideOn, veilBlocks, slideAt, homePlace, sliding, slideOver, slideBegin, slideMove, slideEnd, earlyPress]);
   useEffect(() => {
     if (glassHeld === null) return undefined;
     let second = 0;
@@ -552,6 +581,10 @@ export const LookBar = React.memo(function LookBar({
   // The new bar tucks less as you scroll down (it already sits lower, nearer the home bar).
   const newTuck = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, NEW_BAR.tuck]) * PX) / PX }] }));
   const st = look.st;
+  // Apple's motion (B): its bubble past the bar's edges, in the look the live glass shows.
+  const bubbleOn = newBar && kind === APPLE_KIND && litPlace >= 0 && !calm && !look.m.split;
+  const livePalette = themes[theme];
+  const bubble = bubbleLook(livePalette, (glassHeld ?? glassLook) || inkOn(livePalette.bg) === '#FFFFFF');
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[st.float, { bottom: newBar ? newBarFoot(bottom) : bottom }, outerStyle]}>
       <Animated.View style={[st.pillWrap, newBar ? newTuck : tuckStyle]}>
@@ -581,6 +614,10 @@ export const LookBar = React.memo(function LookBar({
           <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
           ))} />
+          {/* Apple's motion (B): the part of the swelling bubble past the bar's edges, over everything (beside the glass, never holding it). */}
+          {bubbleOn && lensGeo ? (
+            <LensBubble geo={lensGeo} fallback={litPlace} frost={bubble.frost} frostAlpha={bubble.frostAlpha} rim={bubble.rim} glint={bubble.glint} inset={look.m.lensInset} st={st} />
+          ) : null}
         </View>
         </SlideOver>
       </Animated.View>
@@ -693,17 +730,38 @@ const Lens = React.memo(function Lens({ geo, fallback, fill, glass, glassDark, s
 });
 
 /**
- * Each motion's (barLens's LensMotion, in lensKind's order: tuned, liquid, lens) most stretch past the
+ * Each motion's (barLens's LensMotion, in lensKind's order: tuned, liquid, lens, apple) most stretch past the
  * capsule's own width while it travels, as a share of that width.
  */
-const STRETCH_MAX = [0.25, 0.36, 0.15] as const;
-/** Each one's lift at the touch: this much taller (and as much wider), as a share of its height (tuned about 1.06, the lens's swell 1.14). */
-const LIFTS = [0.06, 0.04, 0.14] as const;
-/** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers. */
-const SQUASH = 0.08;
+const STRETCH_MAX = [0.25, 0.36, 0.15, 0.32] as const;
+/**
+ * Each one's lift at the touch: this much taller (and as much wider), as a share of its height (tuned about
+ * 1.06, the lens's swell 1.14). Apple's (Nov 2): the bubble grows from the 52-point capsule to about 70, so
+ * it stands 5 points out past the 60-point bar's top and bottom while the finger is down, as iOS 26's does.
+ */
+const LIFTS = [0.06, 0.04, 0.14, 0.35] as const;
+/** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers; Apple's gel a little more. */
+const SQUASHES = [0, 0.08, 0, 0.1] as const;
 /** Up at the touch, quickly; down, once the finger is up and the lens has landed, on a soft spring with no bounce. */
 const LIFT_UP = { duration: 120, easing: Easing.out(Easing.cubic) };
 const LIFT_DOWN = { dampingRatio: 1, duration: 280 } as const;
+/**
+ * Apple's (Nov 2): the swell at the touch a quick spring with a little give (a hair past full size, then back:
+ * "instantly flexing", as Apple's own Liquid Glass talk puts it), and the sink back into the flat capsule a
+ * softer one that dips a hair under its rest size before settling, so it lands like gel, not like a lid.
+ */
+const APPLE_LIFT_UP = { dampingRatio: 0.7, duration: 260 } as const;
+const APPLE_LIFT_DOWN = { dampingRatio: 0.72, duration: 360 } as const;
+/** Each motion's lift at the touch, on the animation thread (`kind`: lensKind's number). */
+function liftUp(kind: number) {
+  'worklet';
+  return kind === APPLE_KIND ? withSpring(1, APPLE_LIFT_UP) : withTiming(1, LIFT_UP);
+}
+/** How much bigger the icon and word under Apple's lifted bubble look, as under a lens. */
+const MAGNIFY = 0.16;
+/** Apple's bubble, outside the bar while lifted: how milky it is over the page, and its edge. */
+const BUBBLE_FROST = 0.32;
+const BUBBLE_FROST_DARK = 0.1;
 /** A slide along the bar let go: the lens lands on the tab under it this quickly. */
 const SLIDE_LAND_MS = 220;
 /** How near its tab (in tabs) the lens counts as landed, for the lift to start coming down. */
@@ -720,7 +778,14 @@ const landTap = () => haptics.landed();
  * still shows it. The lens's is stiffer: it swells rather than stretches.
  */
 const chase = (k: number) => ({ stiffness: k, damping: 2 * Math.sqrt(k), mass: 1, overshootClamping: true } as const);
-const TRAIL_SPRINGS = [chase(6000), chase(6000), chase(9000)] as const;
+/**
+ * Apple's gel (Nov 2): the back chases the front on a softer spring with some give (damped to 0.55), so the
+ * capsule stretches with its speed and, as the front stops on the tab, the back runs a hair past it and comes
+ * back: a small wobble that dies in about a fifth of a second.
+ */
+const GEL_K = 2600;
+const gel = { stiffness: GEL_K, damping: 2 * 0.55 * Math.sqrt(GEL_K), mass: 1, overshootClamping: false } as const;
+const TRAIL_SPRINGS = [chase(6000), chase(6000), chase(9000), gel] as const;
 const TRAIL_RIDE = chase(1600);
 /**
  * The liquid capsule's trailing edge (review, Oct 28: 400 ms left a slow creep after landing and a long smear
@@ -733,6 +798,152 @@ const MID_W = 100;
 /** The lens's highlight: a short soft bar near its top that rides along with it. */
 const GLINT_W = 22;
 const GLINT_H = 4;
+
+/**
+ * The new bar's capsule as drawn, from where its front (`at`) and back (`trailAt`, -1 not placed) stand as
+ * places in the row and its lift: its middle along the bar, its width and height, and how far the front
+ * leads the back. Numbers in, numbers out: whatever calls it reads the animated values by name itself (a
+ * style is redrawn only for the values its own code reads). StretchLens and Apple's bubble (LensBubble).
+ */
+function lensBox(geo: LensGeo, at: number, trailAt: number, lift: number, calm: boolean, kind: number, h: number) {
+  'worklet';
+  const stretchMax = STRETCH_MAX[kind] ?? STRETCH_MAX[0];
+  const liftBy = LIFTS[kind] ?? LIFTS[0];
+  const trail = calm || trailAt < 0 ? at : trailAt;
+  const places = [0, 1, 2, 3];
+  const lead = interpolate(at, places, geo.centers as number[], Extrapolation.CLAMP);
+  const back = interpolate(trail, places, geo.centers as number[], Extrapolation.CLAMP);
+  const wl = interpolate(at, places, geo.widths as number[], Extrapolation.CLAMP);
+  const wb = interpolate(trail, places, geo.widths as number[], Extrapolation.CLAMP);
+  let left = Math.min(lead - wl / 2, back - wb / 2);
+  let right = Math.max(lead + wl / 2, back + wb / 2);
+  // Never longer than its most stretch past its width: the trailing edge is the one held in.
+  const base = Math.max(wl, wb);
+  const most = base * (1 + stretchMax);
+  if (right - left > most) {
+    if (lead >= back) left = right - most;
+    else right = left + most;
+  }
+  const stretch = Math.max(0, (right - left) / base - 1);
+  const grow = calm ? 0 : liftBy * h * lift;
+  const squashBy = SQUASHES[kind] ?? 0;
+  const squash = squashBy > 0 && !calm ? 1 - squashBy * Math.min(1, stretch / stretchMax) : 1;
+  return { mid: (left + right) / 2, w: right - left + grow, h: (h + grow) * squash, lean: lead - back };
+}
+
+/** The capsule as lensBox works it out, as the animation thread holds it. */
+type LensBoxValue = Readonly<SharedValue<ReturnType<typeof lensBox>>>;
+
+/**
+ * The capsule's pieces moved to its shape (`box`; `h` its height at rest): its two round ends and plain middle,
+ * a half ring at each end and the highlight. Only transforms, on the animation thread.
+ */
+function usePieceStyles(box: LensBoxValue, h: number) {
+  const startCap = useAnimatedStyle(() => {
+    const b = box.value;
+    return { transform: [{ translateX: b.mid - b.w / 2 + b.h / 2 - h / 2 }, { scale: b.h / h }] };
+  }, [h]);
+  const endCap = useAnimatedStyle(() => {
+    const b = box.value;
+    return { transform: [{ translateX: b.mid + b.w / 2 - b.h / 2 - h / 2 }, { scale: b.h / h }] };
+  }, [h]);
+  const middle = useAnimatedStyle(() => {
+    const b = box.value;
+    return { transform: [{ translateX: b.mid - MID_W / 2 }, { scaleX: Math.max(0.001, (b.w - b.h + 1) / MID_W) }, { scaleY: b.h / h }] };
+  }, [h]);
+  const rimStart = useAnimatedStyle(() => {
+    const b = box.value;
+    const sc = b.h / h;
+    return { transform: [{ translateX: b.mid - b.w / 2 - h / 4 + (sc * h) / 4 }, { scale: sc }] };
+  }, [h]);
+  const rimEnd = useAnimatedStyle(() => {
+    const b = box.value;
+    const sc = b.h / h;
+    return { transform: [{ translateX: b.mid + b.w / 2 - h / 4 - (sc * h) / 4 }, { scale: sc }] };
+  }, [h]);
+  const glintMove = useAnimatedStyle(() => {
+    const b = box.value;
+    // Toward the capsule's front as it travels (it leans the way it goes), back to just left of middle at rest.
+    const x = b.mid - b.w * 0.18 + Math.max(-b.w * 0.25, Math.min(b.w * 0.25, b.lean * 0.6));
+    return { transform: [{ translateX: x - GLINT_W / 2 }, { translateY: (h - b.h) / 2 + b.h * 0.1 }, { scaleX: 1 + Math.min(0.8, Math.abs(b.lean) / 40) }] };
+  }, [h]);
+  return { startCap, endCap, middle, rimStart, rimEnd, glintMove };
+}
+
+/** How far past the bar's top and bottom edge Apple's bubble may be seen (it reaches about 5 out, a little more at its swell's give). */
+const BUBBLE_BAND = 9;
+
+/**
+ * Apple's bubble outside the bar (Nov 2, B; barLens's 'apple' motion): while a finger is down on the bar, the
+ * capsule swells past the bar's top and bottom edges, as iOS 26's own tab bar does. The bar's glass clips what
+ * is drawn in it (StretchLens), so this draws the rest, laid over the bar (beside the glass, never holding it):
+ * its milky body only where it stands out past the bar's edges (two strips, so it never covers an icon), its
+ * edge and its highlight. Seen only while lifted (its strength follows the lift); never on a fading copy.
+ */
+const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostAlpha, rim, glint, inset, st }: {
+  geo: LensGeo; fallback: number; frost: string; frostAlpha: number; rim: string; glint: string;
+  /** How far in from the bar's top and bottom the capsule sits at rest (the bar's edges, from it). */
+  inset: number; st: BarStyles;
+}) {
+  const h = geo.height;
+  const box = useDerivedValue(() => {
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    return lensBox(geo, at, lensTrail.value, lensLift.value, false, APPLE_KIND, h);
+  }, [geo, fallback, h]);
+  const { startCap, endCap, middle, rimStart, rimEnd, glintMove } = usePieceStyles(box, h);
+  const frostShow = useAnimatedStyle(() => ({ opacity: frostAlpha * Math.max(0, Math.min(1, lensLift.value)) }), [frostAlpha]);
+  const edgeShow = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, lensLift.value)) }));
+  // The body's three pieces, in the capsule's own place (a strip past the top edge, or past the bottom one, shows its part).
+  const body = (
+    <>
+      <Animated.View style={[st.stretchMid, { height: h, backgroundColor: frost }, middle]} />
+      <Animated.View style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: frost }, startCap]} />
+      <Animated.View style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: frost }, endCap]} />
+    </>
+  );
+  return (
+    <>
+      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="bar-bubble" needsOffscreenAlphaCompositing style={[st.stretch, { height: h }, frostShow]}>
+        <View style={[st.bubbleBand, { top: -inset - BUBBLE_BAND, height: BUBBLE_BAND }]}>
+          <View style={[st.bubbleInBand, { top: inset + BUBBLE_BAND, height: h }]}>{body}</View>
+        </View>
+        <View style={[st.bubbleBand, { top: h + inset, height: BUBBLE_BAND }]}>
+          <View style={[st.bubbleInBand, { top: -h - inset, height: h }]}>{body}</View>
+        </View>
+      </Animated.View>
+      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, edgeShow]}>
+        <Animated.View style={[st.stretchMid, st.rimLine, { height: h, borderColor: rim }, middle]} />
+        <Animated.View style={[st.stretchCap, st.rimHalf, { width: h / 2, height: h }, rimStart]}>
+          <View style={[st.rimRing, { width: h, height: h, borderRadius: h / 2, borderColor: rim }]} />
+        </Animated.View>
+        <Animated.View style={[st.stretchCap, st.rimHalf, { width: h / 2, height: h }, rimEnd]}>
+          <View style={[st.rimRing, { left: -h / 2, width: h, height: h, borderRadius: h / 2, borderColor: rim }]} />
+        </Animated.View>
+        <Animated.View style={[st.stretchCap, { width: GLINT_W, height: GLINT_H, borderRadius: GLINT_H / 2, backgroundColor: glint }, glintMove]} />
+      </Animated.View>
+    </>
+  );
+});
+
+/**
+ * The icon and word under Apple's lifted bubble (Nov 2, B), a size bigger as under a lens: by how near the
+ * capsule is and how far it has swelled, so nothing grows at rest. A transform on the animation thread.
+ */
+const Magnify = React.memo(function Magnify({ place, fallback, children }: { place: number; fallback: number; children: React.ReactNode }) {
+  const grow = useAnimatedStyle(() => {
+    const own = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    const s = 1 + MAGNIFY * Math.max(0, Math.min(1, lensLift.value)) * litNear(place, at, lensTrail.value);
+    return s === 1 ? { transform: [] } : { transform: [{ scale: s }] };
+  }, [place, fallback]);
+  return <Animated.View style={grow}>{children}</Animated.View>;
+});
+/** Magnify only with `on` (Apple's motion); without it, what it holds exactly as it was. */
+function MagnifyIf({ on, place, fallback, children }: { on: boolean; place: number; fallback: number; children: React.ReactElement }) {
+  if (!on) return children;
+  return <Magnify place={place} fallback={fallback}>{children}</Magnify>;
+}
 
 /**
  * The new bar's lens (Oct 28, owner: "Also the animation is inportant for tab switching", then "The new
@@ -751,19 +962,19 @@ const GLINT_H = 4;
  * lens's rim is the same three pieces again (two half rings and a top and bottom line). With Reduce
  * Motion: no stretch, no lift, a quick plain slide.
  */
-const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alpha, rim, glint, kind, drive, calm, st }: {
+const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alpha, rim, glint, body, bodyAlpha, kind, drive, calm, st }: {
   geo: LensGeo; fallback: number; color: string; alpha: number;
   /** The lens's (kind 2) rim and highlight colours. */
   rim: string; glint: string;
-  /** barLens's lensKind: 0 tuned, 1 liquid, 2 lens. */
+  /** Apple's (kind 3): the clear-glass brightness it fills with as it swells, and how strong. */
+  body: string; bodyAlpha: number;
+  /** barLens's lensKind: 0 tuned, 1 liquid, 2 lens, 3 apple. */
   kind: number;
   /** The live bar's: it moves the trailing edge and the lift for every copy too (they read the same values). */
   drive: boolean;
   calm: boolean; st: BarStyles;
 }) {
   const h = geo.height;
-  const stretchMax = STRETCH_MAX[kind] ?? STRETCH_MAX[0];
-  const liftBy = LIFTS[kind] ?? LIFTS[0];
   useAnimatedReaction(() => {
     if (!drive) return null;
     const own = lensAt.value;
@@ -795,8 +1006,8 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
     const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? goal : own;
     return Math.abs(at - goal) < LANDED ? 1 : 0;
   }, (down, was) => {
-    if (down === 1 && was !== 1) lensLift.value = withSpring(0, LIFT_DOWN);
-  }, [drive]);
+    if (down === 1 && was !== 1) lensLift.value = withSpring(0, kind === APPLE_KIND ? APPLE_LIFT_DOWN : LIFT_DOWN);
+  }, [drive, kind]);
   // The soft tap as it lands (a phone's; a browser stays still), once for each tap or slide that sent it.
   useAnimatedReaction(() => {
     if (!drive || !lensLanding.value) return 0;
@@ -811,61 +1022,26 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
     }
   }, [drive]);
   const box = useDerivedValue(() => {
+    // Each value read here by name (see Lens): the shape itself is worked out by lensBox.
     const own = lensAt.value;
     const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
-    const trail = calm || lensTrail.value < 0 ? at : lensTrail.value;
-    const places = [0, 1, 2, 3];
-    const lead = interpolate(at, places, geo.centers as number[], Extrapolation.CLAMP);
-    const back = interpolate(trail, places, geo.centers as number[], Extrapolation.CLAMP);
-    const wl = interpolate(at, places, geo.widths as number[], Extrapolation.CLAMP);
-    const wb = interpolate(trail, places, geo.widths as number[], Extrapolation.CLAMP);
-    let left = Math.min(lead - wl / 2, back - wb / 2);
-    let right = Math.max(lead + wl / 2, back + wb / 2);
-    // Never longer than its most stretch past its width: the trailing edge is the one held in.
-    const base = Math.max(wl, wb);
-    const most = base * (1 + stretchMax);
-    if (right - left > most) {
-      if (lead >= back) left = right - most;
-      else right = left + most;
-    }
-    const stretch = Math.max(0, (right - left) / base - 1);
-    const grow = calm ? 0 : liftBy * h * lensLift.value;
-    const squash = kind === 1 && !calm ? 1 - SQUASH * Math.min(1, stretch / stretchMax) : 1;
-    return { mid: (left + right) / 2, w: right - left + grow, h: (h + grow) * squash, lean: lead - back };
-  }, [geo, fallback, calm, kind, stretchMax, liftBy]);
-  const startCap = useAnimatedStyle(() => {
-    const b = box.value;
-    return { transform: [{ translateX: b.mid - b.w / 2 + b.h / 2 - h / 2 }, { scale: b.h / h }] };
-  }, [h]);
-  const endCap = useAnimatedStyle(() => {
-    const b = box.value;
-    return { transform: [{ translateX: b.mid + b.w / 2 - b.h / 2 - h / 2 }, { scale: b.h / h }] };
-  }, [h]);
-  const middle = useAnimatedStyle(() => {
-    const b = box.value;
-    return { transform: [{ translateX: b.mid - MID_W / 2 }, { scaleX: Math.max(0.001, (b.w - b.h + 1) / MID_W) }, { scaleY: b.h / h }] };
-  }, [h]);
-  // The lens (kind 2): its fill a touch stronger as it swells, its rim and highlight brighter.
-  const lensFill = useAnimatedStyle(() => ({ opacity: kind === 2 && !calm ? alpha * (1 + 0.6 * lensLift.value) : alpha }), [kind, calm, alpha]);
+    return lensBox(geo, at, lensTrail.value, lensLift.value, calm, kind, h);
+  }, [geo, fallback, calm, kind, h]);
+  const { startCap, endCap, middle, rimStart, rimEnd, glintMove } = usePieceStyles(box, h);
+  // Apple's (kind 3): as it swells, a clear-glass brightness fills it under the icons (the part of the bubble
+  // past the bar's edges is LensBubble's), gone again as it sinks.
+  const bodyShow = useAnimatedStyle(() => ({ opacity: kind === APPLE_KIND && !calm ? bodyAlpha * Math.max(0, Math.min(1, lensLift.value)) : 0 }), [kind, calm, bodyAlpha]);
+  // The lens (kind 2): its fill a touch stronger as it swells, its rim and highlight brighter. Apple's: the
+  // tint thins as it swells into clear glass (its bubble, LensBubble, is drawn over the bar), and comes back as it sinks.
+  const lensFill = useAnimatedStyle(() => ({
+    opacity: calm ? alpha
+      : kind === 2 ? alpha * (1 + 0.6 * lensLift.value)
+        : kind === APPLE_KIND ? alpha * (1 - 0.45 * Math.max(0, Math.min(1, lensLift.value)))
+          : alpha,
+  }), [kind, calm, alpha]);
   const rimShow = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * lensLift.value }));
   // The highlight only while it is swollen (at rest the lens is just its fill and a faint rim).
   const glintShow = useAnimatedStyle(() => ({ opacity: lensLift.value }));
-  const rimStart = useAnimatedStyle(() => {
-    const b = box.value;
-    const sc = b.h / h;
-    return { transform: [{ translateX: b.mid - b.w / 2 - h / 4 + (sc * h) / 4 }, { scale: sc }] };
-  }, [h]);
-  const rimEnd = useAnimatedStyle(() => {
-    const b = box.value;
-    const sc = b.h / h;
-    return { transform: [{ translateX: b.mid + b.w / 2 - h / 4 - (sc * h) / 4 }, { scale: sc }] };
-  }, [h]);
-  const glintMove = useAnimatedStyle(() => {
-    const b = box.value;
-    // Toward the capsule's front as it travels (it leans the way it goes), back to just left of middle at rest.
-    const x = b.mid - b.w * 0.18 + Math.max(-b.w * 0.25, Math.min(b.w * 0.25, b.lean * 0.6));
-    return { transform: [{ translateX: x - GLINT_W / 2 }, { translateY: (h - b.h) / 2 + b.h * 0.1 }, { scaleX: 1 + Math.min(0.8, Math.abs(b.lean) / 40) }] };
-  }, [h]);
   return (
     <>
       <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden testID="bar-lens" needsOffscreenAlphaCompositing style={[st.stretch, { height: h }, lensFill]}>
@@ -873,6 +1049,13 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
         <Animated.View testID="bar-lens-start" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, startCap]} />
         <Animated.View testID="bar-lens-end" style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: color }, endCap]} />
       </Animated.View>
+      {kind === APPLE_KIND ? (
+        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden needsOffscreenAlphaCompositing style={[st.stretch, { height: h }, bodyShow]}>
+          <Animated.View style={[st.stretchMid, { height: h, backgroundColor: body }, middle]} />
+          <Animated.View style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: body }, startCap]} />
+          <Animated.View style={[st.stretchCap, { width: h, height: h, borderRadius: h / 2, backgroundColor: body }, endCap]} />
+        </Animated.View>
+      ) : null}
       {kind === 2 ? (
         <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, rimShow]}>
           <Animated.View style={[st.stretchMid, st.rimLine, { height: h, borderColor: rim }, middle]} />
@@ -1071,10 +1254,12 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
         >
           {/* What the tutorial lights: the tab's width, the icon and its word's height, as today. */}
           <View ref={live ? tourRef(item.route) : undefined} style={st.target}>
+            {/* Apple's motion (B): the icon and word a size bigger under the lifted bubble; otherwise exactly as before. */}
+            <MagnifyIf on={follow && kind === APPLE_KIND} place={lensPlace(item.route)} fallback={lensFallback}>
             <Animated.View style={[st.inner, settle]}>
               <View>
                 {follow ? (
-                  <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm} />
+                  <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm && kind !== APPLE_KIND} />
                 ) : (
                   <TabGlyph name={active ? item.activeIcon : item.icon} size={m.icon} color={active ? litOf(item.route) : idleIcon} active={active} pop={fresh && live && !calm} />
                 )}
@@ -1090,6 +1275,7 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
                 <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
               )}
             </Animated.View>
+            </MagnifyIf>
           </View>
         </Pressable>
         </FeedHold>
@@ -1108,10 +1294,12 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // the brand's colour (white would vanish on the light glass) and a white highlight.
   const lensRim = lensDark || darkPage ? withAlpha(c.onMedia, 0.34) : withAlpha(c.brand, 0.3);
   const lensGlint = withAlpha(c.onMedia, lensDark || darkPage ? 0.5 : 0.95);
+  // Apple's motion (B): the clear-glass brightness the swelling bubble fills with (bubbleLook, LookBar's bubble too).
+  const bubble = bubbleLook(c, lensDark || darkPage);
   const inside = (
     <>
       {lens ? (fresh
-        ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} rim={lensRim} glint={lensGlint} kind={kind} drive={live} calm={calm} st={st} />
+        ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} rim={lensRim} glint={lensGlint} body={bubble.frost} bodyAlpha={bubble.frostAlpha} kind={kind} drive={live} calm={calm} st={st} />
         : <Lens geo={lens} fallback={lensFallback} fill={lensFill} glass={live && liquidGlass && LENS_LOOK === 'glass'} glassDark={lensDark || darkPage} st={st} />) : null}
       {row}
       {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
@@ -1169,6 +1357,20 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   );
 }
 
+/**
+ * Apple's bubble's colours (Nov 2, B), in the court's own: a clear-glass white, milkier on a light court than
+ * on a dark one and over a clip; its edge a faint line of the page's ink on a light court (white would vanish
+ * on the light glass), a faint white one on dark; its highlight white.
+ */
+function bubbleLook(c: Palette, dark: boolean) {
+  return {
+    frost: c.onMedia,
+    frostAlpha: dark ? BUBBLE_FROST_DARK : BUBBLE_FROST,
+    rim: dark ? withAlpha(c.onMedia, 0.38) : withAlpha(c.text, 0.14),
+    glint: withAlpha(c.onMedia, dark ? 0.55 : 0.95),
+  };
+}
+
 /** `hex` moved part of the way (`t`, 0 to 1) toward `to`; both `#RRGGBB`, anything else comes back as it was. */
 function toward(hex: string, to: string, t: number): string {
   const a = hex.replace('#', '');
@@ -1182,7 +1384,7 @@ function toward(hex: string, to: string, t: number): string {
  * `hex` (`#RRGGBB`) at least this light and this strong in its own hue, for a colour on dark glass
  * (Clean's green #2C7446 becomes about #5DBE80); anything else comes back as it was.
  */
-function lightened(hex: string, light = 0.6, strong = 0.42): string {
+export function lightened(hex: string, light = 0.6, strong = 0.42): string {
   const h6 = hex.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(h6)) return hex;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h6.slice(i, i + 2), 16) / 255);
@@ -1306,6 +1508,9 @@ function barStyles(m: BarSpec, fresh: boolean) {
     rimLine: { borderTopWidth: 1, borderBottomWidth: 1 },
     rimHalf: { overflow: 'hidden' },
     rimRing: { position: 'absolute', top: 0, left: 0, borderWidth: 1 },
+    // Apple's bubble (LensBubble): a strip past the bar's top or bottom edge, and the capsule's own place inside it.
+    bubbleBand: { position: 'absolute', left: 0, right: 0, overflow: 'hidden' },
+    bubbleInBand: { position: 'absolute', left: 0, right: 0 },
   });
 }
 type BarStyles = ReturnType<typeof barStyles>;
