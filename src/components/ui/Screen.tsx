@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
 import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
-import React, { startTransition, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import React, { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
@@ -13,7 +13,8 @@ import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measur
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import { usePressV2 } from '@/features/navigation/pressV2';
+import { usePressV2, useTapFast } from '@/features/navigation/pressV2';
+import { tapPage } from '@/features/navigation/tapTiming';
 import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -151,7 +152,14 @@ interface Props {
  */
 export function Screen(props: Props) {
   const pathname = usePathname();
-  return <ScreenBody {...props} routeKey={props.memoryKey ?? pathname} />;
+  // A page that does not name itself, with taps answering sooner (pressV2's TAP_FAST, admins first): keyed by
+  // the address it opened on, its own, not the one on show now. Keyed by the one on show, every page left under
+  // the one on top was drawn again each time a page opened or closed over it, before that page could slide
+  // (Nov 2, owner: "There's also a delay on clicking buttons for them to respond. Clicking should respond much
+  // faster"). The key only says which scroll-to-top asks are this page's, and none are ever for such a page.
+  const own = useRef(pathname).current;
+  const fast = useTapFast();
+  return <ScreenBody {...props} routeKey={props.memoryKey ?? (fast ? own : pathname)} />;
 }
 
 const ScreenBody = React.memo(function ScreenBody({
@@ -181,6 +189,8 @@ const ScreenBody = React.memo(function ScreenBody({
   unconstrained = false,
   themeFade,
 }: Props & { routeKey: string }) {
+  // The simulator's tap timing (tapTiming): the page's first draw committed (its slide starts from here).
+  useLayoutEffect(() => { tapPage(routeKey); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
   const styles = useThemedStyles(styleDefinitions);

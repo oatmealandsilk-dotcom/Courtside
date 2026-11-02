@@ -20,6 +20,8 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { followRow } from '@/features/navigation/barShrink';
 import { setRowOnFeed } from '@/features/navigation/barOverMedia';
 import { lensFollow, lensRide, lensSettle } from '@/features/navigation/barLens';
+import { TAP_TIMING, tapMark } from '@/features/navigation/tapTiming';
+import { isTabGlide, setTabGlide } from '@/features/navigation/tabGlide';
 
 /**
  * The strip, left to right: Community (where the app opens, Find Players
@@ -40,6 +42,8 @@ const LAST = TAB_PATHS.length - 1;
 /** The Feed's place in the row. */
 const FEED = TAB_PATHS.indexOf('/');
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
+/** A glide set going by a tap whose address never came after all: the row goes back to the address's tab after this long. */
+const EARLY_CONFIRM_MS = 1200;
 
 /**
  * The four main tabs, mounted side by side and slid between on the animation
@@ -77,13 +81,17 @@ export function TabsPager({ pathname }: { pathname: string }) {
   // positions; `to` is -1 when the row is not gliding to a tab. `id` tells a glide from the next.
   // The bar's tuck rides it frame by frame (barShrink's followRow), so it lands with the page.
   const glide = useSharedValue({ id: 0, from: 0, to: -1 });
-  useEffect(() => {
-    if (target === activeRef.current) return;
-    moveTo(target);
-    setActive(target);
+  // The simulator's tap timing (tapTiming): where the row was as a glide was set going, until it first moves (-1: none watched).
+  const glideWatch = useSharedValue(-1);
+  // The glide to a tab, from wherever the row is: by the address changing (below), or by a tap
+  // before the address has changed (startTabGlide).
+  const glideTo = (to: number) => {
+    moveTo(to);
     const w = width || 1;
-    runOnUI((to: number, w: number) => {
+    runOnUI((to: number, w: number, timed: boolean) => {
       'worklet';
+      // The simulator's tap timing (tapTiming): when the animation thread set the glide going, and its first frame.
+      if (timed) { glideWatch.value = position.value; runOnJS(tapMark)('glide', undefined, Date.now()); }
       const id = glide.value.id + 1;
       // A far tab lifted for a glide this one cuts short goes back to its own slot.
       jumpTab.value = -1;
@@ -125,11 +133,50 @@ export function TabsPager({ pathname }: { pathname: string }) {
         followRow(finished ? 1 : -1);
         if (finished) runOnJS(atRest)();
       });
-    })(target, w);
+    })(to, w, TAP_TIMING);
+  };
+  // A tap's glide set going before its address came (startTabGlide): the tab it is heading for,
+  // and the check that the address does come (-1 when none is waiting).
+  const earlyTo = useRef(-1);
+  const earlyCheck = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const settleEarly = () => { clearTimeout(earlyCheck.current); earlyTo.current = -1; };
+  useEffect(() => {
+    // The address has caught up with a tap's glide: nothing more to do (the row is already on its way).
+    if (target === earlyTo.current) settleEarly();
+    // An address from before that tap (a quicker tap's, still on its way): the row keeps going where the
+    // finger sent it; one that never catches up is put right by the check below.
+    else if (earlyTo.current >= 0) return;
+    if (target !== activeRef.current) glideTo(target);
+    setActive(target);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, position, width, jumpTab, jumpOffset]);
+  // The latest glideTo (it reads this draw's width), for the tap's way in below.
+  const glideToNow = useRef(glideTo);
+  glideToNow.current = glideTo;
+  // A tab tapped on the bar sets the row off from here, before its address has changed (tabGlide's startTabGlide).
+  useEffect(() => {
+    const mine = (path: string) => {
+      const to = TAB_PATHS.indexOf(path as (typeof TAB_PATHS)[number]);
+      if (to < 0 || to === activeRef.current) return false;
+      glideToNow.current(to);
+      earlyTo.current = to;
+      clearTimeout(earlyCheck.current);
+      // The address never came (the router went nowhere): the row goes back to the tab the address is on.
+      earlyCheck.current = setTimeout(() => {
+        if (earlyTo.current !== to) return;
+        earlyTo.current = -1;
+        const there = TAB_PATHS.indexOf(pathnameRef.current as (typeof TAB_PATHS)[number]);
+        if (there >= 0 && there !== activeRef.current) { glideToNow.current(there); setActive(there); }
+      }, EARLY_CONFIRM_MS);
+      return true;
+    };
+    setTabGlide(mine);
+    return () => { if (isTabGlide(mine)) setTabGlide(null); clearTimeout(earlyCheck.current); };
+  }, []);
   // The glide's progress, for the bar's tuck riding it (frame by frame, on the animation thread).
   useAnimatedReaction(() => position.value, (at) => {
+    // The simulator's tap timing (tapTiming): the first frame the row moves after a glide was set going.
+    if (TAP_TIMING && glideWatch.value >= 0 && at !== glideWatch.value) { glideWatch.value = -1; runOnJS(tapMark)('first', undefined, Date.now()); }
     const g = glide.value;
     if (g.to < 0) return;
     const span = g.to - g.from;
@@ -162,6 +209,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
     if (TAB_PATHS[index] === '/profile') requestSection('/profile', 'Posts');
   };
   const land = (index: number) => {
+    // A finger has the row now: a tap's glide no longer waits for its address (startTabGlide).
+    settleEarly();
     moveTo(index);
     atRest();
     setActive(index);

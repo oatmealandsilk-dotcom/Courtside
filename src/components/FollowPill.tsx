@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useOptimistic, useRef, useState, useTransition } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -6,12 +6,47 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
-import { useApp } from '@/store/AppContext';
+import { useApp, useUsers } from '@/store/AppContext';
 import { buttonShape, colors, readsOn, typography, withAlpha } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 import { TextScale } from '@/theme/textScale';
+import { useTapFast } from '@/features/navigation/pressV2';
+import { tapMark } from '@/features/navigation/tapTiming';
+import { useIsGuest } from '@/features/guest/guestStatus';
 
 const EASE = Easing.bezier(0.22, 1, 0.36, 1);
+
+/** What a Follow button says: you follow them, you have asked to (a private account), or neither. */
+export type FollowShown = 'following' | 'requested' | 'none';
+
+/**
+ * A Follow button that turns on the tap itself, with taps answering sooner (pressV2's TAP_FAST, admins first):
+ * Follow becomes Following (or Requested, for a private account), and Requested goes back to Follow, in the
+ * very next frame, while the app's own redraw for it goes on as background work, the way a like already does.
+ * It used to wait for every page in the app to redraw first (Nov 2, owner: "There's also a delay on clicking
+ * buttons for them to respond. Clicking should respond much faster"). Following itself asks before it
+ * unfollows (its own sheet), so that tap goes exactly as before; so does a guest's (it only asks them to join)
+ * and one on a button that does not know whose it is. A second tap while the first is still going through is
+ * a double tap, not a change of mind: it is let go. `stored` is what the app says now; returns what to show,
+ * and the press to run in place of `onPress`.
+ */
+export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void) {
+  const fast = useTapFast();
+  const isGuest = useIsGuest();
+  const users = useUsers();
+  const [shown, setShown] = useOptimistic(stored);
+  const [going, startGoing] = useTransition();
+  // The simulator's tap timing (tapTiming): the button's change committed. Nothing outside the proof build.
+  const drawn = useRef(shown);
+  useLayoutEffect(() => { if (drawn.current !== shown) { drawn.current = shown; tapMark('follow'); } }, [shown]);
+  const press = () => {
+    if (!fast || isGuest || !userId || stored === 'following') { onPress(); return; }
+    if (going) return;
+    const next: FollowShown = stored === 'requested' ? 'none' : users.find((u) => u.id === userId)?.isPrivate ? 'requested' : 'following';
+    startGoing(() => { setShown(next); onPress(); });
+  };
+  return { shown, press };
+}
 
 /**
  * Follow, and then Following: the pill dips slightly on the tap, settles, and
@@ -23,8 +58,12 @@ const EASE = Easing.bezier(0.22, 1, 0.36, 1);
 export function FollowPill({ following, onPress, small = false, name, userId, wide = false, soft = false }: { following: boolean; onPress: () => void; small?: boolean; name?: string; userId?: string; /** Fills the width it is given (a suggestion card's button). */ wide?: boolean; /** The quiet look for a list row (Oct 25, "Quiet Follow: green word with a thin outline"): no fill, a thin brand outline, the word in the brand colour (the text's where the brand does not read on the page), no wash. Same size and tap area. */ soft?: boolean }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
-  const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
-  const filled = following || requested;
+  const asked = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
+  // On the tap itself, with taps answering sooner (useQuickFollow); otherwise exactly what the app says.
+  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress);
+  const requested = quick.shown === 'requested';
+  const filled = quick.shown !== 'none';
+  const said = quick.shown === 'following' ? 'Following' : requested ? 'Requested' : 'Follow';
   const on = useSharedValue(filled ? 1 : 0);
   const bump = useSharedValue(1);
   const reduced = useRef(false);
@@ -53,15 +92,15 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
     // A small, quick press: a slight dip and a settle with no wobble (a deeper dip and a loose spring read as a bounce).
     if (!reduced.current) bump.value = withSequence(withTiming(0.96, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
     haptics.tap();
-    onPress();
+    quick.press();
   };
 
   return (
-    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${following ? 'Following' : requested ? 'Requested' : 'Follow'}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
+    <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${said}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={6} style={wide ? styles.wide : undefined}>
       <Animated.View style={[styles.pill, small && styles.small, wide && styles.wide, pill]}>
         {soft ? null : <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, wash]}><BrandWash radius={buttonShape.smallRadius} curve /></Animated.View>}
         {filled ? <Ionicons name="checkmark" size={14} color={colors.text} /> : null}
-        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{following ? 'Following' : requested ? 'Requested' : 'Follow'}</Animated.Text>
+        <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.text, small && styles.textSmall, label]}>{said}</Animated.Text>
       </Animated.View>
     </Pressable>
   );
@@ -95,8 +134,11 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
 export function FollowShrink({ following, onPress, name, userId, followsYou = false, size = 44, room }: { following: boolean; onPress: () => void; name?: string; userId?: string; followsYou?: boolean; size?: number; room?: number }) {
   useTheme();
   const { followRequests, currentUserId } = useApp();
-  const requested = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
-  const filled = following || requested;
+  const asked = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
+  // On the tap itself, with taps answering sooner (useQuickFollow); otherwise exactly what the app says.
+  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress);
+  const requested = quick.shown === 'requested';
+  const filled = quick.shown !== 'none';
   // How wide the word is, measured from a hidden copy of it, so the pill knows the width to open
   // back out to and the word is never squeezed into "Fo…" while the pill draws in. 0 until
   // measured: the pill then sizes itself around the word.
@@ -149,10 +191,10 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
     lastPress.current = now;
     if (!reduced.current) bump.value = withSequence(withTiming(0.95, { duration: 60, easing: EASE }), withSpring(1, { damping: 20, stiffness: 320 }));
     haptics.tap();
-    onPress();
+    quick.press();
   };
 
-  const said = following ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
+  const said = quick.shown === 'following' ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ selected: filled }} accessibilityLabel={`${said}${name ? ` ${name}` : ''}`} onPress={press} hitSlop={4}>
       <Animated.View style={[styles.shrink, { height: size, borderRadius: size / 2 }, box]}>

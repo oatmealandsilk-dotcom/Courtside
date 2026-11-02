@@ -51,3 +51,42 @@ const subscribe = (fn: () => void) => {
 export function usePressV2(): boolean {
   return useSyncExternalStore(subscribe, pressV2On, pressV2On);
 }
+
+/**
+ * Taps that answer sooner (Nov 2, owner: "There's also a delay on clicking buttons for them to
+ * respond. Clicking should respond much faster"). He already had the quicker press feel above and
+ * still felt the wait, which sat after the finger lifted, not in the press look:
+ *   - a tab tapped on the bar: the row starts gliding in the tap itself, before the app redraws
+ *     for the new address (it used to wait for that whole redraw first: TabsPager's startTabGlide);
+ *   - Follow (the pill, the map card's round one, a player's page): it turns to Following or
+ *     Requested at once, and the app's own redraw for the follow goes on as background work (it
+ *     used to wait for every page in the app to redraw first);
+ *   - Message on a player's page, when they can already be messaged: the chat opens at once,
+ *     with no spinner drawn (and the whole page redrawn for it) first;
+ *   - a page under the one on show is no longer redrawn each time a page opens or closes over it.
+ * Each of these changes when things happen on an iPhone, which no web check can see, so admins
+ * (@oatmealandsilk, @mrdinosaur62) get them first, like the quicker press feel. Turned on for
+ * everyone by setting this to true and shipping an over-the-air update: no database change.
+ */
+export const TAP_FAST_FOR_EVERYONE = false;
+
+/**
+ * The simulator's proof only (simDriver's "tapfast on=0|1"): this build's answer, whoever is
+ * signed in, so one build can be timed both ways. Null everywhere else (the switch and the admin flag decide).
+ */
+let tapFastForced: boolean | null = null;
+
+/** Whether taps answer sooner right now. Read it when acting, not once at import. */
+export const tapFastOn = (): boolean => tapFastForced ?? (TAP_FAST_FOR_EVERYONE || admin);
+
+/** The simulator's proof only (see tapFastForced): on, off, or back to the switch (null). */
+export function forceTapFast(on: boolean | null) {
+  if (tapFastForced === on) return;
+  tapFastForced = on;
+  listeners.forEach((fn) => fn());
+}
+
+/** Whether taps answer sooner for this person; a component using it redraws if that changes. */
+export function useTapFast(): boolean {
+  return useSyncExternalStore(subscribe, tapFastOn, tapFastOn);
+}

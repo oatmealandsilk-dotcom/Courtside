@@ -3,6 +3,7 @@ import { Platform, type GestureResponderEvent } from 'react-native';
 
 import { usePressV2 } from '@/features/navigation/pressV2';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
+import { tapMark } from '@/features/navigation/tapTiming';
 
 /**
  * A press inside a page that swipes sideways (the tab row, a section pager,
@@ -183,10 +184,12 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (isPageDragging() || moved.current) return;
     clearHide();
     shownAt.current = Date.now();
+    // The simulator's tap timing (tapTiming): when the look was asked for. Nothing outside the proof build.
+    tapMark('look');
     lookRef.current(true);
   };
   const pressIn = () => {
-    if (!inSwipe) { lookRef.current(true); return; }
+    if (!inSwipe) { tapMark('look'); lookRef.current(true); return; }
     if (isPageDragging() || moved.current) return;
     // Drifting, not resting: it may be a slow swipe or scroll starting, so it waits the Oct 23 wait.
     const left = DRIFT_LOOK_DELAY - (Date.now() - downAt.current);

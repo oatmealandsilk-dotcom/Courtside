@@ -12,6 +12,7 @@ import { CLOSE_MS, OPEN_MS_CALM, OPEN_SPRING, STAGE_EASING, getStage, setFull, s
 import { useAndroidBack } from '@/lib/androidBack';
 import { HAND_IN_FROM, HAND_IN_MS, HAND_LEAVE_MS, HAND_OUT_MS, arrivingHeight, handOverSheet, takeHandOver } from '@/components/sheetHandOver';
 import { corner } from '@/theme/look';
+import { tapPage } from '@/features/navigation/tapTiming';
 
 const EASE = Easing.bezier(0.22, 0.61, 0.36, 1);
 /** Out of the way fast: a quick ease-in, the way a card is tossed down. */
@@ -251,6 +252,8 @@ export function DragSheet(props: {
    */
   slideOpen?: boolean;
 }) {
+  // The simulator's tap timing (tapTiming): the sheet's first draw committed (its rise starts from here).
+  useLayoutEffect(() => { tapPage(props.stage ? 'stage sheet' : 'sheet'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return props.stage ? <StageSheet {...props} geo={props.stage} /> : <PlainSheet {...props} />;
 }
 

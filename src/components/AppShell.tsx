@@ -1,7 +1,7 @@
 import { useTheme } from '@/theme/ThemeProvider';
 import { catchUpNow } from '@/theme/catchUp';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, Platform, View } from 'react-native';
+import { AppState, Platform, View, type GestureResponderEvent } from 'react-native';
 import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
 import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
 import { NavBar } from './NavBar';
@@ -58,6 +58,9 @@ import { ZoomLayer } from '@/components/map/ZoomLayer';
 import { v7Bar } from '@/features/players/zoomV7';
 import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
+import { startTabGlide } from '@/features/navigation/tabGlide';
+import { tapFastOn } from '@/features/navigation/pressV2';
+import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -87,6 +90,15 @@ const STAGE_ROUTES = new Set(['/comments', '/session-stats']);
 const BAR_IN_PLACE = { transform: [{ translateY: 0 }] };
 /** If a slide back into place never reports that it has finished, the bar is put in place this long after anyway. */
 const BAR_SETTLE_MAX_MS = 1500;
+/**
+ * The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): every finger in the app,
+ * heard by the frame before any button, as it lands and lifts. Nothing at all anywhere else.
+ */
+const TAP_TOUCHES = TAP_TIMING ? {
+  onTouchStartCapture: tapDown,
+  onTouchEndCapture: (e: GestureResponderEvent) => tapUp(e),
+  onTouchCancelCapture: (e: GestureResponderEvent) => tapUp(e, true),
+} : {};
 // An emailed link that has expired or was used already (or a Google sign-in that failed) comes
 // back with error_description on the address. Kept for the sign-in page to say, whatever page the
 // link lands on: a new password's link lands on /account, and the sign-in detour below replaced
@@ -155,6 +167,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The going-home helpers look at which page is on show (see tabsOnShow in goBack).
   const rootNavigation = useNavigationContainerRef();
   useEffect(() => { setRootNavigation(rootNavigation); return () => setRootNavigation(null); }, [rootNavigation]);
+  // The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): the router's calls and page changes.
+  useEffect(() => (TAP_TIMING ? listenToRouter(rootNavigation as unknown as Parameters<typeof listenToRouter>[0]) : undefined), [rootNavigation]);
   const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession, isGuest } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
@@ -504,6 +518,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
     // A theme just picked: the tab this shows, and the one under the page closing, are on it as they show (catchUp).
     if (destination !== pathname) catchUpNow(['active', destination]);
+    // From one tab to another, with taps answering sooner (pressV2's TAP_FAST, admins first): the row sets
+    // off now, in the tap, after the asks above so the tab is ready as it slides in; the router below
+    // catches up behind it. It used to wait for the app's whole redraw for the new address first (Nov 2,
+    // owner: "There's also a delay on clicking buttons for them to respond. Clicking should respond much faster").
+    if (destination !== pathname && TAB_ORDER.includes(pathname) && tapFastOn()) startTabGlide(destination);
     // Already here: a second tap on the same icon takes the page back to the top.
     if (destination === pathname) { if (!(destination === paths.index && closeFeedWindows())) requestScrollToTop(destination); }
     // From a page pushed on top (settings, edit profile…), go back down to the
@@ -536,7 +555,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     else router.navigate(destination);
   };
   const nav = <NavBar state={barState} feedUnder={barOver.current === paths.index} tabsUnder={TAB_ORDER.includes(barOver.current)} navigation={navigation} />;
-  return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }}>
+  return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }} {...TAP_TOUCHES}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{/* The check-in zoom's layer (v7, iPhone admins): over the pages, under the toasts. */}{currentUserId ? <ZoomLayer /> : null}{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>
