@@ -14,7 +14,7 @@ import { tapFastOn } from '@/features/navigation/pressV2';
  * Every number after the first `|` is milliseconds from the finger lifting (a minus number came while the
  * finger was still down):
  *   fast     whether "taps answer sooner" (pressV2's TAP_FAST) was on for that tap: the before/after switch;
- *   held     how long the finger was down; lag N/M: how late the app's code heard the finger land / lift
+ *   held     how long the finger was down (`at`: the lift's clock time, for lining up with a screen recording); lag N/M: how late the app's code heard the finger land / lift
  *            (from the phone's own touch time; left out when the two clocks cannot be compared);
  *   look     the press look asked for (swipePress: a card or button dipping or dimming);
  *   press    a button's action ran (Tappable);
@@ -133,7 +133,8 @@ function file() {
     .sort((a, b) => a.at - b.at)
     .map((m) => `${m.name}${m.detail ? ` ${m.detail}` : ''} ${m.at - from}`);
   const js = t.upAt ? `js ${t.frames.n}f max ${t.frames.max}@${t.frames.maxAt} first ${t.frames.first}` : '';
-  simLog(`[tap-timing] fast=${t.fast ? 1 : 0} ${head} | ${[...marks, js].filter(Boolean).join(' | ')}`);
+  // `at`: the lift's own clock time (the Mac's, in the Simulator), to line the marks up with a screen recording.
+  simLog(`[tap-timing] fast=${t.fast ? 1 : 0} ${head} at ${from} | ${[...marks, js].filter(Boolean).join(' | ')}`);
 }
 
 /** What a router call asked for, in a few words: "push /user/u2", "back". */

@@ -56,8 +56,6 @@ export function usePressV2(): boolean {
  * Taps that answer sooner (Nov 2, owner: "There's also a delay on clicking buttons for them to
  * respond. Clicking should respond much faster"). He already had the quicker press feel above and
  * still felt the wait, which sat after the finger lifted, not in the press look:
- *   - a tab tapped on the bar: the row starts gliding in the tap itself, before the app redraws
- *     for the new address (it used to wait for that whole redraw first: TabsPager's startTabGlide);
  *   - Follow (the pill, the map card's round one, a player's page): it turns to Following or
  *     Requested at once, and the app's own redraw for the follow goes on as background work (it
  *     used to wait for every page in the app to redraw first);
@@ -67,6 +65,10 @@ export function usePressV2(): boolean {
  * Each of these changes when things happen on an iPhone, which no web check can see, so admins
  * (@oatmealandsilk, @mrdinosaur62) get them first, like the quicker press feel. Turned on for
  * everyone by setting this to true and shipping an over-the-air update: no database change.
+ * Not here: a tab tapped on the bar. Setting the row off in the tap itself was tried (Nov 2) and
+ * the Simulator showed it moving no sooner: the animation thread holds the row's frames while the
+ * app's redraw for the new address lands, and set off before that redraw, the Feed's slide moved
+ * one frame and then stood still for a tenth of a second.
  */
 export const TAP_FAST_FOR_EVERYONE = false;
 

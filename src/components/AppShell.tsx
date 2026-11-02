@@ -58,8 +58,6 @@ import { ZoomLayer } from '@/components/map/ZoomLayer';
 import { v7Bar } from '@/features/players/zoomV7';
 import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
-import { startTabGlide } from '@/features/navigation/tabGlide';
-import { tapFastOn } from '@/features/navigation/pressV2';
 import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
 
 /**
@@ -518,11 +516,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     if (destination === paths.discuss && destination !== pathname) askForCommunityMap();
     // A theme just picked: the tab this shows, and the one under the page closing, are on it as they show (catchUp).
     if (destination !== pathname) catchUpNow(['active', destination]);
-    // From one tab to another, with taps answering sooner (pressV2's TAP_FAST, admins first): the row sets
-    // off now, in the tap, after the asks above so the tab is ready as it slides in; the router below
-    // catches up behind it. It used to wait for the app's whole redraw for the new address first (Nov 2,
-    // owner: "There's also a delay on clicking buttons for them to respond. Clicking should respond much faster").
-    if (destination !== pathname && TAB_ORDER.includes(pathname) && tapFastOn()) startTabGlide(destination);
     // Already here: a second tap on the same icon takes the page back to the top.
     if (destination === pathname) { if (!(destination === paths.index && closeFeedWindows())) requestScrollToTop(destination); }
     // From a page pushed on top (settings, edit profile…), go back down to the
