@@ -8,6 +8,7 @@ import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
 import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS, SPLASH_C_DARK_COLORS } from '@/components/launchPictureC';
 import { NEW_SPLASH } from '@/lib/splashLook';
 import { onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
+import { launchLookNow, type LaunchLook } from '@/lib/launchLook';
 
 /*
  * The launch picture's logo, name and line, drawn (not a picture) at exactly
@@ -218,33 +219,64 @@ function AndroidLaunchMark({ ink, faint, line = 'Growing the game' }: { ink: str
  * ground, green and grey). The phone's own launch picture follows the phone's light or dark mode, not
  * the app's theme (it is shown before any of the app runs), so the drawn copy follows the phone too
  * (launchDark), and the two always match at the hand-over.
+ *
+ * Nov 2 (owner: "if someone selects night, then the opening screen is always night, if it's day it's
+ * always day"): where the launch itself was given the look picked (src/lib/launchLook.ts: an iPhone build
+ * with the launch-look module, the website's loader; admins first), the drawn copy takes that look
+ * instead, the same one the phone's launch screen showed, so the two still match at the hand-over.
+ * Everywhere else, the phone's mode as above.
  */
 
-/** The launch look is the dark one: the phone is in dark mode (only where the launch picture is splash C and the app can tell). */
-export function launchDark(): boolean {
-  return NEW_SPLASH && phoneDark();
-}
+/** The phone is in dark mode (only where the launch picture is splash C and the app can tell). */
+const phoneLaunchDark = () => NEW_SPLASH && phoneDark();
 
-/** The launch look's colours: white or dark, as the phone's own launch picture is. */
-const lookC = () => (launchDark() ? SPLASH_C_DARK_COLORS : SPLASH_C_COLORS);
+/**
+ * The launch look is the dark one, for a copy drawn now: the look the launch was given (launchLookNow),
+ * or, where it follows the phone (as before, and for everyone with it off), the phone's mode.
+ */
+export function launchDark(): boolean {
+  if (!NEW_SPLASH) return false;
+  const look = launchLookNow();
+  return look ? look === 'dark' : phoneDark();
+}
 
 const noWatch = () => () => undefined;
 const watchPhone = (told: () => void) => onPhoneAppearance(() => told());
+
+/** How many copies of the launch look are up now, and the look the first of them took. */
+let copiesUp = 0;
+let copiesLook: LaunchLook | null = null;
+
 /**
- * Whether the launch look is the dark one, and a redraw of the part using it should the phone's mode
- * be heard again while it is up (`on`: a first reading put right as the app's window comes up). Every
- * part that draws the launch look or its ground uses this, listening only while it shows the look, so
- * the phone changing mode later redraws nothing. Older iPhone builds: always false, nothing heard.
+ * Whether the launch look is the dark one, for the part using it. Every part that draws the launch look
+ * or its ground uses this, with `on` while it shows the look.
+ *  - Following the phone (as before): a redraw should the phone's mode be heard again while it is up (a
+ *    first reading put right as the app's window comes up); the phone changing mode later redraws nothing.
+ *  - A look of its own (launchLookNow, Nov 2): kept as the part was first drawn, and a part drawn while
+ *    another copy is up (the loading screen handing over to the curtain) takes that one's, so a look saved
+ *    meanwhile (the account coming in, a sign-in) never changes a copy on screen or at a hand-over.
+ * Older iPhone builds: always false, nothing heard.
  */
 export function useLaunchDark(on = true): boolean {
-  return useSyncExternalStore(NEW_SPLASH && on ? watchPhone : noWatch, launchDark, launchDark);
+  const [own] = useState<LaunchLook | null>(() => (copiesUp > 0 ? copiesLook : launchLookNow()));
+  useEffect(() => {
+    if (!on) return undefined;
+    if (copiesUp === 0) copiesLook = own;
+    copiesUp += 1;
+    return () => { copiesUp -= 1; };
+  }, [on, own]);
+  const byPhone = useSyncExternalStore(NEW_SPLASH && on && !own ? watchPhone : noWatch, phoneLaunchDark, phoneLaunchDark);
+  return NEW_SPLASH && (own ? own === 'dark' : byPhone);
 }
+
+/** The launch look's colours: white or dark. */
+const lookC = (dark: boolean) => (dark ? SPLASH_C_DARK_COLORS : SPLASH_C_COLORS);
 const LINE_C_TEXT = { size: LINE_C.size, tracking: LINE_C.tracking, baseline: LINE_C.baseline, centre: PICTURE_C.width / 2 };
 
 /** iPhone: the picture's mark and line, where the picture (drawn to cover the screen) has them. */
-function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
-  useLaunchDark();
-  const C = lookC();
+function PictureLaunchMarkC({ line = PICTURE_LINE, dark }: { line?: string; dark?: boolean }) {
+  const ownDark = useLaunchDark();
+  const C = lookC(dark ?? ownDark);
   const { width: W, height: H } = useWindowDimensions();
   const s = Math.max(W / PICTURE_C.width, H / PICTURE_C.height);
   const ox = (W - PICTURE_C.width * s) / 2;
@@ -272,9 +304,9 @@ function PictureLaunchMarkC({ line = PICTURE_LINE }: { line?: string }) {
  * (assets/splash-c-android.png) is the mark alone, so there the line fades in once it has gone, as
  * the old name and line did; on the website it is simply there, as on its loader (public/index.html).
  */
-function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { markWidth: number; line?: string; fadeLine: boolean }) {
-  useLaunchDark();
-  const C = lookC();
+function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine, dark }: { markWidth: number; line?: string; fadeLine: boolean; dark?: boolean }) {
+  const ownDark = useLaunchDark();
+  const C = lookC(dark ?? ownDark);
   const s = markWidth / MARK_C.width;
   const [mx, my, mw, mh] = MARK_C.view;
   const [lx, ly, lw, lh] = LINE_C.view;
@@ -313,39 +345,43 @@ function CentredLaunchMarkC({ markWidth, line = PICTURE_LINE, fadeLine }: { mark
 }
 
 /** Android: the mark as big as its launch icon shows it (ANDROID_C), the line fading in after. */
-function AndroidLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
-  return <CentredLaunchMarkC markWidth={(ANDROID_C.markPx / ANDROID_C.iconPx) * ANDROID_C.iconPt} line={line} fadeLine />;
+function AndroidLaunchMarkC({ line, dark }: { ink?: string; faint?: string; line?: string; dark?: boolean }) {
+  return <CentredLaunchMarkC markWidth={(ANDROID_C.markPx / ANDROID_C.iconPx) * ANDROID_C.iconPt} line={line} fadeLine dark={dark} />;
 }
 
 /** The website: 22% of the width, at most 96 points (a wide window), as its loader draws it. */
-function WebLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
+function WebLaunchMarkC({ line, dark }: { ink?: string; faint?: string; line?: string; dark?: boolean }) {
   const { width: W } = useWindowDimensions();
-  return <CentredLaunchMarkC markWidth={Math.min(0.22 * W, 96)} line={line} fadeLine={false} />;
+  return <CentredLaunchMarkC markWidth={Math.min(0.22 * W, 96)} line={line} fadeLine={false} dark={dark} />;
 }
 
-function PhoneLaunchMarkC({ line }: { ink?: string; faint?: string; line?: string }) {
-  return <PictureLaunchMarkC line={line} />;
+function PhoneLaunchMarkC({ line, dark }: { ink?: string; faint?: string; line?: string; dark?: boolean }) {
+  return <PictureLaunchMarkC line={line} dark={dark} />;
 }
 
 /**
  * The launch screen's logo and line. Today's look (old mark, name and line, in the given colours)
  * until the installed build's own launch picture is the new one; then splash C, in its own colours
- * (the given ones are not used). See NEW_SPLASH.
+ * (the given ones are not used), white or dark: `dark` as the screen it is drawn on has it (that
+ * screen's useLaunchDark), or its own reading when not given. See NEW_SPLASH.
  */
-export const LaunchMark: (props: { ink: string; faint: string; line?: string }) => React.JSX.Element = NEW_SPLASH
+export const LaunchMark: (props: { ink: string; faint: string; line?: string; dark?: boolean }) => React.JSX.Element = NEW_SPLASH
   ? (Platform.OS === 'web' ? WebLaunchMarkC : Platform.OS === 'android' ? AndroidLaunchMarkC : PhoneLaunchMarkC)
   : (Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark);
 
 const GROUND_LIGHT = { backgroundColor: SPLASH_C_COLORS.ground };
 const GROUND_DARK = { backgroundColor: SPLASH_C_DARK_COLORS.ground };
-/** Splash C is drawn on its own ground, white or dark as the phone is (whatever the theme); today's look keeps the screen's own colour. */
-export function launchGround() {
-  return NEW_SPLASH ? (launchDark() ? GROUND_DARK : GROUND_LIGHT) : null;
+/**
+ * Splash C is drawn on its own ground, white or dark (`dark`: the screen's own useLaunchDark; a reading
+ * now when not given), whatever the theme; today's look keeps the screen's own colour.
+ */
+export function launchGround(dark: boolean = launchDark()) {
+  return NEW_SPLASH ? (dark ? GROUND_DARK : GROUND_LIGHT) : null;
 }
 
 /** The status bar's icons over the launch look: light on the dark one, dark on white (and on today's cream). */
-export function launchStatusStyle(): 'light' | 'dark' {
-  return launchDark() ? 'light' : 'dark';
+export function launchStatusStyle(dark: boolean = launchDark()): 'light' | 'dark' {
+  return dark ? 'light' : 'dark';
 }
 
 const styles = StyleSheet.create({
