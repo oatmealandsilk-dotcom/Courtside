@@ -42,6 +42,7 @@ import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, H
 import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
 import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
+import { mapOpenSmoothOn, mapOpenTap } from '@/features/players/mapOpenSmooth';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -521,6 +522,10 @@ export function NearbyMap(props: NearbyMapProps) {
   const cardPressNow = useRef(cardCheckIn.press);
   cardPressNow.current = cardCheckIn.press;
   useEffect(() => (growsHere ? simAction('uth', () => cardPressNow.current()) : undefined), [growsHere]);
+  // And its "openmap": a tap of the card itself, opening the full map (its timing row: mapOpenSmooth).
+  const expandNow = useRef(onExpand);
+  expandNow.current = onExpand;
+  useEffect(() => (growsHere ? simAction('openmap', () => { if (!growBusy.current && expandNow.current) { mapOpenTap(); expandNow.current(); } }) : undefined), [growsHere]);
   const lock = nearbyLock({ mapLive, me, mapVisibility, locationOn: !!locationOn, hasSpot: !!lastSeen[me.id] });
   const unlock = lock === 'hidden' ? () => { void askWhoSeesYou('manage'); } : onToggleLocation;
   // The "Open to hit today" switch on your card: a teen who never said who sees them is asked first.
@@ -594,6 +599,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   // Opened by the card growing into it (mapGrow): exactly where the grown card shows, so the hand-over cannot be seen.
   const growFrom = expanded ? props.growFrom ?? null : null;
+  // Nov 2, owner: "Right now when you click on the map. It slides but freezes a bit. Let's make the opening of the map
+  // super smooth." Opened plainly (the card's tap: no court, hit, player, spot or place named, and not grown from the card),
+  // the full map's page is made once its slide has landed (mapOpenSmooth, admins first), its own ground under it till then.
+  const [slideFirst] = useState(() => expanded && !growFrom && !focusCourt && !focusHit && !focusUser && !focusSpot && !focusPlace && mapOpenSmoothOn(me));
+  // Its page made: "Loading map…" counts its wait from then, as it always has from the page's start.
+  const [pageMade, setPageMade] = useState(!slideFirst);
   const view = growFrom ? { center: growFrom.center, zoom: growFrom.zoom } : expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
@@ -1065,6 +1076,8 @@ export function NearbyMap(props: NearbyMapProps) {
       onFar={expanded ? setFar : undefined}
       // Only with the zoom on: the page's word is for this swoop alone, and the map is exactly as before without it.
       onSwooped={expanded && zoomOn ? (_arrived, id) => swoop.done(id) : undefined}
+      afterSlide={slideFirst}
+      onMade={slideFirst ? () => setPageMade(true) : undefined}
     />
   );
 
@@ -1102,7 +1115,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
-        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand ? () => { if (!growBusy.current) onExpand(); } : undefined}
+        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand ? () => { if (!growBusy.current) { mapOpenTap(); onExpand(); } } : undefined}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
@@ -1233,7 +1246,8 @@ export function NearbyMap(props: NearbyMapProps) {
         </ChipsNoteLine>
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         {/* The check-in zoom on its way down: the map is up, its streets come as it lands, so no "Loading map…" meanwhile. */}
-        <MapLoadPill status={fz || (swoop.busy && mapStatus === 'loading') ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
+        {/* Its page not made yet (made once the slide has landed): nothing to say, its wait not begun. */}
+        <MapLoadPill status={fz || (swoop.busy && mapStatus === 'loading') || !pageMade ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
       </Reanimated.View>

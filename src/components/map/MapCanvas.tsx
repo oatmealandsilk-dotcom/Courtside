@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -16,6 +16,8 @@ import { V7_CAMERA_JS, type V7PageMsg } from '@/features/players/zoomV7';
 import type { LatLng, ViewBounds } from '@/features/players/positions';
 import * as haptics from '@/lib/haptics';
 import { SIM_DRIVER, simLog } from '@/lib/simDriver';
+import { useArrived } from '@/lib/useArrived';
+import { mapOpenMark } from '@/features/players/mapOpenSmooth';
 
 export type { CanvasMarker, MapLoadStatus };
 
@@ -131,6 +133,15 @@ interface Props {
   phaseLock?: boolean;
   /** The layer's page about its move (v7: 'v7landed' with its frames' numbers, 'v7err'). */
   onV7?: (msg: V7PageMsg) => void;
+  /**
+   * The full map sliding in (mapOpenSmooth, Nov 2): its page is made only once the slide has landed (or 0.7 s at most:
+   * useArrived), the map's own ground colour alone until then, so neither the web view's making nor the map's start
+   * shares the phone with the slide. Moves, pins and a swoop asked for meanwhile wait, as they do for any page still
+   * starting. Read once, when the map is made; only inside a page of the stack.
+   */
+  afterSlide?: boolean;
+  /** With `afterSlide`: its page is being made now (the slide has landed). */
+  onMade?: () => void;
 }
 
 /**
@@ -172,8 +183,17 @@ const NAMES_IN = 15;
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, veil = null, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, style, active = true, layer = false, phaseLock = false, onV7 }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, veil = null, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, style, active = true, layer = false, phaseLock = false, onV7, afterSlide = false, onMade }, ref) {
   const styles = useThemedStyles(styleDefinitions);
+  // The full map sliding in (afterSlide): no web view yet, only the map's ground, until the slide has landed.
+  const [slideFirst] = useState(afterSlide);
+  const [waiting, setWaiting] = useState(afterSlide);
+  const onMadeNow = useRef(onMade);
+  onMadeNow.current = onMade;
+  const landed = () => { setWaiting(false); onMadeNow.current?.(); };
+  useEffect(() => { if (slideFirst) mapOpenMark('pageWaits'); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The simulator's timing row (mapOpenSmooth): when the full map's web view is made.
+  useEffect(() => { if (SIM_DRIVER && interactive && !layer && !waiting) mapOpenMark('webview'); }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
   // The page's map is made and its style is in ('up'): a swoop can be handed to it from then, before it is 'ready'.
@@ -282,7 +302,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // The map's code and stylesheet arrive by ENGINE_JS, at the end; PAINT_WATCH_JS
   // says when the map is up and when it has drawn (and fetches again any streets
   // that failed on the way), so the card can show its loading look till then.
-  const html = useMemo(() => { lockBuilt.current = phaseLock; return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  // Built as the page is made (after the slide, for a map made then), with whatever is current by then.
+  const html = useMemo(() => { if (waiting) return ''; lockBuilt.current = phaseLock; return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <style>html,body,#m{margin:0;height:100%;background:${look.background?.fill ?? '#F4EFE6'};overflow:hidden}.maplibregl-ctrl{display:none}.maplibregl-canvas{outline:none}${MAP_PIN_CSS.replace(/\n/g, '')}${GROW_CLEAR_CSS}${VEIL_CSS}${layer ? V7_CSS : ''}</style></head>
 <body><div id="m"></div><script>
 var LOOK=${lookNow.current};var APPLIED=null;var INIT=${markersNow.current};var WARMED={};var SYNCED=false,SETTLING=false,MOVES=0;var SWOOPER=${interactive ? SWOOP_JS : 'null'},SWOOP=null,LOADED=false;
@@ -374,14 +395,17 @@ function v7move(la,ln){if(!V7ME||!FULLE)return;V7ME=Object.assign({},V7ME,{lat:l
 ` : ''}
 }
 ${ENGINE_JS}
-</script></body></html>`; }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+</script></body></html>`; }, [load.attempt, waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   // The engine the app fetched during the splash (engineCopy), in place before the page starts: the
   // page then goes straight to its streets. Without it yet, the page fetches the engine itself.
-  const engine = useMemo(() => engineInjection(), [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const engine = useMemo(() => (waiting ? undefined : engineInjection()), [load.attempt, waiting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void warmMapEngine(); }, []);
 
   return (
     <View style={[StyleSheet.absoluteFill, style]} pointerEvents={interactive ? 'auto' : 'none'}>
+      {/* Made after the slide: the map's own ground colour under its page, from the first frame of the slide, as its page paints it. */}
+      {slideFirst ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: look.background?.fill }]} /> : null}
+      {waiting ? <AfterSlide onLanded={landed} /> : (
       <WebView
         key={load.attempt}
         ref={web}
@@ -404,6 +428,8 @@ ${ENGINE_JS}
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // The simulator's proof only: how each map's page is getting on (its kind, what it said), into sim-log.txt.
           if (SIM_DRIVER && msg.type !== 'move' && msg.type !== 'v7landed' && msg.type !== 'shot' && msg.type !== 'tap' && msg.type !== 'maptap') simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] ${msg.type}${msg.why ? ` ${msg.why}` : ''}${msg.stage ? ` ${msg.stage}` : ''}${msg.detail ? ` ${msg.detail}` : ''}`);
+          // The full map's opening, for its timing row (mapOpenSmooth).
+          if (SIM_DRIVER && interactive && !layer && ['boot', 'engine', 'up', 'ready', 'painted'].includes(msg.type)) mapOpenMark(msg.type);
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
           if (msg.type === 'fail') { load.failed([msg.stage, msg.detail ?? msg.why].filter(Boolean).join(': ') || 'failed'); return; }
           if (msg.type === 'online') { load.online(); return; }
@@ -445,9 +471,19 @@ ${ENGINE_JS}
           }
         }}
       />
+      )}
     </View>
   );
 });
+
+/** Says once that the page it is in has slid in (useArrived: the slide landed, or 0.7 s at most). */
+function AfterSlide({ onLanded }: { onLanded: () => void }) {
+  const arrived = useArrived(true);
+  const now = useRef(onLanded);
+  now.current = onLanded;
+  useEffect(() => { if (arrived) now.current(); }, [arrived]);
+  return null;
+}
 
 const styleDefinitions = StyleSheet.create({
   web: { flex: 1, backgroundColor: 'transparent' },

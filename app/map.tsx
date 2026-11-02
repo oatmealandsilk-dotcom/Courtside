@@ -1,8 +1,10 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { goBack } from '@/lib/goBack';
+import { SIM_DRIVER } from '@/lib/simDriver';
+import { mapOpenMark } from '@/features/players/mapOpenSmooth';
 
 import { NearbyMap } from '@/components/NearbyMap';
 import { useLocationToggle } from '@/features/players/useLocationToggle';
@@ -37,6 +39,18 @@ export default function MapScreen() {
   useEffect(() => { if (params.grow && !growFrom) endGrow(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [grown, setGrown] = useState(!growFrom);
   const navigation = useNavigation();
+  // The simulator's timing row for this opening (mapOpenSmooth; EXPO_PUBLIC_SIM_DRIVER builds only, never the website):
+  // the page first drawn, committed, and the iPhone's own slide starting and landing. Listened to as it commits, so the
+  // slide's start is never missed.
+  if (SIM_DRIVER) mapOpenMark('render');
+  useLayoutEffect(() => {
+    if (!SIM_DRIVER) return undefined;
+    mapOpenMark('mounted');
+    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    const a = events.addListener?.('transitionStart', (e) => { if (!e?.data?.closing) mapOpenMark('slideStart'); });
+    const b = events.addListener?.('transitionEnd', (e) => { if (!e?.data?.closing) mapOpenMark('slideEnd'); });
+    return () => { a?.(); b?.(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!params.grow || !grown) return;
     navigation.setOptions(Platform.OS === 'web'
