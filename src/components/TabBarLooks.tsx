@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, PixelRatio, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, interpolateColor, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, interpolateColor, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassView } from 'expo-glass-effect';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -346,7 +346,7 @@ export const LookBar = React.memo(function LookBar({
   now.current = { activeRoute, onTab, onTabPressIn, newBar, calm };
   // `slid`: this touch became a slide along the bar (the new bar's), so the tab it started on is not also tapped;
   // `sliding`: that slide still has the finger, so the tab it lit stays lit.
-  const press = useRef({ route: null as string | null, tapped: false, painted: true, frame: 0, wait: undefined as ReturnType<typeof setTimeout> | undefined, seq: 0, slid: false, sliding: false });
+  const press = useRef({ route: null as string | null, tapped: false, painted: true, frame: 0, wait: undefined as ReturnType<typeof setTimeout> | undefined, seq: 0, slid: false, sliding: false, early: false });
   useEffect(() => () => { clearTimeout(press.current.wait); cancelAnimationFrame(press.current.frame); }, []);
   const tabPressIn = useCallback((route: string) => {
     const p = press.current;
@@ -356,7 +356,13 @@ export const LookBar = React.memo(function LookBar({
     p.route = route;
     // The new bar's lens lifts a touch at the touch (iOS 26's own), and comes down once the finger is up
     // and it has landed (StretchLens). Not with Reduce Motion.
-    if (now.current.newBar) {
+    // Apple's motion (B): the touch itself swelled the bubble, sent it on its way and holds it up until the
+    // finger is up, all on the animation thread (`slide`'s onBegin and onFinalize), so this press, which reaches
+    // the app after them, leaves the bubble alone (Nov 2, Simulator: on a busy first open of the Feed it came
+    // after the finger was already up, held the bubble up again, and its own finger-up never came, so the
+    // bubble stayed swollen on the Feed until the next touch).
+    p.early = now.current.newBar && appleEarly.current && !now.current.calm && !winFinger.value;
+    if (now.current.newBar && !p.early) {
       lensPress.value = 1;
       // Apple's motion (B) swelled it already, on the animation thread at the touch itself (`slide`'s onBegin).
       if (!now.current.calm && !appleEarly.current) lensLift.value = withTiming(1, LIFT_UP);
@@ -381,7 +387,7 @@ export const LookBar = React.memo(function LookBar({
   }, []);
   const tabPressOut = useCallback(() => {
     const p = press.current;
-    if (now.current.newBar) lensPress.value = 0;
+    if (now.current.newBar && !p.early) lensPress.value = 0;
     clearTimeout(p.wait);
     // The tap itself comes just after (or just before) the finger lifts; a press that never became one goes dark again.
     p.wait = setTimeout(() => { if (!p.tapped && !p.sliding) { p.route = null; setPressed(null); } }, LIT_TAP_WAIT_MS);
@@ -752,6 +758,12 @@ const LIFT_DOWN = { dampingRatio: 1, duration: 280 } as const;
  */
 const APPLE_LIFT_UP = { dampingRatio: 0.7, duration: 260 } as const;
 const APPLE_LIFT_DOWN = { dampingRatio: 0.72, duration: 360 } as const;
+/**
+ * Apple's bubble stays swollen this long on the tab it has landed on before it sinks (Nov 2, measured on Apple's
+ * own bar, option A, in the Simulator: it lands, stays a bubble about a tenth of a second, then sinks; ours sank
+ * the moment it landed).
+ */
+const APPLE_LIFT_HOLD_MS = 100;
 /** Each motion's lift at the touch, on the animation thread (`kind`: lensKind's number). */
 function liftUp(kind: number) {
   'worklet';
@@ -1006,7 +1018,8 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
     const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? goal : own;
     return Math.abs(at - goal) < LANDED ? 1 : 0;
   }, (down, was) => {
-    if (down === 1 && was !== 1) lensLift.value = withSpring(0, kind === APPLE_KIND ? APPLE_LIFT_DOWN : LIFT_DOWN);
+    if (down !== 1 || was === 1) return;
+    lensLift.value = kind === APPLE_KIND ? withDelay(APPLE_LIFT_HOLD_MS, withSpring(0, APPLE_LIFT_DOWN)) : withSpring(0, LIFT_DOWN);
   }, [drive, kind]);
   // The soft tap as it lands (a phone's; a browser stays still), once for each tap or slide that sent it.
   useAnimatedReaction(() => {

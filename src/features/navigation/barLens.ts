@@ -202,6 +202,13 @@ const NEW_SPRINGS = [
   { dampingRatio: 1, duration: 320, overshootClamping: true },
   { dampingRatio: 0.86, duration: 380, overshootClamping: false },
 ] as const;
+/** Apple's spring (NEW_SPRINGS' last) for a way `places` tabs long: its time for one tab, and this much more for each further tab. */
+const APPLE_MORE_MS = 150;
+function appleSpring(places: number) {
+  'worklet';
+  const one = NEW_SPRINGS[APPLE_KIND];
+  return { dampingRatio: one.dampingRatio, overshootClamping: one.overshootClamping, duration: one.duration + APPLE_MORE_MS * Math.max(0, Math.min(3, places) - 1) };
+}
 /** 1 from the moment a tap or a slide along the bar sends the new bar's lens to a tab until it lands there (its soft tap on landing). */
 export const lensLanding = makeMutable(0);
 /** Reduce Motion (lensFeel 2): a quick plain slide, no stretch, no lift. Run even with the setting on (it is the calm version already). */
@@ -219,10 +226,17 @@ export const lensLift = makeMutable(0);
 /** 1 while a finger is down on one of the new bar's tabs. */
 export const lensPress = makeMutable(0);
 
-/** The lens on its way to `to`, on the bar's own move. */
-function lensMove(to: number) {
+/**
+ * The lens on its way to `to` from `from` (where it stands: the callers pass it, as lensAt is made further down
+ * and so is not yet there for this function), on the bar's own move.
+ */
+function lensMove(to: number, from: number) {
   'worklet';
   const feel = lensFeel.value;
+  // Apple's (B): the longer the way, the longer it takes, as Apple's own bar (Nov 2, measured on it, option A, in
+  // the Simulator: one tab over in about a tenth of a second, the first tab to the last in about three; ours took
+  // the same short time for both).
+  if (feel === 1 && lensKind.value === APPLE_KIND) return withSpring(to, appleSpring(Math.abs(to - from)));
   return feel === 2 ? withTiming(to, CALM_SLIDE) : withSpring(to, feel === 1 ? NEW_SPRINGS[lensKind.value] ?? NEW_SPRINGS[1] : LENS_SPRING);
 }
 /** Picked up by a finger mid-slide: how long it takes to ease onto the row from where it stood. */
@@ -290,7 +304,7 @@ export function lensLand(to: number) {
   lensLag.value = 0;
   lensGoal.value = to;
   lensAt.value = shown;
-  if (Math.abs(shown - to) > 0.001) lensAt.value = lensMove(to);
+  if (Math.abs(shown - to) > 0.001) lensAt.value = lensMove(to, shown);
 }
 
 /**
@@ -329,7 +343,7 @@ export function lensTo(to: number, tap = false) {
   lensGoal.value = to;
   // A tap on the bar: a soft tap when it lands (the new bar's; never for a tab lit any other way).
   if (tap && lensFeel.value !== 0) lensLanding.value = 1;
-  lensAt.value = lensMove(to);
+  lensAt.value = lensMove(to, lensAt.value);
 }
 
 /** The bar went away: the next one places its lens afresh. */
