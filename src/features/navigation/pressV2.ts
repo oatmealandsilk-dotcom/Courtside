@@ -57,18 +57,20 @@ export function usePressV2(): boolean {
  * respond. Clicking should respond much faster"). He already had the quicker press feel above and
  * still felt the wait, which sat after the finger lifted, not in the press look:
  *   - Follow (the pill, the map card's round one, a player's page): it turns to Following or
- *     Requested at once, and the app's own redraw for the follow goes on as background work (it
- *     used to wait for every page in the app to redraw first);
+ *     Requested at once, with the follower count beside it on a player's page, and the app's own
+ *     redraw for the follow goes on as background work (it used to wait for every page in the app
+ *     to redraw first);
  *   - Message on a player's page, when they can already be messaged: the chat opens at once,
- *     with no spinner drawn (and the whole page redrawn for it) first;
- *   - a page under the one on show is no longer redrawn each time a page opens or closes over it.
+ *     with no spinner drawn (and the whole page redrawn for it) first.
  * Each of these changes when things happen on an iPhone, which no web check can see, so admins
  * (@oatmealandsilk, @mrdinosaur62) get them first, like the quicker press feel. Turned on for
  * everyone by setting this to true and shipping an over-the-air update: no database change.
  * Not here: a tab tapped on the bar. Setting the row off in the tap itself was tried (Nov 2) and
  * the Simulator showed it moving no sooner: the animation thread holds the row's frames while the
  * app's redraw for the new address lands, and set off before that redraw, the Feed's slide moved
- * one frame and then stood still for a tenth of a second.
+ * one frame and then stood still for a tenth of a second. Nor pages underneath: keeping a page
+ * under the one on show from being redrawn each time a page opened or closed over it (Screen's key
+ * held to the address it opened on) was tried (Nov 2) and showed no measurable gain, so it came out.
  */
 export const TAP_FAST_FOR_EVERYONE = false;
 

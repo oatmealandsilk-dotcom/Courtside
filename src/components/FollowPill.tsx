@@ -27,25 +27,32 @@ export type FollowShown = 'following' | 'requested' | 'none';
  * buttons for them to respond. Clicking should respond much faster"). Following itself asks before it
  * unfollows (its own sheet), so that tap goes exactly as before; so does a guest's (it only asks them to join)
  * and one on a button that does not know whose it is. A second tap while the first is still going through is
- * a double tap, not a change of mind: it is let go. `stored` is what the app says now; returns what to show,
- * and the press to run in place of `onPress`.
+ * a double tap, not a change of mind: it is let go. The quick state belongs to the person it was tapped for:
+ * a button handed someone else (the map card's, when you move to another pin) shows what the app says for them,
+ * never the last person's Following. `stored` is what the app says now; returns what to show, the press to run in
+ * place of `onPress`, and `delta`, what to add to their follower count shown beside it (+1 while Follow has
+ * turned to Following ahead of the app, 0 otherwise), so a count moves with the button, as a like's does.
  */
 export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void) {
   const fast = useTapFast();
   const isGuest = useIsGuest();
   const users = useUsers();
-  const [shown, setShown] = useOptimistic(stored);
+  const [quick, setQuick] = useOptimistic<{ id: string | undefined; shown: FollowShown }>({ id: userId, shown: stored });
+  const shown: FollowShown = quick.id === userId ? quick.shown : stored;
   const [going, startGoing] = useTransition();
+  const goingFor = useRef<string | undefined>(undefined);
   // The simulator's tap timing (tapTiming): the button's change committed. Nothing outside the proof build.
   const drawn = useRef(shown);
   useLayoutEffect(() => { if (drawn.current !== shown) { drawn.current = shown; tapMark('follow'); } }, [shown]);
   const press = () => {
     if (!fast || isGuest || !userId || stored === 'following') { onPress(); return; }
-    if (going) return;
+    if (going && goingFor.current === userId) return;
     const next: FollowShown = stored === 'requested' ? 'none' : users.find((u) => u.id === userId)?.isPrivate ? 'requested' : 'following';
-    startGoing(() => { setShown(next); onPress(); });
+    goingFor.current = userId;
+    startGoing(() => { setQuick({ id: userId, shown: next }); onPress(); });
   };
-  return { shown, press };
+  const delta = (shown === 'following' ? 1 : 0) - (stored === 'following' ? 1 : 0);
+  return { shown, press, delta };
 }
 
 /**
