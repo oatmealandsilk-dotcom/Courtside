@@ -13,7 +13,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
 import { useRestKey, useRestLength } from '@/components/ui/restMotion';
-import { FollowShrink } from '@/components/FollowPill';
+import { FollowShrink, flushQuickFollows } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
 import { TileCover } from '@/components/TileCover';
@@ -1216,7 +1216,8 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;
   const first = user.name.split(' ')[0];
   // ⋯ holds what used to hang under the buttons (Add to a group), the profile, and Follow in words,
-  // the same choices a profile's own ⋯ offers. Each runs once the menu has gone.
+  // the same choices a profile's own ⋯ offers. Each runs once the menu has gone. Opening it sends a Follow tapped a
+  // moment ago that the app has not caught up with yet (flushQuickFollows), so it never offers Follow again for it.
   const [menuOpen, setMenuOpen] = useState(false);
   const { followRequests, currentUserId, followEdges } = useApp();
   const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
@@ -1305,7 +1306,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           )}
         </View>
         <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} size={CARD_ROUND} room={followRoom} />
-        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} style={styles.cardRound}>
+        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => { flushQuickFollows(); setMenuOpen(true); }} style={styles.cardRound}>
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
         </Tappable>
         {/* The pills' words at their natural width, never seen or read out (see followRoom). */}

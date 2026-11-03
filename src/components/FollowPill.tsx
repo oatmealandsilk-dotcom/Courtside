@@ -1,5 +1,6 @@
-import React, { startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { startTransition, use, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { AppState, Pressable, StyleSheet, Text, View } from 'react-native';
+import { NavigationContext } from 'expo-router/build/react-navigation/core/NavigationContext';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -43,6 +44,11 @@ export type FollowShown = 'following' | 'requested' | 'none';
  * A follow is a toggle, so the one sent later goes through only if the app still says what the button showed on
  * the tap (followAsSeen): followed some other way in between (first-move's Follow all, the same person's Follow
  * elsewhere on the page), sending it undid that follow, with an "Unfollowed" toast (Nov 3 review).
+ *
+ * Nothing waits on the settle when something needs the follow in: it is sent at once when a page decides from
+ * whom you follow (flushQuickFollows: first-move's Continue and Follow all, the map card's ⋯), when the button
+ * leaves the screen or a page opens over it, and when the app is put away (Nov 3 review: Follow, then Continue a
+ * quarter of a second later, saved the first move as "later").
  */
 export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void, settleMs = 0) {
   const fast = useTapFast();
@@ -52,13 +58,21 @@ export function useQuickFollow(stored: FollowShown, userId: string | undefined, 
   // app's own answer, so the two hand over in one frame (no flicker back, even if the database said no meanwhile).
   const [quick, setQuick] = useState<{ id: string; shown: FollowShown; mark: object } | null>(null);
   const shown: FollowShown = quick && quick.id === userId ? quick.shown : stored;
-  // This button's mark in quickFollows (see there), let go once the app's redraw for it has landed.
-  const mine = useRef<{ id: string; mark: object } | null>(null);
+  // This button's entry in quickFollows (see there), let go once the app's redraw for it has landed.
+  const mine = useRef<{ id: string; entry: QuickFollow } | null>(null);
   useLayoutEffect(() => {
     if (quick || !mine.current) return;
-    letGo(mine.current.id, mine.current.mark);
+    letGo(mine.current.id, mine.current.entry);
     mine.current = null;
   }, [quick]);
+  // Its follow still waiting to be sent when the button leaves the screen, or a page opens over it: sent now,
+  // so whatever happens next (the page it opens, a decision made there) finds the app already following.
+  const navigation = use(NavigationContext);
+  useEffect(() => {
+    if (!quick || !navigation) return undefined;
+    return navigation.addListener('blur', () => { if (mine.current) sendNow(mine.current.id); });
+  }, [quick, navigation]);
+  useEffect(() => () => { if (mine.current) sendNow(mine.current.id); }, []);
   // The simulator's tap timing (tapTiming): the button's change committed. Nothing outside the proof build.
   const drawn = useRef(shown);
   useLayoutEffect(() => { if (drawn.current !== shown) { drawn.current = shown; tapMark('follow'); } }, [shown]);
@@ -68,39 +82,78 @@ export function useQuickFollow(stored: FollowShown, userId: string | undefined, 
     // is a double tap, not a change of mind: it is let go (a second toggle would undo the first).
     if (quickFollows.has(userId)) return;
     const next: FollowShown = stored === 'requested' ? 'none' : users.find((u) => u.id === userId)?.isPrivate ? 'requested' : 'following';
-    const mark = {};
     const id = userId;
     // What the app said for them on the tap: the follow goes out only if it still says so when sent (followAsSeen).
     const seen = stored;
-    quickFollows.set(id, mark);
-    mine.current = { id, mark };
-    setQuick({ id, shown: next, mark });
-    const send = (later: boolean) => startTransition(() => {
-      try {
-        // Sent later, its buzz is left out: the button buzzed on the tap (a second one came a third of a second after).
-        // Followed some other way meanwhile (first-move's Follow all), it changes nothing: a toggle then undid the follow.
-        followAsSeen(id, seen, () => (later ? haptics.quietly(onPress) : onPress()));
-      } finally {
-        // Whatever the press did, the button hands back to what the app says (never stuck on Following).
-        setQuick((q) => (q && q.mark === mark ? null : q));
-      }
-    });
-    if (settleMs > 0) setTimeout(() => send(true), settleMs); else send(false);
+    const entry: QuickFollow = { shown: next, send: null };
+    quickFollows.set(id, entry);
+    mine.current = { id, entry };
+    setQuick({ id, shown: next, mark: entry });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Sent once only: by its timer, or sooner by sendNow (flushQuickFollows), as the app's own work, not a transition then.
+    const send = (later: boolean, now: boolean) => {
+      if (timer !== undefined) clearTimeout(timer);
+      entry.send = null;
+      const run = () => {
+        try {
+          // Sent later, its buzz is left out: the button buzzed on the tap (a second one came a third of a second after).
+          // Followed some other way meanwhile (first-move's Follow all), it changes nothing: a toggle then undid the follow.
+          followAsSeen(id, seen, () => (later ? haptics.quietly(onPress) : onPress()));
+        } finally {
+          // Whatever the press did, the button hands back to what the app says (never stuck on Following).
+          setQuick((q) => (q && q.mark === entry ? null : q));
+        }
+      };
+      if (now) run(); else startTransition(run);
+    };
+    if (settleMs > 0) {
+      entry.send = () => send(true, true);
+      timer = setTimeout(() => send(true, false), settleMs);
+    } else send(false, false);
     // Gone from the screen before its redraw landed (its layout effect never runs): let go once that surely has.
-    setTimeout(() => letGo(id, mark), settleMs + LET_GO_MS);
+    setTimeout(() => letGo(id, entry), settleMs + LET_GO_MS);
   };
   const delta = (shown === 'following' ? 1 : 0) - (stored === 'following' ? 1 : 0);
   return { shown, press, delta };
 }
+
+/** A quick Follow going through: what its button shows, and its send while that still waits (the settle). */
+type QuickFollow = { shown: FollowShown; send: (() => void) | null };
 
 /**
  * The people with a quick Follow still going through (useQuickFollow), whichever button it was tapped on: a
  * list's pill, the map card's or a player's page. Until the app's redraw for it lands, every other button for
  * them still says Follow, and a quick press there would send a second toggle that undoes the first.
  */
-const quickFollows = new Map<string, object>();
-/** Lets go of `id` only if it is still that press's (a later press for them has a mark of its own). */
-const letGo = (id: string, mark: object) => { if (quickFollows.get(id) === mark) quickFollows.delete(id); };
+const quickFollows = new Map<string, QuickFollow>();
+/** Lets go of `id` only if it is still that press's (a later press for them has an entry of its own). */
+const letGo = (id: string, entry: QuickFollow) => { if (quickFollows.get(id) === entry) quickFollows.delete(id); };
+/** Sends the follow for `id` now if it is still waiting for its button's change to play. */
+const sendNow = (id: string) => { quickFollows.get(id)?.send?.(); };
+
+const NONE_WAITING: ReadonlyMap<string, FollowShown> = new Map();
+
+/**
+ * Every quick Follow still going through (taps answering sooner, admins first), sent now, and what each one's
+ * button shows, by person: the app catches up with them only once its redraw lands, so code that decides from
+ * whom you follow on a tap (first-move's Continue and Follow all) counts these as well (Nov 3 review: Follow, then
+ * Continue a quarter of a second later, saved the first move as "later"). The follows are sent as the app's own
+ * work, ahead of whatever the caller does next; one already sent is not sent again. Empty, and nothing sent, with
+ * taps answering sooner off.
+ */
+export function flushQuickFollows(): ReadonlyMap<string, FollowShown> {
+  if (!quickFollows.size) return NONE_WAITING;
+  const waiting = new Map<string, FollowShown>();
+  for (const [id, entry] of [...quickFollows]) {
+    waiting.set(id, entry.shown);
+    entry.send?.();
+  }
+  return waiting;
+}
+
+// The app put away (the home screen, the app switcher): the follows still waiting go now, not lost with it.
+AppState.addEventListener('change', (state) => { if (state !== 'active') flushQuickFollows(); });
+
 /** How long after its redraw was sent a quick Follow from a button no longer on screen is let go: well after it lands. */
 const LET_GO_MS = 2000;
 /** The pill's colour fade, and the map card's draw-in, below; their redraws wait this much longer (a frame or so to start, and a margin). */

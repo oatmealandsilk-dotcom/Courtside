@@ -63,9 +63,11 @@ export function usePressV2(): boolean {
  *     played (useQuickFollow's settleMs), as sent at once it stalled the fade part way. Known cost, to weigh
  *     before this goes to everyone: for those 0.34 to 0.38 s only the tapped button (and a player page's count)
  *     has changed; the rest of the screen (the same person in another row, first-move's "Follow all" count,
- *     follower counts elsewhere, the ••• menus) catches up after, and a follow is lost if the app is closed
- *     within that time (its database write goes out with it). If anything else follows them meanwhile, the
- *     late follow changes nothing (followAsSeen), so it never undoes one;
+ *     follower counts elsewhere, the ••• menus) catches up after. What decides from whom you follow
+ *     does not wait for it: the follow is sent at once (flushQuickFollows) on first-move's Continue and Follow
+ *     all, the map card's ⋯, a page opening over the button or the button leaving the screen, and the app being
+ *     put away (so a follow is lost only if the app is killed outright in that third of a second). If anything
+ *     else follows them meanwhile, the late follow changes nothing (followAsSeen), so it never undoes one;
  *   - Message on a player's page, when they can already be messaged: the chat opens at once,
  *     with no spinner drawn (and the whole page redrawn for it) first;
  *   - any page opening over the four main tabs: the Feed's shades (behind the clip words, the
