@@ -350,7 +350,8 @@ const styles = StyleSheet.create({
   bordered: { borderWidth: 1 },
   popEdge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   popTop: { position: 'absolute', left: 0, right: 0, top: 0, height: 3 },
-  popLift: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.10)' },
+  // No colour here: this sheet is made once, in the colours the app opened in; each use sets the live border colour.
+  popLift: { borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.10)' },
   banner: { borderRadius: corner(16), paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
