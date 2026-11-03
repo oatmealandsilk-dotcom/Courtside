@@ -1,4 +1,5 @@
 import type { ID, Message, User } from '@/data/types';
+import { firstLink, isOnlyLink } from '@/lib/links';
 
 /*
  * A chat's messages as the rows its list draws, worked out in one pass:
@@ -50,6 +51,25 @@ const isPhoto = (m?: Message) => !!m && m.kind === 'photo' && !!m.photos?.length
 const runsOn = (a?: Message, b?: Message) =>
   !!a && !!b && a.kind !== 'system' && b.kind !== 'system' && a.senderId === b.senderId
   && Date.parse(b.createdAt) - Date.parse(a.createdAt) <= GROUP_GAP_MS;
+
+/** Drawn as a card alone, edge to edge with what is joined to it: a court, or a message that is only a link. */
+const isFlushCard = (m: Message) => !m.hiddenByWords && ((m.kind === 'court' && !!m.place) || (m.kind === 'text' && !m.replyToId && !!isOnlyLink(m.body)));
+/** Drawn with a card (a court, or words with a link's card under them). */
+const hasCard = (m: Message) => (m.kind === 'court' && !!m.place) || (m.kind === 'text' && !!firstLink(m.body));
+
+/**
+ * Joined to a photo through cards only, in one run (Nov 3): photo, court, link all at the photo's width,
+ * not just the card next to the photo. `step` is -1 to look up the run, 1 to look down it.
+ */
+function photoThroughCards(thread: Message[], i: number, step: -1 | 1): boolean {
+  for (let j = i + step, at = i; j >= 0 && j < thread.length; at = j, j += step) {
+    const [a, b] = step < 0 ? [thread[j], thread[at]] : [thread[at], thread[j]];
+    if (!runsOn(a, b)) return false;
+    if (isPhoto(thread[j])) return true;
+    if (!isFlushCard(thread[j])) return false;
+  }
+  return false;
+}
 
 /**
  * The rows, oldest first. `readers`: in a group, the people whose read
@@ -104,7 +124,8 @@ export function buildRows(thread: Message[], opts: { me: ID | null; group: boole
     }
     const name = theirsInGroup && !inRun;
     const gap: Gap = inRun ? 'run' : prev && !stamp && !name && prev.kind !== 'system' ? 'turn' : 'plain';
-    const besidePhoto = (inRun && isPhoto(prev)) || (!lastOfRun && isPhoto(next));
+    const besidePhoto = (inRun && isPhoto(prev)) || (!lastOfRun && isPhoto(next))
+      || (hasCard(message) && ((inRun && photoThroughCards(thread, i, -1)) || (!lastOfRun && photoThroughCards(thread, i, 1))));
     rows.push({
       key: message.id, message, stamp, gap, joinBelow: !lastOfRun, name, face: theirsInGroup && lastOfRun,
       seenBy: seenAt.get(message.id),
