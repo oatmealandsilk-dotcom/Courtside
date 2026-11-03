@@ -120,11 +120,11 @@ export default function AiCoachRoute() {
   const { currentUser } = useApp();
   const [later, setLater] = useState(false);
   if (on === undefined || (on && consent.agreed === undefined)) {
-    return <Screen title="AI Coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
+    return <Screen title="AI coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
   }
   if (!on) {
     return (
-      <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+      <Screen title="AI coach" compactTitle onBack={() => goBack()}>
         <EmptyState icon="sparkles-outline" title="AI coach is coming soon" body="A weekly plan, and a coach to ask about your game." />
       </Screen>
     );
@@ -137,7 +137,7 @@ export default function AiCoachRoute() {
   const p = currentUser?.profile;
   if (p && !later && p.goals.length === 0 && p.sessionsPerWeek === undefined) {
     return (
-      <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+      <Screen title="AI coach" compactTitle onBack={() => goBack()}>
         <View style={introStyles.card}>
           {LESS_AI ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
           <Text style={introStyles.title}>Two quick questions first</Text>
@@ -176,7 +176,7 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
     'If Apple Health is connected: your recent sleep and heart rate variability',
   ];
   return (
-    <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+    <Screen title="AI coach" compactTitle onBack={() => goBack()}>
       <View style={introStyles.card}>
         {LESS_AI ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
         <Text style={introStyles.title}>Before you use the AI coach</Text>
@@ -291,7 +291,7 @@ function Train() {
     .map((c) => ({ id: c.id, name: users.find((u) => u.id === c.userId)?.name ?? 'Coach', specialties: c.specialties, fromCents: paidBooking ? Math.min(...c.services.map((s) => s.priceCents)) : 0 }));
 
   if (!currentUser || !plan) {
-    return <Screen title="AI Coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
+    return <Screen title="AI coach" compactTitle onBack={() => goBack()}><View style={{ paddingVertical: 60, alignItems: 'center' }}><CourtSpinner size={28} /></View></Screen>;
   }
 
   const ask = async (text: string) => {
@@ -317,7 +317,7 @@ function Train() {
   const onCourtDays = plan.days.filter((d) => !d.restDay).length;
 
   return (
-    <Screen title="AI Coach" compactTitle onBack={() => goBack()}>
+    <Screen title="AI coach" compactTitle onBack={() => goBack()}>
       <SegmentedControl slide segments={[{ value: 'ask', label: 'Ask' }, { value: 'plan', label: 'This week' }]} value={section} onChange={setSection} />
 
       {/* Ask and This week side by side, slid between (Oct 20 sweep, as Profile's sections do). */}
