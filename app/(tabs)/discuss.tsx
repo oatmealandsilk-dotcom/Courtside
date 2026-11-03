@@ -1099,6 +1099,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       {/* Find Players on the left, Discussions on the right, each its own page. Community is the
           strip's first tab, so a swipe right from Find Players only gives a little at the edge; a
           swipe left from Discussions goes on to Home. */}
+      {/* A picture of Discussions (previewSection: a thread's swipe back) leaves Find Players empty: it is never
+          in sight there, and its map was a second map started behind the thread (Nov 3). */}
       <SectionPager
         fill
         // Both stay built and drawn, in a browser too: Find Players' map is never torn down and
@@ -1106,7 +1108,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{content('players')}</PaneScroller>,
+          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{previewSection && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
           <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}

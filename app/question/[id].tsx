@@ -51,6 +51,9 @@ import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, corner } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
 
+/** How long after the page has slid in its view is counted (taps that answer sooner only). */
+const VIEW_AFTER_MS = 400;
+
 function QuestionDetail() {
   useSimTrace('Thread');
   const styles = useThemedStyles(styleDefinitions);
@@ -61,8 +64,14 @@ function QuestionDetail() {
   // The view is counted once the page has slid in (with taps that answer sooner: pressV2's TAP_FAST, admins
   // first): counted in the tap, the whole app redrew for it just as the slide began, and the Simulator showed
   // the slide stand still for 190-205 ms (Nov 3). Nothing on this page shows the count.
-  const arrived = useArrived(useTapFast());
-  useEffect(() => { if (arrived) view('question', String(id)); }, [view, id, arrived]);
+  const viewLater = useTapFast();
+  const arrived = useArrived(viewLater);
+  useEffect(() => {
+    if (!arrived) return;
+    if (!viewLater) { view('question', String(id)); return; }
+    // A beat after it has landed, so the redraw is not in the slide's last frames; counted even if you leave first.
+    setTimeout(() => view('question', String(id)), VIEW_AFTER_MS);
+  }, [view, id, arrived]); // eslint-disable-line react-hooks/exhaustive-deps
   // The app arrives with each thread's newest replies; opening one brings them all.
   const loadThread = actions.loadThread;
   const { ready } = useApp();

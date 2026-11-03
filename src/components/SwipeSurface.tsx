@@ -9,8 +9,8 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { tapFastOn } from '@/features/navigation/pressV2';
 import { TabOnShowContext, TabOnShowLaterContext } from '@/lib/useIsFocused';
 
-/** After the page has slid in (the phone's push is about 350 ms) and settled, as background work. */
-const WARM_AFTER_MS = 650;
+/** Well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
+const WARM_AFTER_MS = 1200;
 
 /**
  * Whether a warm preview is built yet (Nov 3, the sweep's worst catch: swiping back from a thread froze
