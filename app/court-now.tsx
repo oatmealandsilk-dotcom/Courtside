@@ -43,8 +43,8 @@ const MISSED: Record<Missed, string> = {
  * answer). Under it, for adults, at any court but someone's home (a club's
  * too since Oct 29: "if your playing there your playing there"),
  * "I'm playing here": for as long as "How long are you here?" says (30
- * minutes to 4 hours, CourtTimeHost; the switch opens it), gone the moment
- * Location goes off; people
+ * minutes to 4 hours, CourtTimeHost; the switch opens it), riding on till
+ * its time runs out even with Location off (migration 209); people
  * who follow each other with you see your name, anyone else only a count,
  * and only once two or more are there. It needs a yes to "Who can see you on
  * the map?" (migration 191): with no answer yet, turning it on asks first,

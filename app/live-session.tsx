@@ -91,8 +91,9 @@ export default function LiveSessionPage() {
 
   const ms = elapsedMs(s, now);
   const where = livePlace(s);
-  // Who can see you: you are checked in at the court (and Location is on), or only you, and why.
-  const here = !!s.court && !!courtNow[s.court.id]?.youHere && locationEnabled && state !== 'finished';
+  // Who can see you: you are checked in at the court (still so with Location off: it rides on till its time runs out,
+  // migration 209), or only you, and why.
+  const here = !!s.court && !!courtNow[s.court.id]?.youHere && state !== 'finished';
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const plan = checkInPlan({ me: currentUser, court: s.court, access: s.court ? courtFacts[s.court.id]?.access : undefined, locationOn: locationEnabled, seenBy });
   const seen = state === 'finished' ? { line: 'Finished · no longer shown', shared: false } : seenShort({ here, seenBy, why: plan.why });
