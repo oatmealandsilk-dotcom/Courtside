@@ -101,6 +101,38 @@ const deadline = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref(
 
 class SetupError extends Error {}
 
+/**
+ * Keeps this Mac awake while the tester runs. With its lid shut and nothing
+ * holding it awake, a Mac sleeps and wakes only in 10-second spells, and the
+ * run freezes with it: on Nov 3 five runs in a row failed at random steps that
+ * way (every wait ran out across a sleep, and a screenshot asked for just
+ * before one never came). caffeinate -w lets go by itself when this run ends.
+ * It works on mains power; on battery a shut lid still sleeps (see `frozen`).
+ */
+function keepAwake() {
+  if (process.platform !== 'darwin' || OPTS.serve) return;
+  try {
+    const caffeinate = spawn('/usr/bin/caffeinate', ['-ims', '-w', String(process.pid)], { stdio: 'ignore' });
+    caffeinate.on('error', () => { /* no caffeinate: the run goes on, and `frozen` reports any sleep */ });
+    caffeinate.unref();
+  } catch { /* as above */ }
+}
+
+/**
+ * Times this run stood still (the machine asleep, or the process stopped):
+ * { at, seconds }. A failure after one is the machine's doing, so the report
+ * says so; it still fails.
+ */
+const frozen = [];
+function watchForFreezes() {
+  let last = Date.now();
+  setInterval(() => {
+    const now = Date.now();
+    if (now - last > 5000) frozen.push({ at: Math.round((last - started) / 1000), seconds: Math.round((now - last) / 1000) });
+    last = now;
+  }, 1000).unref();
+}
+
 // ---------------------------------------------------------------------------
 // 1. Build (demo mode)
 // ---------------------------------------------------------------------------
@@ -1874,6 +1906,7 @@ function prepareScreenshots(out) {
 }
 
 async function main() {
+  keepAwake();
   try {
     return await run();
   } finally {
@@ -1896,6 +1929,7 @@ async function run() {
   }
 
   prepareScreenshots(OPTS.out);
+  watchForFreezes(); // from here on (the build above holds the script still on purpose)
   const chrome = await launchChrome();
   const results = [];
   let page;
@@ -1977,6 +2011,11 @@ function report(results, page) {
     console.error(`\nFailed ${which}${failed.where ? ` on ${failed.where}` : ''}: ${failed.error}`);
     for (const p of failed.problems ?? []) console.error(`  - ${p.kind}: ${p.text}`);
     line = `SMOKE FAIL: ${which}: ${failed.error} (${passed} passed, ${seconds}s, screenshots in ${shots}/)`;
+    if (frozen.length) {
+      const total = frozen.reduce((sum, f) => sum + f.seconds, 0);
+      console.error(`  this machine stood still ${frozen.length} time${frozen.length > 1 ? 's' : ''} during the run (${frozen.map((f) => `${f.seconds}s at ${f.at}s`).join(', ')}): asleep (lid shut, on battery?) or stopped`);
+      line += ` [the machine slept or froze for ${total}s during the run, so this may not be the app: run it again with the Mac awake]`;
+    }
   } else {
     const warned = page?.warnings.length ? `, ${page.warnings.length} warning${page.warnings.length > 1 ? 's' : ''}` : '';
     line = `SMOKE PASS: ${passed}/${STEPS.length} steps at ${OPTS.width}px, no errors${warned} (${seconds}s, screenshots in ${shots}/)`;
