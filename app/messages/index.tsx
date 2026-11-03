@@ -29,6 +29,8 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { learned } from '@/features/tips/tips';
 import { useArrived } from '@/lib/useArrived';
 import { TextScale } from '@/theme/textScale';
+import { designVar } from '@/lib/designVar';
+import { EmptyRows, InviteRow, PeopleYouCanMessage, UpTodayBig } from '@/features/messages/EmptyInboxOptions';
 
 type Section = 'all' | 'groups' | 'coaches' | 'clients';
 /** Chats drawn with the page, a screenful and a half; the rest once it has slid in (see useArrived). */
@@ -204,6 +206,21 @@ export default function Inbox() {
       .sort((a, b) => Number(talking.has(b.id)) - Number(talking.has(a.id)))
       .slice(0, 12);
   }, [users, all, currentUserId, blockedIds, actions, lastSeen]);
+  // DESIGN PREVIEW (web demo only, ?var=messages-empty:A|B|C|D): options for an inbox with no chats yet.
+  // Null everywhere else, which is the page exactly as it is.
+  const emptyVar = all.length === 0 ? designVar('messages-empty') : null;
+  const upUntil = (u: User) => {
+    const a = isOpenToHit(u) ? u.openToHitUntil ?? null : null;
+    const b = lastSeen[u.id]?.openUntil && Date.parse(lastSeen[u.id].openUntil!) > Date.now() ? lastSeen[u.id].openUntil! : null;
+    return a && b ? (Date.parse(a) > Date.parse(b) ? a : b) : a ?? b;
+  };
+  // A: everyone canMessage already allows (never someone blocked), those up to hit first.
+  const canWrite = useMemo(() => (emptyVar !== 'A' || !currentUserId ? [] : users
+    .filter((u) => u.id !== currentUserId && !blockedIds.includes(u.id) && actions.canMessage(u.id))
+    .sort((a, b) => Number(upToday.includes(b)) - Number(upToday.includes(a)))
+    .slice(0, 8)), [emptyVar, users, currentUserId, blockedIds, actions, upToday]);
+  // A and C take the search and the All / Groups / Coaches chips away until there is a chat to search or sort.
+  const bareTop = (emptyVar === 'A' && canWrite.length > 0) || (emptyVar === 'C' && upToday.length > 0);
   const openWith = (u: User) => {
     const chat = currentUserId ? findDirectChat(conversations, currentUserId, u.id) : undefined;
     router.push(`/messages/${chat ? chat.id : actions.openConversationWith(u.id)}`);
@@ -296,8 +313,8 @@ export default function Inbox() {
         </Pressable>
       }
     >
-      <SearchField value={search} onChangeText={(t) => { setOpenRow(null); setSearch(t); }} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />
-      {upToday.length && !search.trim() ? (
+      {bareTop ? null : <SearchField value={search} onChangeText={(t) => { setOpenRow(null); setSearch(t); }} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />}
+      {upToday.length && !search.trim() && !bareTop ? (
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
         <View style={styles.upToday}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.upTodayTitle}>Up to hit today</Text>
@@ -313,13 +330,23 @@ export default function Inbox() {
           </ScrollView>
         </View>
       ) : null}
+      {bareTop ? null : (
       <View style={styles.sections}>
         {sections.map((seg) => (
           <Chip key={seg.value} label={seg.label} selected={section === seg.value} tint={colors.text} ink={colors.brandInk} onPress={() => { setOpenRow(null); setSection(seg.value); }} />
         ))}
       </View>
+      )}
 
-      {threads.length === 0 ? (
+      {emptyVar === 'A' && canWrite.length > 0 ? (
+        <PeopleYouCanMessage people={canWrite} upUntil={upUntil} onMessage={openWith} />
+      ) : emptyVar === 'B' && threads.length === 0 ? (
+        <EmptyRows line={`${emptyCopy.title}.`} />
+      ) : emptyVar === 'C' && upToday.length > 0 ? (
+        <UpTodayBig people={upToday} upUntil={upUntil} onMessage={openWith} />
+      ) : emptyVar === 'D' && threads.length === 0 ? (
+        <InviteRow line={section === 'all' ? 'No messages yet. Are the people you play with on CourtSide?' : `${emptyCopy.title}.`} />
+      ) : threads.length === 0 ? (
         <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
       ) : (
         // The rows there when the page opens are simply there; only later changes move.
