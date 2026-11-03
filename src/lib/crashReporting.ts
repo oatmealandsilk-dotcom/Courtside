@@ -273,7 +273,12 @@ export function installCrashReporting() {
   installed = true;
   if (Platform.OS === 'web') {
     if (typeof window === 'undefined') return;
-    window.addEventListener('error', (e) => { void reportError(e.error ?? e.message, { where: 'page' }); });
+    window.addEventListener('error', (e) => {
+      // "Script error." with no error is a script from another site (an in-app browser's or an extension's own;
+      // this page loads none): the browser hides everything about it, so it is not filed (Nov 3 sweep).
+      if (!e.error && /^Script error\.?$/.test(String(e.message ?? '').trim())) return;
+      void reportError(e.error ?? e.message, { where: 'page' });
+    });
     window.addEventListener('unhandledrejection', (e) => { void reportError(e.reason, { where: 'promise' }); });
     return;
   }
