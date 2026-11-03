@@ -1,3 +1,4 @@
+import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
@@ -2717,6 +2718,7 @@ const styleDefinitions = StyleSheet.create({
  * person's or one court's feed (a scope) is the plain feed, with no row.
  */
 function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: FeedScope } = {}) {
+  useSimTrace('Feed');
   if (scope) return <Home scope={scope} previewSection={previewSection} />;
   return <GroupedFeed />;
 }

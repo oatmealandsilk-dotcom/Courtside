@@ -1,3 +1,4 @@
+import { useSimTrace } from '@/lib/simTrace';
 import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute, useOnShowNow } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
@@ -131,6 +132,7 @@ const joinedLabel = (iso: string) => {
 };
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
+  useSimTrace(previewSection ? 'DiscussPreview' : 'Discuss');
   const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded, pinnedQuestion, remoteLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made

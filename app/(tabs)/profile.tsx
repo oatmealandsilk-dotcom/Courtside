@@ -1,3 +1,4 @@
+import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
@@ -70,6 +71,7 @@ function inSection(p: Post, section: string): boolean {
 }
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
+  useSimTrace(previewSection ? 'ProfilePreview' : 'Profile');
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.

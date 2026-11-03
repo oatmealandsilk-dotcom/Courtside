@@ -1,3 +1,4 @@
+import { useSimTrace } from '@/lib/simTrace';
 import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { asTabRoute } from '@/features/navigation/tabFocus';
@@ -31,6 +32,7 @@ import { TextScale } from '@/theme/textScale';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 
 function Coaching() {
+  useSimTrace('Coaching');
   const styles = useThemedStyles(styleDefinitions);
   const { coaches, users, coachingRequests, coachQuestions, currentUserId, currentUser, actions, isGuest } = useApp();
   const aiCoachOn = useAiCoachOn();

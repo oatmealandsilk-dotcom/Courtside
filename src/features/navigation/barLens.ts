@@ -1,7 +1,23 @@
 import { Platform } from 'react-native';
 import { Easing, ReduceMotion, cancelAnimation, makeMutable, withSpring, withTiming } from 'react-native-reanimated';
 
+import { useSyncExternalStore } from 'react';
+
 import { useApp } from '@/store/AppContext';
+
+/**
+ * The simulator's proof only (simDriver's "barlook on=0|1|switch"): the admin bar look forced off or on
+ * whoever is signed in, so one build can be timed both ways. Null everywhere else (the switches and the admin flag decide).
+ */
+let barForced: boolean | null = null;
+const barListeners = new Set<() => void>();
+const readBarForced = () => barForced;
+const subscribeBarForced = (fn: () => void) => { barListeners.add(fn); return () => { barListeners.delete(fn); }; };
+export function forceBarLook(on: boolean | null) {
+  if (barForced === on) return;
+  barForced = on;
+  barListeners.forEach((fn) => fn());
+}
 
 /**
  * The lens under the lit tab (Oct 26, owner: "Also can we experiment with building Liquid Glass for
@@ -35,7 +51,8 @@ export const BAR_LENS_FOR_EVERYONE = false;
 /** Whether this person's bar shows the lens. */
 export function useBarLens(): boolean {
   const { currentUser } = useApp();
-  return BAR_LENS_FOR_EVERYONE || !!currentUser?.isAdmin;
+  const forced = useSyncExternalStore(subscribeBarForced, readBarForced, readBarForced);
+  return forced ?? (BAR_LENS_FOR_EVERYONE || !!currentUser?.isAdmin);
 }
 
 /**
@@ -63,7 +80,8 @@ export const BAR_SLIDE = true;
 /** Whether this person's bar is the new one (it always has the lens). */
 export function useBarIg(): boolean {
   const { currentUser } = useApp();
-  return BAR_IG_FOR_EVERYONE || !!currentUser?.isAdmin;
+  const forced = useSyncExternalStore(subscribeBarForced, readBarForced, readBarForced);
+  return forced ?? (BAR_IG_FOR_EVERYONE || !!currentUser?.isAdmin);
 }
 
 /**

@@ -1,3 +1,6 @@
+import { useSimTrace } from '@/lib/simTrace';
+import { useArrived } from '@/lib/useArrived';
+import { useTapFast } from '@/features/navigation/pressV2';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { ThreadReply } from '@/components/ThreadReplies';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
@@ -49,12 +52,17 @@ import { LESS_AI_DISCUSS, corner } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
 
 function QuestionDetail() {
+  useSimTrace('Thread');
   const styles = useThemedStyles(styleDefinitions);
   // `at`: a reply to open the thread at (a reported one, from Reports): scrolled to once the thread is in, and lit up.
   const { id, at } = useLocalSearchParams<{ id: string; at?: string }>();
   const { questions, answers, users, currentUserId, currentUser, actions, isGuest, pinnedQuestion } = useApp();
   const view = actions.recordView;
-  useEffect(() => { view('question', String(id)); }, [view, id]);
+  // The view is counted once the page has slid in (with taps that answer sooner: pressV2's TAP_FAST, admins
+  // first): counted in the tap, the whole app redrew for it just as the slide began, and the Simulator showed
+  // the slide stand still for 190-205 ms (Nov 3). Nothing on this page shows the count.
+  const arrived = useArrived(useTapFast());
+  useEffect(() => { if (arrived) view('question', String(id)); }, [view, id, arrived]);
   // The app arrives with each thread's newest replies; opening one brings them all.
   const loadThread = actions.loadThread;
   const { ready } = useApp();
@@ -189,7 +197,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null} warm={-1}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}

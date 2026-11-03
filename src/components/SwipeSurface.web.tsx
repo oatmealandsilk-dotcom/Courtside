@@ -50,6 +50,8 @@ export interface SwipeSurfaceProps {
   gap?: number;
   /** How far across (0..1) a slow drag must go before letting go turns the page. */
   commitAt?: number;
+  /** The phone's only (SwipeSurface.tsx): the preview that way built ahead. A browser builds it as the drag starts. */
+  warm?: 1 | -1;
 }
 
 const SETTLE_MS = 300;
