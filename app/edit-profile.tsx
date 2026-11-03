@@ -195,7 +195,7 @@ export default function EditProfile() {
                         <Field row accessibilityLabel={`${system} rating`} value={ratingText} onChangeText={setRatingText} placeholder={system === 'UTR' ? '6.0' : '3.5'} keyboardType="decimal-pad" selectTextOnFocus />
                       </View>
                       <View style={styles.system}>
-                        <SegmentedControl<'NTRP' | 'UTR'> accessibilityLabel="Rating system" value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+                        <SegmentedControl<'NTRP' | 'UTR'> calm accessibilityLabel="Rating system" value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
                       </View>
                     </View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.level, !ratingEmpty && !ratingOk && styles.ratingBad]}>
@@ -244,7 +244,7 @@ export default function EditProfile() {
               <Text style={styles.label}>Rating</Text>
               <View style={styles.ratingRow}>
                 <View style={{ flex: 1 }}>
-                  <SegmentedControl<'NTRP' | 'UTR'> value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+                  <SegmentedControl<'NTRP' | 'UTR'> calm value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
                 </View>
                 <View style={styles.ratingBox}>
                   <Field label="" accessibilityLabel={`${system} rating`} value={ratingText} onChangeText={setRatingText} placeholder={system === 'UTR' ? '6.0' : '3.5'} keyboardType="decimal-pad" />
