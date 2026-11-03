@@ -684,7 +684,8 @@ const showFirstSession = (page) => page.waitUntil(() => page.call(() => {
 
 /** The page colours of the Paris court and the default court (Clean since Oct 24), as the browser writes them (src/theme). */
 const PARIS_BG = 'rgb(248, 240, 233)';
-const DEFAULT_BG = 'rgb(255, 255, 255)';
+// Clean's page is #FFFFFE (one step off pure white, so it never reads as "white over a picture": ThemeProvider cleanColors).
+const DEFAULT_BG = 'rgb(255, 255, 254)';
 /** The Night court's page colour (src/theme/ThemeProvider.tsx darkColors.bg). */
 const NIGHT_BG = 'rgb(15, 20, 18)';
 
