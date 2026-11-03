@@ -82,8 +82,10 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
   // Your own face: the one colour SELF_AVATAR_COLOR says, wherever it is drawn.
   const myId = useMyId();
-  const mine = !!myId && (seed === myId || seed === users.find((user) => user.id === myId)?.avatarSeed);
-  const tint = quiet ? quietTintFor(seed) : mine ? selfTint(seed) : tintFor(seed);
+  const mySeed = myId ? users.find((user) => user.id === myId)?.avatarSeed : undefined;
+  const mine = !!myId && (seed === myId || seed === mySeed);
+  // Always by your avatarSeed, whichever of your id or seed the caller passed, so you are one colour.
+  const tint = quiet ? quietTintFor(seed) : mine ? selfTint(mySeed ?? seed) : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;

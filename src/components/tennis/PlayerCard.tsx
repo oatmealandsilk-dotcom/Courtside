@@ -209,8 +209,8 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const level = draft.rated ? (scale.bands.find((b) => p.rating <= b.upTo) ?? scale.bands[scale.bands.length - 1]).label : '';
   const years = draft.years === null ? '' : draft.years === 0 ? '<1 yr' : `${draft.years} ${draft.years === 1 ? 'yr' : 'yrs'}`;
   const filled = look.filled;
-  // The avatar's disc: a deeper shade of a filled card; else the brand once there is a name, the card's lines before.
-  const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines;
+  // The avatar's disc: a deeper shade of a filled card; else your own picture's colour (SELF_AVATAR_COLOR) once there is a name, the card's lines before.
+  const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? selfTint(user.avatarSeed) : look.lines;
   const face = draft.roomy ? 52 : 44;
   // A photo covers the disc (Avatar's own lookup): then the initials are never drawn.
   const users = useUsers();

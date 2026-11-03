@@ -157,7 +157,7 @@ export function PlayAndSquares({ view }: { view: CourtView }) {
           <Tappable accessibilityLabel={`Find someone to play. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} hoverTo={1.02} style={styles.play}>
             <View style={styles.playInner}>
               <HitGlyph size={19} color={colors.brand} />
-              <Text {...oneLine(TextScale.TITLE, 0.85)} style={styles.playText} numberOfLines={1}>Find someone to play</Text>
+              <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.playText} numberOfLines={1}>Find someone to play</Text>
             </View>
           </Tappable>
         ) : null}

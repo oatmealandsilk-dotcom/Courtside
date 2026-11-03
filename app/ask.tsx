@@ -81,7 +81,7 @@ export default function Ask() {
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
           <Section title="Your question">
             {/* The most the database keeps (300 for the question, 10,000 for the details): longer looked posted and was lost. */}
-            <Field soft edged={edged} value={title} onChangeText={setTitle} placeholder="What do you want to know?" accessibilityLabel="Your question" maxLength={300} />
+            <Field soft edged={edged} value={title} onChangeText={setTitle} placeholder={edged ? 'What do you want to know?' : undefined} accessibilityLabel="Your question" maxLength={300} />
           </Section>
           <Section title="Topic">
             <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />

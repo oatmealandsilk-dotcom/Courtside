@@ -196,7 +196,6 @@ export function Field({
           focused && styles.inputFocused,
           soft && (multiline ? styles.softArea : styles.softLine),
           edged && styles.edged,
-          edged && focused && styles.inputFocused,
           well && styles.well,
           well && focused && styles.inputFocused,
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
