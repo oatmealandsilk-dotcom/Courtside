@@ -16,7 +16,7 @@ set local lock_timeout = '5s';
 
 do $$
 begin
-  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) not in ('19197cb21b3db9d1132630782d36e41a', '653b4f13594b34cff16425c59b3edc63')
+  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) not in ('47d5204b778f5674e9eb7f5bab02a518', '653b4f13594b34cff16425c59b3edc63')
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_board(date)'::regprocedure) not in ('a38cb62648a6faffeef863c526e80959', '0a3e2f3846eb9f612adaf4a6ec59515d')
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) not in ('26b3feb9ea06c466b572b901b6d04cd7', 'e6c05cc304a90e64a76e2c5d1e65e0c7') then
     raise exception 'Undo 211 stopped before changing anything: a city board function changed after 211. Ask Claude to look.';

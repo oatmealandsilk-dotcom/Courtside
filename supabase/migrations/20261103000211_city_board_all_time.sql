@@ -24,7 +24,11 @@
 --   * All time, a player counts for the town on their profile NOW, never the
 --     "city of the first counted session" a month keeps (sticky all time would
 --     leave someone who logged before picking a town counted nowhere for ever,
---     and a mover never counted for their new town). Who may be named is
+--     and a mover never counted for their new town). A town change takes
+--     effect at the day's change (the first run after 10:00 UTC), never in the
+--     middle of a day, so a city's total never jumps by one player's count
+--     on its own. (Left as asked: in a quiet city, a mover's count can still
+--     be roughly read off the day's change in the total.) Who may be named is
 --     unchanged: named / friends_only still need y.city_id = x.city_now, which
 --     all-time rows always meet, so the same people as a month, never more.
 --   * Movement ("this week"), "climbing N weeks", news and the daily snapshot
@@ -66,7 +70,7 @@ begin
   end if;
   select string_agg(w.sig, ', ') into bad
     from (values
-      ('public.refresh_city_board()', array['653b4f13594b34cff16425c59b3edc63', '19197cb21b3db9d1132630782d36e41a']),
+      ('public.refresh_city_board()', array['653b4f13594b34cff16425c59b3edc63', '47d5204b778f5674e9eb7f5bab02a518']),
       ('public.city_board(date)', array['0a3e2f3846eb9f612adaf4a6ec59515d', 'a38cb62648a6faffeef863c526e80959']),
       ('public.city_page(text, date)', array['e6c05cc304a90e64a76e2c5d1e65e0c7', '26b3feb9ea06c466b572b901b6d04cd7'])
     ) as w(sig, md5s)
@@ -120,6 +124,7 @@ declare
   v_mt timestamptz;
   -- 211: the all-time board's key (every session ever), worked out next to the months.
   v_all constant date := '2000-01-01';
+  v_hold boolean;
 begin
   if not pg_try_advisory_xact_lock(hashtextextended('refresh_city_board', 196)) then
     return jsonb_build_object('skipped', 'already running');
@@ -132,6 +137,8 @@ begin
     v_mt := clock_timestamp();
     -- 211: the all-time board has no end (a far-off day, so the daily snapshot below is taken every day).
     v_end := case when v_m = v_all then date '3000-01-01' else (v_m + interval '1 month')::date end;
+    -- 211: the all-time board was worked out since today's change began (then players keep their city until tomorrow's).
+    v_hold := v_m = v_all and coalesce((select mo.refreshed_at >= v_day_cut from public.city_board_months mo where mo.month = v_all), false);
 
     -- 1. Players: counted sessions, by the PROFILE town. Tennis only; logged
     --    within 7 days of the day played and not for a later day; at most 2 a
@@ -166,8 +173,11 @@ begin
          group by k.user_id, p.city_lat, p.city_lng, p.location
       ) x
       -- 211: all time, a player counts for the town on their profile NOW (never sticky: else someone who logged
-      -- before picking a town would count nowhere for ever, and a mover never for their new town).
-      cross join lateral (select case when v_m = v_all then x.city_now
+      -- before picking a town would count nowhere for ever, and a mover never for their new town). But only from
+      -- the day's change (the first run after v_day_cut, 10:00 UTC): until then they stay where this day's board
+      -- had them, so a town change never moves a city's total in the middle of the day (which would give away
+      -- that one player's count, hidden or not). v_hold: the all-time board was already worked out today.
+      cross join lateral (select case when v_m = v_all and not v_hold then x.city_now
                                       when v_was ? x.user_id::text then v_was ->> x.user_id::text else x.city_now end as city_id) y;
 
     -- 2. The words under a filled face, for players who may be named (to
@@ -756,7 +766,7 @@ end $function$;
 -- ------------------------------------------------------------- 4. last check
 do $$
 begin
-  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) <> '19197cb21b3db9d1132630782d36e41a'
+  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) <> '47d5204b778f5674e9eb7f5bab02a518'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_board(date)'::regprocedure) <> 'a38cb62648a6faffeef863c526e80959'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) <> '26b3feb9ea06c466b572b901b6d04cd7' then
     raise exception 'Migration 211 stopped: the city board functions did not come out as written. Nothing was changed.';

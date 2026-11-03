@@ -61,12 +61,20 @@ export function useCityBoard(enabled = true): {
     actions.loadCityBoard(month, tries > 0).then((b) => {
       // The 1st: last month's final board, unless it has nothing on it (then this month's, which has begun).
       if (live && b && !isAllTime(month) && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
-        fellBack = { from: month, to: thisMonth() };
+        // (Keyed by `first`: after an all-time fall back to last month's final, this one replaces it.)
+        fellBack = { from: first, to: thisMonth() };
         redraw((n) => n + 1);
       }
-    }, () => undefined);
+    }, (err: unknown) => {
+      // A database without the all-time board yet (migration 211 not run, or undone): the month's, as before 211.
+      const said = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : '';
+      if (live && isAllTime(month) && said.includes('month out of range')) {
+        fellBack = { from: month, to: boardMonth() };
+        redraw((n) => n + 1);
+      }
+    });
     return () => { live = false; };
-  }, [on, month, today, mine, tries, actions]);
+  }, [on, first, month, today, mine, tries, actions]);
   const entry = on ? cityBoards[month] : undefined;
   const board = entry?.board ?? null;
   const status: BoardStatus = !on ? 'off' : !entry ? 'loading' : board ? 'ready' : entry.failed ? 'error' : 'off';
