@@ -48,7 +48,7 @@ function closesKeys(header: React.ReactNode) {
  */
 export default function AskCoach() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, coaches } = useApp();
+  const { actions, coaches, currentUserId } = useApp();
   // Opened from the box on the Coaching tab, the page grows out of that box:
   // it starts at the box's size and place, rounded like it, and expands to
   // the whole page while the form fades in; then the cursor is waiting.
@@ -60,7 +60,7 @@ export default function AskCoach() {
   const hero = !!origin && origin.length === 4 && origin.every((n) => Number.isFinite(n) && n >= 0) && origin[2] > 0 && origin[3] > 0;
   const web = Platform.OS === 'web';
   // A question that didn't post comes back already typed (its toast's "Ask again").
-  const [unsent] = useState(peekUnsentCoachQuestion);
+  const [unsent] = useState(() => peekUnsentCoachQuestion(currentUserId));
   useEffect(() => { clearUnsentCoachQuestion(); }, []);
   const [title, setTitle] = useState(unsent?.title ?? '');
   const titleBox = useRef<TextInput>(null);

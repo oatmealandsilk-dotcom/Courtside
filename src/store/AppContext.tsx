@@ -82,7 +82,7 @@ import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
-import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
+import { holdCoachQuestionWhileUploading, keepUnsentCoachQuestion, releaseCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
@@ -6286,7 +6286,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (r === 'blocked' || r === 'failed') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
         if (r === 'failed') {
           // What was typed is kept: "Ask again" opens Ask a coach with it filled in.
-          keepUnsentCoachQuestion({ title: q.title, body: q.body, specialty: q.specialty });
+          keepUnsentCoachQuestion({ title: q.title, body: q.body, specialty: q.specialty }, q.authorId);
           showToast({ title: 'Your question didn’t post', body: 'Your words are kept. Check your connection, then ask again.', icon: 'alert-circle-outline', action: { label: 'Ask again', onPress: () => router.push('/ask-coach') } });
         }
         return r;
@@ -6299,6 +6299,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         else {
           startUpload(question.id, 'Uploading your clip');
           coachClipsUploading.current.add(question.id);
+          // The words are kept on the phone until the question is saved: an app closed mid-upload
+          // opens Ask a coach with them typed next time (the clip is picked again).
+          holdCoachQuestionWhileUploading(question.id, me, { title: question.title, body: question.body, specialty: question.specialty });
           void uploadMedia(me, local, 'video', (f) => setUploadProgress(question.id, f))
             .then((videoUrl) => {
               coachClipsUploading.current.delete(question.id);
@@ -6317,9 +6320,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               finishUpload(question.id, false, e.message);
               const saved = { ...question, videoUrl: undefined, mediaLabel: undefined };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
-              void saveQuestion(saved);
+              const done = saveQuestion(saved);
               showToast({ title: 'Your clip did not upload', body: `The question is up without it. ${e.message}`, icon: 'alert-circle-outline' });
-            });
+              return done;
+            })
+            // Saved, refused, deleted meanwhile or kept for "Ask again": the phone's note of its words goes.
+            .finally(() => releaseCoachQuestion(question.id));
         }
       }
       return question.id;
@@ -9292,7 +9298,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // saves it, and its strip leaves now rather than ending on "Posted".
     if (!live(me, questionId) || coachClipsUploading.current.has(questionId)) {
       coachQuestionsDeleted.current.add(questionId);
-      if (coachClipsUploading.current.has(questionId)) cancelUpload(questionId);
+      if (coachClipsUploading.current.has(questionId)) { cancelUpload(questionId); releaseCoachQuestion(questionId); }
       return;
     }
     remote.deleteCoachQuestion(questionId).then(
