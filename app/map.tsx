@@ -1,5 +1,5 @@
 import { useTheme } from '@/theme/ThemeProvider';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { Platform, View } from 'react-native';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -13,6 +13,7 @@ import { takeHandedPlace } from '@/features/places/geocode';
 import { useApp } from '@/store/AppContext';
 import { colors } from '@/theme';
 import { endGrow, takeGrowPlan } from '@/features/players/mapGrow';
+import { setMapCovering } from '@/features/players/mapOpenV2';
 
 /** The community map as the whole page: tiles edge to edge, the controls laid over them. */
 export default function MapScreen() {
@@ -43,6 +44,20 @@ export default function MapScreen() {
       ? { presentation: 'card', animation: 'slide_from_right', contentStyle: { backgroundColor: colors.bg } }
       : { animation: 'slide_from_right' });
   }, [grown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // MAP_OPEN_V2 (admins first, iPhone): once this page's slide has landed, the page under it is out of sight and its
+  // endless animations stop (OpenRing); they start again as this page begins to leave (Back, or the edge swipe starting,
+  // and again here if that swipe is called off). Opened by the card growing into it (no slide; the card shows through as
+  // it grows), never. Listened to as the page commits, so the slide's end is never missed.
+  useLayoutEffect(() => {
+    if (Platform.OS !== 'ios' || params.grow) return undefined;
+    const events = navigation as unknown as { addListener: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    const offs = [
+      events.addListener('transitionEnd', (e) => { if (!e?.data?.closing) setMapCovering(true); }),
+      events.addListener('transitionStart', (e) => { if (e?.data?.closing) setMapCovering(false); }),
+      events.addListener('beforeRemove', () => setMapCovering(false)),
+    ];
+    return () => { offs.forEach((off) => off()); setMapCovering(false); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const lat = Number(params.lat); const lng = Number(params.lng);
   const spotKnown = !!params.lat && !!params.lng && Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
   const focusCourt = useMemo(

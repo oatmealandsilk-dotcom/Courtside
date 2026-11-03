@@ -290,6 +290,7 @@ var PUSH=${full || veilNow.current ? PUSH_JS : 'null'},LENS=null,LZ=0,VEIL=${vei
 if(VEIL)document.documentElement.classList.add('cs-veil','cs-hide');
 document.body.classList.toggle('cs-still',${stillNow.current ? 'true' : 'false'});
 var post=function(o){window.ReactNativeWebView&&window.ReactNativeWebView.postMessage(JSON.stringify(o))};
+${SIM_DRIVER ? "post({type:'simt',o:performance.timeOrigin,i0:(window.__csT||{}).i0,i1:(window.__csT||{}).i1,p:performance.now()});" : ''}
 function start(){
 var map=new maplibregl.Map({container:'m',style:'${STYLE}',center:[${centerNow.current.lng},${centerNow.current.lat}],zoom:${zoomNow.current},interactive:${interactive},attributionControl:false,dragRotate:false,pitchWithRotate:false,touchPitch:false${interactive ? '' : ',preserveDrawingBuffer:true,fadeDuration:0'}});
 // 'painted' waits for the app's own pins, look and move (SYNCED, sent on 'ready'), then for every
@@ -377,7 +378,12 @@ ${ENGINE_JS}
 </script></body></html>`; }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   // The engine the app fetched during the splash (engineCopy), in place before the page starts: the
   // page then goes straight to its streets. Without it yet, the page fetches the engine itself.
-  const engine = useMemo(() => engineInjection(), [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  const engine = useMemo(() => {
+    const e = engineInjection();
+    // The simulator's proof only: when the page's own clock started, and how long the engine's code took to run.
+    return SIM_DRIVER ? `window.__csT={i0:performance.now()};${e ?? ''};window.__csT.i1=performance.now();window.__csT.had=${e ? 1 : 0};true;` : e;
+  }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (SIM_DRIVER) simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] mounted engine ${engineInjection() ? 'in' : 'none'}`); }, [load.attempt]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { void warmMapEngine(); }, []);
 
   return (
@@ -402,6 +408,11 @@ ${ENGINE_JS}
         onMessage={(e) => {
           let msg: { type: string; ok?: boolean; sw?: number; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
+          if (msg.type === 'simt') {
+            const m = msg as unknown as { o: number; i0?: number; i1?: number; p: number };
+            if (SIM_DRIVER) simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] simt nav ${Math.round(m.o)} inj ${m.i0 === undefined ? '-' : Math.round(m.i0)}..${m.i1 === undefined ? '-' : Math.round(m.i1)} script ${Math.round(m.p)}`);
+            return;
+          }
           // The simulator's proof only: how each map's page is getting on (its kind, what it said), into sim-log.txt.
           if (SIM_DRIVER && msg.type !== 'move' && msg.type !== 'v7landed' && msg.type !== 'shot' && msg.type !== 'tap' && msg.type !== 'maptap') simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] ${msg.type}${msg.why ? ` ${msg.why}` : ''}${msg.stage ? ` ${msg.stage}` : ''}${msg.detail ? ` ${msg.detail}` : ''}`);
           // How the page is getting on (useMapLoad): a word of any kind shows it is alive.
