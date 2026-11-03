@@ -53,23 +53,23 @@ export const darkColors: Palette = {
  * and goes slightly flat against pure white.
  */
 const cleanColors: Palette = {
-  bg: '#FFFFFF', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
+  bg: '#FFFFFE', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
   border: '#E6E7E8', borderStrong: '#C7CACC', text: '#0F1419', textMuted: '#536471', textFaint: '#5F6871',
-  brand: '#2C7446', brandInk: '#FFFFFF', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7446', clay: '#B4653A',
-  hard: '#2C6885', grass: '#477F50', info: '#2C6885', success: '#2C7446', warning: '#806311', danger: '#B93129',
+  brand: '#2C7446', brandInk: '#FFFFFD', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7447', clay: '#B4653A',
+  hard: '#2C6885', grass: '#477F50', info: '#2C6886', success: '#2C7448', warning: '#806311', danger: '#B93129',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#9A7110', rose: '#B04A7C',
   open: '#17803F',
   overlay: 'rgba(15, 20, 25, 0.5)',
   link: '#1B6699', onMedia: '#FFFFFF',
   bubble: '#EEF0F1',
-  bubbleMine: '#2B7345', onDanger: '#FFFFFF',
+  bubbleMine: '#2B7345', onDanger: '#FFFFFC',
   // No shirt for Clean: its session box stays the green box with the brand's own wash (cardLook).
   // These only fill the slots, with that box's colours.
-  cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
-  cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
-  cardTouch: '#2C7446',
-  launchLine: '#5F6871',
+  cardFill: '#2C7546', cardGlowTop: '#2C7547', cardGlowBottom: '#2C7548',
+  cardFigure: '#FEFFFF', cardInk: '#FEFFFE', cardMuted: '#FEFFFD',
+  cardTouch: '#2C7449',
+  launchLine: '#5F6872',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
   // On pure white the coins are a touch fuller than on the cream page, or they wash out.
