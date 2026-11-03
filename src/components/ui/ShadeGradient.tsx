@@ -27,6 +27,11 @@ import { useTapFast } from '@/features/navigation/pressV2';
  * Only for a single colour fading (the same colour at every stop, only its see-through changing):
  * with two colours the two gradients can blend the middle differently, so those stay on
  * LinearGradient.
+ *
+ * Look check (Nov 3, Simulator, Clean and Night, screenshots with this off and on): the clip's top
+ * shade, the shade behind a clip's words and a Discussions card's fade in the Feed came out within
+ * 2 shades in 255 (a few edge pixels of the words over or under them 3). The opened caption's shade
+ * came out up to 5 apart, so ReelCaption keeps expo's gradient for that one.
  */
 export function ShadeGradient({ colors, locations, style, pointerEvents }: {
   colors: readonly [ColorValue, ColorValue, ...ColorValue[]];
@@ -37,7 +42,9 @@ export function ShadeGradient({ colors, locations, style, pointerEvents }: {
 }) {
   const fast = useTapFast() && Platform.OS === 'ios';
   const image = useMemo(() => {
-    if (!fast) return null;
+    // Only colours written out ('#rrggbb', 'rgba(...)'): one of the phone's own named colours (PlatformColor) is
+    // not a string and cannot go into a CSS gradient, so that shade stays expo's.
+    if (!fast || !colors.every((c) => typeof c === 'string')) return null;
     const n = colors.length;
     // A CSS gradient straight down ('to bottom', expo's default start and end), each stop at its location.
     return `linear-gradient(180deg, ${colors.map((c, i) => `${String(c)} ${((locations?.[i] ?? (n > 1 ? i / (n - 1) : 0)) * 100).toFixed(4)}%`).join(', ')})`;

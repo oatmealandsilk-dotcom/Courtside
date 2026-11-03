@@ -59,7 +59,8 @@ export function usePressV2(): boolean {
  *   - Follow (the pill, the map card's round one, a player's page): it turns to Following or
  *     Requested at once, with the follower count beside it on a player's page, and the app's own
  *     redraw for the follow goes on as background work (it used to wait for every page in the app
- *     to redraw first);
+ *     to redraw first); on the pill and the map card's, that redraw is sent once their change has
+ *     played (useQuickFollow's settleMs), as sent at once it stalled the fade part way;
  *   - Message on a player's page, when they can already be messaged: the chat opens at once,
  *     with no spinner drawn (and the whole page redrawn for it) first;
  *   - any page opening over the four main tabs: the Feed's shades (behind the clip words, the

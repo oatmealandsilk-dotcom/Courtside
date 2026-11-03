@@ -1,4 +1,4 @@
-import React, { useEffect, useLayoutEffect, useOptimistic, useRef, useState, useTransition } from 'react';
+import React, { startTransition, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -26,34 +26,74 @@ export type FollowShown = 'following' | 'requested' | 'none';
  * It used to wait for every page in the app to redraw first (Nov 2, owner: "There's also a delay on clicking
  * buttons for them to respond. Clicking should respond much faster"). Following itself asks before it
  * unfollows (its own sheet), so that tap goes exactly as before; so does a guest's (it only asks them to join)
- * and one on a button that does not know whose it is. A second tap while the first is still going through is
- * a double tap, not a change of mind: it is let go. The quick state belongs to the person it was tapped for:
+ * and one on a button that does not know whose it is. A second tap while the first is still going through, on
+ * any button for the same person, is a double tap, not a change of mind: it is let go (quickFollows). The quick state belongs to the person it was tapped for:
  * a button handed someone else (the map card's, when you move to another pin) shows what the app says for them,
  * never the last person's Following. `stored` is what the app says now; returns what to show, the press to run in
  * place of `onPress`, and `delta`, what to add to their follower count shown beside it (+1 while Follow has
  * turned to Following ahead of the app, 0 otherwise), so a count moves with the button, as a like's does.
+ *
+ * `settleMs`: a button whose change animates (the pill's colour fade, the map card's draw-in) has the app's
+ * follow (its redraw, the database write) sent only once that has played, this long after the tap; the button
+ * buzzes on the tap, so the follow's own buzz is left out then. Sent at once, the redraw landed part way through
+ * and the fade stood still for two to three frames (Nov 3, Simulator, real taps: 13 of 14 list Follows held about
+ * 40 ms mid-fade with this on, none with it off). The button itself still answers on the tap.
  */
-export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void) {
+export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void, settleMs = 0) {
   const fast = useTapFast();
   const isGuest = useIsGuest();
   const users = useUsers();
-  const [quick, setQuick] = useOptimistic<{ id: string | undefined; shown: FollowShown }>({ id: userId, shown: stored });
-  const shown: FollowShown = quick.id === userId ? quick.shown : stored;
-  const [going, startGoing] = useTransition();
-  const goingFor = useRef<string | undefined>(undefined);
+  // What this button shows ahead of the app, for whom; cleared in the same background redraw that brings the
+  // app's own answer, so the two hand over in one frame (no flicker back, even if the database said no meanwhile).
+  const [quick, setQuick] = useState<{ id: string; shown: FollowShown; mark: object } | null>(null);
+  const shown: FollowShown = quick && quick.id === userId ? quick.shown : stored;
+  // This button's mark in quickFollows (see there), let go once the app's redraw for it has landed.
+  const mine = useRef<{ id: string; mark: object } | null>(null);
+  useLayoutEffect(() => {
+    if (quick || !mine.current) return;
+    letGo(mine.current.id, mine.current.mark);
+    mine.current = null;
+  }, [quick]);
   // The simulator's tap timing (tapTiming): the button's change committed. Nothing outside the proof build.
   const drawn = useRef(shown);
   useLayoutEffect(() => { if (drawn.current !== shown) { drawn.current = shown; tapMark('follow'); } }, [shown]);
   const press = () => {
     if (!fast || isGuest || !userId || stored === 'following') { onPress(); return; }
-    if (going && goingFor.current === userId) return;
+    // A second tap while the first is still going through, on this button or any other for the same person,
+    // is a double tap, not a change of mind: it is let go (a second toggle would undo the first).
+    if (quickFollows.has(userId)) return;
     const next: FollowShown = stored === 'requested' ? 'none' : users.find((u) => u.id === userId)?.isPrivate ? 'requested' : 'following';
-    goingFor.current = userId;
-    startGoing(() => { setQuick({ id: userId, shown: next }); onPress(); });
+    const mark = {};
+    quickFollows.set(userId, mark);
+    mine.current = { id: userId, mark };
+    setQuick({ id: userId, shown: next, mark });
+    const send = (later: boolean) => startTransition(() => {
+      // Sent later, its buzz is left out: the button buzzed on the tap (a second one came a third of a second after).
+      if (later) haptics.quietly(onPress); else onPress();
+      setQuick((q) => (q && q.mark === mark ? null : q));
+    });
+    if (settleMs > 0) setTimeout(() => send(true), settleMs); else send(false);
+    // Gone from the screen before its redraw landed (its layout effect never runs): let go once that surely has.
+    setTimeout(() => letGo(userId, mark), settleMs + LET_GO_MS);
   };
   const delta = (shown === 'following' ? 1 : 0) - (stored === 'following' ? 1 : 0);
   return { shown, press, delta };
 }
+
+/**
+ * The people with a quick Follow still going through (useQuickFollow), whichever button it was tapped on: a
+ * list's pill, the map card's or a player's page. Until the app's redraw for it lands, every other button for
+ * them still says Follow, and a quick press there would send a second toggle that undoes the first.
+ */
+const quickFollows = new Map<string, object>();
+/** Lets go of `id` only if it is still that press's (a later press for them has a mark of its own). */
+const letGo = (id: string, mark: object) => { if (quickFollows.get(id) === mark) quickFollows.delete(id); };
+/** How long after its redraw was sent a quick Follow from a button no longer on screen is let go: well after it lands. */
+const LET_GO_MS = 2000;
+/** The pill's colour fade, and the map card's draw-in, below; their redraws wait this much longer (a frame or so to start, and a margin). */
+const FADE_MS = 280;
+const SHRINK_MS = 320;
+const SETTLE_PAD_MS = 60;
 
 /**
  * Follow, and then Following: the pill dips slightly on the tap, settles, and
@@ -67,7 +107,8 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   const { followRequests, currentUserId } = useApp();
   const asked = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
   // On the tap itself, with taps answering sooner (useQuickFollow); otherwise exactly what the app says.
-  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress);
+  // The app's redraw for it waits until the colour fade below has played.
+  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress, FADE_MS + SETTLE_PAD_MS);
   const requested = quick.shown === 'requested';
   const filled = quick.shown !== 'none';
   const said = quick.shown === 'following' ? 'Following' : requested ? 'Requested' : 'Follow';
@@ -75,7 +116,7 @@ export function FollowPill({ following, onPress, small = false, name, userId, wi
   const bump = useSharedValue(1);
   const reduced = useRef(false);
   useEffect(() => { reduceMotionEnabled().then((r) => { reduced.current = r; }).catch(() => {}); }, []);
-  useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: 280, easing: EASE }); }, [filled, on]);
+  useEffect(() => { on.value = withTiming(filled ? 1 : 0, { duration: FADE_MS, easing: EASE }); }, [filled, on]);
 
   // The theme's colours are read here, on each draw, and handed to the animation as plain values.
   // Read inside it, they were copied once, from whichever theme the pill first drew in (it stayed
@@ -143,7 +184,8 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
   const { followRequests, currentUserId } = useApp();
   const asked = !following && !!userId && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === userId);
   // On the tap itself, with taps answering sooner (useQuickFollow); otherwise exactly what the app says.
-  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress);
+  // The app's redraw for it waits until the draw-in below has played.
+  const quick = useQuickFollow(following ? 'following' : asked ? 'requested' : 'none', userId, onPress, SHRINK_MS + SETTLE_PAD_MS);
   const requested = quick.shown === 'requested';
   const filled = quick.shown !== 'none';
   // How wide the word is, measured from a hidden copy of it, so the pill knows the width to open
@@ -168,7 +210,7 @@ export function FollowShrink({ following, onPress, name, userId, followsYou = fa
     const tapped = wasFilled.current !== filled;
     wasFilled.current = filled;
     on.value = tapped ? withTiming(filled ? 1 : 0, { duration: 260, easing: EASE }) : filled ? 1 : 0;
-    shut.value = tapped && !reduced.current ? withTiming(closed ? 1 : 0, { duration: 320, easing: EASE }) : closed ? 1 : 0;
+    shut.value = tapped && !reduced.current ? withTiming(closed ? 1 : 0, { duration: SHRINK_MS, easing: EASE }) : closed ? 1 : 0;
   }, [filled, closed, on, shut]);
 
   // Read on each draw and handed in as plain values (see FollowPill: read inside, they stick to the first theme).

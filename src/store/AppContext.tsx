@@ -8850,12 +8850,45 @@ export function AppProvider({ children }: { children: ReactNode }) {
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   // The database would not take a follow or an ask (someone you are blocked
-  // with): the button goes back, and a note says why.
-  const toggleFollowRef = useRef<(userId: ID, quiet?: boolean) => void>(() => undefined);
+  // with): the button goes back, and a note says why. It sets where things end
+  // (not following them, no ask waiting, both follow counts as they were) rather
+  // than toggling back from what the app last drew: with taps answering sooner
+  // (useQuickFollow, admins first) the follow itself is background work, and an
+  // answer that came before it had landed toggled from the wrong side (a second
+  // follow instead of none). Queued after the follow, it is applied after it
+  // whenever that lands. Nothing to undo in the database: it wrote nothing. Not
+  // an unfollow either, so no Undo is offered (as before).
   const followRefused = (userId: ID) => {
     showToast({ title: "You can't follow this account", icon: 'lock-closed-outline' });
-    // Quiet: putting the button back is not an unfollow to offer to undo.
-    toggleFollowRef.current(userId, true);
+    haptics.untap();
+    setState((prev) => {
+      const me = prev.currentUserId;
+      if (!me || userId === me) return prev;
+      const followed = prev.followingIds.includes(userId);
+      const asked = prev.followRequests.some((r) => r.fromId === me && r.toId === userId);
+      if (!followed && !asked) return prev;
+      let next = prev;
+      if (followed) {
+        next = {
+          ...next,
+          followingIds: next.followingIds.filter((x) => x !== userId),
+          followEdges: next.followEdges.filter((e) => !(e.followerId === me && e.followingId === userId)),
+          users: next.users.map((u) =>
+            u.id === me ? { ...u, following: Math.max(0, u.following - 1) }
+            : u.id === userId ? { ...u, followers: Math.max(0, u.followers - 1) }
+            : u,
+          ),
+        };
+      }
+      if (asked) {
+        next = {
+          ...next,
+          followRequests: next.followRequests.filter((r) => !(r.fromId === me && r.toId === userId)),
+          notifications: next.notifications.filter((n) => !(n.kind === 'follow-request' && n.actorId === me && n.userId === userId)),
+        };
+      }
+      return next;
+    });
   };
   const toggleFollow = useCallback((userId: ID, quiet?: boolean, noBuzz?: boolean) => {
     {
@@ -8917,7 +8950,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-  toggleFollowRef.current = toggleFollow;
 
   const followAll = useCallback((userIds: ID[]) => {
     const me = stateRef.current.currentUserId;

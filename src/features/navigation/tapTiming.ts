@@ -20,7 +20,7 @@ import { tapFastOn } from '@/features/navigation/pressV2';
  *   press    a button's action ran (Tappable);
  *   go       the router was asked to open or close a page (push, navigate, back, ...) and where;
  *   state    the app's navigation changed (its redraw for the new page done);
- *   page     a page or sheet put on screen (its first draw committed: the native slide starts from here);
+ *   page     a page put on screen (its first draw committed: the native slide starts from here; sheets are not marked, DragSheet stays as on main);
  *   drawn    the app's next frame after that page;
  *   glide    a tab tap's glide set going on the animation thread; first: that thread's first frame of it;
  *   heart / follow   a like's heart or a Follow button changed on screen (its redraw committed);
@@ -95,7 +95,7 @@ export function tapMark(name: string, detail?: string, at = Date.now()) {
   tap.marks.push({ name, at, detail });
 }
 
-/** A page or sheet has committed its first draw: `page` now, and `drawn` with the app's next frame. */
+/** A page has committed its first draw: `page` now, and `drawn` with the app's next frame. */
 export function tapPage(name: string) {
   if (!TAP_TIMING || !tap || tap.filed) return;
   if (tap.marks.some((m) => m.name === 'page')) return;
