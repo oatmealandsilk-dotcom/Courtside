@@ -16,9 +16,10 @@ export type BoardStatus = 'off' | 'loading' | 'ready' | 'error';
 
 /**
  * The month every board screen shows: the phone's own, last month's final board on the 1st (see boardMonth);
- * the all-time board while CITY_BOARD_ALL_TIME is on (migration 211).
+ * the all-time board while CITY_BOARD_ALL_TIME is on (migration 211). A fall back holds for the day it was
+ * made (`at`): the next day asks for `from` again (say 211 has been run since, or a month has gone by).
  */
-let fellBack: { from: string; to: string } | null = null;
+let fellBack: { from: string; to: string; at: string } | null = null;
 
 /** How many sessions of yours this phone holds (logging one asks for the board again). */
 const useMySessionCount = () => {
@@ -52,7 +53,7 @@ export function useCityBoard(enabled = true): {
   const first = CITY_BOARD_ALL_TIME ? ALL_TIME : boardMonth();
   const today = new Date().toDateString();
   const [, redraw] = useState(0);
-  const month = fellBack && fellBack.from === first ? fellBack.to : first;
+  const month = fellBack && fellBack.from === first && fellBack.at === today ? fellBack.to : first;
   const mine = useMySessionCount();
   const [tries, setTries] = useState(0);
   useEffect(() => {
@@ -62,14 +63,14 @@ export function useCityBoard(enabled = true): {
       // The 1st: last month's final board, unless it has nothing on it (then this month's, which has begun).
       if (live && b && !isAllTime(month) && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
         // (Keyed by `first`: after an all-time fall back to last month's final, this one replaces it.)
-        fellBack = { from: first, to: thisMonth() };
+        fellBack = { from: first, to: thisMonth(), at: today };
         redraw((n) => n + 1);
       }
     }, (err: unknown) => {
       // A database without the all-time board yet (migration 211 not run, or undone): the month's, as before 211.
       const said = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : '';
       if (live && isAllTime(month) && said.includes('month out of range')) {
-        fellBack = { from: month, to: boardMonth() };
+        fellBack = { from: month, to: boardMonth(), at: today };
         redraw((n) => n + 1);
       }
     });

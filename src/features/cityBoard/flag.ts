@@ -30,6 +30,10 @@ export const cityBoardOn = (me?: { isAdmin?: boolean } | null): boolean => !!me 
  * versions keep asking for months). On: every board screen (the board, the
  * Find Players card, a city's page, sign-up's last step) asks for ALL_TIME and
  * says "All time" where it said the month. Off: monthly again, as before 211.
+ * The all-time board is the months added up, each session staying with the
+ * city its month counted it for (a town change never moves a count). 211 also
+ * points the "<city> moved up to #N" push at the all-time board: turning this
+ * off for good wants that back on the month (211's undo does it).
  */
 export const CITY_BOARD_ALL_TIME = true;
 

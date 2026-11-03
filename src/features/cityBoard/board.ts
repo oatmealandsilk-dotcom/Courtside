@@ -100,9 +100,9 @@ export function withMine(board: CityBoard, extra = 0): { cities: CityBoardCity[]
   const mySessions = me.sessions + extra;
   // Your month counts where its first session was: here, or (nothing counted yet) here from your next one.
   // Counted with no town on your profile then (countsFor null, sessions > 0): nowhere this month.
-  // All time (migration 211): every session of yours counts for the town on your profile now, but after a move
-  // only from the server's next daily change (until then it still counts you where you were: not here too).
-  const countsHere = !!me.cityId && (me.countsFor === me.cityId || (me.countsFor === null && (isAllTime(board.month) || me.sessions === 0)));
+  // All time (migration 211) the same: the all-time board adds up the months, each where it counted, so your
+  // row there is your latest month's city (after a move, the new town from your first session in a new month).
+  const countsHere = !!me.cityId && (me.countsFor === me.cityId || (me.countsFor === null && me.sessions === 0));
   const add = countsHere ? mySessions - me.inTotal : 0;
   if (add <= 0) return { cities: board.cities, mySessions, countsHere };
   const cities = board.cities.map((c) => {

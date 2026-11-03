@@ -19,7 +19,7 @@ import { PeekCardBody, peekFrame, useCourtPicturesGo } from '@/components/place/
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { MIN_PLAYERS, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
-import { CITY_BOARD_ALL_TIME, isAllTime } from '@/features/cityBoard/flag';
+import { isAllTime } from '@/features/cityBoard/flag';
 import { catalogCity, catalogSpot, cityLabel, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -181,7 +181,7 @@ export default function CityPage() {
     // A board a few minutes old can call a city at 0 that has since been ranked: if its page then comes, it
     // takes this one's place as it stands, with nothing rising in (shownZero, read by Rise below).
     shownZero.current = true;
-    return <ZeroCityPage city={zero} />;
+    return <ZeroCityPage city={zero} month={boardNow.month} />;
   }
   if (status === 'off') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, each city’s players and courts will show here." action={{ label: 'Back', onPress: () => goBack() }} /></Screen>;
   if (status === 'error') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="cloud-offline-outline" title={`Couldn’t load ${name}`} body="Check your connection and try again." action={{ label: 'Try again', onPress: retry }} /></Screen>;
@@ -338,7 +338,7 @@ function seeOnMap(city: { id: string; name: string; region: string }) {
  * city's place is (its row's dash, said in words), what ranks a city, and
  * the way to its courts on the map. No players, no courts, no clip.
  */
-function ZeroCityPage({ city }: { city: ZeroCity }) {
+function ZeroCityPage({ city, month }: { city: ZeroCity; month: string }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.root}>
@@ -346,7 +346,7 @@ function ZeroCityPage({ city }: { city: ZeroCity }) {
         <View style={[styles.body, styles.bodyPlain]}>
           <View style={[styles.standing, styles.standingZero]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Not ranked yet</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zeroBody}>A city is ranked once {MIN_PLAYERS} players who call it home log sessions{CITY_BOARD_ALL_TIME ? '' : ' in the month'}.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zeroBody}>A city is ranked once {MIN_PLAYERS} players who call it home log sessions{isAllTime(month) ? '' : ' in the month'}.</Text>
           </View>
           <View style={styles.footer}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Visiting {cityLabel(city)}?</Text>

@@ -4,21 +4,28 @@
 -- on purpose). Run it in the Supabase SQL editor as one piece only to take 211
 -- back out. All-or-nothing; safe to run more than once.
 --
--- It puts refresh_city_board(), city_board() and city_page() back exactly as
--- they were before 211 (checked letter for letter at the end) and removes the
--- all-time board's rows (month '2000-01-01': numbers and ids only). Months are
--- untouched. Do this only with the app's CITY_BOARD_ALL_TIME off again (an app
--- still asking for '2000-01-01' would get "month out of range" and show
--- "Couldn't load the board").
+-- It puts refresh_city_board(), city_board(), city_page() and
+-- send_catch_up_alerts() back exactly as they were before 211 (checked letter
+-- for letter at the end), removes the all-time board's rows (month
+-- '2000-01-01': numbers and ids only), and drops what 211 added for it:
+-- private.city_board_all_time_parts() and private.city_board_all_time_base
+-- (the sessions from before the first month board, and any month the 13-month
+-- clean-up has added in since; numbers and ids only). Months are untouched.
+-- An app still on CITY_BOARD_ALL_TIME then gets "month out of range" for
+-- '2000-01-01' and falls back to the month's board for the rest of that day
+-- (useCityBoard), asking for all time again each new day; turn
+-- CITY_BOARD_ALL_TIME off too (an over-the-air update on "production") so it
+-- says the month's words again.
 
 begin;
 set local lock_timeout = '5s';
 
 do $$
 begin
-  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) not in ('47d5204b778f5674e9eb7f5bab02a518', '653b4f13594b34cff16425c59b3edc63')
+  if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) not in ('2a47b8ab7e8df21ecfaa2c0167b7d13e', '653b4f13594b34cff16425c59b3edc63')
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_board(date)'::regprocedure) not in ('a38cb62648a6faffeef863c526e80959', '0a3e2f3846eb9f612adaf4a6ec59515d')
-     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) not in ('26b3feb9ea06c466b572b901b6d04cd7', 'e6c05cc304a90e64a76e2c5d1e65e0c7') then
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) not in ('4c5148cd8bb584e4b36e25a63da00c86', 'e6c05cc304a90e64a76e2c5d1e65e0c7')
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.send_catch_up_alerts(timestamptz, boolean)'::regprocedure) not in ('2dcb9690a1fcd124be4bb28c7d215e30', '12f4da3f721e8aad97fd1b3a39c3a9d5') then
     raise exception 'Undo 211 stopped before changing anything: a city board function changed after 211. Ask Claude to look.';
   end if;
 end $$;
@@ -659,6 +666,187 @@ begin
     'up', to_jsonb(v_up), 'courts', v_courts, 'active_courts', v_active, 'clip', v_clip);
 end $function$;
 
+-- send_catch_up_alerts() as 201 left it (step d: the latest month's board).
+CREATE OR REPLACE FUNCTION public.send_catch_up_alerts(p_now timestamp with time zone DEFAULT now(), p_dry_run boolean DEFAULT false)
+ RETURNS TABLE(who uuid, nudge text, words text, link text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  r record;
+  w text;
+  l text;
+  here_lat double precision;
+  here_lng double precision;
+  town text;
+  v_n integer;
+  v_names text[];
+  v_first uuid;
+  v_weekend boolean;
+  v_clips boolean;
+  v_sessions boolean;
+  v_post uuid;
+  since timestamptz;
+  planned uuid[] := '{}';
+begin
+  for r in
+    -- Only time zones Postgres knows (the list is read first, so a bad name can never stop the job).
+    with zones as materialized (select z.name from pg_catalog.pg_timezone_names z),
+    people as materialized (
+      select us.user_id, us.tz, coalesce(us.muted_ids, '{}') || coalesce(us.blocked_ids, '{}') as quiet,
+             (p_now at time zone us.tz)::date as today,
+             -- The map's own switches: "Friends up for a hit" (a) and "New open hits" (b).
+             us.push_map_friends is not false as friends_on, us.push_map_hits is not false as hits_on
+        from public.user_state us
+        join public.profiles pr on pr.id = us.user_id and pr.suspended_at is null
+       where us.tz is not null and us.tz in (select name from zones)
+         and us.push_catch_up is not false
+         and exists (select 1 from public.push_tokens t where t.user_id = us.user_id)
+    )
+    select pe.user_id, pe.tz, pe.quiet, pe.today, pe.friends_on, pe.hits_on, pr.location, pr.city_lat, pr.city_lng,
+           ls.lat as spot_lat, ls.lng as spot_lng,
+           greatest((select max(a.day) from public.app_opens a where a.user_id = pe.user_id),
+                    (select (max(t.updated_at) at time zone pe.tz)::date from public.push_tokens t where t.user_id = pe.user_id)) as last_day,
+           (select max((n.sent_at at time zone pe.tz)::date) from public.nudges n where n.user_id = pe.user_id and n.kind = 'catch-up') as last_alert
+      from people pe
+      join public.profiles pr on pr.id = pe.user_id
+      left join public.last_seen ls on ls.user_id = pe.user_id
+     order by pe.user_id
+     limit 5000
+  loop
+    begin
+      -- Away 5 days or more, and 5 days or more since the last of these.
+      continue when r.last_day is null or r.today - r.last_day < 5;
+      continue when r.last_alert is not null and r.today - r.last_alert < 5;
+      continue when r.user_id = any (planned);
+      continue when not private.nudge_ok(r.user_id, p_now);
+      w := null; l := null;
+      here_lat := coalesce(r.city_lat, r.spot_lat);
+      here_lng := case when r.city_lat is not null then r.city_lng else r.spot_lng end;
+      town := nullif(btrim(split_part(coalesce(r.location, ''), ',', 1)), '');
+      -- When they left: the day after their last open, their time.
+      since := greatest(((r.last_day + 1)::timestamp at time zone r.tz), p_now - interval '5 days');
+
+      -- a. Friends who follow each other with them, up for a hit today, near them.
+      --    The map's rule for "Friends up for a hit": two known adults, or their spot is shown to them.
+      --    Not when they turned "Friends up for a hit" off: then b, c or d.
+      if here_lat is not null and r.friends_on then
+        select count(*), (array_agg(x.nm order by x.until desc))[1:2], (array_agg(x.id order by x.until desc))[1]
+          into v_n, v_names, v_first
+          from (
+            select p.id, split_part(coalesce(nullif(btrim(p.name), ''), p.handle), ' ', 1) as nm, p.open_to_hit_until as until
+              from public.follows f
+              join public.profiles p on p.id = f.following_id
+              join public.last_seen s on s.user_id = p.id
+             where f.follower_id = r.user_id
+               and p.open_to_hit_until > p_now and p.suspended_at is null
+               and public.follow_each_other(r.user_id, p.id)
+               and not (p.id::text = any (r.quiet))
+               and not public.is_blocked_between(r.user_id, p.id)
+               and ((public.known_adult(r.user_id) and public.known_adult(p.id)) or public.spot_shown_to(r.user_id, p.id))
+               and public.km_between(here_lat, here_lng, s.lat, s.lng) <= 50
+          ) x;
+        if v_n = 1 then
+          w := v_names[1] || ' is up for a hit today';
+          l := '/user/' || v_first;
+        elsif v_n = 2 then
+          w := v_names[1] || ' and ' || v_names[2] || ' are up for a hit today';
+          l := '/map';
+        elsif v_n > 2 then
+          w := v_names[1] || ' and ' || (v_n - 1) || ' other friends are up for a hit today';
+          l := '/map';
+        end if;
+      end if;
+
+      -- b. Open hits near their town in the next 7 days, by known adults, to known adults only.
+      --    Not when they turned "New open hits" off: then c or d.
+      if w is null and here_lat is not null and r.hits_on and public.known_adult(r.user_id) then
+        select count(distinct h.author_id), coalesce(bool_and(extract(isodow from (h.starts_at at time zone r.tz)) in (6, 7)
+                                                            and (h.starts_at at time zone r.tz)::date - r.today <= 7 - extract(isodow from r.today)::int), false)
+          into v_n, v_weekend
+          from public.hit_requests h
+          join public.profiles a on a.id = h.author_id and a.suspended_at is null
+          cross join lateral public.hit_point(h.place) hp
+         where not h.cancelled and h.starts_at > p_now and h.starts_at < p_now + interval '7 days'
+           and coalesce(h.audience, 'everyone') = 'everyone'
+           and h.author_id <> r.user_id
+           and public.known_adult(h.author_id)
+           and not (h.author_id::text = any (r.quiet))
+           and not public.is_blocked_between(r.user_id, h.author_id)
+           and public.hit_is_open(h.id)
+           and hp.p_lat is not null and hp.p_lng is not null
+           and public.km_between(here_lat, here_lng, hp.p_lat, hp.p_lng) <= 25;
+        if v_n > 0 then
+          w := case when v_n = 1 then 'A player near ' || coalesce(town, 'you') || ' is up for a hit'
+                    else v_n || ' players near ' || coalesce(town, 'you') || ' are up for a hit' end
+               || case when v_weekend then ' this weekend' else ' this week' end;
+          l := '/map';
+        end if;
+      end if;
+
+      -- c. A clip or session posted since they left by friends who follow each other with them.
+      if w is null then
+        select count(distinct x.author_id), (array_agg(x.nm order by x.created_at desc))[1:2], (array_agg(x.id order by x.created_at desc))[1],
+               coalesce(bool_and(x.is_clip), false), coalesce(bool_and(not x.is_clip), false)
+          into v_n, v_names, v_post, v_clips, v_sessions
+          from (
+            select distinct on (p.author_id) p.id, p.author_id, p.created_at,
+                   split_part(coalesce(nullif(btrim(a.name), ''), a.handle), ' ', 1) as nm,
+                   (p.kind = 'clip' or p.video_url is not null) as is_clip
+              from public.follows f
+              join public.posts p on p.author_id = f.following_id
+              join public.profiles a on a.id = p.author_id and a.suspended_at is null
+             where f.follower_id = r.user_id
+               and p.created_at > since and p.created_at <= p_now
+               and p.removed_at is null and not coalesce(p.archived, false) and p.group_id is null
+               and not coalesce(p.auto_held, false)
+               and (p.kind = 'clip' or p.video_url is not null or jsonb_typeof(p.session) = 'object')
+               and (not coalesce(p.auto_logged, false) or public.auto_log_audience_of(p.author_id, null) in ('mutuals', 'public'))
+               and not exists (select 1 from public.post_demotions d where d.post_id = p.id)
+               and public.follow_each_other(r.user_id, p.author_id)
+               and not (p.author_id::text = any (r.quiet))
+               and not public.is_blocked_between(r.user_id, p.author_id)
+             order by p.author_id, p.created_at desc
+          ) x;
+        if v_n = 1 then
+          w := v_names[1] || ' posted a new ' || case when v_clips then 'clip' else 'session' end;
+        elsif v_n = 2 then
+          w := v_names[1] || ' and ' || v_names[2] || ' posted new ' || case when v_clips then 'clips' when v_sessions then 'sessions' else 'clips and sessions' end;
+        elsif v_n > 2 then
+          w := v_names[1] || ' and ' || (v_n - 1) || ' other friends posted new ' || case when v_clips then 'clips' when v_sessions then 'sessions' else 'clips and sessions' end;
+        end if;
+        if w is not null then l := '/post/' || v_post; end if;
+      end if;
+
+      -- d. Their city moved up the city board this week (196).
+      if w is null then
+        select bc.name || ' moved up to #' || c.rank || ' on the city board', '/city/' || c.city_id
+          into w, l
+          from public.city_board_members m
+          join public.city_board_cities c on c.month = m.month and c.city_id = m.city_id
+          join public.board_cities bc on bc.id = c.city_id
+         where m.user_id = r.user_id
+           and m.month = (select max(cm.month) from public.city_board_cities cm where cm.month <= r.today)
+           and c.rank is not null and c.week_ago_rank is not null and c.rank < c.week_ago_rank
+         limit 1;
+      end if;
+
+      -- Nothing real to say: nothing sent (the next hour looks again).
+      continue when w is null;
+      if not p_dry_run then
+        continue when not private.send_nudge(r.user_id, 'catch-up', to_char(r.today, 'YYYY-MM-DD'), w, l, p_now);
+      end if;
+      planned := planned || r.user_id;
+      who := r.user_id; nudge := 'catch-up'; words := w; link := l;
+      return next;
+    exception when others then
+      raise warning 'catch-up alert for %: %', r.user_id, sqlerrm;
+    end;
+  end loop;
+  return;
+end $function$;
+
 delete from public.city_board_members where month = '2000-01-01';
 delete from public.city_board_cities where month = '2000-01-01';
 delete from public.city_board_daily where month = '2000-01-01';
@@ -667,12 +855,15 @@ delete from public.city_board_courts where month = '2000-01-01';
 delete from public.city_board_court_weeks where month = '2000-01-01';
 delete from public.city_board_clips where month = '2000-01-01';
 delete from public.city_board_months where month = '2000-01-01';
+drop function if exists private.city_board_all_time_parts(uuid);
+drop table if exists private.city_board_all_time_base;
 
 do $$
 begin
   if (select md5(p.prosrc) from pg_proc p where p.oid = 'public.refresh_city_board()'::regprocedure) <> '653b4f13594b34cff16425c59b3edc63'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_board(date)'::regprocedure) <> '0a3e2f3846eb9f612adaf4a6ec59515d'
-     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) <> 'e6c05cc304a90e64a76e2c5d1e65e0c7' then
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) <> 'e6c05cc304a90e64a76e2c5d1e65e0c7'
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.send_catch_up_alerts(timestamptz, boolean)'::regprocedure) <> '12f4da3f721e8aad97fd1b3a39c3a9d5' then
     raise exception 'Undo 211 stopped: the functions did not come back as they were. Nothing was changed.';
   end if;
 end $$;
