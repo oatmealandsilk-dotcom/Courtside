@@ -187,6 +187,11 @@ export function noteStep(what: string): Promise<void> {
   return Promise.race([writeNote(), new Promise<void>((resolve) => setTimeout(resolve, 300))]);
 }
 
+/** Swaps the step for another, only while it is still `from` (a later step, another upload's, stays). */
+export function replaceStep(from: string, to: string): Promise<void> {
+  return step === from ? noteStep(to) : Promise.resolve();
+}
+
 /**
  * Called just before the app restarts itself for an instant update, so the
  * next open knows it was not a crash. Nothing is written after this.

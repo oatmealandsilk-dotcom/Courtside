@@ -87,7 +87,7 @@ import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
-import { noteStep, reportError } from '@/lib/crashReporting';
+import { noteStep, replaceStep, reportError } from '@/lib/crashReporting';
 import { noteAppOpen } from '@/features/usage/appOpens';
 import { noteTimeZone } from '@/features/recap/timeZone';
 import { learned as learnedTip } from '@/features/tips/tips';
@@ -146,6 +146,9 @@ import { notePlayerSurface } from '@/features/players/courts';
 import type { VotedSurface } from '@/features/places/courtSurface';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
+
+/** The crash note's step once a post has landed (see addPost). */
+const POST_LANDED_STEP = 'post saved, Home moving it to the top';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -5385,7 +5388,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               toast.show({ title: 'Posted with the first photo only', body: 'The other photos could not be added this time.', icon: 'alert' });
             }
             // Kept in the note a few seconds more: Home rebuilds its pages around the new post now.
-            void noteStep('post saved, Home moving it to the top');
+            void noteStep(POST_LANDED_STEP);
             if (uploading) {
               // Landed: into the store, and to the very top of Home.
               finishUpload(post.id);
@@ -5411,8 +5414,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (source && sending.current.get(source) === post.id) sending.current.delete(source);
             // Landed (it is in the store now) or failed: in the same moment as either, so a page never sees it in neither place.
             outgoing.current.delete(post.id);
-            // Cleared a few seconds on, unless another post is still going up (its own steps stay).
-            setTimeout(() => { if (!anyUploading()) void noteStep(''); }, 5000);
+            // Cleared a few seconds on. With something else still going up (another post, an Instant, a coach
+            // question's clip: their own steps stay), this post's own label is not left as if it were what was
+            // lost (Nov 3 sweep: "A post was lost ... during: post saved" with a coach clip going up).
+            setTimeout(() => {
+              if (!anyUploading()) void noteStep('');
+              else void replaceStep(POST_LANDED_STEP, 'a post saved; another upload still going up');
+            }, 5000);
           }
         })();
       }
