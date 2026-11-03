@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, PixelRatio, Platform, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
-import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { Easing, Extrapolation, cancelAnimation, interpolate, interpolateColor, makeMutable, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSequence, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassView } from 'expo-glass-effect';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -929,28 +929,18 @@ const FollowGlyph = React.memo(function FollowGlyph({ place, fallback, icon, act
   );
 });
 
-/**
- * The new bar's tab word, its colour following the capsule as the icon's does: the word in the tabs' ink
- * under the same word in the lit colour, the top one shown by how near the capsule is, which mixes the two
- * colours exactly as mixing the colour itself did. Not the colour itself: a word's colour changed on every
- * frame made the phone lay the whole app out again on every frame of a tab change, and the Simulator showed
- * the glide stand still for 50-490 ms (Nov 3). Both words fade together as the bar tucks (`fade`, on the pair).
- */
-const WORD_OVER = { position: 'absolute', left: 0, top: 0, right: 0 } as const;
+/** The new bar's tab word, its colour following the capsule as the icon's does (one word, its colour mixed). */
 const FollowWord = React.memo(function FollowWord({ place, fallback, idle, lit, style, fade, children, onWidth }: {
   place: number; fallback: number; idle: string; lit: string; style: object; fade: AnimStyle; children: string;
   onWidth?: (w: number) => void;
 }) {
-  const litOn = useAnimatedStyle(() => {
+  const tint = useAnimatedStyle(() => {
     const own = lensAt.value;
     const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
-    return { opacity: litNear(place, at, lensTrail.value) };
-  }, [place, fallback]);
+    return { color: interpolateColor(litNear(place, at, lensTrail.value), [0, 1], [idle, lit]) };
+  }, [place, fallback, idle, lit]);
   return (
-    <Animated.View style={fade}>
-      <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} onLayout={onWidth ? (e) => onWidth(e.nativeEvent.layout.width) : undefined} style={[style, { color: idle }]}>{children}</Text>
-      <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[style, { color: lit }, WORD_OVER, litOn]}>{children}</Animated.Text>
-    </Animated.View>
+    <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} onLayout={onWidth ? (e) => onWidth(e.nativeEvent.layout.width) : undefined} style={[style, tint, fade]}>{children}</Animated.Text>
   );
 });
 
