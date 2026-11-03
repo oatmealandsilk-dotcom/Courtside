@@ -1737,9 +1737,9 @@ const STEPS = [
         if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
       }
       await page.waitFor({ text: 'Find Players' }, 45000);
-      // "Cities this month" (or, on the 1st, last month's final board: "Cities in October").
-      await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
-      await page.waitFor({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      // "Cities" (the all-time board, CITY_BOARD_ALL_TIME), "Cities this month" (or, on the 1st, last month's final board: "Cities in October").
+      await page.reveal({ text: /^Cities( this month| in [A-Z][a-z]+)?$/ }, 20000);
+      await page.waitFor({ text: /^Cities( this month| in [A-Z][a-z]+)?$/ }, 20000);
       await page.reveal({ label: /See all cities$/ }, 20000);
       await page.tap({ label: /See all cities$/ });
       // Every city the boards know, the ones not ranked at 0 under the ranked ones (owner, Oct 28: "Also add the
@@ -1766,7 +1766,7 @@ const STEPS = [
       await page.reveal({ text: 'Most active courts' }, 20000);
     },
     // As court cards (owner, Oct 28: "should be like the rectangles"): the top one says its visits and place.
-    expect: [{ text: 'Most active courts' }, { label: /^.+, \d+ visits? this month, number 1\. Open court$/ }],
+    expect: [{ text: 'Most active courts' }, { label: /^.+, \d+ visits?( this month)?, number 1\. Open court$/ }],
     after: async (page) => {
       // Admin no more for anything after this: the next visit starts as everyone else does.
       await page.eval("sessionStorage.removeItem('courtside-demo-admin')");
@@ -1787,7 +1787,7 @@ const STEPS = [
         if (next.index === 0) { try { await page.tap({ text: 'Enter' }, 5000); } catch { /* it went on to the app by itself */ } }
       }
       await page.waitFor({ text: 'Find Players' }, 45000);
-      await page.reveal({ text: /^Cities (this month|in [A-Z][a-z]+)$/ }, 20000);
+      await page.reveal({ text: /^Cities( this month| in [A-Z][a-z]+)?$/ }, 20000);
       // The card: your city first (a dash: not ranked yet), then the biggest at 0 (New York, Chicago…).
       await page.waitFor({ label: /Not ranked, Los Angeles, your city\. Not ranked, New York, 0 sessions\. Not ranked, Chicago, 0 sessions\..* See all cities$/ }, 20000);
       await page.reveal({ label: /See all cities$/ }, 20000);

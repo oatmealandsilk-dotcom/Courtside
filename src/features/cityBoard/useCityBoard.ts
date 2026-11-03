@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CityBoard, CityBoardCity, CityPage } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { boardMonth, sessionsSince, thisMonth, withMine } from './board';
-import { cityBoardOn } from './flag';
+import { ALL_TIME, CITY_BOARD_ALL_TIME, cityBoardOn, isAllTime } from './flag';
 
 /**
  * Where a board or a page stands:
@@ -14,7 +14,10 @@ import { cityBoardOn } from './flag';
  */
 export type BoardStatus = 'off' | 'loading' | 'ready' | 'error';
 
-/** The month every board screen shows: the phone's own, last month's final board on the 1st (see boardMonth). */
+/**
+ * The month every board screen shows: the phone's own, last month's final board on the 1st (see boardMonth);
+ * the all-time board while CITY_BOARD_ALL_TIME is on (migration 211).
+ */
 let fellBack: { from: string; to: string } | null = null;
 
 /** How many sessions of yours this phone holds (logging one asks for the board again). */
@@ -46,7 +49,7 @@ export function useCityBoard(enabled = true): {
   const on = enabled && cityBoardOn(currentUser);
   // Worked out on every draw, never kept: Find Players stays open for days on a phone, and the board must
   // move on to the new month (and ask again on a new day) without the app being closed first.
-  const first = boardMonth();
+  const first = CITY_BOARD_ALL_TIME ? ALL_TIME : boardMonth();
   const today = new Date().toDateString();
   const [, redraw] = useState(0);
   const month = fellBack && fellBack.from === first ? fellBack.to : first;
@@ -57,7 +60,7 @@ export function useCityBoard(enabled = true): {
     let live = true;
     actions.loadCityBoard(month, tries > 0).then((b) => {
       // The 1st: last month's final board, unless it has nothing on it (then this month's, which has begun).
-      if (live && b && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
+      if (live && b && !isAllTime(month) && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
         fellBack = { from: month, to: thisMonth() };
         redraw((n) => n + 1);
       }

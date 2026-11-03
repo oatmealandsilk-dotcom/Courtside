@@ -10,6 +10,7 @@ import { PAGE_WASH, PageWashContext } from '@/components/ui/pageWash';
 import { Wash } from '@/components/Wash';
 import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { MIN_PLAYERS, isFinal, isHot, monthName, morePlayersWords, nextTarget, ordinal, rankCities, resetsOn, sessionsWords, whenWords, type BoardMode, type RankedCity } from '@/features/cityBoard/board';
+import { isAllTime } from '@/features/cityBoard/flag';
 import { useCityBoard } from '@/features/cityBoard/useCityBoard';
 import { cityLabel, zeroCities, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -96,6 +97,8 @@ export default function CityBoard() {
   // Kept the same between draws, so the 200 rows at 0 are not drawn again when the tab or the page moves.
   const open = useCallback((id: string) => router.push({ pathname: '/city/[id]', params: { id } }), []);
   const final = isFinal(month);
+  // The all-time board (migration 211): no month to name, nothing to reset.
+  const allTime = isAllTime(month);
 
   // The week's news: yours first, two lines at most.
   const moments = useMemo(() => {
@@ -194,7 +197,7 @@ export default function CityBoard() {
 
   return (
     <View style={styles.root}>
-      <Screen title="Cities" subtitle={final ? `${monthName(month)} · final` : `${monthName(month)} · resets ${resetsOn(month)}`} compactTitle onBack={() => goBack()} scrollRef={scrollRef} offsetY={offsetY}>
+      <Screen title="Cities" subtitle={allTime ? 'All time' : final ? `${monthName(month)} · final` : `${monthName(month)} · resets ${resetsOn(month)}`} compactTitle onBack={() => goBack()} scrollRef={scrollRef} offsetY={offsetY}>
         <View
           ref={probe}
           onLayout={() => {
@@ -203,7 +206,7 @@ export default function CityBoard() {
           }}
         />
         {/* Not open to you, or could not be loaded with nothing earlier to show. */}
-        {status === 'off' ? <EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, your city’s tennis sessions this month will show here." action={{ label: "Back", onPress: () => goBack() }} /> : null}
+        {status === 'off' ? <EmptyState icon="podium-outline" title="City boards aren’t open yet" body={`When they are, your city’s tennis sessions${allTime ? '' : ' this month'} will show here.`} action={{ label: "Back", onPress: () => goBack() }} /> : null}
         {status === 'error' ? <EmptyState icon="cloud-offline-outline" title="Couldn’t load the board" body="Check your connection and try again." action={{ label: "Try again", onPress: retry }} /> : null}
         {stale ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stale}>Offline: this is the board from earlier.</Text> : null}
         {/* The week's moments: one line each, newest first. */}
@@ -283,7 +286,7 @@ export default function CityBoard() {
               <View style={styles.climbButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged this month by players who call it home. A city needs {MIN_PLAYERS} players to be ranked; until then it shows 0.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged{allTime ? '' : ' this month'} by players who call it home. A city needs {MIN_PLAYERS} players to be ranked; until then it shows 0.</Text>
         </View>
         ) : null}
       </Screen>

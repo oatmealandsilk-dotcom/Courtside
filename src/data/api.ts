@@ -29,7 +29,8 @@ import { DEMO_FOLLOWERS, DEMO_FOLLOWING, DEMO_MAP_ALERTS } from './mock/courtLif
 import { demoSessionTagNotifications, demoSessionTags, demoSessions } from './mock/sessions';
 import { DEMO_COURT_REGULARS, DEMO_COURT_WINS, DEMO_FLYBY } from './mock/strava';
 import { DEMO_BOARD_CITIES, DEMO_BOARD_EVENTS, DEMO_BOARD_PLACES, DEMO_ACTIVE_COURTS, DEMO_CITY_CLIPS, DEMO_PLAYER_SESSIONS, DEMO_PLAY_LOG, type DemoBoardCity } from './mock/cityBoard';
-import { FILL_TO, MIN_PLAYERS, monthAfter, rankRows } from '@/features/cityBoard/board';
+import { FILL_TO, MIN_PLAYERS, boardEnd, monthAfter, rankRows } from '@/features/cityBoard/board';
+import { isAllTime } from '@/features/cityBoard/flag';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { localDay } from '@/features/practice/stats';
 import { STREAK_FLAME_FROM } from '@/features/practice/streakFlame';
@@ -594,7 +595,8 @@ const BOARD_TENNIS = new Set<PracticeSession['kind']>(['practice', 'match', 'dri
  * city's total holds of yours).
  */
 function demoMySessions(sessions: PracticeSession[], me: ID, month: string): { now: number; inTotal: number } {
-  const end = monthAfter(month);
+  // The all-time board (migration 211): every session ever.
+  const end = boardEnd(month);
   const today = localDay(Date.now());
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
   const byDay = new Map<string, PracticeSession[]>();
@@ -668,7 +670,8 @@ export async function cityBoard({ month, me, users: everyone, sessions }: { mont
   return clone({
     month,
     refreshedAt: new Date().toISOString(),
-    openUntil: `${monthAfter(month).slice(0, 8)}03`,
+    // The all-time board is never closed (city_board() sends no open_until for it).
+    openUntil: isAllTime(month) ? '' : `${monthAfter(month).slice(0, 8)}03`,
     cities,
     events: DEMO_BOARD_EVENTS.filter((e) => ranked.has(e.who) && ranked.has(e.passed)).map((e) => ({ who: e.who, passed: e.passed, at: new Date(Date.now() - e.daysAgo * 86_400_000).toISOString() })),
     me: {

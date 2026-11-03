@@ -1,5 +1,6 @@
 import type { CityBoard, CityBoardCity, CityPageFill, ID, PracticeSession } from '@/data/types';
 import { localDay } from '@/features/practice/stats';
+import { isAllTime } from './flag';
 
 /**
  * City boards (migration 196; owner, Oct 28: "New rank city sessions is
@@ -99,7 +100,8 @@ export function withMine(board: CityBoard, extra = 0): { cities: CityBoardCity[]
   const mySessions = me.sessions + extra;
   // Your month counts where its first session was: here, or (nothing counted yet) here from your next one.
   // Counted with no town on your profile then (countsFor null, sessions > 0): nowhere this month.
-  const countsHere = !!me.cityId && (me.countsFor === me.cityId || (me.countsFor === null && me.sessions === 0));
+  // All time (migration 211): every session of yours counts for the town on your profile now, wherever it began.
+  const countsHere = !!me.cityId && (isAllTime(board.month) || me.countsFor === me.cityId || (me.countsFor === null && me.sessions === 0));
   const add = countsHere ? mySessions - me.inTotal : 0;
   if (add <= 0) return { cities: board.cities, mySessions, countsHere };
   const cities = board.cities.map((c) => {
@@ -114,6 +116,9 @@ export function withMine(board: CityBoard, extra = 0): { cities: CityBoardCity[]
 const TENNIS = new Set<PracticeSession['kind']>(['practice', 'match', 'drills']);
 const DAY_MS = 86_400_000;
 
+/** The day after a board's last: the next month's 1st, or (the all-time board) none. */
+export const boardEnd = (month: string) => (isAllTime(month) ? '9999-12-31' : monthAfter(month));
+
 /**
  * Your sessions this phone logged since the board was last worked out that
  * the server will count (refresh_city_board, step 1): tennis, in the board's
@@ -123,7 +128,7 @@ const DAY_MS = 86_400_000;
 export function sessionsSince(sessions: PracticeSession[], me: ID, month: string, refreshedAt: string | null): number {
   if (!refreshedAt) return 0;
   const since = Date.parse(refreshedAt);
-  const end = monthAfter(month);
+  const end = boardEnd(month);
   const byDay = new Map<string, { before: number; after: number }>();
   for (const s of sessions) {
     if (s.userId !== me || !TENNIS.has(s.kind) || s.day < month || s.day >= end) continue;
@@ -175,8 +180,8 @@ export function boardMonth(now: Date = new Date()): string {
 /** "October". */
 export const monthName = (month: string) => MONTHS[Number(month.slice(5, 7)) - 1] ?? '';
 
-/** Whether a month's board is over (shown on the 1st as the final board). */
-export const isFinal = (month: string, now: Date = new Date()) => month < thisMonth(now);
+/** Whether a month's board is over (shown on the 1st as the final board). The all-time board never is. */
+export const isFinal = (month: string, now: Date = new Date()) => !isAllTime(month) && month < thisMonth(now);
 
 /**
  * The quiet word beside "Cities this month": how long the race has left
@@ -184,6 +189,7 @@ export const isFinal = (month: string, now: Date = new Date()) => month < thisMo
  * reason to log today; "Final" for last month's, shown on the 1st.
  */
 export function daysLeftLabel(month: string, now: Date = new Date()): string {
+  if (isAllTime(month)) return 'All time';
   if (isFinal(month, now)) return 'Final';
   const days = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const left = days - now.getDate() + 1;
@@ -232,7 +238,7 @@ export interface PlayLine { lines: [string, string]; spoken: string }
  * evenings": under "Up to hit today" that could read as "playing this
  * evening". A filled face is a regular; only the green ring says "up today".
  */
-export function playWords(f: Pick<CityPageFill, 'habit' | 'lastDay' | 'sessions'>, now: Date = new Date()): PlayLine {
+export function playWords(f: Pick<CityPageFill, 'habit' | 'lastDay' | 'sessions'>, now: Date = new Date(), allTime = false): PlayLine {
   if (f.habit) return { lines: ['Usually', f.habit], spoken: `usually plays ${f.habit}` };
   if (f.lastDay && /^\d{4}-\d{2}-\d{2}$/.test(f.lastDay)) {
     const back = daysBack(f.lastDay, now);
@@ -242,6 +248,11 @@ export function playWords(f: Pick<CityPageFill, 'habit' | 'lastDay' | 'sessions'
       return { lines: ['Played', day], spoken: `played ${back === 1 ? day : `on ${day}`}` };
     }
   }
-  if (typeof f.sessions === 'number' && f.sessions > 0) return { lines: [sessionsWords(f.sessions), 'this month'], spoken: `${sessionsWords(f.sessions)} this month` };
-  return { lines: ['Active', 'this month'], spoken: 'active this month' };
+  // The all-time board (migration 211): "12 sessions" / "all time"; "Active" alone.
+  if (typeof f.sessions === 'number' && f.sessions > 0) {
+    return allTime
+      ? { lines: [sessionsWords(f.sessions), 'all time'], spoken: `${sessionsWords(f.sessions)} all time` }
+      : { lines: [sessionsWords(f.sessions), 'this month'], spoken: `${sessionsWords(f.sessions)} this month` };
+  }
+  return allTime ? { lines: ['Active', ' '], spoken: 'active' } : { lines: ['Active', 'this month'], spoken: 'active this month' };
 }
