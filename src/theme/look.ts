@@ -120,6 +120,19 @@ export const LESS_AI_ROUND2: boolean = true;
  * starts from further up, so it is always out of sight), and the "How was the
  * hit?" card, never change here.
  */
+/**
+ * SELF_AVATAR_COLOR (Nov 3, owner: "One color"). Your own picture with no
+ * photo was brand green on Profile, Edit profile and the Tennis profile card,
+ * but your own colour (the one everyone else sees you in) in Settings,
+ * Account center, the comment box and your Discussions posts. One colour
+ * everywhere your own picture is drawn; he has not said which yet:
+ *   'own'    the colour other people already see you in, everywhere
+ *   'brand'  brand green, everywhere
+ * Other people's pictures never change here.
+ */
+export type SelfAvatarColor = 'own' | 'brand';
+export const SELF_AVATAR_COLOR: SelfAvatarColor = 'own';
+
 export type ToastLook = 'now' | 'banner' | 'line';
 export const TOAST_LOOK: ToastLook = 'banner';
 export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';

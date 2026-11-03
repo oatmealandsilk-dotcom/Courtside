@@ -12,7 +12,7 @@ import { GuestSignIn } from '@/features/guest/GuestSignIn';
 import { PhoneAppRow } from '@/features/phoneApp/PhoneAppCard';
 import { ConnectCard } from '@/features/activity/ConnectCard';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
+import { Avatar, Button, EmptyState, Screen, selfTint } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
 import { CarouselMark } from '@/components/CarouselMark';
@@ -221,7 +221,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    <View style={styles.identity}>
      {/* Picture on the left, who you are beside it, the bio under — the way the apps people already use set it. */}
      <View style={styles.identityRow}>
-       <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
+       <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} style={{ backgroundColor: selfTint(user.avatarSeed) }}/>
        <View style={styles.identityWords}>
          {/* The flame after your name is what everyone else sees there (3 days or more). A screen reader hears it once, from the streak pill under it. */}
          {LESS_AI ? <>
@@ -464,7 +464,7 @@ function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?:
   return <>
    <View style={styles.identity}>
      <View style={styles.identityRow}>
-       <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80} style={{ backgroundColor: colors.brand }}/>
+       <Avatar name={name ?? ''} seed={seed} uri={avatarUrl} size={80} style={{ backgroundColor: selfTint(seed) }}/>
        <View style={styles.identityWords}>
          {name ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{name}</Text> : <Blank w={140} h={20} />}
          <Blank w={110} h={16} />

@@ -5,7 +5,7 @@ import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar } from '@/components/ui';
+import { Avatar, selfTint } from '@/components/ui';
 import { CardWash, boxLook, cardLook, quietBox, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
@@ -23,7 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SCALES } from '@/features/players/ratingScales';
 import { colors, font, inkOn, lift } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { useUsers } from '@/store/AppContext';
+import { useMyId, useUsers } from '@/store/AppContext';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { initials } from '@/lib/format';
 import { EaseSwatch, GlideText, RollRating, SoftSwap, SoftText } from './SetupMotion';
@@ -73,6 +73,7 @@ export interface SetupDraft { rated: boolean; years: number | null; game?: boole
 
 function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | 'banner'; onPress?: () => void }) {
   const { theme } = useTheme();
+  const myId = useMyId();
   // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
   // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
   // On the other courts but Night both cards are the quiet box near the page (Oct 25, owner: "I meant the tennis
@@ -150,7 +151,7 @@ function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | '
       <View style={styles.identity}>
         {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
             a deeper shade of the card instead (a brand disc would vanish into it). */}
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : colors.brand }} />
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : user.id === myId ? selfTint(user.avatarSeed) : colors.brand }} />
         <View style={styles.identityWords}>
           <View style={styles.nameLine}><Text numberOfLines={1} style={[styles.name, styles.shrink, { color: look.ink }]}>{user.name}</Text><OfficialCheck userId={user.id} size={17} /></View>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
