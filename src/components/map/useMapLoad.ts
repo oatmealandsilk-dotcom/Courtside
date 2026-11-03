@@ -28,6 +28,9 @@ export type MapLoadStatus = 'loading' | 'painted' | 'failed';
  *   or the connection comes back, and whenever `restart` is called (a tap).
  *   A try that was still going and comes good later still counts.
  */
+/** A gap this long between the 1-second checks means the app (or this map) was paused, not that the map went quiet. */
+const RESUME_GAP_MS = 3000;
+
 export function useMapLoad(where: string, active = true) {
   // Off screen (a hidden pager page, a screen pushed over it, another tab): its clocks stop, since the
   // phone pauses an unseen web view and its silence there is not a failure (Oct 18 crash reports).
@@ -104,12 +107,25 @@ export function useMapLoad(where: string, active = true) {
 
   // A try that has gone quiet is a failure (20 s before the map is up, 90 s after); before it is up, time runs
   // out once nothing is arriving, but never for a try that has only just started (it counts as a try then).
+  // Only while the app is in front (Nov 3 sweep): the phone wakes the app in the background (Apple Health,
+  // iOS resuming it) and a tick could run there before the 'back in front' handler below, with clocks from
+  // minutes ago, filing a false "Map didn't load ... after 1 try, 1826s". A tick long after the last one
+  // counted is a resume: fresh clocks, as the app coming back to the front gives.
   useEffect(() => {
     if (status !== 'loading') return undefined;
+    let lastTick = Date.now();
     const t = setInterval(() => {
+      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
       if (!act.current) return;
-      if (s.painted || s.gaveUp || s.retry) return;
       const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+      if (s.painted || s.gaveUp || s.retry) return;
+      if (gap > RESUME_GAP_MS) {
+        s.heard = now;
+        if (!s.up) { s.since = s.began = s.progress = now; }
+        return;
+      }
       if (s.up) { if (now - s.heard > LOAD_STUCK_MS) failed('stuck'); return; }
       if (now - s.heard > LOAD_SILENCE_MS) { failed('no answer'); return; }
       if (now - s.since > LOAD_BUDGET_MS && now - s.began > LOAD_SILENCE_MS && now - s.progress > 5000) failed('too slow');
