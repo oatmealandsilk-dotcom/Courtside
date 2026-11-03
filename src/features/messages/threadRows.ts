@@ -41,7 +41,11 @@ export interface ThreadRow {
   wordsHidden?: boolean;
   /** In a group, who has read up to here (their faces go under it). */
   seenBy?: ID[];
+  /** Joined in one run to a photo just above or below it: a court or link card is drawn at the photo's width, so their edges meet. */
+  besidePhoto?: boolean;
 }
+
+const isPhoto = (m?: Message) => !!m && m.kind === 'photo' && !!m.photos?.length;
 
 const runsOn = (a?: Message, b?: Message) =>
   !!a && !!b && a.kind !== 'system' && b.kind !== 'system' && a.senderId === b.senderId
@@ -100,9 +104,11 @@ export function buildRows(thread: Message[], opts: { me: ID | null; group: boole
     }
     const name = theirsInGroup && !inRun;
     const gap: Gap = inRun ? 'run' : prev && !stamp && !name && prev.kind !== 'system' ? 'turn' : 'plain';
+    const besidePhoto = (inRun && isPhoto(prev)) || (!lastOfRun && isPhoto(next));
     rows.push({
       key: message.id, message, stamp, gap, joinBelow: !lastOfRun, name, face: theirsInGroup && lastOfRun,
       seenBy: seenAt.get(message.id),
+      ...(besidePhoto ? { besidePhoto } : {}),
     });
   }
   return rows;
@@ -121,6 +127,7 @@ export function keepRows(cache: Map<string, ThreadRow>, rows: ThreadRow[]): Thre
     const was = cache.get(row.key);
     return was && was.message === row.message && was.stamp === row.stamp && was.gap === row.gap && was.joinBelow === row.joinBelow
       && was.name === row.name && was.face === row.face && sameIds(was.folded, row.folded) && sameIds(was.seenBy, row.seenBy) && was.wordsHidden === row.wordsHidden
+      && was.besidePhoto === row.besidePhoto
       ? was : row;
   });
   cache.clear();
