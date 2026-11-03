@@ -15,3 +15,5 @@ export const simCheckIn = {
   reading: async (fix: GeoResult): Promise<GeoResult> => fix,
   server: async (): Promise<boolean> => true,
 };
+export const simNoPins = () => false;
+export function setSimNoPins(_on: boolean) { /* no simulator on the website */ }

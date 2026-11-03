@@ -92,8 +92,6 @@ export const TAP_FAST_FOR_EVERYONE = false;
 let tapFastForced: boolean | null = null;
 
 /** Whether taps answer sooner right now. Read it when acting, not once at import. */
-/** Whether the signed-in person is an admin (AppContext tells setPressV2Admin). */
-export const adminNow = (): boolean => admin;
 export const tapFastOn = (): boolean => tapFastForced ?? (TAP_FAST_FOR_EVERYONE || admin);
 
 /** The simulator's proof only (see tapFastForced): on, off, or back to the switch (null). */

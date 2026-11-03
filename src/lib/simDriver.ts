@@ -109,3 +109,8 @@ export function simLog(line: string) {
     logBuf = [];
   }, 200);
 }
+
+/** The simulator's proof only ("nopins on=1"): the full map's pins held back, to time its opening without them. */
+let noPins = false;
+export const simNoPins = () => SIM_DRIVER && noPins;
+export function setSimNoPins(on: boolean) { noPins = on; }

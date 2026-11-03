@@ -1,5 +1,4 @@
-import React, { useContext, useEffect, useRef } from 'react';
-import { NavigationContext } from 'expo-router/build/react-navigation/core/NavigationContext';
+import React, { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, { Easing, cancelAnimation, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
@@ -7,7 +6,6 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
-import { mapCovering, onMapCovering } from '@/features/players/mapOpenV2';
 
 const ACircle = Animated.createAnimatedComponent(Circle);
 
@@ -49,10 +47,6 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
   const pop = useSharedValue(1);
   // What it was last time, so only a real change plays (not its first appearance, nor a second run of the same effect).
   const prev = useRef(open);
-  // Whether the beat is running now (so a second start never jumps it back to the beginning).
-  const beating = useRef(false);
-  // Stopped only because the map covers it (so it carries on from where it stood once it shows again).
-  const paused = useRef(false);
 
   useEffect(() => {
     const changed = prev.current !== open;
@@ -66,33 +60,9 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
         : withTiming(0, { duration: 420, easing: Easing.bezier(0.4, 0, 0.2, 1) });
       if (open) pop.value = withSequence(withTiming(1.08, { duration: 170, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 12, stiffness: 220 }));
     }
-    beatNow.current();
+    if (open && !reduce) beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
+    else cancelAnimation(beat);
   }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
-  // MAP_OPEN_V2: under the full map (its slide landed, mapOpenV2), the beat stops, out of sight; it starts again as the map
-  // begins to leave, before this page shows. A ring on the page that is on top (the full map's own) never stops.
-  const nav = useContext(NavigationContext);
-  const beatNow = useRef(() => undefined as void);
-  beatNow.current = () => {
-    const hidden = mapCovering() && !!nav && !nav.isFocused();
-    const loop = () => withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
-    if (open && !reduce && !hidden) {
-      if (beating.current) return;
-      beating.current = true;
-      // Back from under the map: the breath carries on from where it stood (no jump), then beats as before.
-      if (paused.current) {
-        paused.current = false;
-        const at = Math.min(1, Math.max(0, beat.value));
-        beat.value = withSequence(withTiming(1, { duration: Math.max(1, Math.round(BEAT * (1 - at))), easing: Easing.out(Easing.quad) }), withTiming(0, { duration: 0 }), loop());
-        return;
-      }
-      beat.value = loop();
-    } else {
-      paused.current = beating.current && hidden;
-      beating.current = false;
-      cancelAnimation(beat);
-    }
-  };
-  useEffect(() => onMapCovering(() => beatNow.current()), []);
 
   const ring = useAnimatedProps(() => (reduce
     // Reduce Motion: the whole ring fades in and out, never drawn round.

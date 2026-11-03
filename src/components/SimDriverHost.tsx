@@ -2,9 +2,8 @@ import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
 
-import { simAction, simCheckIn, simLog, startSimPolling } from '@/lib/simDriver';
+import { setSimNoPins, simAction, simCheckIn, simLog, startSimPolling } from '@/lib/simDriver';
 import { forceTapFast } from '@/features/navigation/pressV2';
-import { setMapOpenV2Sim } from '@/features/players/mapOpenV2';
 import { useApp } from '@/store/AppContext';
 
 /**
@@ -59,21 +58,8 @@ export function SimDriverHost() {
       simAction('signin', () => { void now.current.signIn('you').then(() => router.replace('/')); }),
       simAction('go', (q) => { if (q.to) router.navigate(q.to as never); }),
       simAction('fwatch', (q) => fwatchNow.current(Number(q.ms) || 3000)),
-      // "jsprof on" / "jsprof off": Hermes's own sampling profiler (if this engine has it), its trace into Documents/jsprof.cpuprofile.
-      simAction('jsprof', (q) => {
-        const h = (globalThis as unknown as { HermesInternal?: { enableSamplingProfiler?: () => void; disableSamplingProfiler?: () => void; dumpSampledTraceToFile?: (f: string) => void } }).HermesInternal;
-        try {
-          if (q.on === '1') { h?.enableSamplingProfiler?.(); simLog(`[jsprof] on ${h?.enableSamplingProfiler ? 'yes' : 'missing'}`); return; }
-          // eslint-disable-next-line @typescript-eslint/no-require-imports
-          const { Paths } = require('expo-file-system') as typeof import('expo-file-system');
-          const path = `${Paths.document.uri.replace('file://', '')}/jsprof.cpuprofile`;
-          h?.dumpSampledTraceToFile?.(path);
-          h?.disableSamplingProfiler?.();
-          simLog(`[jsprof] dumped ${path}`);
-        } catch (e) { simLog(`[jsprof] error ${String(e)}`); }
-      }),
-      // MAP_OPEN_V2 (mapOpenV2) on (1), off (0), or as the switch says for this player (auto): the same build both ways.
-      simAction('mapv2', (q) => setMapOpenV2Sim(q.on === '1' ? true : q.on === '0' ? false : null)),
+      // "nopins on=1": the full map's pins held back (app/map.tsx), to time its opening without the pins' wave.
+      simAction('nopins', (q) => { setSimNoPins(q.on === '1'); simLog(`[sim] nopins ${q.on}`); }),
       simAction('back', () => { if (router.canGoBack()) router.back(); }),
       simAction('mapvis', () => { void now.current.setMapVisibility('mutuals'); }),
       // Taps answering sooner (pressV2's TAP_FAST) off or on for this build, whoever is signed in, so the tap timing
