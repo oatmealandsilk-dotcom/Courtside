@@ -31,6 +31,8 @@ import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } fro
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
+import { remote } from '@/data/remote';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { notKnownAdult } from '@/features/players/age';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
@@ -179,7 +181,7 @@ function routeFor(group: Group, hits: HitRequest[]): string {
   // Several workouts found at once: their list, each with its own Log it.
   if (group.found) return foundHref(group.found.activityIds);
   // The map's alerts open the map: on the player, or on the hit with its card up.
-  // A friend playing at a court opens the map on them: their pin is on that court.
+  // (A friend playing at a court opens that court: openFriendCourt, below.)
   if (group.kind === 'map-friend-hit' || group.kind === 'map-new-player' || group.kind === 'friend-court') return `/map?user=${group.actorIds[0]}`;
   // A hit with no spot to show (Flexible: no court yet, features/hits/flexible) opens its own page instead.
   if (group.kind === 'map-new-hit') {
@@ -327,7 +329,7 @@ function recapHours(preview: string | undefined | null): string | null {
 
 export default function Notifications() {
   const styles = useThemedStyles(styleDefinitions);
-  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions, autoLogSharing } = useApp();
+  const { notifications, users, posts, stories, comments, hitRequests, conversations, messages, questions, currentUserId, currentUser, followRequests, followingIds, followedCourts, courtRings, sessionTags, detectedActivities, feedGroupInvites, actions, blockedIds, sessions, autoLogSharing } = useApp();
   // Tracker sessions the server logged for you (migration 185), by the tracker session's id.
   const autoLogged = useMemo(() => new Set(sessions.filter((x) => x.autoLogged && x.activityId).map((x) => x.activityId!)), [sessions]);
   // Held back by the server until you choose (Post.autoHeld, migration 193), by the tracker session's id.
@@ -390,6 +392,18 @@ export default function Notifications() {
     const c = followedCourts?.find((x) => x.courtId === courtId);
     if (c) showCourtOnMap({ id: c.courtId, name: c.name ?? 'Tennis courts', lat: c.lat, lng: c.lng });
     else router.push('/map');
+  };
+  // A friend playing at a court: the map on that court with its card up, as the phone's alert opens it (migration 208's
+  // court_link). The friend often has no pin of their own (I'm playing here without Up to hit), so the map on them showed
+  // nothing. The court's spot from courts already loaded, else the map's courts; not found, the map on the friend as before.
+  const openFriendCourt = async (group: Group) => {
+    const id = group.targetId;
+    const name = group.preview?.trim() || 'Tennis courts';
+    const known = followedCourts?.find((x) => x.courtId === id) ?? courtRings.find((x) => x.courtId === id);
+    if (known) { showCourtOnMap({ id, name: known.name ?? name, lat: known.lat, lng: known.lng }); return; }
+    const spot = isSupabaseConfigured ? await remote.fetchCourtSpot(id).catch(() => null) : null;
+    if (spot) showCourtOnMap({ id, name: spot.name ?? name, lat: spot.lat, lng: spot.lng });
+    else router.push(`/map?user=${group.actorIds[0]}`);
   };
   // A tag of you, for an alert about one: what it was, from your side, and whether you have answered.
   const tagFor = (group: Group) => (group.kind === 'session-tag' ? sessionTags.find((t) => t.taggedId === currentUserId && t.sessionId === group.targetId) : undefined);
@@ -729,6 +743,7 @@ export default function Notifications() {
                   const reply = replyAt(group);
                   if (reply) { router.push({ pathname: '/comments', params: reply }); return; }
                   if (group.kind === 'court-activity') { openFollowedCourt(group.targetId); return; }
+                  if (group.kind === 'friend-court') { void openFriendCourt(group); return; }
                   const calledOff = calledOffChatFor(group);
                   if (calledOff) { router.push(`/messages/${calledOff}`); return; }
                   const to = routeFor(group, hitRequests);
