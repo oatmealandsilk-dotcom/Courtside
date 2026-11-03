@@ -128,7 +128,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const shown = (tab === 'Tagged' ? posts.filter(p => !!user && isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => inSection(p, tab))).sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
  // How many of each, shown beside the section names.
  const counts: Record<typeof TABS[number], number> = {
-   Posts: own.length,
+   Posts: own.filter(p => inSection(p, 'Posts')).length,
    Clips: own.filter(p => p.kind === 'clip').length,
    Activity: own.filter(p => inSection(p, 'Activity')).length,
    Tagged: user ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId).length : 0,
