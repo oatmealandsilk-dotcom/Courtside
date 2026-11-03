@@ -41,6 +41,8 @@ import { openRules } from '@/features/moderation/RemovedNote';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { useArrived } from '@/lib/useArrived';
 import { toastForJoin } from '@/features/groups/GroupInvitesSection';
+import { designVariant } from '@/features/design/variant';
+import { ExampleRows, FirstSteps, PeopleToFollow, QuietLine } from '@/features/notifications/EmptyOptions';
 
 /**
  * One row per thing that happened to you, the way Instagram does it.
@@ -376,6 +378,8 @@ export default function Notifications() {
   // The welcome's one next step: what the map page leads with right now (mapLead.ts).
   const mapLead = useMapLead();
   const findPlayers = () => { requestSection('/discuss', 'players'); goToTab('/discuss'); };
+  // Design options for a page with nothing yet, website only (?var=notifications-empty:A … D); null is today's page.
+  const [emptyOption] = useState(() => designVariant('notifications-empty'));
   // A teen's line is the same sentence as their friends card (friendsWords); the button is the
   // short verb, so that sentence fits on two lines beside it.
   const welcomeStep = currentUser && notKnownAdult(currentUser)
@@ -668,7 +672,12 @@ export default function Notifications() {
           </Pressable>
         </View>
       ) : null}
-      {groups.length === 0 ? (
+      {groups.length === 0 && emptyOption && welcome.shown ? (
+        emptyOption === 'A' ? <ExampleRows />
+          : emptyOption === 'B' ? <PeopleToFollow />
+          : emptyOption === 'C' ? <FirstSteps onFindPlayers={findPlayers} />
+          : <QuietLine />
+      ) : groups.length === 0 ? (
         <EmptyState
           icon="notifications-outline"
           title={welcome.shown ? 'Nothing else yet' : 'Nothing yet'}
