@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CityBoard, CityBoardCity, CityPage } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { boardMonth, sessionsSince, thisMonth, withMine } from './board';
-import { cityBoardOn } from './flag';
+import { ALL_TIME, CITY_BOARD_ALL_TIME, cityBoardOn, isAllTime } from './flag';
 
 /**
  * Where a board or a page stands:
@@ -14,8 +14,12 @@ import { cityBoardOn } from './flag';
  */
 export type BoardStatus = 'off' | 'loading' | 'ready' | 'error';
 
-/** The month every board screen shows: the phone's own, last month's final board on the 1st (see boardMonth). */
-let fellBack: { from: string; to: string } | null = null;
+/**
+ * The month every board screen shows: the phone's own, last month's final board on the 1st (see boardMonth);
+ * the all-time board while CITY_BOARD_ALL_TIME is on (migration 211). A fall back holds for the day it was
+ * made (`at`): the next day asks for `from` again (say 211 has been run since, or a month has gone by).
+ */
+let fellBack: { from: string; to: string; at: string } | null = null;
 
 /** How many sessions of yours this phone holds (logging one asks for the board again). */
 const useMySessionCount = () => {
@@ -46,10 +50,10 @@ export function useCityBoard(enabled = true): {
   const on = enabled && cityBoardOn(currentUser);
   // Worked out on every draw, never kept: Find Players stays open for days on a phone, and the board must
   // move on to the new month (and ask again on a new day) without the app being closed first.
-  const first = boardMonth();
+  const first = CITY_BOARD_ALL_TIME ? ALL_TIME : boardMonth();
   const today = new Date().toDateString();
   const [, redraw] = useState(0);
-  const month = fellBack && fellBack.from === first ? fellBack.to : first;
+  const month = fellBack && fellBack.from === first && fellBack.at === today ? fellBack.to : first;
   const mine = useMySessionCount();
   const [tries, setTries] = useState(0);
   useEffect(() => {
@@ -57,13 +61,21 @@ export function useCityBoard(enabled = true): {
     let live = true;
     actions.loadCityBoard(month, tries > 0).then((b) => {
       // The 1st: last month's final board, unless it has nothing on it (then this month's, which has begun).
-      if (live && b && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
-        fellBack = { from: month, to: thisMonth() };
+      if (live && b && !isAllTime(month) && month !== thisMonth() && !b.cities.length && !b.me.sessions) {
+        // (Keyed by `first`: after an all-time fall back to last month's final, this one replaces it.)
+        fellBack = { from: first, to: thisMonth(), at: today };
         redraw((n) => n + 1);
       }
-    }, () => undefined);
+    }, (err: unknown) => {
+      // A database without the all-time board yet (migration 211 not run, or undone): the month's, as before 211.
+      const said = err && typeof err === 'object' && 'message' in err ? String((err as { message: unknown }).message) : '';
+      if (live && isAllTime(month) && said.includes('month out of range')) {
+        fellBack = { from: month, to: boardMonth(), at: today };
+        redraw((n) => n + 1);
+      }
+    });
     return () => { live = false; };
-  }, [on, month, today, mine, tries, actions]);
+  }, [on, first, month, today, mine, tries, actions]);
   const entry = on ? cityBoards[month] : undefined;
   const board = entry?.board ?? null;
   const status: BoardStatus = !on ? 'off' : !entry ? 'loading' : board ? 'ready' : entry.failed ? 'error' : 'off';

@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import type { CityPage, ID, User } from '@/data/types';
 import { useApp } from '@/store/AppContext';
 import { FILL_TO, playWords, type PlayLine } from './board';
+import { isAllTime } from './flag';
 
 /** A face after the ringed ones in Up to hit: a regular here, with when they usually play. */
 export interface FillFace extends PlayLine { user: User }
@@ -36,11 +37,12 @@ export function useCityFill(page: CityPage | null | undefined, upIds: ID[]): Fil
     const byId = new Map(users.map((u) => [u.id, u]));
     const up = new Set(upIds);
     const now = new Date();
+    const allTime = isAllTime(page.month);
     return page.fill
       .flatMap((f) => {
         const user = byId.get(f.userId);
         if (!user || user.id === currentUserId || up.has(user.id) || blockedIds.includes(user.id) || blockedMeIds.includes(user.id) || mutedIds.includes(user.id)) return [];
-        return [{ user, ...playWords(f, now) }];
+        return [{ user, ...playWords(f, now, allTime) }];
       })
       .slice(0, room);
   }, [page, upKey, users, currentUserId, blockedIds, blockedMeIds, mutedIds]); // eslint-disable-line react-hooks/exhaustive-deps

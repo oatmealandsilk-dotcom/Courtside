@@ -7,6 +7,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { MIN_PLAYERS, daysLeftLabel, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, sessionsWords, whenWords, type RankedCity } from '@/features/cityBoard/board';
 import { BoardHead, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
+import { isAllTime } from '@/features/cityBoard/flag';
 import { cityLabel, zeroCities, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard } from '@/features/cityBoard/useCityBoard';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -73,6 +74,8 @@ export function CityBoardPreview() {
   const below = apart ? rows[at + 1] ?? null : null;
   const target = mine ? nextTarget(ranked, mine.id, 'total') : null;
   const final = isFinal(month);
+  // The all-time board (migration 211): "Cities", with "All time" where the days left were.
+  const allTime = isAllTime(month);
 
   // One line of news under the title, the race's latest: about your city when there is one.
   const moment = useMemo(() => {
@@ -90,7 +93,7 @@ export function CityBoardPreview() {
 
   // The last row dissolves into the page; never your own.
   const fadeRows = apart ? (below ? 1 : 0) : Math.min(1.6, Math.max(0, top.length - 1 - at));
-  const title = final ? `Cities in ${monthName(month)}` : 'Cities this month';
+  const title = allTime ? 'Cities' : final ? `Cities in ${monthName(month)}` : 'Cities this month';
   const loading = status === 'loading';
   const listed = rows.length > 0;
 
