@@ -34,6 +34,9 @@ export const cityBoardOn = (me?: { isAdmin?: boolean } | null): boolean => !!me 
  * city its month counted it for (a town change never moves a count). 211 also
  * points the "<city> moved up to #N" push at the all-time board: turning this
  * off for good wants that back on the month (211's undo does it).
+ * All-time Most active courts (city_page) adds up the monthly active-court
+ * rows, which refresh_active_courts' 13-month clean-up starts deleting from
+ * about Dec 2027: revisit then if the board is still all time.
  */
 export const CITY_BOARD_ALL_TIME = true;
 

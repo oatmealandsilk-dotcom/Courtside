@@ -153,6 +153,12 @@ end $$;
 
 -- Each player's count per city (null: counted with no town), all time: the
 -- block above plus every month board kept. `last_month`: the latest month in it.
+-- A month refresh_city_board() no longer works out (before the month of 3 days
+-- ago) adds its `sessions` as `sessions_now` too: a session for its last days
+-- logged after that day's cut in Hawaii is in its frozen sessions_now but never
+-- reaches its sessions, so "you" would stay 1 above "in total" for ever (review
+-- of 211, round 3). Parts that add up to nothing are left out (a board row
+-- needs sessions_now > 0).
 CREATE OR REPLACE FUNCTION private.city_board_all_time_parts(p_user uuid DEFAULT NULL::uuid)
  RETURNS TABLE(user_id uuid, city_id text, sessions integer, sessions_now integer, last_month date)
  LANGUAGE sql
@@ -164,11 +170,14 @@ AS $function$
             from private.city_board_all_time_base b
            where p_user is null or b.user_id = p_user
           union all
-          select mb.user_id, mb.city_id, mb.sessions, mb.sessions_now, mb.month
+          select mb.user_id, mb.city_id, mb.sessions,
+                 case when mb.month < date_trunc('month', current_date - 3)::date then mb.sessions else mb.sessions_now end,
+                 mb.month
             from public.city_board_members mb
            where mb.month <> date '2000-01-01'
              and (p_user is null or mb.user_id = p_user)) z
    group by z.user_id, z.city_id
+  having sum(z.sessions_now) > 0
 $function$;
 revoke all on function private.city_board_all_time_parts(uuid) from public, anon, authenticated;
 
@@ -1082,7 +1091,7 @@ begin
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_board(date)'::regprocedure) <> 'a38cb62648a6faffeef863c526e80959'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.city_page(text, date)'::regprocedure) <> '4c5148cd8bb584e4b36e25a63da00c86'
      or (select md5(p.prosrc) from pg_proc p where p.oid = 'public.send_catch_up_alerts(timestamptz, boolean)'::regprocedure) <> '2dcb9690a1fcd124be4bb28c7d215e30'
-     or (select md5(p.prosrc) from pg_proc p where p.oid = 'private.city_board_all_time_parts(uuid)'::regprocedure) is distinct from '8a7ffc8aadc73c08587ae76220b9abf8' then
+     or (select md5(p.prosrc) from pg_proc p where p.oid = 'private.city_board_all_time_parts(uuid)'::regprocedure) is distinct from '6b1bead2c48eb5dcd732043044cf6c88' then
     raise exception 'Migration 211 stopped: the city board functions did not come out as written. Nothing was changed.';
   end if;
   if (select string_agg(p.oid::regprocedure::text || '=' || coalesce(p.proacl::text, '-') || '/' || p.prosecdef::text || '/' || coalesce(p.proconfig::text, '-'), '; ' order by p.oid::regprocedure::text)
