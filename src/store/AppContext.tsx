@@ -1865,6 +1865,25 @@ function sameRows<T>(held: readonly T[], fetched: readonly T[]): boolean {
   return true;
 }
 
+/** What a Follow button showed for someone when it was tapped: you follow them, you have asked to (a private account), or neither. */
+type FollowSeen = 'following' | 'requested' | 'none';
+/** The quick Follow being sent right now (followAsSeen), if any: for whom, and what its button showed on the tap. */
+let followSeen: { id: ID; seen: FollowSeen } | null = null;
+
+/**
+ * Runs a quick Follow's own press (useQuickFollow), sent a moment after its tap, so that the follow in it only
+ * goes through if the app still says what the button said on the tap. A Follow is a toggle: if anything else
+ * followed them in between (first-move's Follow all, another Follow button for them, a check of whom you follow),
+ * the tap's follow was already done, and sending it then undid it ("Unfollowed @x · Undo", the ask taken back for
+ * a private account). toggleFollow then changes nothing for them; the rest of the press (a list keeping the row
+ * on show) still runs.
+ */
+export function followAsSeen(userId: ID, seen: FollowSeen, press: () => void) {
+  const was = followSeen;
+  followSeen = { id: userId, seen };
+  try { press(); } finally { followSeen = was; }
+}
+
 const AppContext = createContext<AppContextValue | null>(null);
 const NO_USERS: User[] = [];
 /**
@@ -8895,6 +8914,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const me = stateRef.current.currentUserId;
       const target = stateRef.current.users.find((u) => u.id === userId);
       const following = stateRef.current.followingIds.includes(userId);
+      // A quick Follow sent after its tap (followAsSeen): only if they are still as its button showed them.
+      if (followSeen && followSeen.id === userId) {
+        const now: FollowSeen = following ? 'following'
+          : me && stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId) ? 'requested' : 'none';
+        if (now !== followSeen.seen) return;
+      }
       if (me && userId !== me && target?.isPrivate && !following) {
         // A private account: this is an ask, not a follow. Asking twice takes it back.
         const asked = stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId);

@@ -6,7 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import * as haptics from '@/lib/haptics';
 import { useTheme } from '@/theme/ThemeProvider';
 import { BrandWash } from '@/components/ui/BrandWash';
-import { useApp, useUsers } from '@/store/AppContext';
+import { followAsSeen, useApp, useUsers } from '@/store/AppContext';
 import { buttonShape, colors, readsOn, typography, withAlpha } from '@/theme';
 import { reduceMotionEnabled } from '@/lib/useReducedMotion';
 import { TextScale } from '@/theme/textScale';
@@ -36,8 +36,13 @@ export type FollowShown = 'following' | 'requested' | 'none';
  * `settleMs`: a button whose change animates (the pill's colour fade, the map card's draw-in) has the app's
  * follow (its redraw, the database write) sent only once that has played, this long after the tap; the button
  * buzzes on the tap, so the follow's own buzz is left out then. Sent at once, the redraw landed part way through
- * and the fade stood still for two to three frames (Nov 3, Simulator, real taps: 13 of 14 list Follows held about
- * 40 ms mid-fade with this on, none with it off). The button itself still answers on the tap.
+ * and the fade stood still for two to three frames (Nov 3, Simulator, real taps: 12 of 14 list Follows held 30 to
+ * 43 ms part way through the fade with this on; with it off, 9 of 24 held 30 to 35 ms, all near the fade's start).
+ * The button itself still answers on the tap.
+ *
+ * A follow is a toggle, so the one sent later goes through only if the app still says what the button showed on
+ * the tap (followAsSeen): followed some other way in between (first-move's Follow all, the same person's Follow
+ * elsewhere on the page), sending it undid that follow, with an "Unfollowed" toast (Nov 3 review).
  */
 export function useQuickFollow(stored: FollowShown, userId: string | undefined, onPress: () => void, settleMs = 0) {
   const fast = useTapFast();
@@ -64,17 +69,25 @@ export function useQuickFollow(stored: FollowShown, userId: string | undefined, 
     if (quickFollows.has(userId)) return;
     const next: FollowShown = stored === 'requested' ? 'none' : users.find((u) => u.id === userId)?.isPrivate ? 'requested' : 'following';
     const mark = {};
-    quickFollows.set(userId, mark);
-    mine.current = { id: userId, mark };
-    setQuick({ id: userId, shown: next, mark });
+    const id = userId;
+    // What the app said for them on the tap: the follow goes out only if it still says so when sent (followAsSeen).
+    const seen = stored;
+    quickFollows.set(id, mark);
+    mine.current = { id, mark };
+    setQuick({ id, shown: next, mark });
     const send = (later: boolean) => startTransition(() => {
-      // Sent later, its buzz is left out: the button buzzed on the tap (a second one came a third of a second after).
-      if (later) haptics.quietly(onPress); else onPress();
-      setQuick((q) => (q && q.mark === mark ? null : q));
+      try {
+        // Sent later, its buzz is left out: the button buzzed on the tap (a second one came a third of a second after).
+        // Followed some other way meanwhile (first-move's Follow all), it changes nothing: a toggle then undid the follow.
+        followAsSeen(id, seen, () => (later ? haptics.quietly(onPress) : onPress()));
+      } finally {
+        // Whatever the press did, the button hands back to what the app says (never stuck on Following).
+        setQuick((q) => (q && q.mark === mark ? null : q));
+      }
     });
     if (settleMs > 0) setTimeout(() => send(true), settleMs); else send(false);
     // Gone from the screen before its redraw landed (its layout effect never runs): let go once that surely has.
-    setTimeout(() => letGo(userId, mark), settleMs + LET_GO_MS);
+    setTimeout(() => letGo(id, mark), settleMs + LET_GO_MS);
   };
   const delta = (shown === 'following' ? 1 : 0) - (stored === 'following' ? 1 : 0);
   return { shown, press, delta };
