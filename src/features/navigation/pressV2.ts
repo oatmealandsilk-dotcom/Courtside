@@ -61,7 +61,10 @@ export function usePressV2(): boolean {
  *     redraw for the follow goes on as background work (it used to wait for every page in the app
  *     to redraw first);
  *   - Message on a player's page, when they can already be messaged: the chat opens at once,
- *     with no spinner drawn (and the whole page redrawn for it) first.
+ *     with no spinner drawn (and the whole page redrawn for it) first;
+ *   - any page opening over the four main tabs: the Feed's shades (behind the clip words, the
+ *     clip's top, a Discussions card's fade) are iOS's own gradient (ShadeGradient), which iOS
+ *     does not repaint by hand as a page opens over them, so the slide starts sooner.
  * Each of these changes when things happen on an iPhone, which no web check can see, so admins
  * (@oatmealandsilk, @mrdinosaur62) get them first, like the quicker press feel. Turned on for
  * everyone by setting this to true and shipping an over-the-air update: no database change.
