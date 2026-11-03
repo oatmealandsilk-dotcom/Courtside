@@ -38,15 +38,28 @@ export function useMapLoad(where: string, active = true) {
   act.current = active;
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapLoadStatus>('loading');
-  // since: when this round of tries began; began: when the current try did.
-  const s = useRef({ tries: 0, since: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
+  // since: when this round of tries began (moved on by any time spent paused); began: when the current try did;
+  // live: the last moment its clocks were running (in front and on screen).
+  const s = useRef({ tries: 0, since: Date.now(), live: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
 
   /** A new try, with its own clock: the page or map is made again. */
   const begin = () => {
     if (s.retry) { clearTimeout(s.retry); s.retry = null; }
     s.up = false;
-    s.began = s.heard = s.progress = Date.now();
+    s.began = s.heard = s.progress = s.live = Date.now();
     setAttempt((n) => n + 1);
+  };
+  /**
+   * Back from a pause (the app away, the map off screen, the phone holding the page): fresh clocks for this
+   * try, while the round's budget (since) keeps counting from where it stood. Only the time away is left
+   * out, so a pause never counts against it, and pausing never hands a slow map a fresh budget (Nov 3).
+   */
+  const resume = (now: number) => {
+    const away = now - s.live;
+    if (away > 1000) s.since = Math.min(now, s.since + away);
+    s.live = now;
+    s.heard = now;
+    if (!s.up) { s.began = s.progress = now; }
   };
   const giveUp = (why: string) => {
     if (s.painted || s.gaveUp) return;
@@ -77,6 +90,7 @@ export function useMapLoad(where: string, active = true) {
     } else if (what === 'up' && s.gaveUp) {
       // A try given up on came good after all: back to loading, and its streets are on their way.
       s.gaveUp = false;
+      s.live = now;
       setStatus('loading');
     }
   };
@@ -84,7 +98,7 @@ export function useMapLoad(where: string, active = true) {
   const restart = () => {
     if (s.painted) return;
     s.tries = 0;
-    s.since = Date.now();
+    s.since = s.live = Date.now();
     s.gaveUp = false;
     setStatus('loading');
     begin();
@@ -99,7 +113,7 @@ export function useMapLoad(where: string, active = true) {
       s.painted = false;
       s.gaveUp = false;
       s.tries = 0;
-      s.since = Date.now();
+      s.since = s.live = Date.now();
       setStatus('loading');
     }
     begin();
@@ -120,12 +134,9 @@ export function useMapLoad(where: string, active = true) {
       const now = Date.now();
       const gap = now - lastTick;
       lastTick = now;
+      if (gap > RESUME_GAP_MS) { resume(now); return; }
+      s.live = now;
       if (s.painted || s.gaveUp || s.retry) return;
-      if (gap > RESUME_GAP_MS) {
-        s.heard = now;
-        if (!s.up) { s.since = s.began = s.progress = now; }
-        return;
-      }
       if (s.up) { if (now - s.heard > LOAD_STUCK_MS) failed('stuck'); return; }
       if (now - s.heard > LOAD_SILENCE_MS) { failed('no answer'); return; }
       if (now - s.since > LOAD_BUDGET_MS && now - s.began > LOAD_SILENCE_MS && now - s.progress > 5000) failed('too slow');
@@ -141,8 +152,7 @@ export function useMapLoad(where: string, active = true) {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || s.painted) return;
       if (s.gaveUp) { latest.current.restart(); return; }
-      s.heard = Date.now();
-      if (!s.up) { s.since = s.began = s.progress = Date.now(); }
+      resume(Date.now());
     });
     return () => sub.remove();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -153,8 +163,7 @@ export function useMapLoad(where: string, active = true) {
     if (firstActive.current) { firstActive.current = false; return; }
     if (!active || s.painted) return;
     if (s.gaveUp) { latest.current.restart(); return; }
-    s.heard = Date.now();
-    if (!s.up) { s.since = s.began = s.progress = Date.now(); }
+    resume(Date.now());
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The connection is back: a map that has not come up starts again at once. */
