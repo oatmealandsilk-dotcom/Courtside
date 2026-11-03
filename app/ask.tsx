@@ -1,4 +1,4 @@
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -26,6 +26,8 @@ const TOPICS = Object.keys(TOPIC_META) as QuestionTopic[];
 export default function Ask() {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
+  // On Clean the white boxes all but vanished on the white sheet: a thin outline there only (Nov 3).
+  const edged = useTheme().theme === 'clean';
   // A thread that didn't post comes back already typed (its toast's "Post again").
   const [unsent] = useState(peekUnsentThread);
   useEffect(() => { clearUnsentThread(); }, []);
@@ -78,15 +80,14 @@ export default function Ask() {
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={formBody} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}>
           <Section title="Your question">
-            {/* The section title already says what goes here, so the box stays empty. */}
             {/* The most the database keeps (300 for the question, 10,000 for the details): longer looked posted and was lost. */}
-            <Field soft value={title} onChangeText={setTitle} accessibilityLabel="Your question" maxLength={300} />
+            <Field soft edged={edged} value={title} onChangeText={setTitle} placeholder="What do you want to know?" accessibilityLabel="Your question" maxLength={300} />
           </Section>
           <Section title="Topic">
             <Chips options={TOPICS.map((t) => ({ value: t, label: TOPIC_META[t].label }))} value={topic} onChange={(t) => { if (t) setTopic(t); }} />
           </Section>
           <Section title="Details">
-            <Field soft value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions maxLength={10000} />
+            <Field soft edged={edged} value={body} onChangeText={setBody} placeholder="Optional" accessibilityLabel="Details" multiline minHeight={96} mentions maxLength={10000} />
           </Section>
           {poll ? (
             <Section title="Poll" right={<Pressable accessibilityRole="button" accessibilityLabel="Remove the poll" hitSlop={8} onPress={() => setPoll(null)}><Text style={styles.remove}>Remove</Text></Pressable>}>

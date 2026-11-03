@@ -50,6 +50,8 @@ interface Props {
   mentions?: boolean;
   /** The soft look of the app's own ask boxes: white, lifted on a shadow, no outline. Used in sheets. */
   soft?: boolean;
+  /** With `soft`: a thin outline in the theme's border colour as well (Ask the room on Clean, Nov 3, owner: "almost invisible"). */
+  edged?: boolean;
   /** A slim one-line pill that grows as you type (a comment box, a message box). */
   compact?: boolean;
   /** No box at all: the words on the page, beside an avatar (a session's caption). */
@@ -99,6 +101,7 @@ export function Field({
   flush = false,
   mentions = false,
   soft = false,
+  edged = false,
   compact = false,
   bare = false,
   well = false,
@@ -192,6 +195,8 @@ export function Field({
           styles.input,
           focused && styles.inputFocused,
           soft && (multiline ? styles.softArea : styles.softLine),
+          edged && styles.edged,
+          edged && focused && styles.inputFocused,
           well && styles.well,
           well && focused && styles.inputFocused,
           multiline && { minHeight: minHeight ?? 110, textAlignVertical: 'top' },
@@ -232,6 +237,7 @@ const styleDefinitions = StyleSheet.create({
   // text itself. With padding, the example sat a line low, half under the box (Oct 6, owner).
   softLine: { ...lift, borderWidth: 0, borderRadius: inputCorner(radius.pill), height: 52, paddingVertical: 0, fontSize: 16 },
   softArea: { ...lift, borderWidth: 0, borderRadius: inputCorner(20), paddingVertical: 14, fontSize: 16, lineHeight: 22 },
+  edged: { borderWidth: 1, borderColor: colors.border },
   well: { backgroundColor: colors.surfaceAlt, borderColor: 'transparent', borderRadius: inputCorner(14) },
   compact: { minHeight: 44, maxHeight: 120, borderRadius: inputCorner(22), paddingTop: 11, paddingBottom: 11, paddingHorizontal: 16, fontSize: 16, lineHeight: 22 },
 });
