@@ -30,3 +30,6 @@ function read(): Record<string, string> {
 export function designVariant(page: string): string | null {
   return read()[page] ?? null;
 }
+
+// Noted as the app starts (app/_layout imports this file), while the address still has the `var` asked for.
+read();

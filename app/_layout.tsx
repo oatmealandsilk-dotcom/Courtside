@@ -44,6 +44,8 @@ import { CourtTimeHost } from '@/components/place/CourtTimeHost';
 import { AlertsWhyHost } from '@/components/AlertsWhyHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
+// Design options to pick from, website only (?var=page:option): noted before sign-in moves the address on.
+import '@/features/design/variant';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
