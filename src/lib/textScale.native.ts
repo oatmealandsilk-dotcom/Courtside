@@ -15,7 +15,10 @@ import { TextScale } from '@/theme/textScale';
  */
 const MAX = TextScale.DEFAULT;
 
-const ANDROID = Platform.OS === 'android';
+// The Android parts below (Oct 5) never took effect while the cap was not installing (see wrapped).
+// They stay off until they can be checked on an Android phone, so installing the cap changes
+// nothing on Android but the cap itself.
+const ANDROID_EXTRAS = false && Platform.OS === 'android';
 
 /*
  * Android only (Oct 5), also set once here for every text and text box.
@@ -57,27 +60,43 @@ function interBold(style: unknown): unknown {
 }
 
 type Props = Record<string, unknown>;
-type Mod = { default: unknown };
+type Component = ((props: Props) => React.ReactNode) & { __capped?: boolean };
 
-function wrapped(mod: Mod, name: string, adjust: (props: Props) => Props) {
-  const original = mod.default as ((props: Props) => React.ReactNode) & { __capped?: boolean };
+/*
+ * Where the capped text is put. In React Native 0.86 the 'default' export of
+ * Text.js and TextInput.js is a read-only getter, so assigning to it threw
+ * (silently, in the try below) and the cap never took effect (Nov 3 sweep: names
+ * split mid-word and ratings tripled at the largest text sizes). The Text and
+ * TextInput that the app imports are read through getters on
+ * require('react-native'), which can be redefined; that is where the capped
+ * versions go now. The old assignment stays as a fallback for a React Native
+ * that exports differently.
+ */
+function wrapped(name: 'Text' | 'TextInput', file: { default: unknown }, adjust: (props: Props) => Props) {
+  const rn = require('react-native') as Record<string, unknown>;
+  const original = rn[name] as Component;
   if (typeof original !== 'function' || original.__capped) return;
   const Capped = (props: Props) => original(adjust(props));
   Object.assign(Capped, original, { displayName: name, __capped: true });
-  try { mod.default = Capped; } catch { /* left as it was */ }
+  const own = Object.getOwnPropertyDescriptor(rn, name);
+  if (own?.configurable) {
+    Object.defineProperty(rn, name, { configurable: true, enumerable: own.enumerable ?? true, get: () => Capped });
+    return;
+  }
+  try { file.default = Capped; } catch { /* left as it was */ }
 }
 
 const capped = (props: Props): Props => (props.maxFontSizeMultiplier === undefined ? { ...props, maxFontSizeMultiplier: MAX } : props);
 
 const text = (props: Props): Props => {
   const next = capped(props);
-  if (!ANDROID) return next;
+  if (!ANDROID_EXTRAS) return next;
   return { ...next, style: [NO_FONT_PADDING, interBold(next.style)] };
 };
 
 const input = (props: Props): Props => {
   const next = capped(props);
-  if (!ANDROID) return next;
+  if (!ANDROID_EXTRAS) return next;
   // Read at draw time, so the green is the court you are on.
   return {
     ...next,
@@ -89,8 +108,8 @@ const input = (props: Props): Props => {
 };
 
 try {
-  wrapped(require('react-native/Libraries/Text/Text') as Mod, 'Text', text);
-  wrapped(require('react-native/Libraries/Components/TextInput/TextInput') as Mod, 'TextInput', input);
+  wrapped('Text', require('react-native/Libraries/Text/Text') as { default: unknown }, text);
+  wrapped('TextInput', require('react-native/Libraries/Components/TextInput/TextInput') as { default: unknown }, input);
 } catch {
   // A React Native that moved these files: text simply follows the setting with no limit, as before.
 }
