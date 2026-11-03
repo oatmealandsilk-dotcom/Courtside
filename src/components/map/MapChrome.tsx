@@ -1821,11 +1821,11 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
         <View style={styles.cityGlow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cityName, edge]} numberOfLines={1}>{cityName}</Text>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn, edge]}>{line}</Text>
-          {hitCount ? <Text style={[styles.cityHits, edge]}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
+          {hitCount ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
-            : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
+            : !count && placeCount && hint ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
       </Animated.View>
       </>}
