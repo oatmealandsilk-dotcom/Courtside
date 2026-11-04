@@ -81,6 +81,7 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
+import { designVariant } from '@/lib/designVariant';
 
 /** The plain Create list (round 2, item 2): off until the owner says (Oct 25: "Don't change create tab yet"). */
 const CREATE_PLAIN = false;
@@ -372,7 +373,9 @@ function Compose() {
   // thin lines between, no boxes and no explainer sentences (a screen reader still hears them). A status (a session
   // going, a video getting ready) still shows under its word. The challenge's one-card menu keeps its card.
   // Held back for now (Oct 25, owner: "Don't change create tab yet"): the Create box keeps its boxes and sentences.
-  const plainMenu = CREATE_PLAIN && LESS_AI_ROUND2 && !entering;
+  // Options to look at (Nov 3), web only via ?var=create-sheet:A…D; null (today's box) everywhere else. D is the parked plain list.
+  const variant = entering ? null : designVariant('create-sheet');
+  const plainMenu = (CREATE_PLAIN && LESS_AI_ROUND2 && !entering) || variant === 'D';
   const navigation = useNavigation();
   const closing = useRef(false);
   const closeMenu = () => {
@@ -1365,11 +1368,63 @@ function Compose() {
   );
 
   if (stage === 'choose') stageBack.current = () => { closeMenu(); return true; };
-  const choiceStyle = (line: boolean) => (plainMenu ? [styles.choiceRow, line && styles.choiceRowLine] : [styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter]);
+  const choiceStyle = (line: boolean) => (plainMenu ? [styles.choiceRow, line && styles.choiceRowLine] : [styles.choiceOption, tight && styles.choiceOptionTight, tighter && styles.choiceOptionTighter, variant === 'A' && styles.varOutline]);
   const menuIcon = plainMenu ? 22 : choiceIcon;
   const choiceWords = (label: string, note: string, status: string | null) => (plainMenu
     ? <View style={styles.choiceWords}><Text style={styles.choiceRowLabel}>{label}</Text>{status ? <Text style={styles.note}>{status}</Text> : null}</View>
     : <><Text style={styles.choiceLabel}>{label}</Text><Text style={styles.note}>{note}</Text></>);
+  if (stage === 'choose' && (variant === 'B' || variant === 'C')) {
+    // Options B and C (Nov 3, to look at only): a sheet from the bottom, like the Session sheet, instead of the floating box.
+    const liveNow = liveSession ? liveState(liveSession) : null;
+    const sessionStatus = liveSession ? [liveNow === 'finished' ? 'Finished' : `Started ${startClock(liveSession)}`, livePlace(liveSession)].filter(Boolean).join(' · ') : null;
+    const sessionLabel = !liveSession ? 'Session' : liveNow === 'finished' ? 'Log your session' : 'Session in progress';
+    const openSession = () => (!liveSession ? router.replace('/new-session') : liveNow === 'finished' ? finishLive(liveSession, actions, { open: () => openLiveLog('replace') }) : router.replace('/live-session'));
+    const rest = [
+      { key: 'clip', icon: 'videocam-outline' as const, label: 'Clip', line: preparing === 'video' ? 'Getting your video ready…' : 'A video from your phone', a11y: 'Create a clip', busy: preparing === 'video', onPress: () => { setMode('clip'); void openDevice('video'); } },
+      { key: 'post', icon: 'images-outline' as const, label: 'Post', line: preparing === 'all' ? 'Getting it ready…' : 'Photos and videos', a11y: 'Create a post', busy: preparing === 'all', onPress: () => { setMode('post'); void openDevice('all', true); } },
+      { key: 'thread', icon: 'chatbubbles-outline' as const, label: 'Thread', line: 'Ask or start a conversation', a11y: 'Create a thread or question', busy: false, onPress: () => router.replace('/ask') },
+      ...(flagsOn.instants ? [{ key: 'instant', icon: 'camera-outline' as const, label: 'Instant', line: 'A photo, up for a day', a11y: 'Take an Instant', busy: false, onPress: () => router.replace('/hit') }] : []),
+    ];
+    const sessionIcon = <Ionicons name={liveSession ? 'radio-button-on' : 'stopwatch-outline'} size={24} color={liveSession ? colors.open : colors.brand}/>;
+    return <View style={styles.varBackdrop}>
+      <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
+      <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
+      <Reanimated.View style={[styles.varSheet, { maxHeight: menuMaxH, paddingBottom: insets.bottom + 12 }, popStyle]}>
+        <View style={styles.varGrabber}/>
+        <View style={styles.varHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
+        <ScrollView style={styles.choiceScroll} bounces={false} showsVerticalScrollIndicator={false}>
+          {variant === 'B' ? <>
+            <Reanimated.View entering={arrive(0)}><Pressable accessibilityRole="button" accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'} onPress={openSession} style={styles.varRow}>
+              {sessionIcon}
+              <View style={styles.choiceWords}><Text style={[styles.varRowLabel, !liveSession && styles.varBrandWord]}>{sessionLabel}</Text><Text style={styles.note}>{sessionStatus ?? 'Start one now, or log one you’ve played'}</Text></View>
+            </Pressable></Reanimated.View>
+            {rest.map((r, i) => <Reanimated.View key={r.key} entering={arrive(i + 1)}><Pressable accessibilityRole="button" accessibilityLabel={r.a11y} onPress={r.onPress} style={[styles.varRow, styles.choiceRowLine]}>
+              {r.busy ? <PreparingRing size={24} done={prepDone} /> : <Ionicons name={r.icon} size={24} color={colors.textMuted}/>}
+              <View style={styles.choiceWords}><Text style={styles.varRowLabel}>{r.label}</Text><Text style={styles.note}>{r.line}</Text></View>
+            </Pressable></Reanimated.View>)}
+          </> : <>
+            <Reanimated.View entering={arrive(0)} style={styles.varLead}>
+              <Pressable accessibilityRole="button" accessibilityLabel={!liveSession ? 'Session. Start one now, or log one you’ve played' : liveNow === 'finished' ? 'Log your finished session' : 'Session in progress. Open it'} onPress={openSession} style={styles.varLeadWords}>
+                {sessionIcon}
+                <View style={styles.choiceWords}><Text style={styles.varRowLabel}>{sessionLabel}</Text><Text style={styles.note} numberOfLines={2}>{sessionStatus ?? 'Your time on court'}</Text></View>
+              </Pressable>
+              {!liveSession ? <View style={styles.varLeadButtons}>
+                <Button size="sm" label="Start" accessibilityLabel="Start a session" onPress={() => router.replace('/start-session')}/>
+                <Button size="sm" variant="secondary" label="Log" accessibilityLabel="Log a session you played" onPress={() => router.replace('/new-session')}/>
+              </View> : <Button size="sm" label={liveNow === 'finished' ? 'Log it' : 'Open'} onPress={openSession}/>}
+            </Reanimated.View>
+            <Reanimated.View entering={arrive(1)} style={styles.varTiles}>
+              {rest.map((r) => <Pressable key={r.key} accessibilityRole="button" accessibilityLabel={r.a11y} onPress={r.onPress} style={styles.varTile}>
+                {r.busy ? <PreparingRing size={24} done={prepDone} /> : <Ionicons name={r.icon} size={24} color={colors.text}/>}
+                <Text style={styles.varTileWord} numberOfLines={1}>{r.label}</Text>
+              </Pressable>)}
+            </Reanimated.View>
+          </>}
+          {pickError ? <Text style={[styles.pickError, styles.varError]}>{pickError}</Text> : null}
+        </ScrollView>
+      </Reanimated.View>
+    </View>;
+  }
   if (stage === 'choose') return <View style={styles.choiceBackdrop}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
@@ -1928,6 +1983,22 @@ const styleDefinitions = StyleSheet.create({
   choiceRowLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   choiceWords: { flex: 1, minWidth: 0, gap: 2 },
   choiceRowLabel: { fontSize: 17, ...font('500'), color: colors.text },
+  // Design options (Nov 3, ?var=create-sheet:…, web only): A outlines today's boxes; B and C are a sheet from the bottom.
+  varOutline: { backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: corner(12) },
+  varBackdrop: { flex: 1, backgroundColor: 'transparent', justifyContent: 'flex-end' },
+  varSheet: { width: '100%', maxWidth: 700, alignSelf: 'center', borderTopLeftRadius: corner(24), borderTopRightRadius: corner(24), paddingHorizontal: 20, paddingTop: 8, backgroundColor: colors.bg },
+  varGrabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: colors.border, marginBottom: 10 },
+  varHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6 },
+  varRow: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 60, paddingVertical: 12 },
+  varRowLabel: { fontSize: 17, ...font('600'), color: colors.text },
+  varBrandWord: { color: colors.brand },
+  varLead: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 14 },
+  varLeadWords: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  varLeadButtons: { flexDirection: 'row', gap: 8 },
+  varTiles: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 8 },
+  varTile: { flex: 1, alignItems: 'center', gap: 6, paddingVertical: 12 },
+  varTileWord: { fontSize: 13, ...font('500'), color: colors.text },
+  varError: { paddingBottom: 8 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'transparent' },
   // What fades in as a handed-over sheet grows into the "Log it" page: everything on it, the sheet's own surface staying put.
   riseBody: { flex: 1 },
