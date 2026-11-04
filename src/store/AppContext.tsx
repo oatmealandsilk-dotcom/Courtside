@@ -82,12 +82,12 @@ import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
-import { keepUnsentCoachQuestion } from '@/features/coaching/unsentQuestion';
+import { holdCoachQuestionWhileUploading, keepUnsentCoachQuestion, releaseCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
 import { stopWorkoutWatch } from '@/features/health/workoutWatch';
 import { framesAt } from '@/features/compose/frames';
-import { noteStep, reportError } from '@/lib/crashReporting';
+import { noteStep, replaceStep, reportError } from '@/lib/crashReporting';
 import { noteAppOpen } from '@/features/usage/appOpens';
 import { noteTimeZone } from '@/features/recap/timeZone';
 import { learned as learnedTip } from '@/features/tips/tips';
@@ -146,6 +146,9 @@ import { notePlayerSurface } from '@/features/players/courts';
 import type { VotedSurface } from '@/features/places/courtSurface';
 import { HIDDEN_WORDS_MAX, HIDDEN_WORD_LENGTH, cleanWords, defaultHiddenWords } from '@/features/hiddenWords/hiddenWords';
 import { canScore, scoreNotKept, setsWinner } from '@/features/activity/score';
+
+/** The crash note's step once a post has landed (see addPost). */
+const POST_LANDED_STEP = 'post saved, Home moving it to the top';
 
 interface NewStoryInput {
   imageUrl?: string;
@@ -1863,6 +1866,25 @@ function sameRows<T>(held: readonly T[], fetched: readonly T[]): boolean {
     if (held[i] !== fetched[i] && JSON.stringify(held[i]) !== JSON.stringify(fetched[i])) return false;
   }
   return true;
+}
+
+/** What a Follow button showed for someone when it was tapped: you follow them, you have asked to (a private account), or neither. */
+type FollowSeen = 'following' | 'requested' | 'none';
+/** The quick Follow being sent right now (followAsSeen), if any: for whom, and what its button showed on the tap. */
+let followSeen: { id: ID; seen: FollowSeen } | null = null;
+
+/**
+ * Runs a quick Follow's own press (useQuickFollow), sent a moment after its tap, so that the follow in it only
+ * goes through if the app still says what the button said on the tap. A Follow is a toggle: if anything else
+ * followed them in between (first-move's Follow all, another Follow button for them, a check of whom you follow),
+ * the tap's follow was already done, and sending it then undid it ("Unfollowed @x · Undo", the ask taken back for
+ * a private account). toggleFollow then changes nothing for them; the rest of the press (a list keeping the row
+ * on show) still runs.
+ */
+export function followAsSeen(userId: ID, seen: FollowSeen, press: () => void) {
+  const was = followSeen;
+  followSeen = { id: userId, seen };
+  try { press(); } finally { followSeen = was; }
 }
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -5370,7 +5392,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
               toast.show({ title: 'Posted with the first photo only', body: 'The other photos could not be added this time.', icon: 'alert' });
             }
             // Kept in the note a few seconds more: Home rebuilds its pages around the new post now.
-            void noteStep('post saved, Home moving it to the top');
+            void noteStep(POST_LANDED_STEP);
             if (uploading) {
               // Landed: into the store, and to the very top of Home.
               finishUpload(post.id);
@@ -5396,8 +5418,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
             if (source && sending.current.get(source) === post.id) sending.current.delete(source);
             // Landed (it is in the store now) or failed: in the same moment as either, so a page never sees it in neither place.
             outgoing.current.delete(post.id);
-            // Cleared a few seconds on, unless another post is still going up (its own steps stay).
-            setTimeout(() => { if (!anyUploading()) void noteStep(''); }, 5000);
+            // Cleared a few seconds on. With something else still going up (another post, an Instant, a coach
+            // question's clip: their own steps stay), this post's own label is not left as if it were what was
+            // lost (Nov 3 sweep: "A post was lost ... during: post saved" with a coach clip going up).
+            setTimeout(() => {
+              if (!anyUploading()) void noteStep('');
+              else void replaceStep(POST_LANDED_STEP, 'a post saved; another upload still going up');
+            }, 5000);
           }
         })();
       }
@@ -6263,7 +6290,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (r === 'blocked' || r === 'failed') setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.filter((x) => x.id !== q.id) }));
         if (r === 'failed') {
           // What was typed is kept: "Ask again" opens Ask a coach with it filled in.
-          keepUnsentCoachQuestion({ title: q.title, body: q.body, specialty: q.specialty });
+          keepUnsentCoachQuestion({ title: q.title, body: q.body, specialty: q.specialty }, q.authorId);
           showToast({ title: 'Your question didn’t post', body: 'Your words are kept. Check your connection, then ask again.', icon: 'alert-circle-outline', action: { label: 'Ask again', onPress: () => router.push('/ask-coach') } });
         }
         return r;
@@ -6276,6 +6303,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         else {
           startUpload(question.id, 'Uploading your clip');
           coachClipsUploading.current.add(question.id);
+          // The words are kept on the phone until the question is saved: an app closed mid-upload
+          // opens Ask a coach with them typed next time (the clip is picked again).
+          holdCoachQuestionWhileUploading(question.id, me, { title: question.title, body: question.body, specialty: question.specialty });
           void uploadMedia(me, local, 'video', (f) => setUploadProgress(question.id, f))
             .then((videoUrl) => {
               coachClipsUploading.current.delete(question.id);
@@ -6294,9 +6324,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
               finishUpload(question.id, false, e.message);
               const saved = { ...question, videoUrl: undefined, mediaLabel: undefined };
               setState((prev) => ({ ...prev, coachQuestions: prev.coachQuestions.map((q) => (q.id === question.id ? saved : q)) }));
-              void saveQuestion(saved);
+              const done = saveQuestion(saved);
               showToast({ title: 'Your clip did not upload', body: `The question is up without it. ${e.message}`, icon: 'alert-circle-outline' });
-            });
+              return done;
+            })
+            // Saved, refused, deleted meanwhile or kept for "Ask again": the phone's note of its words goes.
+            .finally(() => releaseCoachQuestion(question.id));
         }
       }
       return question.id;
@@ -8854,18 +8887,57 @@ export function AppProvider({ children }: { children: ReactNode }) {
     list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
 
   // The database would not take a follow or an ask (someone you are blocked
-  // with): the button goes back, and a note says why.
-  const toggleFollowRef = useRef<(userId: ID, quiet?: boolean) => void>(() => undefined);
+  // with): the button goes back, and a note says why. It sets where things end
+  // (not following them, no ask waiting, both follow counts as they were) rather
+  // than toggling back from what the app last drew: with taps answering sooner
+  // (useQuickFollow, admins first) the follow itself is background work, and an
+  // answer that came before it had landed toggled from the wrong side (a second
+  // follow instead of none). Queued after the follow, it is applied after it
+  // whenever that lands. Nothing to undo in the database: it wrote nothing. Not
+  // an unfollow either, so no Undo is offered (as before).
   const followRefused = (userId: ID) => {
     showToast({ title: "You can't follow this account", icon: 'lock-closed-outline' });
-    // Quiet: putting the button back is not an unfollow to offer to undo.
-    toggleFollowRef.current(userId, true);
+    haptics.untap();
+    setState((prev) => {
+      const me = prev.currentUserId;
+      if (!me || userId === me) return prev;
+      const followed = prev.followingIds.includes(userId);
+      const asked = prev.followRequests.some((r) => r.fromId === me && r.toId === userId);
+      if (!followed && !asked) return prev;
+      let next = prev;
+      if (followed) {
+        next = {
+          ...next,
+          followingIds: next.followingIds.filter((x) => x !== userId),
+          followEdges: next.followEdges.filter((e) => !(e.followerId === me && e.followingId === userId)),
+          users: next.users.map((u) =>
+            u.id === me ? { ...u, following: Math.max(0, u.following - 1) }
+            : u.id === userId ? { ...u, followers: Math.max(0, u.followers - 1) }
+            : u,
+          ),
+        };
+      }
+      if (asked) {
+        next = {
+          ...next,
+          followRequests: next.followRequests.filter((r) => !(r.fromId === me && r.toId === userId)),
+          notifications: next.notifications.filter((n) => !(n.kind === 'follow-request' && n.actorId === me && n.userId === userId)),
+        };
+      }
+      return next;
+    });
   };
   const toggleFollow = useCallback((userId: ID, quiet?: boolean, noBuzz?: boolean) => {
     {
       const me = stateRef.current.currentUserId;
       const target = stateRef.current.users.find((u) => u.id === userId);
       const following = stateRef.current.followingIds.includes(userId);
+      // A quick Follow sent after its tap (followAsSeen): only if they are still as its button showed them.
+      if (followSeen && followSeen.id === userId) {
+        const now: FollowSeen = following ? 'following'
+          : me && stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId) ? 'requested' : 'none';
+        if (now !== followSeen.seen) return;
+      }
       if (me && userId !== me && target?.isPrivate && !following) {
         // A private account: this is an ask, not a follow. Asking twice takes it back.
         const asked = stateRef.current.followRequests.some((r) => r.fromId === me && r.toId === userId);
@@ -8921,7 +8993,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return next;
     });
   }, []);
-  toggleFollowRef.current = toggleFollow;
 
   const followAll = useCallback((userIds: ID[]) => {
     const me = stateRef.current.currentUserId;
@@ -9231,7 +9302,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // saves it, and its strip leaves now rather than ending on "Posted".
     if (!live(me, questionId) || coachClipsUploading.current.has(questionId)) {
       coachQuestionsDeleted.current.add(questionId);
-      if (coachClipsUploading.current.has(questionId)) cancelUpload(questionId);
+      if (coachClipsUploading.current.has(questionId)) { cancelUpload(questionId); releaseCoachQuestion(questionId); }
       return;
     }
     remote.deleteCoachQuestion(questionId).then(

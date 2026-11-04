@@ -140,6 +140,7 @@ export default function Follows() {
       <View style={styles.tabs}>
         <SegmentedControl<Tab>
           slide
+          calm
           value={tab}
           onChange={setTab}
           segments={[

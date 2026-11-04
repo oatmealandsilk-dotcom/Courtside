@@ -1,3 +1,5 @@
+import { tapFastOn } from '@/features/navigation/pressV2';
+import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
@@ -21,7 +23,7 @@ import { useArrived } from '@/lib/useArrived';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack, onPageChange, sheetOnTop } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ShadeGradient } from '@/components/ui/ShadeGradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
 import Reanimated, { Easing, cancelAnimation, FadeOut, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -1948,16 +1950,30 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // A group's feed and Activities sit under the Feed's top row; any other scope has a back button.
   const rowed = !!scope?.groupId || !!scope?.activities;
   const scopedBack = !!scope && !rowed;
+  // When the Feed last came on show (a tab tap, a swipe, a page closed over it): see the view count below.
+  const shownAt = useRef(0);
+  const focusedBefore = useRef(focused);
+  if (focused && !focusedBefore.current) shownAt.current = Date.now();
+  focusedBefore.current = focused;
   useEffect(() => {
     if (!focused || !showing) return;
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
-    if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
-    if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start' || showing.type === 'caught-up') return;
-    actions.recordView(
-      showing.type === 'post' ? 'post' : 'question',
-      showing.type === 'post' ? showing.post.id : showing.question.id,
-    );
+    const count = () => {
+      if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
+      if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start' || showing.type === 'caught-up') return;
+      actions.recordView(
+        showing.type === 'post' ? 'post' : 'question',
+        showing.type === 'post' ? showing.post.id : showing.question.id,
+      );
+    };
+    // Just come on show (taps that answer sooner: pressV2's TAP_FAST, admins first): counted once the Feed has
+    // slid in, not in the tap. Counted then, the other three tabs redrew for it in the same go, and the
+    // Simulator showed the Feed's first slide wait 100-200 ms to start and then jump (Nov 3). Counted even if
+    // you move on first, as before.
+    const wait = tapFastOn() ? FEED_VIEW_AFTER_MS - (Date.now() - shownAt.current) : 0;
+    if (wait > 0) { setTimeout(count, wait); return; }
+    count();
   }, [focused, showing, actions, currentUserId]);
 
   // The last page of the main feed: a small congratulations for getting
@@ -2262,7 +2278,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         </View>
                       </Pressable>
                       {/* The replies run on to the bottom and fade into the page: plainly more below, a tap away, without a line saying so. */}
-                      <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.threadFade} />
+                      <ShadeGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.threadFade} />
                     </View>
                   </View>
                 );
@@ -2716,7 +2732,11 @@ const styleDefinitions = StyleSheet.create({
  * group's feed (held still), so coming back finds it where you left it. One
  * person's or one court's feed (a scope) is the plain feed, with no row.
  */
+/** How long after the Feed comes on show the page on show is counted as seen (taps that answer sooner only). */
+const FEED_VIEW_AFTER_MS = 450;
+
 function FeedTab({ scope, previewSection }: { previewSection?: string; scope?: FeedScope } = {}) {
+  useSimTrace('Feed');
   if (scope) return <Home scope={scope} previewSection={previewSection} />;
   return <GroupedFeed />;
 }

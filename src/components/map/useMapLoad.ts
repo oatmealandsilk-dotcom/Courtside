@@ -28,6 +28,9 @@ export type MapLoadStatus = 'loading' | 'painted' | 'failed';
  *   or the connection comes back, and whenever `restart` is called (a tap).
  *   A try that was still going and comes good later still counts.
  */
+/** A gap this long between the 1-second checks means the app (or this map) was paused, not that the map went quiet. */
+const RESUME_GAP_MS = 3000;
+
 export function useMapLoad(where: string, active = true) {
   // Off screen (a hidden pager page, a screen pushed over it, another tab): its clocks stop, since the
   // phone pauses an unseen web view and its silence there is not a failure (Oct 18 crash reports).
@@ -35,15 +38,31 @@ export function useMapLoad(where: string, active = true) {
   act.current = active;
   const [attempt, setAttempt] = useState(0);
   const [status, setStatus] = useState<MapLoadStatus>('loading');
-  // since: when this round of tries began; began: when the current try did.
-  const s = useRef({ tries: 0, since: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
+  // since: when this round of tries began (moved on by any time spent paused); began: when the current try did;
+  // live: the last moment its clocks were running (in front and on screen).
+  const s = useRef({ tries: 0, since: Date.now(), live: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
 
-  /** A new try, with its own clock: the page or map is made again. */
+  /**
+   * A new try, with its own clock: the page or map is made again. Not `live`: a retry or reboot can fire
+   * on the way back from a pause, before the resume, and must not hide the time away from it.
+   */
   const begin = () => {
     if (s.retry) { clearTimeout(s.retry); s.retry = null; }
     s.up = false;
     s.began = s.heard = s.progress = Date.now();
     setAttempt((n) => n + 1);
+  };
+  /**
+   * Back from a pause (the app away, the map off screen, the phone holding the page): fresh clocks for this
+   * try, while the round's budget (since) keeps counting from where it stood. Only the time away is left
+   * out, so a pause never counts against it, and pausing never hands a slow map a fresh budget (Nov 3).
+   */
+  const resume = (now: number) => {
+    const away = now - s.live;
+    if (away > 1000) s.since = Math.min(now, s.since + away);
+    s.live = now;
+    s.heard = now;
+    if (!s.up) { s.began = s.progress = now; }
   };
   const giveUp = (why: string) => {
     if (s.painted || s.gaveUp) return;
@@ -74,6 +93,7 @@ export function useMapLoad(where: string, active = true) {
     } else if (what === 'up' && s.gaveUp) {
       // A try given up on came good after all: back to loading, and its streets are on their way.
       s.gaveUp = false;
+      s.live = now;
       setStatus('loading');
     }
   };
@@ -81,7 +101,7 @@ export function useMapLoad(where: string, active = true) {
   const restart = () => {
     if (s.painted) return;
     s.tries = 0;
-    s.since = Date.now();
+    s.since = s.live = Date.now();
     s.gaveUp = false;
     setStatus('loading');
     begin();
@@ -96,7 +116,7 @@ export function useMapLoad(where: string, active = true) {
       s.painted = false;
       s.gaveUp = false;
       s.tries = 0;
-      s.since = Date.now();
+      s.since = s.live = Date.now();
       setStatus('loading');
     }
     begin();
@@ -104,12 +124,22 @@ export function useMapLoad(where: string, active = true) {
 
   // A try that has gone quiet is a failure (20 s before the map is up, 90 s after); before it is up, time runs
   // out once nothing is arriving, but never for a try that has only just started (it counts as a try then).
+  // Only while the app is in front (Nov 3 sweep): the phone wakes the app in the background (Apple Health,
+  // iOS resuming it) and a tick could run there before the 'back in front' handler below, with clocks from
+  // minutes ago, filing a false "Map didn't load ... after 1 try, 1826s". A tick long after the last one
+  // counted is a resume: fresh clocks, as the app coming back to the front gives.
   useEffect(() => {
     if (status !== 'loading') return undefined;
+    let lastTick = Date.now();
     const t = setInterval(() => {
+      if (Platform.OS !== 'web' && AppState.currentState !== 'active') return;
       if (!act.current) return;
-      if (s.painted || s.gaveUp || s.retry) return;
       const now = Date.now();
+      const gap = now - lastTick;
+      lastTick = now;
+      if (gap > RESUME_GAP_MS) { resume(now); return; }
+      s.live = now;
+      if (s.painted || s.gaveUp || s.retry) return;
       if (s.up) { if (now - s.heard > LOAD_STUCK_MS) failed('stuck'); return; }
       if (now - s.heard > LOAD_SILENCE_MS) { failed('no answer'); return; }
       if (now - s.since > LOAD_BUDGET_MS && now - s.began > LOAD_SILENCE_MS && now - s.progress > 5000) failed('too slow');
@@ -125,8 +155,7 @@ export function useMapLoad(where: string, active = true) {
     const sub = AppState.addEventListener('change', (state) => {
       if (state !== 'active' || s.painted) return;
       if (s.gaveUp) { latest.current.restart(); return; }
-      s.heard = Date.now();
-      if (!s.up) { s.since = s.began = s.progress = Date.now(); }
+      resume(Date.now());
     });
     return () => sub.remove();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -137,8 +166,7 @@ export function useMapLoad(where: string, active = true) {
     if (firstActive.current) { firstActive.current = false; return; }
     if (!active || s.painted) return;
     if (s.gaveUp) { latest.current.restart(); return; }
-    s.heard = Date.now();
-    if (!s.up) { s.since = s.began = s.progress = Date.now(); }
+    resume(Date.now());
   }, [active]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** The connection is back: a map that has not come up starts again at once. */

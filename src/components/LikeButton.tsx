@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { Platform, Pressable, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 import { router } from 'expo-router';
 
@@ -9,6 +9,7 @@ import { RailGlyph } from '@/components/RailGlyph';
 import { useIsGuest } from '@/features/guest/guestStatus';
 import * as haptics from '@/lib/haptics';
 import { useOptimisticToggle } from '@/lib/useOptimisticToggle';
+import { tapMark } from '@/features/navigation/tapTiming';
 
 interface Props {
   /** "p:<post id>" or "h:<hit id>", so the picture's double tap and this button agree. */
@@ -47,6 +48,9 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
   // Whether it showed liked when last drawn: a double tap on an unliked clip throws the sparks too.
   const wasOn = useRef(like.on);
   wasOn.current = like.on;
+  // The simulator's tap timing (tapTiming): the heart's change committed. Nothing outside the proof build.
+  const drawnOn = useRef(like.on);
+  useLayoutEffect(() => { if (drawnOn.current !== like.on) { drawnOn.current = like.on; tapMark('heart'); } }, [like.on]);
   const seen = useRef(pop);
   const playSparks = sparks.play;
   useEffect(() => {

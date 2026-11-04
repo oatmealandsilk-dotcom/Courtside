@@ -142,7 +142,8 @@ export function NowRow({ view }: { view: CourtView }) {
 /* --------------------------------- Buttons --------------------------------- */
 
 /**
- * Under Start a session here: Play here (the brand's dim fill and its words,
+ * Under Start a session here: Find someone to play (was "Play here" till
+ * Nov 3, owner said yes to the clearer words; it posts an open hit) (the brand's dim fill and its words,
  * the hit glyph, the rest of the width), second only to Start; then two
  * 44pt squares, Directions and Share. A members-only or private court has
  * no Play here: the squares sit on the right alone.
@@ -153,10 +154,10 @@ export function PlayAndSquares({ view }: { view: CourtView }) {
     <View style={styles.second}>
       <View style={styles.playGrow}>
         {!view.closed ? (
-          <Tappable accessibilityLabel={`Play here. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} hoverTo={1.02} style={styles.play}>
+          <Tappable accessibilityLabel={`Find someone to play. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} hoverTo={1.02} style={styles.play}>
             <View style={styles.playInner}>
               <HitGlyph size={19} color={colors.brand} />
-              <Text {...oneLine(TextScale.TITLE, 0.85)} style={styles.playText} numberOfLines={1}>Play here</Text>
+              <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.playText} numberOfLines={1}>Find someone to play</Text>
             </View>
           </Tappable>
         ) : null}

@@ -23,21 +23,21 @@ type Palette = Record<keyof typeof lightColors, string>;
 export const darkColors: Palette = {
   bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
   border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#8A948F',
-  brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', brandBright: '#7ED492', court: '#6FB483', clay: '#C98A6A',
-  hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C4', success: '#6FB483', warning: '#D2B36A', danger: '#D97F73',
-  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A948F',
+  brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', brandBright: '#7ED492', court: '#6FB484', clay: '#C98A6A',
+  hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C5', success: '#6FB482', warning: '#D2B36A', danger: '#D97F73',
+  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A9490',
   sun: '#E0BE66', rose: '#E592B4',
   open: '#4FD487',
   overlay: 'rgba(0, 0, 0, 0.65)',
   link: '#8EBEDD', onMedia: '#FFFFFF',
   bubble: '#232D28',
-  bubbleMine: '#6EB382', onDanger: '#0C1710',
+  bubbleMine: '#6EB382', onDanger: '#0C1711',
   // The Night shirt: its near-black green, a deeper green glowing top right, a warm clay-gold bottom
   // left, green lettering; the quiet words in the page's muted grey.
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
-  cardFigure: '#6FB483', cardInk: '#6FB483', cardMuted: '#A6B1AB',
-  cardTouch: '#6FB483',
-  launchLine: '#8A948F',
+  cardFigure: '#6FB383', cardInk: '#6FB583', cardMuted: '#A6B1AC',
+  cardTouch: '#6EB483',
+  launchLine: '#8A948E',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2E3A34', avatarTint2: '#3A3530', avatarTint3: '#3B3034', avatarTint4: '#2D3640', avatarTint5: '#35313D', avatarTint6: '#363A2E',
   // The metals at night: bright inks on deep coins, warm against the green-black page.
@@ -53,23 +53,23 @@ export const darkColors: Palette = {
  * and goes slightly flat against pure white.
  */
 const cleanColors: Palette = {
-  bg: '#FFFFFF', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
+  bg: '#FFFFFE', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
   border: '#E6E7E8', borderStrong: '#C7CACC', text: '#0F1419', textMuted: '#536471', textFaint: '#5F6871',
-  brand: '#2C7446', brandInk: '#FFFFFF', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7446', clay: '#B4653A',
-  hard: '#2C6885', grass: '#477F50', info: '#2C6885', success: '#2C7446', warning: '#806311', danger: '#B93129',
+  brand: '#2C7446', brandInk: '#FFFFFD', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7447', clay: '#B4653A',
+  hard: '#2C6885', grass: '#477F50', info: '#2C6886', success: '#2C7448', warning: '#806311', danger: '#B93129',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#9A7110', rose: '#B04A7C',
   open: '#17803F',
   overlay: 'rgba(15, 20, 25, 0.5)',
   link: '#1B6699', onMedia: '#FFFFFF',
   bubble: '#EEF0F1',
-  bubbleMine: '#2B7345', onDanger: '#FFFFFF',
+  bubbleMine: '#2B7345', onDanger: '#FFFFFC',
   // No shirt for Clean: its session box stays the green box with the brand's own wash (cardLook).
   // These only fill the slots, with that box's colours.
-  cardFill: '#2C7446', cardGlowTop: '#2C7446', cardGlowBottom: '#2C7446',
-  cardFigure: '#FFFFFF', cardInk: '#FFFFFF', cardMuted: '#FFFFFF',
-  cardTouch: '#2C7446',
-  launchLine: '#5F6871',
+  cardFill: '#2C7546', cardGlowTop: '#2C7547', cardGlowBottom: '#2C7548',
+  cardFigure: '#FEFFFF', cardInk: '#FEFFFE', cardMuted: '#FEFFFD',
+  cardTouch: '#2C7449',
+  launchLine: '#5F6872',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
   // On pure white the coins are a touch fuller than on the cream page, or they wash out.
@@ -85,23 +85,23 @@ const cleanColors: Palette = {
 const aoColors: Palette = {
   bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#F8FCFF', surfaceAlt: '#C8DEEE',
   border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
-  brand: '#2E85BF', brandInk: '#FFFFFF', brandDim: '#CFE4F2', brandBright: '#7ED492', court: '#4179A8', clay: '#B97753',
-  hard: '#2E85BF', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
+  brand: '#2E85BF', brandInk: '#FFFEFE', brandDim: '#CFE4F2', brandBright: '#7ED492', court: '#4179A8', clay: '#B97753',
+  hard: '#2E85C0', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#A8781A', rose: '#AE4F80',
   open: '#1A8147',
   overlay: 'rgba(7, 26, 42, 0.58)',
   link: '#1F64A0', onMedia: '#FFFFFF',
   bubble: '#D9EAF6',
-  bubbleMine: '#2471A6', onDanger: '#FFFFFF',
+  bubbleMine: '#2471A6', onDanger: '#FFFEFF',
   // The Melbourne shirt as light as the shirt itself (Oct 6, owner: "AO card could be more light the
   // color of her shirt"): its light court blue, a sky sheen top right, the aqua shirt's aqua bottom left.
   // Cream can't hold on a blue this light, so the lettering is the court's deep navy: small and quiet
   // words 4.7:1 or more on the fill and both corners, the big numbers 5.7:1.
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
-  cardTouch: '#2E85BF',
-  launchLine: '#496273',
+  cardTouch: '#2E85BE',
+  launchLine: '#496274',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D3E3EF', avatarTint2: '#E4DED2', avatarTint3: '#EBD8D4', avatarTint4: '#D5E5DD', avatarTint5: '#DDD9EA', avatarTint6: '#E3E6D3',
   // Silver's coin leans a little cooler here, so it still reads as metal on the blue page.
@@ -119,20 +119,20 @@ const rolandGarrosColors: Palette = {
   bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#FFFAF5', surfaceAlt: '#E6D2C0',
   border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
   brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', brandBright: '#7ED492', court: '#9E432E', clay: '#C67443',
-  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6982', success: '#1F5F3F', warning: '#9A6718', danger: '#9E432E',
+  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6981', success: '#1F5F40', warning: '#9A6718', danger: '#9E432F',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#9E7416', rose: '#A2456E',
   open: '#1A8147',
   overlay: 'rgba(46, 22, 12, 0.58)',
   link: '#2F6587', onMedia: '#FFFFFF',
   bubble: '#F0E2D5',
-  bubbleMine: '#AB4D2D', onDanger: '#FFFFFF',
+  bubbleMine: '#AB4D2D', onDanger: '#FFFEFF',
   // The Paris shirt, deepened so its cream lettering holds: brick clay, a brighter clay top right, the
   // shirt's gold glow bottom left.
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
-  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F6EFE6',
-  cardTouch: '#AD4E2E',
-  launchLine: '#6D5745',
+  cardFigure: '#FAF8F1', cardInk: '#FAF8EF', cardMuted: '#F6EFE6',
+  cardTouch: '#AD4E2F',
+  launchLine: '#6D5746',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#EBD9CB', avatarTint2: '#E2DDCC', avatarTint3: '#D9DFD5', avatarTint4: '#DDD8E2', avatarTint5: '#EFD5CF', avatarTint6: '#D7DEE3',
   // Bronze browner than the court's brick, so 3rd never reads as just the brand colour here.
@@ -148,22 +148,22 @@ const rolandGarrosColors: Palette = {
 const wimbledonColors: Palette = {
   bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#FBFDF7', surfaceAlt: '#D7E3C9',
   border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
-  brand: '#256B3A', brandInk: '#FFFFFF', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
-  hard: '#4F2683', grass: '#4E8A4A', info: '#4F2683', success: '#256B3A', warning: '#8A6A19', danger: '#943634',
+  brand: '#256B3A', brandInk: '#FFFEFE', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
+  hard: '#4F2683', grass: '#4E8A4B', info: '#4F2684', success: '#256B3B', warning: '#8A6A19', danger: '#943634',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#94701A', rose: '#A4497A',
   open: '#1A8147',
   overlay: 'rgba(14, 26, 16, 0.55)',
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
-  bubbleMine: '#246A39', onDanger: '#FFFFFF',
+  bubbleMine: '#246A39', onDanger: '#FFFEFF',
   // The London shirt, deepened so its cream lettering holds: grass green, a fresher green top right,
   // the club's purple bottom left. (Oct 6: lilac was tried; owner: "for the London one green looks better".)
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
-  cardFigure: '#FAF8F0', cardInk: '#FAF8F0', cardMuted: '#F0F1E7',
+  cardFigure: '#FAF8F1', cardInk: '#FAF8EF', cardMuted: '#F0F1E7',
   // London's purple, deepened to an aubergine that sits with its greens (10.1:1 on the card, 10.3:1 under white words).
   cardTouch: '#5A2D6E',
-  launchLine: '#586552',
+  launchLine: '#586553',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D9E6CF', avatarTint2: '#E6E0CC', avatarTint3: '#E9D8D7', avatarTint4: '#D3E0E4', avatarTint5: '#DED9E6', avatarTint6: '#E4E5D0',
   medalGold: '#7D5C0D', medalGoldFill: '#F1E3B6',
@@ -180,21 +180,21 @@ const usOpenColors: Palette = {
   bg: '#14283D', bgElevated: '#1B3350', surface: '#1F3A5A', surfaceAlt: '#2A4A6E',
   border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
   brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', brandBright: '#7ED492', court: '#4E87C4', clay: '#D08A5E',
-  hard: '#4E87C4', grass: '#5C9BD8', info: '#5C9BD8', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
-  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A948F',
+  hard: '#4E87C5', grass: '#5C9BD8', info: '#5C9BD9', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
+  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A9490',
   sun: '#F0B04A', rose: '#EE97BA',
   // The one green on this court, kept for Open to hit: the ring a player wears reads as green, as promised.
   open: '#4FD487',
   overlay: 'rgba(4, 12, 22, 0.7)',
   link: '#A4CCF4', onMedia: '#FFFFFF',
   bubble: '#24425F',
-  bubbleMine: '#F4D35F', onDanger: '#1B1A0A',
+  bubbleMine: '#F4D35F', onDanger: '#1B1A0B',
   // The New York shirt: night blue, a lighter blue top right, the ball's yellow glowing bottom left
   // (held low, so the yellow lettering holds on it); the quiet words a shade lighter than the page's.
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
-  cardFigure: '#F5D460', cardInk: '#F5D460', cardMuted: '#CBD8E6',
-  cardTouch: '#F5D460',
-  launchLine: '#A9B9CA',
+  cardFigure: '#F5D461', cardInk: '#F5D45F', cardMuted: '#CBD8E6',
+  cardTouch: '#F5D360',
+  launchLine: '#A9B9CB',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',
   // Gold a warmer amber than the ball's yellow (the brand here), so 1st never reads as "yours";
@@ -772,6 +772,10 @@ function PutBack() {
  * must define every key — a missing slot would leave a stray colour from
  * whichever theme the style was authored in.
  */
+// So every value names one slot: no colour is used by two different slots in any palette, or across
+// palettes (Nov 3: Night's brand, court, success and card letters were one green, so a style written on
+// Night came back as the brand on every other court until a restart). Where two slots look the same,
+// one sits a step off (#6FB483 / #6FB484): nothing looks different. Compare such pairs with sameInk.
 // Every colour any palette uses, and the slot it fills — built once, so a
 // theme change is a lookup per value rather than a scan of every palette.
 const slotOf = new Map<string, keyof typeof lightColors>();

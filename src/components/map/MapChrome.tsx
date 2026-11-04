@@ -13,7 +13,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { Avatar, BrandWash } from '@/components/ui';
 import { MapGlass } from '@/components/map/MapGlass';
 import { useRestKey, useRestLength } from '@/components/ui/restMotion';
-import { FollowShrink } from '@/components/FollowPill';
+import { FollowShrink, flushQuickFollows } from '@/components/FollowPill';
 import { MenuSheet, type MenuSheetItem } from '@/components/MenuSheet';
 import { afterMenu } from '@/lib/confirm';
 import { TileCover } from '@/components/TileCover';
@@ -1216,7 +1216,8 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
   const till = isOpenToHit(user) ? tillLabel(user.openToHitUntil) : null;
   const first = user.name.split(' ')[0];
   // ⋯ holds what used to hang under the buttons (Add to a group), the profile, and Follow in words,
-  // the same choices a profile's own ⋯ offers. Each runs once the menu has gone.
+  // the same choices a profile's own ⋯ offers. Each runs once the menu has gone. Opening it sends a Follow tapped a
+  // moment ago that the app has not caught up with yet (flushQuickFollows), so it never offers Follow again for it.
   const [menuOpen, setMenuOpen] = useState(false);
   const { followRequests, currentUserId, followEdges } = useApp();
   const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
@@ -1305,7 +1306,7 @@ export function PlayerSheet({ placed, following, onClose, onProfile, onMessage, 
           )}
         </View>
         <FollowShrink following={following} userId={user.id} onPress={onFollow} name={first} followsYou={followsYou} size={CARD_ROUND} room={followRoom} />
-        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => setMenuOpen(true)} style={styles.cardRound}>
+        <Tappable accessibilityLabel={`More for ${user.name}`} onPress={() => { flushQuickFollows(); setMenuOpen(true); }} style={styles.cardRound}>
           <Ionicons name="ellipsis-horizontal" size={19} color={colors.text} />
         </Tappable>
         {/* The pills' words at their natural width, never seen or read out (see followRoom). */}
@@ -1820,11 +1821,11 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
         <View style={styles.cityGlow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.cityName, edge]} numberOfLines={1}>{cityName}</Text>
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityCount, (count > 0 || placeCount > 0) && styles.cityCountOn, edge]}>{line}</Text>
-          {hitCount ? <Text style={[styles.cityHits, edge]}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
+          {hitCount ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>{hitCount === 1 ? '1 open hit nearby' : `${hitCount} open hits nearby`}</Text>
             // Nobody to show, but courts to play on: how to see the players here, or (sharing already) a next step, not an empty town.
-            : !count && placeCount && hint ? <Text style={[styles.cityHits, edge]}>{hint}</Text>
+            : !count && placeCount && hint ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>{hint}</Text>
               // Not with the "You're early" card under the map: that card is the one ask for this moment.
-              : !count && placeCount && adult && !inviting ? <Text style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
+              : !count && placeCount && adult && !inviting ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.cityHits, edge]}>Tap Up to hit so friends see you</Text> : null}
         </View>
       </Animated.View>
       </>}

@@ -8,7 +8,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useLeave } from '@/components/LeaveCurtain';
 import { goToStart, replaceWithStart } from '@/features/navigation/startTab';
 import { goBack } from '@/lib/goBack';
-import { FollowPill } from '@/components/FollowPill';
+import { FollowPill, flushQuickFollows, type FollowShown } from '@/components/FollowPill';
 import { LevelPill } from '@/components/LevelPill';
 import { useNearCourts } from '@/components/place/CourtsNear';
 import { Avatar, Button } from '@/components/ui';
@@ -233,7 +233,11 @@ export default function FirstMove() {
 
   // Setup's last page: setup's one step count (Oct 20 sweep); none when opened again from the profile.
   const setupCount = useSetupCount('first-move', !overApp);
-  const done = (move: FirstMove, then?: () => void) => {
+  // `chosen` left out (Continue, Finish): the move is what was done here, counting a Follow tapped a moment ago
+  // whose follow the app has not caught up with yet (flushQuickFollows: taps answering sooner, admins first).
+  const done = (chosen: FirstMove | null, then?: () => void) => {
+    const waiting = flushQuickFollows();
+    const move = chosen ?? moveWith(waiting);
     actions.noteFirstMove(move);
     if (overApp && move === 'later') { goBack('/(tabs)/profile'); return; }
     leave(() => { if (overApp) goToStart(); else replaceWithStart(); if (then) setTimeout(then, 380); });
@@ -258,13 +262,19 @@ export default function FirstMove() {
   const findContacts = () => { haptics.tap(); setLooked(true); router.push('/find-contacts'); };
   // Followed someone (here, or from your contacts), or asked to follow a private account here.
   const [startFollows] = useState(followingIds.length);
-  const followed = followingIds.length > startFollows
-    || (picks ?? []).some((p) => followingIds.includes(p.user.id) || followRequests.some((r) => r.fromId === currentUserId && r.toId === p.user.id));
+  // `waiting`: Follows tapped whose follow the app has not caught up with yet (flushQuickFollows), by what their button shows.
+  const followedWith = (waiting: ReadonlyMap<string, FollowShown>) => {
+    const shownFor = (id: string): FollowShown => waiting.get(id)
+      ?? (followingIds.includes(id) ? 'following' : followRequests.some((r) => r.fromId === currentUserId && r.toId === id) ? 'requested' : 'none');
+    let count = followingIds.length;
+    for (const [id, shown] of waiting) count += (shown === 'following' ? 1 : 0) - (followingIds.includes(id) ? 1 : 0);
+    return count > startFollows || (picks ?? []).some((p) => shownFor(p.user.id) !== 'none');
+  };
   const follow = (who: User) => {
     if (followingIds.includes(who.id)) confirmUnfollow(who, () => actions.toggleFollow(who.id));
     else actions.toggleFollow(who.id);
   };
-  const move: FirstMove = followed ? 'follow' : shared ? 'invite' : looked ? 'find' : 'later';
+  const moveWith = (waiting: ReadonlyMap<string, FollowShown>): FirstMove => followedWith(waiting) ? 'follow' : shared ? 'invite' : looked ? 'find' : 'later';
   // "Follow all" (R9, Oct 20 sweep: "The more people a new player follows, the fuller their Feed and
   // map. Today it's one tap per person. Adults only."). Only for someone known to be an adult, and only
   // over the list already shown, which keeps the suggestions' own rules (a teen is never offered to an
@@ -274,7 +284,11 @@ export default function FirstMove() {
   const notYet = (picks ?? []).filter((p) => !followingIds.includes(p.user.id) && !followRequests.some((r) => r.fromId === currentUserId && r.toId === p.user.id));
   const canFollowAll = adult && (picks?.length ?? 0) >= 2 && notYet.length >= 2;
   // One buzz for the whole tap, not one per person (R9 review).
-  const followAll = () => actions.followAll(notYet.map((p) => p.user.id));
+  // A Follow tapped a moment ago (its follow not yet in the app: flushQuickFollows) is sent first and left out here.
+  const followAll = () => {
+    const waiting = flushQuickFollows();
+    actions.followAll(notYet.filter((p) => !waiting.has(p.user.id)).map((p) => p.user.id));
+  };
 
   // Context only: the list under it says what to do.
   const line = !adult ? 'Your map shows only your friends.'
@@ -363,7 +377,7 @@ export default function FirstMove() {
           </Animated.View>
         </ScrollView>
         <Animated.View entering={enter(2)}>
-          <SetupFooter primary={{ label: finishLabel, onPress: () => done(move) }} />
+          <SetupFooter primary={{ label: finishLabel, onPress: () => done(null) }} />
         </Animated.View>
         <StatusShade wash={setupLook.wash} />
         {curtain}
@@ -481,7 +495,7 @@ export default function FirstMove() {
       {/* Continue, always in reach: following anyone is optional. */}
       {/* Setup's bottom, the same on every setup page (Oct 20 sweep). */}
       <Animated.View entering={enter(4)}>
-        <SetupFooter primary={{ label: setupCount && setupCount.index === setupCount.total - 1 ? 'Finish' : 'Continue', onPress: () => done(move) }} />
+        <SetupFooter primary={{ label: setupCount && setupCount.index === setupCount.total - 1 ? 'Finish' : 'Continue', onPress: () => done(null) }} />
       </Animated.View>
       {/* What scrolls up stops at the status bar instead of running under the clock. */}
       <StatusShade wash={{ height: 420 }} />

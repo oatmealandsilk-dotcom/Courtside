@@ -285,7 +285,7 @@ export default function Settings() {
     <Screen title="Settings" compactTitle onBack={() => goBack()}>
       {currentUser ? (
         <View style={styles.me}>
-          <Avatar name={currentUser.name} seed={currentUser.avatarSeed} size={64} />
+          <Avatar name={currentUser.name} seed={currentUser.avatarSeed} uri={currentUser.avatarUrl} size={64} />
           <View style={styles.meWords}>
             <PlayerName userId={currentUser.id} style={styles.meName}>{currentUser.name}</PlayerName>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meHandle}>@{currentUser.handle}</Text>

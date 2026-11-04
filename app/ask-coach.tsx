@@ -48,7 +48,7 @@ function closesKeys(header: React.ReactNode) {
  */
 export default function AskCoach() {
   const styles = useThemedStyles(styleDefinitions);
-  const { actions, coaches } = useApp();
+  const { actions, coaches, currentUserId } = useApp();
   // Opened from the box on the Coaching tab, the page grows out of that box:
   // it starts at the box's size and place, rounded like it, and expands to
   // the whole page while the form fades in; then the cursor is waiting.
@@ -60,8 +60,9 @@ export default function AskCoach() {
   const hero = !!origin && origin.length === 4 && origin.every((n) => Number.isFinite(n) && n >= 0) && origin[2] > 0 && origin[3] > 0;
   const web = Platform.OS === 'web';
   // A question that didn't post comes back already typed (its toast's "Ask again").
-  const [unsent] = useState(peekUnsentCoachQuestion);
-  useEffect(() => { clearUnsentCoachQuestion(); }, []);
+  const [unsent] = useState(() => peekUnsentCoachQuestion(currentUserId));
+  // Cleared only once shown here, and only this account's (another account's stays for its writer).
+  useEffect(() => { if (unsent) clearUnsentCoachQuestion(currentUserId); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [title, setTitle] = useState(unsent?.title ?? '');
   const titleBox = useRef<TextInput>(null);
   const [body, setBody] = useState(unsent?.body ?? '');
@@ -301,7 +302,7 @@ export default function AskCoach() {
         </View>
 
         <View style={styles.foot}>
-          <Text style={styles.footNote}>{canSubmit ? 'Coaches see your level with it.' : title.trim().length <= 10 ? 'A few more words on what is wrong.' : 'A little more detail, so the answer can be specific.'}</Text>
+          <Text style={styles.footNote}>{canSubmit ? 'Coaches see your level with it.' : !title.trim() ? 'Write your question to post.' : title.trim().length <= 10 ? 'A few more words on what is wrong.' : 'A little more detail, so the answer can be specific.'}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Post to coaches" accessibilityState={{ disabled: !canSubmit }} disabled={!canSubmit} onPress={submit} style={({ pressed }) => [styles.postPress, pressed && canSubmit && { opacity: 0.85 }]}>
             <Reanimated.View key={postKey} style={[styles.post, postFill]}>
               <Reanimated.Text style={[styles.postText, postInk]}>Post</Reanimated.Text>

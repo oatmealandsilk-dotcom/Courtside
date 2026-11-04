@@ -39,7 +39,20 @@ const mayBuzz = (fallback: number | number[]) => {
   return !activation || activation.hasBeenActive;
 };
 
+/** Above 0 while `quietly` runs: no buzz at all. */
+let hushed = 0;
+
+/**
+ * Runs `work` with every buzz in it left out. For an action whose button already buzzed on the tap and whose
+ * own work runs a moment later (a quick Follow's, useQuickFollow): without this the phone buzzed twice.
+ */
+export function quietly(work: () => void) {
+  hushed += 1;
+  try { work(); } finally { hushed -= 1; }
+}
+
 function run(work: () => Promise<void>, fallback: number | number[], onAndroid?: AndroidFeel | null) {
+  if (hushed > 0) return;
   try {
     if (web) { if (mayBuzz(fallback)) navigator.vibrate(fallback); return; }
     if (android && onAndroid !== undefined) { if (onAndroid) void feelAndroid(onAndroid).catch(() => undefined); return; }

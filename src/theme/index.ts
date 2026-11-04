@@ -17,7 +17,7 @@ export const lightColors = {
   // court's own colour for anything else. The same on every light court (hard, clay and grass above wear the
   // court's theme: London's hard is purple, New York's grass blue), deep enough for white letters on them.
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
-  info: '#3E6982', success: '#527C56', warning: '#957328', danger: '#A34D40',
+  info: '#3E6983', success: '#527C57', warning: '#957328', danger: '#A34D40',
   // Two colours only for decoration (a group's face), never for a warning or
   // an error, so a gold or rose group never reads as something gone wrong.
   sun: '#A87B1C', rose: '#A9547A',
@@ -38,7 +38,7 @@ export const lightColors = {
   // Words and icons on a danger-red button (the inbox's Delete): white, or dark on the two dark courts,
   // where white on their lighter red fell short. Read from `colors` when drawing, not from a style sheet:
   // white is also a page colour, so a style sheet would recolour it as the page.
-  onDanger: '#FFFFFF',
+  onDanger: '#FFFEFF',
   // The session box (a session's card, its photo strip and tile, the share stamp, the Tennis profile
   // card): each court's shirt (Oct 6, owner: "make those the darker full color card. like how we did
   // with the default"). Its fill; the shirt's two-colour fade as it shows at the very corner, top right
@@ -48,10 +48,10 @@ export const lightColors = {
   // owner: the old gold-grey cream "looks a bit damp"), the brand green lettering, the small words the
   // green a fifth of the way to the text, the quiet ones the page's muted ink.
   cardFill: '#F6F0E2', cardGlowTop: '#D6E2CA', cardGlowBottom: '#F2D9BD',
-  cardFigure: '#3F7049', cardInk: '#3A6141', cardMuted: '#5D584C',
+  cardFigure: '#3F704A', cardInk: '#3A6141', cardMuted: '#5D584D',
   // A touch of the court's second colour on the quiet cards in the app (Oct 25, owner: "a touch of purple on cards" for
   // London): the result pill, the rating and the week's bars. Every court without one keeps its brand here, so nothing changes.
-  cardTouch: '#3F7049',
+  cardTouch: '#3F7048',
   // "Growing the game" on the app's copy of the launch screen. Here, the launch picture's own grey
   // (assets/splash.png), a shade lighter than textFaint: on this court the copy is the picture to the
   // pixel, so the line must not darken as the picture hands over (Oct 7). Every other court: its textFaint.
@@ -72,6 +72,18 @@ export const lightColors = {
 } as const;
 
 export const colors: Record<keyof typeof lightColors, string> = { ...lightColors };
+
+/**
+ * Two palette colours that are the same to the eye. Within a palette no two slots share a value
+ * (the theme switch tells slots apart by value: ThemeProvider), so a slot that "is the brand" on a
+ * court sits a step or two off it; this reads such a pair as one colour.
+ */
+export function sameInk(a: string, b: string): boolean {
+  if (a === b) return true;
+  const ha = a.replace('#', ''); const hb = b.replace('#', '');
+  if (!/^[0-9a-f]{6}$/i.test(ha) || !/^[0-9a-f]{6}$/i.test(hb)) return false;
+  return [0, 2, 4].every((i) => Math.abs(parseInt(ha.slice(i, i + 2), 16) - parseInt(hb.slice(i, i + 2), 16)) <= 8);
+}
 
 /** A palette colour (`#RRGGBB`) at an opacity, as rgba(), which animations on the phone and in a browser both read. */
 export function withAlpha(hex: string, alpha: number): string {

@@ -21,7 +21,7 @@ import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import { Tappable } from '@/components/Tappable';
-import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
+import { Avatar, Button, EmptyState, Screen, selfTint } from '@/components/ui';
 import { PlayerCard } from '@/components/tennis/PlayerCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
@@ -37,7 +37,8 @@ import { buttonShape, colors, radius, spacing, typography, font } from '@/theme'
 import { TextScale, oneLine } from '@/theme/textScale';
 import { useStillLoading } from '@/lib/useStillLoading';
 import { useArrived } from '@/lib/useArrived';
-import { usePressV2 } from '@/features/navigation/pressV2';
+import { usePressV2, useTapFast } from '@/features/navigation/pressV2';
+import { useQuickFollow, type FollowShown } from '@/components/FollowPill';
 import { useMessageReady } from '@/features/messages/useMessageReady';
 import type { Post } from '@/data/types';
 import { afterMenu, confirmBlock, confirmReport, confirmUnfollow } from '@/lib/confirm';
@@ -127,6 +128,8 @@ function UserProfile() {
   // That wait is the quicker press feel's (pressV2: admins first): a swipe to another grid right as
   // the page lands could find it still filling in, so everyone else gets all four with the page.
   const quick = usePressV2();
+  // Taps answering sooner (pressV2's TAP_FAST, admins first): Message, below.
+  const tapFast = useTapFast();
   const arrived = useArrived(quick);
   const built = useRef(new Set<(typeof TABS)[number]>()).current;
   built.add(tab);
@@ -202,7 +205,7 @@ function UserProfile() {
     setTimeout(() => setNotice(''), 2200);
   };
 
-  // One word, as on every app: a private account's Follow sends an ask, and the button then says so.
+  // One word, as on every app: a private account's Follow sends an ask, and the button then says so (QuickFollowArea).
   const followLabel = following ? 'Following' : requested ? 'Requested' : 'Follow';
   // Unblock, notifications and mute announce themselves, in a toast with Undo.
   const menu: { icon: keyof typeof Ionicons.glyphMap; label: string; danger?: boolean; onPress: () => void }[] = blocked
@@ -238,7 +241,7 @@ function UserProfile() {
           // Left-aligned like your own Profile (Oct 25, "D all for less ai", item 12): the picture at the left, the name
           // and level beside it, the bio and counts under, rather than everything centred like a landing page.
           <View style={styles.identityRow}>
-            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} ring={user.isCoach} style={{ backgroundColor: colors.brand }} />
+            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} ring={user.isCoach} style={{ backgroundColor: isMe ? selfTint(user.avatarSeed) : colors.brand }} />
             <View style={styles.identityWords}>
               <View style={styles.nameLine}>
                 <PlayerName userId={user.id} style={[styles.name, styles.nameLeft]}>{user.name}</PlayerName>
@@ -252,7 +255,7 @@ function UserProfile() {
             </View>
           </View>
         ) : <>
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: colors.brand, alignSelf: 'center' }} />
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: isMe ? selfTint(user.avatarSeed) : colors.brand, alignSelf: 'center' }} />
         <View style={styles.nameRow}>
           {/* The name and, close after it, their streak's flame (3 days or more). */}
           <View style={styles.nameLine}>
@@ -266,8 +269,10 @@ function UserProfile() {
         </>}
         {!!user.bio && <Text style={[styles.bio, LESS_AI_ROUND2 && styles.bioLeft]}>{user.bio}</Text>}
         {!!user.location && <Text style={styles.meta}>{user.location}</Text>}
+        {/* Follow and the follower count beside it, drawn together on the tap with taps answering sooner (QuickFollowArea). */}
+        <QuickFollowArea userId={user.id} stored={following ? 'following' : requested ? 'requested' : 'none'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)}>{(quick) => <>
         <View style={styles.followRow}>
-          {([['followers', user.followers, 'followers'], ['following', user.following, 'following']] as const).map(([which, n, label], i) => (
+          {([['followers', user.followers + quick.delta, 'followers'], ['following', user.following, 'following']] as const).map(([which, n, label], i) => (
             <React.Fragment key={which}>
               {i > 0 && <Text style={styles.followDot}>·</Text>}
               <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} disabled={locked} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab: which } })} style={styles.follow}>
@@ -288,17 +293,21 @@ function UserProfile() {
         ) : !isMe ? (
           <View style={styles.buttons}>
             <View style={{ flex: 1 }}>
-              <Button label={followLabel} variant={following || requested ? 'secondary' : 'primary'} onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} full size="sm" />
+              <Button label={quick.shown === 'following' ? 'Following' : quick.shown === 'requested' ? 'Requested' : 'Follow'} variant={quick.shown !== 'none' ? 'secondary' : 'primary'} onPress={quick.press} full size="sm" />
             </View>
             <View style={{ flex: 1 }}>
               {/* Locked, it asks the server again first (they may have followed you
-                  since the app opened), then says why in a note that stays to be read. */}
-              <Button label="Message" variant="secondary" onPress={async () => { if (opening.current) return; opening.current = true; setOpeningChat(true); try { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); } finally { opening.current = false; setOpeningChat(false); } }} loading={openingChat} full size="sm" />
+                  since the app opened), then says why in a note that stays to be read.
+                  Already open to you, with taps answering sooner (pressV2's TAP_FAST, admins first): the chat
+                  opens in the tap, with no spinner drawn first, which redrew this whole page before the chat
+                  could start to slide in (Nov 2, owner: "Clicking should respond much faster"). */}
+              <Button label="Message" variant="secondary" onPress={async () => { if (opening.current) return; if (tapFast && actions.canMessage(user.id)) { router.push(`/messages/${actions.openConversationWith(user.id)}`); return; } opening.current = true; setOpeningChat(true); try { const lock = await actions.messageLock(user.id); if (lock) { showToast({ title: lock, icon: 'lock-closed-outline', long: true }); return; } router.push(`/messages/${actions.openConversationWith(user.id)}`); } finally { opening.current = false; setOpeningChat(false); } }} loading={openingChat} full size="sm" />
             </View>
           </View>
         ) : (
           <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" style={{ minHeight: buttonShape.profileHeight }} /></View></View>
         )}
+        </>}</QuickFollowArea>
         {coach && !blocked && !locked ? (
           <Button label="See coaching services" onPress={() => router.push(`/coach/${coach.id}`)} full />
         ) : null}
@@ -362,6 +371,18 @@ function UserProfile() {
       </RisingSheet> : null}
     </Screen>
   );
+}
+
+/**
+ * Follow on a player's page and the follower count beside it, in a part of their own: with taps answering
+ * sooner (useQuickFollow, admins first) the button says Following or Requested on the tap itself and the count
+ * moves with it (useQuickFollow's delta, as a like's count moves with its heart), and only this part is drawn for
+ * that, not the page; the app catches up behind it. Otherwise exactly as before, the count straight from the app
+ * (Nov 2, owner: "There's also a delay on clicking buttons for them to respond. Clicking should respond much faster").
+ */
+function QuickFollowArea({ userId, stored, onPress, children }: { userId: string; stored: FollowShown; onPress: () => void; children: (quick: ReturnType<typeof useQuickFollow>) => React.ReactNode }) {
+  const quick = useQuickFollow(stored, userId, onPress);
+  return <>{children(quick)}</>;
 }
 
 const styleDefinitions = StyleSheet.create({
