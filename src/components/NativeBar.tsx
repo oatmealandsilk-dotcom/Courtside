@@ -18,7 +18,7 @@ import { BAR_RECEDE } from '@/features/compose/createMenu';
 import { LENS_TABS } from '@/features/navigation/barLens';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { barCompact } from '@/features/navigation/barShrink';
-import { NATIVE_BAR, NEW_BAR, nativeBarRoom } from '@/features/navigation/tabBarLook';
+import { NATIVE_BAR, NEW_BAR, nativeBarRoom, nativeBarSetup } from '@/features/navigation/tabBarLook';
 import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme } from '@/theme/ThemeProvider';
 import { inkOn, withAlpha } from '@/theme';
@@ -113,13 +113,6 @@ function tabKey(route: string | undefined): string | null {
   return route && (LENS_TABS as readonly string[]).includes(route) ? route : null;
 }
 
-/**
- * Where Apple's bar puts the middle of each of its five places, on a screen 402 points wide (Nov 2, measured in the
- * Simulator on an iPhone 18 Pro; not five equal places: its ends sit further in). Other widths are scaled from these.
- * The tutorial's targets and the Feed tab's hold sit on them (Nov 3: on five equal places they were up to 17 points off).
- */
-const PLACE_X_402 = [74, 144, 201, 271, 336] as const;
-const PLACE_W_402 = 402;
 /** How wide each target is: about the icon and its word. */
 const PLACE_MARK_W = 62;
 /** The court themes, whose glass carries the court's colour on today's bar. */
@@ -159,7 +152,9 @@ export const NativeBar = React.memo(function NativeBar({
 }) {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
-  const placeX = (i: number) => (PLACE_X_402[i] * width) / PLACE_W_402;
+  // The words' size, each tab's title (with any invisible room either side) and the five places (tabBarLook's NATIVE_BUBBLE).
+  const setup = useMemo(() => nativeBarSetup(width, items.map((it) => it.label)), [width, items]);
+  const placeX = (i: number) => setup.places[i];
   const c = themes[theme];
   const darkPage = inkOn(c.bg) === '#FFFFFF';
   // Over a clip on the Feed itself, dark glass (as today's bar: the same two signals, TabBarLooks).
@@ -176,12 +171,20 @@ export const NativeBar = React.memo(function NativeBar({
   const idle = media ? withAlpha(c.onMedia, 0.92) : c.text;
   const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.bg;
   // One look for every place (a tab item's look is the whole bar's while that tab is lit), made again only when its colours change.
+  // A set word size keeps Apple's own weights: medium at rest, semibold lit.
+  const word = setup.word;
   const appearance = useMemo<TabsScreenAppearanceIOS>(() => ({
     stacked: {
-      normal: { tabBarItemIconColor: idle, tabBarItemTitleFontColor: idle, tabBarItemBadgeBackgroundColor: c.danger },
-      selected: { tabBarItemIconColor: lit, tabBarItemTitleFontColor: lit, tabBarItemBadgeBackgroundColor: c.danger },
+      normal: {
+        tabBarItemIconColor: idle, tabBarItemTitleFontColor: idle, tabBarItemBadgeBackgroundColor: c.danger,
+        ...(word ? { tabBarItemTitleFontSize: word, tabBarItemTitleFontWeight: '500' as const } : null),
+      },
+      selected: {
+        tabBarItemIconColor: lit, tabBarItemTitleFontColor: lit, tabBarItemBadgeBackgroundColor: c.danger,
+        ...(word ? { tabBarItemTitleFontSize: word, tabBarItemTitleFontWeight: '600' as const } : null),
+      },
     },
-  }), [idle, lit, c.danger]);
+  }), [idle, lit, c.danger, word]);
 
   // The tab the phone's bar is asked to show: the app's, as the address (or a swipe's pick) says. A tab picked on
   // the bar itself is shown by the bar at once; the app's word then catches up, and until it has (or for
@@ -235,7 +238,7 @@ export const NativeBar = React.memo(function NativeBar({
       <Tabs.Screen
         key={item.route}
         screenKey={item.route}
-        title={item.label}
+        title={setup.titles[index]}
         badgeValue={item.route === 'profile' ? badge : undefined}
         tabBarItemAccessibilityLabel={item.label}
         specialEffects={noEffects}

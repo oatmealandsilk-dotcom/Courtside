@@ -134,6 +134,94 @@ export function newBarFoot(bottom: number): number {
  */
 export const NATIVE_BAR = { frame: 49, capsule: 62, side: 21, icon: 25 } as const;
 
+/**
+ * Apple's bar's lit bubble once it has landed (Nov 4, owner, after the three bars side by side: "I like the clearness or
+ * apples own glass but it's just a bit too big when it lands because the circle almost cuts into the other pages icons").
+ *
+ * What sets it (Nov 4, measured in the Simulator from the bar's own views): the bubble at rest is exactly the lit tab's
+ * button, and Apple sizes the five buttons (our four tabs and the empty middle place under our +) itself. Each wants
+ * its word's width plus about 31 points, never under about 73; the five are then stretched together to fill the glass,
+ * each overlapping its neighbours by 20 points. So the long words' buttons (Community, Coaching) keep only about 20
+ * points either side of the word, and a lit neighbour's bubble, reaching 20 points into them, stops 1 to 2 points from
+ * "Community" (Feed lit) or "Coaching" (Profile lit). The icon pictures' size, the word's offset, and UIKit's own
+ * itemWidth, itemSpacing and itemPositioning change none of it (tried): the 20-point overlap and the stretch are Apple's.
+ * What the app can change: the words' size, and invisible room (thin spaces) either side of a word, which widens that
+ * tab's button so a lit neighbour's bubble stops further from the word. The five buttons always share the same width,
+ * so a wider button somewhere is a narrower one elsewhere: no choice here makes every bubble smaller.
+ *
+ *   'today'   Apple's own: words 10 (semibold when lit), no room.
+ *   'small'   words 9 (semibold when lit), no room: Community's and Coaching's bubbles a few points smaller; Feed lit
+ *             next to "Community" and Profile lit next to "Coaching" stay about as tight as today.
+ *   'even'    words 9, and room either side of Community, Coaching and Profile, as much as the phone's width allows
+ *             without Apple squeezing a word: every bubble at rest keeps about the same clear gap to the next tab's
+ *             icon and word. Feed's bubble gets smaller, Community's and Coaching's wider; the places move a few points.
+ *   'even10'  'even' with the words kept at today's 10: the same evening out, with smaller gaps.
+ * Only this line changes it (A itself stays off: barLens's BAR_NATIVE_FOR_*).
+ */
+export type NativeBubble = 'today' | 'small' | 'even' | 'even10';
+export const NATIVE_BUBBLE = 'today' as NativeBubble;
+const BUBBLES: Record<NativeBubble, { word: number | null; room: boolean }> = {
+  today: { word: null, room: false },
+  small: { word: 9, room: false },
+  even: { word: 9, room: true },
+  even10: { word: 10, room: true },
+};
+
+/**
+ * Apple's bar's own measures (above; Simulator, Nov 4), in points: what each button wants on top of its word, the least
+ * it takes, how far neighbours overlap, the glass's distance from the screen's sides and its buttons' from its ends, and
+ * how much wider than its word (spaces included) a button must stay for Apple not to squeeze the word (32, and 2 spare).
+ */
+const APPLE_BAR = { want: 30.77, least: 73.37, overlap: 20, side: 21, inset: 4, fit: 34 } as const;
+/** The four words (Community, Feed, Coaching, Profile) as Apple draws them lit (semibold), at 10 points. */
+const LIT_WORDS_10 = [57.33, 24.67, 47.33, 33] as const;
+/** Which tabs get room in 'even' (Feed's button is at Apple's least width either way, so room there changes nothing). */
+const ROOMY = [true, false, true, true] as const;
+/** The invisible room: thin spaces (U+2009), each this much of the type size wide. */
+export const ROOM_SPACE = ' ';
+const ROOM_SPACE_EM = 1 / 6;
+
+/** How Apple's bar is set up for a screen this wide: the words' size (null: Apple's own), each tab's title, and the five places' middles. */
+export type NativeBarSetup = { word: number | null; titles: readonly string[]; places: readonly number[] };
+
+/**
+ * The bar's setup for NATIVE_BUBBLE on a screen `width` points wide. 'today' is exactly as before (Apple's words, the
+ * places measured on a 402-point screen and scaled); the others place the tabs where Apple's measures (above) put them.
+ */
+export function nativeBarSetup(width: number, labels: readonly string[], bubble: NativeBubble = NATIVE_BUBBLE): NativeBarSetup {
+  const look = BUBBLES[bubble];
+  if (look.word === null) return { word: null, titles: labels, places: PLACE_X_402.map((x) => (x * width) / 402) };
+  const k = look.word / 10;
+  const space = ROOM_SPACE_EM * look.word;
+  // The five buttons, overlapping, fill the glass less its ends' insets (432 on a 402-point screen).
+  const fill = width - 2 * (APPLE_BAR.side + APPLE_BAR.inset) + 4 * APPLE_BAR.overlap;
+  const lay = (spaces: number) => {
+    const words = LIT_WORDS_10.map((w, i) => w * k + (look.room && ROOMY[i] ? 2 * spaces * space : 0));
+    const want = [words[0], words[1], 0, words[2], words[3]].map((w) => Math.max(w + APPLE_BAR.want, APPLE_BAR.least));
+    const stretch = fill / want.reduce((a, b) => a + b, 0);
+    const widths = want.map((w) => w * stretch);
+    return { widths, fits: words.every((w, i) => widths[i < 2 ? i : i + 1] >= w + APPLE_BAR.fit) };
+  };
+  // As much room as fits (none if even that would squeeze a word).
+  let spaces = 0;
+  if (look.room) while (spaces < 24 && lay(spaces + 1).fits) spaces += 1;
+  const { widths } = lay(spaces);
+  let x = APPLE_BAR.side + APPLE_BAR.inset;
+  const places = widths.map((w) => { const middle = x + w / 2; x += w - APPLE_BAR.overlap; return middle; });
+  // The middle place is our round +, always in the middle of the screen.
+  places[2] = width / 2;
+  const pad = ROOM_SPACE.repeat(spaces);
+  return { word: look.word, titles: labels.map((label, i) => (look.room && ROOMY[i] && pad ? `${pad}${label}${pad}` : label)), places };
+}
+
+/**
+ * Where Apple's bar puts the middle of each of its five places, on a screen 402 points wide (Nov 2, measured in the
+ * Simulator on an iPhone 18 Pro; not five equal places: its ends sit further in). Other widths are scaled from these.
+ * The tutorial's targets and the Feed tab's hold sit on them (Nov 3: on five equal places they were up to 17 points off).
+ * NATIVE_BUBBLE 'today' only: the others work their places out (nativeBarSetup).
+ */
+const PLACE_X_402 = [74, 144, 201, 271, 336] as const;
+
 /** The room Apple's bar takes above the screen's bottom edge, from the phone's bottom strip (`inset`, 0 with no home bar). */
 export function nativeBarRoom(inset: number): number {
   return Math.max(inset + NATIVE_BAR.frame, NATIVE_BAR.capsule + 12);
