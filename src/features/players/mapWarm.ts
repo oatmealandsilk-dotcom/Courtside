@@ -150,3 +150,10 @@ simAction('memwarn', () => memoryWarning());
 let pictureShown = true;
 export const mapWarmPictureShown = () => pictureShown;
 simAction('warmpic', (q) => { pictureShown = q.on !== '0'; simLog(`[sim] warmpic ${q.on ?? '1'}`); });
+/**
+ * The simulator's proof only ("warmhold ms=3000"): the picture kept up that long after the map has drawn, as on a slow phone, so
+ * leaving the map while it is up (Back, the swipe back, a drag) can be filmed on a busy Mac. 0 everywhere else.
+ */
+let holdMs = 0;
+export const mapWarmSimHold = () => holdMs;
+simAction('warmhold', (q) => { holdMs = Number(q.ms) || 0; simLog(`[sim] warmhold ${holdMs}`); });

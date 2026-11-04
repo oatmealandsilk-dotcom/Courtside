@@ -38,7 +38,7 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import { homeFor, homeIsKnown, wideView, type LatLng } from '@/features/players/positions';
-import { mapWarmOn, mapWarmPictureShown, mapWarmResting, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
 import { useMyCity } from '@/features/players/useMyCity';
 import { MapWarmCopy, MapWarmPicture } from '@/components/map/MapWarm';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
@@ -73,6 +73,8 @@ const WARM_MAX_MS = 4000;
 /** mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge is the system's swipe back. */
 const WARM_MOVE = 8;
 const WARM_EDGE = 24;
+/** mapWarm: from the left edge, past this the system's swipe back would have taken the touch already: the map is being moved. */
+const WARM_EDGE_MOVE = 40;
 
 export type { NearbyMapProps };
 
@@ -650,22 +652,26 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   const warmGoNow = useRef(warmGo);
   warmGoNow.current = warmGo;
-  // A finger moving the map (not a tap, not the system's swipe back from the left edge, not the buttons over it): the picture
-  // goes at once, so the map's own drawing is what moves. Only a page that opened on a picture listens (fixed for its life).
+  // A finger moving the map (not a tap, not the buttons over it): the picture goes at once, so the map's own drawing is what
+  // moves. From the left edge it may be the system's swipe back, which takes the touch away (cancelled) and slides the page
+  // out picture and all; one the map keeps instead is moving it, so it counts once it has gone further. Only a page that
+  // opened on a picture listens (fixed for its life).
   const [warmWrap] = useState(!!warmPic);
   const warmTouch = useRef<{ x: number; y: number } | null>(null);
+  const warmMoved = (s: { x: number; y: number }, e: GestureResponderEvent) =>
+    e.nativeEvent.touches.length > 1 || Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= (s.x < WARM_EDGE ? WARM_EDGE_MOVE : WARM_MOVE);
   const warmFinger = {
     onTouchStart: (e: GestureResponderEvent) => { warmTouch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; },
     onTouchMove: (e: GestureResponderEvent) => {
       const s = warmTouch.current;
-      if (!s || !warmUp.current || s.x < WARM_EDGE) return;
-      if (e.nativeEvent.touches.length > 1 || Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= WARM_MOVE) warmGo('pan');
+      if (s && warmUp.current && warmMoved(s, e)) warmGo('pan');
     },
     onTouchEnd: (e: GestureResponderEvent) => {
       const s = warmTouch.current;
       warmTouch.current = null;
-      if (s && warmUp.current && s.x >= WARM_EDGE && Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= WARM_MOVE) warmGo('pan');
+      if (s && warmUp.current && warmMoved(s, e)) warmGo('pan');
     },
+    onTouchCancel: () => { warmTouch.current = null; },
   };
   useEffect(() => {
     if (!warmUp.current) return undefined;
@@ -1130,7 +1136,7 @@ export function NearbyMap(props: NearbyMapProps) {
       // v7: the card's and the full map's pulses keep the wall clock's phase, as the zoom layer's do (MapCanvas phaseLock).
       phaseLock={v7On || (expanded && zoomOn)}
       // The full map: its own map has drawn (mapWarm's picture, if any, goes now). The still card: its cover goes.
-      onPainted={expanded ? () => warmGo('painted') : () => showCard()}
+      onPainted={expanded ? () => { if (mapWarmSimHold()) setTimeout(() => warmGoNow.current('painted'), mapWarmSimHold()); else warmGo('painted'); } : () => showCard()}
       onShot={expanded ? undefined : (data) => {
         // The check-in zoom's grow asked for the card's map alone (growReady), and the card's picture cover maybe too.
         shotWaiters.current.slice().forEach((give) => give(data));
