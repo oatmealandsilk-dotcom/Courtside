@@ -1,4 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
+import { pageScrollHeld, pageScrolledAt } from '@/features/navigation/scrollQuiet';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
 import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
 import React, { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
@@ -423,6 +424,7 @@ const ScreenBody = React.memo(function ScreenBody({
     onScroll: (event) => {
       const y = event.contentOffset.y;
       scrollY.value = y;
+      pageScrolledAt.value = Date.now();
       if (offsetY) offsetY.value = y;
       if (strip > 0) {
         gap.value = strip - y;
@@ -449,6 +451,7 @@ const ScreenBody = React.memo(function ScreenBody({
     },
     onBeginDrag: () => {
       dragging.value = true;
+      pageScrollHeld.value = true;
       settling.value = false;
       // A finger on the page while it springs back catches it where it is.
       if (gliding.value) { cancelAnimation(glide); gliding.value = false; }
@@ -456,6 +459,8 @@ const ScreenBody = React.memo(function ScreenBody({
     },
     onEndDrag: (event) => {
       dragging.value = false;
+      pageScrollHeld.value = false;
+      pageScrolledAt.value = Date.now();
       const y = event.contentOffset.y;
       // Where the page was left is kept once the finger lifts and once the
       // glide ends, not on every frame: a message across to the app's logic

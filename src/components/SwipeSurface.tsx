@@ -7,10 +7,13 @@ import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/fe
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { tapFastOn } from '@/features/navigation/pressV2';
+import { pagesStillFor } from '@/features/navigation/scrollQuiet';
 import { TabOnShowContext, TabOnShowLaterContext } from '@/lib/useIsFocused';
 
 /** Well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
 const WARM_AFTER_MS = 1200;
+/** And once no page has scrolled for this long (a fling's glide included). */
+const STILL_FOR_MS = 700;
 
 /**
  * Whether a warm preview is built yet (Nov 3, the sweep's worst catch: swiping back from a thread froze
@@ -22,7 +25,14 @@ function useWarmPreview(want: boolean): boolean {
   const [ready, setReady] = useState(false);
   useEffect(() => {
     if (!want || ready || !tapFastOn()) return undefined;
-    const t = setTimeout(() => startTransition(() => setReady(true)), WARM_AFTER_MS);
+    // Never in the middle of a scroll: built while the page under it was moving, it caught that scroll for
+    // 40-45 ms (Nov 3 review); it waits until no page has moved for a moment.
+    let t: ReturnType<typeof setTimeout>;
+    const tryNow = () => {
+      if (pagesStillFor() < STILL_FOR_MS) { t = setTimeout(tryNow, 250); return; }
+      startTransition(() => setReady(true));
+    };
+    t = setTimeout(tryNow, WARM_AFTER_MS);
     return () => clearTimeout(t);
   }, [want, ready]);
   // Once built it stays (a drag never finds it half there); it only starts while no drag is on.
