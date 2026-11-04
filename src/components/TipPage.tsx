@@ -74,7 +74,8 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: spacing.sm },
   title: { ...typography.display, color: colors.text },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
-  // The court slot: what this style sheet has always drawn on every court (the theme switch used to read success as it).
+  // The court slot. This file loads at startup with the layouts, so its sheet is written against the CourtSide
+  // palette, where success and court share a value: a city court has always shown court here.
   thanks: { ...typography.smallStrong, color: colors.court, paddingHorizontal: spacing.sm },
   // A quiet row onto the board, carrying its top tip.
   board: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, borderRadius: corner(20), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },

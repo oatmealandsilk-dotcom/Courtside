@@ -716,8 +716,7 @@ const styleDefinitions = StyleSheet.create({
   quietLink: { ...typography.small, fontSize: 14, color: colors.textMuted },
   linkButton: { alignSelf: 'center', paddingVertical: spacing.sm },
   error: { ...typography.small, color: colors.danger },
-  // The court slot: what this style sheet has always drawn on every court (the theme switch used to read success as it).
-  notice: { ...typography.small, color: colors.court },
+  notice: { ...typography.small, color: colors.success },
   // Apple's and Google's buttons: the same full width and height, so neither is the smaller way in.
   provider: { height: 48, width: '100%' },
   // Google's is outlined, so it reads as a button and not as one more white box to type in.

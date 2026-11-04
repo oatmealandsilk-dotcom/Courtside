@@ -366,8 +366,7 @@ const styleDefinitions = StyleSheet.create({
   heroName: { ...typography.heading, color: colors.text },
   heroMeta: { ...typography.small, color: colors.textMuted },
   demo: { ...typography.small, color: colors.textFaint, lineHeight: 19, paddingBottom: spacing.md },
-  // The court slot: what this style sheet has always drawn on every court (the theme switch used to read success as it).
-  notice: { ...typography.small, color: colors.court, paddingBottom: spacing.sm },
+  notice: { ...typography.small, color: colors.success, paddingBottom: spacing.sm },
   // Quiet, the way Settings reads: short labels, the value at the right,
   // flat grouped lists with a hairline edge instead of a raised shadow.
   sectionTitle: { ...typography.small, color: colors.textFaint, paddingHorizontal: spacing.sm, paddingTop: spacing.xl, paddingBottom: 6 },
