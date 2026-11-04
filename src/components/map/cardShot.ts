@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Directory, File, Paths } from 'expo-file-system';
 import { Image as ExpoImage } from 'expo-image';
 
+import { dropMapWarm } from '@/features/players/mapWarm';
+
 /*
  * A picture of the still map card as it last drew (Oct 22, owner: "The map
  * blips in 50% of the time … can we just pre load the map?"). A web view
@@ -242,6 +244,8 @@ export function dropPeopleShots() {
 
 /** Signing out: every picture and every remembered centre, gone (the whole folder, files the index never knew of too). */
 export function clearCardShots() {
+  // The full map's picture too (mapWarm): it shows where you are.
+  dropMapWarm('signed out');
   if (!loaded) dropBeforeLoad = 'all';
   index.entries.forEach((e) => remove(e.name));
   try { const dir = new Directory(Paths.cache, FOLDER); if (dir.exists) dir.delete(); } catch { /* already gone */ }
@@ -255,6 +259,8 @@ export function clearCardShots() {
  * picture of their card, gone from this phone at once.
  */
 export function forgetPlaces(user: string) {
+  // The full map's picture too (mapWarm): it shows where you are.
+  dropMapWarm('forget places');
   if (!loaded) forgetBeforeLoad.add(user);
   const mine = index.entries.filter((e) => e.key.startsWith(`${user}|`));
   if (!mine.length && !index.hints[user]) return;

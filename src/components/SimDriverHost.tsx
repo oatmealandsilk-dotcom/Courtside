@@ -6,6 +6,7 @@ import { startJsGapWatch } from '@/lib/simTrace';
 import { forceBarLook } from '@/features/navigation/barLens';
 import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
+import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 
 /**
  * The simulator proof harness's app-wide commands (simDriver: demo builds with EXPO_PUBLIC_SIM_DRIVER only; AppShell mounts
@@ -17,9 +18,15 @@ export function SimDriverHost() {
   const { actions } = useApp();
   const now = useRef(actions);
   now.current = actions;
+  const { setTheme } = useTheme();
+  const themeNow = useRef(setTheme);
+  themeNow.current = setTheme;
   useEffect(() => {
     const off = [
       simAction('signin', () => { void now.current.signIn('you').then(() => router.replace('/')); }),
+      // Log out (the full map's kept picture goes with the map card's: mapWarm), and a theme picked ("theme name=night").
+      simAction('signout', () => { now.current.signOut(); }),
+      simAction('theme', (q) => { if (q.name) themeNow.current(q.name as ThemeName); }),
       simAction('go', (q) => { if (q.to) router.navigate(q.to as never); }),
       simAction('back', () => { if (router.canGoBack()) router.back(); }),
       simAction('mapvis', () => { void now.current.setMapVisibility('mutuals'); }),
