@@ -22,6 +22,9 @@ import { MIN_PLAYERS, isFinal, monthName, morePlayersWords, nextTarget, ordinal,
 import { isAllTime } from '@/features/cityBoard/flag';
 import { catalogCity, catalogSpot, cityLabel, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
+import { ZeroCityOptions, isZeroOption } from '@/features/cityBoard/ZeroCityOptions';
+import { designVar } from '@/lib/designVar';
+import type { RankedCity } from '@/features/cityBoard/board';
 import { useBarInset } from '@/features/navigation/barInset';
 import { cityPlace, handPlace } from '@/features/places/geocode';
 import { isOpenToHit, tillLabel } from '@/features/players/openToHit';
@@ -181,7 +184,7 @@ export default function CityPage() {
     // A board a few minutes old can call a city at 0 that has since been ranked: if its page then comes, it
     // takes this one's place as it stands, with nothing rising in (shownZero, read by Rise below).
     shownZero.current = true;
-    return <ZeroCityPage city={zero} month={boardNow.month} />;
+    return <ZeroCityPage city={zero} month={boardNow.month} board={board} />;
   }
   if (status === 'off') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, each city’s players and courts will show here." action={{ label: 'Back', onPress: () => goBack() }} /></Screen>;
   if (status === 'error') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="cloud-offline-outline" title={`Couldn’t load ${name}`} body="Check your connection and try again." action={{ label: 'Try again', onPress: retry }} /></Screen>;
@@ -338,8 +341,21 @@ function seeOnMap(city: { id: string; name: string; region: string }) {
  * city's place is (its row's dash, said in words), what ranks a city, and
  * the way to its courts on the map. No players, no courts, no clip.
  */
-function ZeroCityPage({ city, month }: { city: ZeroCity; month: string }) {
+function ZeroCityPage({ city, month, board }: { city: ZeroCity; month: string; board: RankedCity[] }) {
   const styles = useThemedStyles(styleDefinitions);
+  // DESIGN PREVIEW (web demo only, ?var=city-unranked:A|B|C|D): options for this page. Phones never see them.
+  const option = designVar('city-unranked');
+  if (isZeroOption(option)) {
+    return (
+      <View style={styles.root}>
+        <Screen title={cityLabel(city)} compactTitle padded={false} onBack={() => goBack()}>
+          <View style={[styles.body, styles.bodyPlain, styles.zeroOptions]}>
+            <ZeroCityOptions option={option} city={city} month={month} board={board} onMap={() => seeOnMap(city)} />
+          </View>
+        </Screen>
+      </View>
+    );
+  }
   return (
     <View style={styles.root}>
       <Screen title={cityLabel(city)} compactTitle padded={false} onBack={() => goBack()}>
@@ -594,6 +610,7 @@ const styleDefinitions = StyleSheet.create({
   // A city at 0: right under the title (no faces above it).
   standingZero: { paddingTop: spacing.sm, gap: 4 },
   zeroBody: { ...typography.body, color: colors.textMuted },
+  zeroOptions: { paddingBottom: spacing.xxl },
   standingLine: { ...typography.body, ...font('500'), color: colors.text },
   section: { paddingTop: spacing.xl, gap: 2 },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: spacing.sm },
