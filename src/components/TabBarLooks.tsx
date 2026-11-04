@@ -628,7 +628,8 @@ export const LookBar = React.memo(function LookBar({
           ))} />
           {/* Apple's motion (B): the part of the swelling bubble past the bar's edges, over everything (beside the glass, never holding it). */}
           {bubbleOn && lensGeo ? (
-            <LensBubble geo={lensGeo} fallback={litPlace} frost={bubble.frost} frostAlpha={bubble.frostAlpha} rim={bubble.rim} glint={bubble.glint} inset={look.m.lensInset} st={st} />
+            <LensBubble geo={lensGeo} fallback={litPlace} frost={bubble.frost} frostAlpha={bubble.frostAlpha} rim={bubble.rim} glint={bubble.glint} inset={look.m.lensInset}
+              plus={PLUS_LOOK === 'icon' ? null : { brand: livePalette.brand, ink: livePalette.brandInk, size: look.m.plusW, icon: look.m.plusIcon }} st={st} />
           ) : null}
         </View>
         </SlideOver>
@@ -661,8 +662,8 @@ const FollowCopy = React.memo(function FollowCopy({ dark, children }: { dark: bo
  */
 interface LensGeo {
   centers: readonly number[]; width: number; widths: readonly number[]; height: number;
-  /** The round +'s middle along the bar and its half width (-1: none in the row, the split bar's). */
-  plusAt: number; plusHalf: number;
+  /** The round +'s middle along the bar (-1: none in the row, the split bar's). */
+  plusAt: number;
 }
 
 /**
@@ -705,8 +706,7 @@ function lensGeometry(pillW: number, m: BarSpec, words: Readonly<Record<string, 
   const centers = [0, 1, 2, 3].map((i) => m.pad + slotW * ((m.split || i < 2 ? i : i + 1) + 0.5));
   const width = slotW + 2 * m.pad - 2 * m.lensInset;
   const plusAt = m.split ? -1 : m.pad + slotW * 2.5;
-  const plusHalf = m.plus / 2;
-  if (!words) return { centers, width, widths: [width, width, width, width], height: m.height - 2 * m.lensInset, plusAt, plusHalf };
+  if (!words) return { centers, width, widths: [width, width, width, width], height: m.height - 2 * m.lensInset, plusAt };
   // The new bar: as wide as the tab's word on screen plus NEW_BAR.room each side (never under minLit), but
   // never past 4 in from the bar's round ends, and always 3 clear of the next tab's icon or the round +.
   const scale = m.label / NEW_BAR.label;
@@ -718,7 +718,7 @@ function lensGeometry(pillW: number, m: BarSpec, words: Readonly<Record<string, 
     const right = i === 3 ? pillW - c - m.lensInset : slotW - (i === 1 ? m.plus / 2 : m.icon / 2) - 3;
     return Math.min(want, 2 * Math.min(left, right));
   });
-  return { centers, width: Math.max(...widths), widths, height: m.height - 2 * m.lensInset, plusAt, plusHalf };
+  return { centers, width: Math.max(...widths), widths, height: m.height - 2 * m.lensInset, plusAt };
 }
 
 /**
@@ -763,8 +763,6 @@ const LIFTS = [0.06, 0.04, 0.14, 0.44] as const;
  * in the Simulator: about 88 x 52 at rest, 125 x 75 lifted) grows wider than tall: 37 against 23 points.
  */
 const LIFT_WIDE = [1, 1, 1, 1.6] as const;
-/** The least room left between Apple's widened bubble and the round + (lensBox). */
-const PLUS_AIR = 2;
 /** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers; Apple's gel a little more. */
 const SQUASHES = [0, 0.08, 0, 0.1] as const;
 /** Up at the touch, quickly; down, once the finger is up and the lens has landed, on a soft spring with no bounce. */
@@ -868,16 +866,8 @@ function lensBox(geo: LensGeo, at: number, trailAt: number, lift: number, calm: 
   const grow = calm ? 0 : liftBy * h * lift;
   const squashBy = SQUASHES[kind] ?? 0;
   const squash = squashBy > 0 && !calm ? 1 - squashBy * Math.min(1, stretch / stretchMax) : 1;
-  // It widens either side, but never out over the round + beside it (Nov 3: Apple's bubble passes under its own
-  // round button; ours, drawn over the +, would cut a ring across it): the side toward the + widens only as far as the
-  // room it has, the other side the same.
-  let half = (grow * (LIFT_WIDE[kind] ?? 1)) / 2;
-  if (half > 0 && geo.plusAt >= 0) {
-    const clear = geo.plusHalf + PLUS_AIR;
-    const room = left >= geo.plusAt ? left - (geo.plusAt + clear) : right <= geo.plusAt ? geo.plusAt - clear - right : half;
-    half = Math.min(half, Math.max(grow / 4, room));
-  }
-  return { mid: (left + right) / 2, w: right - left + 2 * half, h: (h + grow) * squash, lean: lead - back };
+  // (Apple's widens more than it grows taller; it passes under the round +, which LensBubble lays back on top.)
+  return { mid: (left + right) / 2, w: right - left + grow * (LIFT_WIDE[kind] ?? 1), h: (h + grow) * squash, lean: lead - back };
 }
 
 /** The capsule as lensBox works it out, as the animation thread holds it. */
@@ -929,8 +919,14 @@ const BUBBLE_BAND = 13;
  * its milky body only where it stands out past the bar's edges (two strips, so it never covers an icon), its
  * edge and its highlight. Seen only while lifted (its strength follows the lift); never on a fading copy.
  */
-const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostAlpha, rim, glint, inset, st }: {
+const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostAlpha, rim, glint, inset, plus, st }: {
   geo: LensGeo; fallback: number; frost: string; frostAlpha: number; rim: string; glint: string;
+  /**
+   * The round + laid back over the bubble while it is lifted (Nov 3: it passes under the +, as Apple's bubble passes
+   * under its own round button; drawn over it, its edge cut a line across the +). The same + in the same place, drawn
+   * only while lifted (never faded: there or not), never pressed (the live + under it takes the touch).
+   */
+  plus: { brand: string; ink: string; size: number; icon: number } | null;
   /** How far in from the bar's top and bottom the capsule sits at rest (the bar's edges, from it). */
   inset: number; st: BarStyles;
 }) {
@@ -943,6 +939,7 @@ const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostA
   const { startCap, endCap, middle, rimStart, rimEnd, glintMove } = usePieceStyles(box, h);
   const frostShow = useAnimatedStyle(() => ({ opacity: frostAlpha * Math.max(0, Math.min(1, lensLift.value)) }), [frostAlpha]);
   const edgeShow = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, lensLift.value)) }));
+  const plusShow = useAnimatedStyle(() => ({ opacity: lensLift.value > 0.01 ? 1 : 0 }));
   // The body's three pieces, in the capsule's own place (a strip past the top edge, or past the bottom one, shows its part).
   const body = (
     <>
@@ -971,6 +968,14 @@ const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostA
         </Animated.View>
         <Animated.View style={[st.stretchCap, { width: GLINT_W, height: GLINT_H, borderRadius: GLINT_H / 2, backgroundColor: glint }, glintMove]} />
       </Animated.View>
+      {plus && geo.plusAt >= 0 ? (
+        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, plusShow]}>
+          <View style={[st.plus, st.plusOver, { left: geo.plusAt - plus.size / 2, top: (h - plus.size) / 2, width: plus.size, height: plus.size, borderRadius: plus.size / 2, backgroundColor: plus.brand }]}>
+            <BrandWash radius={plus.size / 2} />
+            <Ionicons name="add" size={plus.icon} color={plus.ink} />
+          </View>
+        </Animated.View>
+      ) : null}
     </>
   );
 });
@@ -1580,10 +1585,11 @@ function barStyles(m: BarSpec, fresh: boolean) {
     rimLine: { borderTopWidth: 1, borderBottomWidth: 1 },
     rimHalf: { overflow: 'hidden' },
     rimRing: { position: 'absolute', top: 0, left: 0, borderWidth: 1 },
+    plusOver: { position: 'absolute' },
     // Apple's bubble (LensBubble): a strip past the bar's top or bottom edge, and the capsule's own place inside it.
     bubbleBand: { position: 'absolute', left: 0, right: 0, overflow: 'hidden' },
     // Apple's lifted bubble stands off the bar: a soft shadow cast by its edge.
-    bubbleEdge: { shadowColor: '#000000', shadowOpacity: 0.16, shadowRadius: 5, shadowOffset: { width: 0, height: 1.5 } },
+    bubbleEdge: { shadowColor: '#000000', shadowOpacity: 0.22, shadowRadius: 6, shadowOffset: { width: 0, height: 1.5 } },
     bubbleInBand: { position: 'absolute', left: 0, right: 0 },
   });
 }
