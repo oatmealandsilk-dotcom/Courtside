@@ -170,7 +170,9 @@ export async function keepMapWarm(key: string, dataUrl: string, startGen: number
     file.create();
     file.write(dataUrl.replace(/^data:image\/\w+;base64,/, ''), { encoding: 'base64' });
     uri = file.uri;
-    const read = PhotoImage.loadAsync({ uri, cacheKey });
+    const file0 = uri;
+    // (The simulator's proof only, "warmkeepslow ms=8000": reading in as slow as on a busy phone. 0 everywhere else.)
+    const read = (keepSlowMs ? new Promise<void>((done) => setTimeout(done, keepSlowMs)) : Promise.resolve()).then(() => PhotoImage.loadAsync({ uri: file0, cacheKey }));
     let late = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     picture = await Promise.race([
@@ -258,3 +260,6 @@ simAction('warmhold', (q) => { holdMs = Number(q.ms) || 0; simLog(`[sim] warmhol
 let slowMs = 0;
 export const mapWarmSimSlow = () => slowMs;
 simAction('mapslow', (q) => { slowMs = Number(q.ms) || 0; simLog(`[sim] mapslow ${slowMs}`); });
+/** The simulator's proof only ("warmkeepslow ms=8000"): each picture read in that much later, to show no second copy starts meanwhile. */
+let keepSlowMs = 0;
+simAction('warmkeepslow', (q) => { keepSlowMs = Number(q.ms) || 0; simLog(`[sim] warmkeepslow ${keepSlowMs}`); });
