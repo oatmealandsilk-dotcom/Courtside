@@ -59,7 +59,8 @@ const VIEW_AFTER_MS = 400;
  * with its votes, its fold and maybe a photo) held the slide back by a third of a second (Nov 4, owner: "Tapping a
  * discussion thread is not instant response and open"). Six (more on a taller phone: firstRepliesFor) is more than a
  * screen holds even when every reply is one line, so the ones after are always out of sight below; they are built a
- * moment after the slide has begun (REST_AFTER_MS), well before it lands, with the replies' photos (MediaLaterContext).
+ * moment after the slide has begun (REST_AFTER_MS), well before it lands. So are the photos of replies that are surely
+ * below the first screen (MediaLaterContext, belowFirstScreen); one that may be in sight is drawn with the page, as before.
  */
 const FIRST_REPLIES = 6;
 /** The shortest a reply can be (one line, its name and its buttons), and the least the page has above its replies. */
@@ -67,6 +68,27 @@ const SHORTEST_REPLY = 100;
 const ABOVE_REPLIES = 320;
 /** Six, or more on a phone tall enough to show more one-line replies than that. */
 const firstRepliesFor = (screenHeight: number) => Math.max(FIRST_REPLIES, Math.ceil((screenHeight - ABOVE_REPLIES) / SHORTEST_REPLY));
+/**
+ * The least room a reply and the replies under it can take: its name and buttons, each line of its words past the first
+ * (never more than LINE_CHARS letters to a line, at any text size), and its photo or clip (never under SHORTEST_MEDIA).
+ */
+const LINE_CHARS = 60;
+const LINE = 23;
+const SHORTEST_MEDIA = 200;
+const SHORTEST_REPLY_BOX = 90;
+function leastHeight(answer: Answer, thread: Answer[]): number {
+  const lines = Math.max(1, Math.ceil((answer.body?.length ?? 0) / LINE_CHARS));
+  const own = SHORTEST_REPLY_BOX + (lines - 1) * LINE + (answer.media ? SHORTEST_MEDIA : 0);
+  return own + thread.filter((c) => c.parentAnswerId === answer.id).reduce((sum, c) => sum + leastHeight(c, thread), 0);
+}
+/**
+ * For each reply in `replies` (top-level, in order): whether it starts below the first screen whatever the text size or
+ * phone, i.e. the least room everything above it can take already fills the screen. Only those keep their photos back.
+ */
+function belowFirstScreen(replies: Answer[], thread: Answer[], screenHeight: number): boolean[] {
+  let above = ABOVE_REPLIES;
+  return replies.map((a) => { const below = above >= screenHeight; above += leastHeight(a, thread); return below; });
+}
 const REST_AFTER_MS = 60;
 /** In case the slide never says it has begun (opened without one, or the event lost): the rest is built anyway. */
 const REST_FALLBACK_MS = 300;
@@ -128,7 +150,8 @@ function QuestionDetail() {
   // Taps that answer sooner: the first draw carries the question and the replies a screen can hold (FIRST_REPLIES), the rest
   // come as the page slides in. Not when it opens at a reply (`at`), which may be further down.
   const restBuilt = useRestBuilt(tapFastOn() && !at);
-  const firstReplies = firstRepliesFor(useWindowDimensions().height);
+  const screenHeight = useWindowDimensions().height;
+  const firstReplies = firstRepliesFor(screenHeight);
   const jump = useJumpTo(at, looked);
   // The order the replies were put in (most votes first), kept while you read: a vote never moves a
   // reply under your thumb, as on Reddit. Worked out again when the thread has loaded and on a
@@ -191,6 +214,11 @@ function QuestionDetail() {
   const rank = replyOrder.current.rank;
   const placeOf = (a: Answer) => rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
   const thread = listed.sort((a, b) => placeOf(a) - placeOf(b) || b.votes - a.votes);
+  // The replies drawn now (the first screen's, until the rest are built: taps that answer sooner), and which of them keep
+  // their photos back until then (only ones surely below the first screen).
+  const topReplies = thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId));
+  const shownReplies = restBuilt ? topReplies : topReplies.slice(0, firstReplies);
+  const photoLater = restBuilt ? [] : belowFirstScreen(shownReplies, thread, screenHeight);
 
 
   // Taken down by an admin (migration 108): only its author and admins can open it, and nobody can reply.
@@ -362,11 +390,13 @@ function QuestionDetail() {
           )
         ) : null}
 
-        <JumpProvider value={jump.ctx}><MediaLaterContext.Provider value={!restBuilt}>
-          {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).slice(0, restBuilt ? undefined : firstReplies).map(answer => (
-            <ThreadReply key={answer.id} answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+        <JumpProvider value={jump.ctx}>
+          {shownReplies.map((answer, k) => (
+            <MediaLaterContext.Provider key={answer.id} value={!restBuilt && photoLater[k]}>
+              <ThreadReply answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+            </MediaLaterContext.Provider>
           ))}
-        </MediaLaterContext.Provider></JumpProvider>
+        </JumpProvider>
 
         {restBuilt ? (
           <HiddenComments count={hidden.length} noun="replies">
