@@ -20,14 +20,12 @@ import { simAction, simLog } from '@/lib/simDriver';
  *  - Once the Community card has drawn and been on show a moment, a hidden copy of the full map (inside the
  *    card, see-through, never touched) draws the full map's first view (its centre, zoom, size and look), and
  *    its page hands back a picture of its streets. The copy is then let go: nothing keeps running.
- *  - The picture is then readied on the card too (see-through), so the full map's first frame does not have to hand the phone a
- *    full-screen picture as its own map starts (that held the map's start back by about 0.1 s on the simulator).
  *  - The full map, opened on exactly that view, shows the picture from its first frame, under
  *    its buttons and over its own map, so its streets slide in with it. Its own map starts underneath as
  *    always; its pins wait while the picture is up, and the moment its map has drawn the same streets the
  *    picture goes (nothing on screen changes) and the pins come in as their usual wave.
  *  - Anything else, the way it was: no picture yet, a different view (a court, a hit, a player, a place, a
- *    new fix), Only me (nothing of where you are is kept), the check-in zoom's swoop. A touch on the map, a
+ *    new fix), Only me (nothing of where you are is kept), the check-in zoom's swoop. A finger moving the map, a
  *    page that fails, or 4 s without drawing, and the picture goes at once.
  *  - The picture goes on a memory warning (and none is made for a while after), on sign-out, with Location
  *    off or Only me (forgetPlaces); a new view's picture replaces the old. One at a time, in the app's cache folder.
@@ -152,7 +150,3 @@ simAction('memwarn', () => memoryWarning());
 let pictureShown = true;
 export const mapWarmPictureShown = () => pictureShown;
 simAction('warmpic', (q) => { pictureShown = q.on !== '0'; simLog(`[sim] warmpic ${q.on ?? '1'}`); });
-/** The simulator's proof only ("warmprime on=0"): the picture not readied on Community, to time what readying it saves. */
-let primed = true;
-export const mapWarmPrimeOn = () => primed;
-simAction('warmprime', (q) => { primed = q.on !== '0'; simLog(`[sim] warmprime ${q.on ?? '1'}`); tell(); });

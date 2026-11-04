@@ -1,7 +1,7 @@
 import * as haptics from '@/lib/haptics';
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, PixelRatio, Platform, Pressable, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { AppState, PixelRatio, Platform, Pressable, StyleSheet, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import { Image as PhotoImage } from 'expo-image';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { File, Paths } from 'expo-file-system';
@@ -38,9 +38,9 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import { homeFor, homeIsKnown, wideView, type LatLng } from '@/features/players/positions';
-import { mapWarmOn, mapWarmPictureShown, mapWarmPrimeOn, mapWarmResting, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { mapWarmOn, mapWarmPictureShown, mapWarmResting, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
 import { useMyCity } from '@/features/players/useMyCity';
-import { MapWarmCopy, MapWarmPicture, MapWarmPrime } from '@/components/map/MapWarm';
+import { MapWarmCopy, MapWarmPicture } from '@/components/map/MapWarm';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
 import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
@@ -70,6 +70,9 @@ const CLOSE_ZOOM = 13.5;
 const WARM_SETTLE_MS = 1500;
 /** mapWarm: the full map's picture goes by itself if its own map has not drawn by then (its loading look then shows, as before). */
 const WARM_MAX_MS = 4000;
+/** mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge is the system's swipe back. */
+const WARM_MOVE = 8;
+const WARM_EDGE = 24;
 
 export type { NearbyMapProps };
 
@@ -620,7 +623,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // mapWarm (admins first, iPhone only): the full map opened on exactly the view its picture was made for (the plain way in:
   // no court, hit, player, spot or place, no grow, no swoop) shows that picture from its first frame, over its own map and
   // under its buttons. Its pins wait meanwhile; the moment its own map has drawn the same streets the picture goes, in one
-  // frame, and the pins come in as their usual wave. A touch on the map, a page that fails, a swoop or a theme change, or
+  // frame, and the pins come in as their usual wave. A finger moving the map, a page that fails, a swoop or a theme change, or
   // WARM_MAX_MS without drawing: it goes at once (the map's own loading look, as before).
   const [warmPic, setWarmPic] = useState<string | null>(() => {
     if (!expanded || growFrom || focusCourt || focusHit || focusUser || focusSpot || focusPlace || swoop.busy || keepNone || !mapWarmOn(me)) return null;
@@ -647,6 +650,23 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   const warmGoNow = useRef(warmGo);
   warmGoNow.current = warmGo;
+  // A finger moving the map (not a tap, not the system's swipe back from the left edge, not the buttons over it): the picture
+  // goes at once, so the map's own drawing is what moves. Only a page that opened on a picture listens (fixed for its life).
+  const [warmWrap] = useState(!!warmPic);
+  const warmTouch = useRef<{ x: number; y: number } | null>(null);
+  const warmFinger = {
+    onTouchStart: (e: GestureResponderEvent) => { warmTouch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; },
+    onTouchMove: (e: GestureResponderEvent) => {
+      const s = warmTouch.current;
+      if (!s || !warmUp.current || s.x < WARM_EDGE) return;
+      if (e.nativeEvent.touches.length > 1 || Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= WARM_MOVE) warmGo('pan');
+    },
+    onTouchEnd: (e: GestureResponderEvent) => {
+      const s = warmTouch.current;
+      warmTouch.current = null;
+      if (s && warmUp.current && s.x >= WARM_EDGE && Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= WARM_MOVE) warmGo('pan');
+    },
+  };
   useEffect(() => {
     if (!warmUp.current) return undefined;
     const t = setTimeout(() => warmGoNow.current('late'), WARM_MAX_MS);
@@ -937,10 +957,6 @@ export function NearbyMap(props: NearbyMapProps) {
   }, [warmShown, warmFor]); // eslint-disable-line react-hooks/exhaustive-deps
   // The card tapped (the full map opening): a copy still drawing is let go, so the two never start together.
   const warmStop = () => { if (warmCopy) setWarmCopy(null); };
-  // The picture for this view, once made: readied on the card (see-through), so the full map's first frame is quick. It stays while
-  // the picture does (the same image either way: no more memory), so every opening finds it ready.
-  const warmReady = growsHere && !!warmFor && mapWarmOn(me) && !keepNone && mapWarmPrimeOn() ? takeMapWarm(warmFor) : null;
-  const warmPrimeView = warmReady ? <MapWarmPrime uri={warmReady} w={windowW} h={windowH} /> : null;
   const warmCopyView = warmCopy && warmCopy === warmFor
     ? <MapWarmCopy key={warmCopy} warmKey={warmCopy} center={warmView.center} zoom={warmView.zoom} look={fullLook} tpl={tpl} w={windowW} h={windowH} onDone={() => setWarmCopy(null)} />
     : null;
@@ -1190,7 +1206,6 @@ export function NearbyMap(props: NearbyMapProps) {
       >
         {/* mapWarm: the hidden copy of the full map's first view, under everything and see-through, while it makes its picture. */}
         {warmCopyView}
-        {warmPrimeView}
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
           {/* The map alone, photographed for the card's picture (never what lies over it). */}
@@ -1286,7 +1301,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Zoomed out past about a city with the courts on: "Zoom in to see courts" (not over a court's card, nor a search).
   const zoomNote = model.courtsOn && far && !model.selectedCourt && !model.query.trim();
   return (
-    <View style={styles.fill} onLayout={(e) => { setMapH(Math.round(e.nativeEvent.layout.height)); if (SIM_DRIVER) simLog(`[warm] full map ${e.nativeEvent.layout.x},${e.nativeEvent.layout.y} ${e.nativeEvent.layout.width}x${e.nativeEvent.layout.height} window ${windowW}x${windowH}`); }} onTouchStart={warmPic ? () => warmGo('touch') : undefined}>
+    <View style={styles.fill} onLayout={(e) => { setMapH(Math.round(e.nativeEvent.layout.height)); if (SIM_DRIVER) simLog(`[warm] full map ${e.nativeEvent.layout.x},${e.nativeEvent.layout.y} ${e.nativeEvent.layout.width}x${e.nativeEvent.layout.height} window ${windowW}x${windowH}`); }}>
       {/* Opened by the card growing into it: the picture of the Community page, carrying on the push-in under the map's */}
       {/* page (see-through, its pins showing on the card's spots: MapCanvas veil) until its streets have come in over it; */}
       {/* over the card in it, the card's map alone (its words, buttons and your pin gone by then: mapGrow). */}
@@ -1303,7 +1318,7 @@ export function NearbyMap(props: NearbyMapProps) {
           </Reanimated.View>
         </Reanimated.View>
       ) : null}
-      {mapView}
+      {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{mapView}</View> : mapView}
       {/* mapWarm: the picture of exactly what this map is about to draw, over it until it has (then gone in one frame). */}
       {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} uri={warmPic} w={windowW} h={windowH} /> : null}
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>

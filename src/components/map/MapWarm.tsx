@@ -67,19 +67,6 @@ export const MapWarmPicture = forwardRef<{ hide: () => void }, { uri: string; w:
   );
 });
 
-/**
- * The picture, readied on the Community card while it waits (mapWarm): the same image, already handed to the screen, see-through
- * and untouchable inside the card, so the full map's first frame does not have to hand the phone a full-screen picture as it
- * starts its own map (that held the map's start back by about 0.1 s on the simulator).
- */
-export function MapWarmPrime({ uri, w, h }: { uri: string; w: number; h: number }) {
-  return (
-    <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[styles.copy, { width: w, height: h }]}>
-      <PhotoImage source={{ uri }} contentFit="fill" transition={0} cachePolicy="memory" style={{ width: w, height: h }} />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   // Never seen: no colour of its own at all, at the card's top left (the card clips it), under everything on the card.
   copy: { position: 'absolute', left: 0, top: 0, opacity: 0 },
