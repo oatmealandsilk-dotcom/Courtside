@@ -66,7 +66,18 @@ export function ZeroCityOptions({ option, city, month, board, onMap }: {
       {option === 'D' ? <NearestRanked city={city} board={board} /> : null}
 
       {/* The way to its courts on the map: a plain row, not a floating button. */}
-      <View style={[styles.rows, option === 'A' && styles.rowsFirst]}>
+      <View style={styles.rows}>
+        {/* C: the way to the five players first, in the same list. */}
+        {option === 'C' ? (
+          <Pressable accessibilityRole="link" accessibilityLabel="Invite a player from here" onPress={() => router.push('/invite')} style={({ pressed }) => [styles.linkRow, styles.linkLine, pressed && { opacity: PRESS_DIM }]}>
+            <Ionicons name="person-add-outline" size={20} color={colors.text} />
+            <View style={styles.linkWords}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.linkTitle}>Know someone who plays here?</Text>
+              <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.linkSub}>Invite them to CourtSide</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="link" accessibilityLabel={`See ${name} on the map`} onPress={onMap} style={({ pressed }) => [styles.linkRow, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="map-outline" size={20} color={colors.text} />
           <View style={styles.linkWords}>
@@ -135,16 +146,6 @@ function WhatRanks({ name }: { name: string }) {
         ))}
       </View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.marksLine}>{MIN_PLAYERS} players with {name} on their profile, each logging sessions.</Text>
-      <View style={[styles.rows, styles.rowsTight]}>
-        <Pressable accessibilityRole="link" accessibilityLabel="Invite a player from here" onPress={() => router.push('/invite')} style={({ pressed }) => [styles.linkRow, pressed && { opacity: PRESS_DIM }]}>
-          <Ionicons name="person-add-outline" size={20} color={colors.text} />
-          <View style={styles.linkWords}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.linkTitle}>Know someone who plays here?</Text>
-            <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.linkSub}>Invite them to CourtSide</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color={colors.textFaint} />
-        </Pressable>
-      </View>
     </View>
   );
 }
@@ -204,8 +205,7 @@ const styleDefinitions = StyleSheet.create({
   quiet: { ...typography.body, color: colors.textMuted, paddingTop: spacing.xs },
   // Plain rows between hairlines, a settings list's, not a floating button.
   rows: { marginTop: spacing.xl, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  rowsFirst: { marginTop: spacing.xl },
-  rowsTight: { marginTop: spacing.md },
+  linkLine: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   linkRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: spacing.sm },
   linkWords: { flex: 1, minWidth: 0, gap: 1 },
   linkTitle: { ...font('500'), fontSize: 16, color: colors.text },
