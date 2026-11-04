@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { startTransition, useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -6,6 +6,38 @@ import { useResponsive } from '@/lib/useResponsive';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { SwipeArea } from '@/features/navigation/swipePress';
+import { tapFastOn } from '@/features/navigation/pressV2';
+import { pagesStillFor } from '@/features/navigation/scrollQuiet';
+import { TabOnShowContext, TabOnShowLaterContext } from '@/lib/useIsFocused';
+
+/** Well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
+const WARM_AFTER_MS = 1200;
+/** And once no page has scrolled for this long (a fling's glide included). */
+const STILL_FOR_MS = 500;
+
+/**
+ * Whether a warm preview is built yet (Nov 3, the sweep's worst catch: swiping back from a thread froze
+ * 272-595 ms mid-swipe on the Simulator, because the whole Community page was built as the finger
+ * started to move, and the slide waited on it). With taps that answer sooner only (pressV2's TAP_FAST:
+ * admins first): it keeps a second Community drawn out of sight while a thread is open.
+ */
+function useWarmPreview(want: boolean): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!want || ready || !tapFastOn()) return undefined;
+    // Never in the middle of a scroll: built while the page under it was moving, it caught that scroll for
+    // 40-45 ms (Nov 3 review); it waits until no page has moved for a moment.
+    let t: ReturnType<typeof setTimeout>;
+    const tryNow = () => {
+      if (pagesStillFor() < STILL_FOR_MS) { t = setTimeout(tryNow, 250); return; }
+      startTransition(() => setReady(true));
+    };
+    t = setTimeout(tryNow, WARM_AFTER_MS);
+    return () => clearTimeout(t);
+  }, [want, ready]);
+  // Once built it stays (a drag never finds it half there); it only starts while no drag is on.
+  return ready;
+}
 
 /**
  * Drag-to-swipe between pages on the phone.
@@ -15,7 +47,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
  * JavaScript only hears from the gesture at three moments: when it starts (to
  * mount the preview), when it is known to be going through, and when it lands.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest, gap = 0, commitAt = 0.28 }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest, gap = 0, commitAt = 0.28, warm }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
@@ -51,6 +83,11 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   gap?: number;
   /** How far across (0..1) a slow drag must go before letting go turns the page. */
   commitAt?: number;
+  /**
+   * The preview that way built ahead, out of sight, once the page has slid in, and kept, so a drag
+   * that way finds it ready (see useWarmPreview). Undefined: built as the drag starts, as before.
+   */
+  warm?: 1 | -1;
 }) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
@@ -226,16 +263,32 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
 
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   const previewStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
-  const preview = dragging ? renderPreview?.(direction) : null;
+  // Built ahead (warm): the same element in the same place, so a drag that way only moves it.
+  const warmReady = useWarmPreview(warm !== undefined && enabled && !dragging);
+  // Once built, the warm side is always drawn, whichever way a drag goes (a drag the other way, even a
+  // rubber-band one with nothing there, never tears it down to be rebuilt at release). The other way's
+  // preview is drawn beside it only while dragged, as before.
+  const warmSide = warmReady && warm !== undefined ? warm : undefined;
+  const warmPreview = warmSide !== undefined ? renderPreview?.(warmSide) : null;
+  const dragSide = dragging && !(warmPreview && direction === warmSide) ? direction : undefined;
+  const dragPreview = dragSide !== undefined ? renderPreview?.(dragSide) : null;
+  const frame = (side: 1 | -1) => [{ position: 'absolute' as const, top: 0, bottom: 0, width: '100%' as const, left: `${side * 100}%` as const, marginLeft: side * gap }, previewStyle];
 
   return (
     <GestureDetector gesture={pan}>
       <View onLayout={(event) => { width.value = event.nativeEvent.layout.width; }} style={{ flex: fill ? 1 : undefined, overflow: 'hidden' }}>
         {/* A press on the page waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
         <Animated.View style={[{ flex: fill ? 1 : undefined }, pageStyle]}><SwipeArea on={enabled}>{children}</SwipeArea></Animated.View>
-        {preview ? (
-          <Animated.View pointerEvents="none" accessibilityElementsHidden style={[{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: `${direction * 100}%`, marginLeft: direction * gap }, previewStyle]}>
-            {preview}
+        {warmPreview && warmSide !== undefined ? (
+          <Animated.View key={warmSide} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={frame(warmSide)}>
+            {/* Built ahead: a picture of the page, never "on show" (its map and videos stay asleep, and it keeps up with the
+                app as background work), the same while dragged in, so the drag never redraws it. */}
+            <TabOnShowContext.Provider value={false}><TabOnShowLaterContext.Provider value={false}>{warmPreview}</TabOnShowLaterContext.Provider></TabOnShowContext.Provider>
+          </Animated.View>
+        ) : null}
+        {dragPreview && dragSide !== undefined ? (
+          <Animated.View key={dragSide} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={frame(dragSide)}>
+            {dragPreview}
           </Animated.View>
         ) : null}
       </View>

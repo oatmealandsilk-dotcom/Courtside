@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, { Easing, cancelAnimation, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { useLoopsRun } from '@/lib/loopShown';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
@@ -47,6 +48,8 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
   const pop = useSharedValue(1);
   // What it was last time, so only a real change plays (not its first appearance, nor a second run of the same effect).
   const prev = useRef(open);
+  // Out of sight (its section or tab slid away, or a page opened over it), the breath rests (see useLoopsRun).
+  const rests = !useLoopsRun();
 
   useEffect(() => {
     const changed = prev.current !== open;
@@ -60,9 +63,16 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
         : withTiming(0, { duration: 420, easing: Easing.bezier(0.4, 0, 0.2, 1) });
       if (open) pop.value = withSequence(withTiming(1.08, { duration: 170, easing: Easing.out(Easing.quad) }), withSpring(1, { damping: 12, stiffness: 220 }));
     }
-    if (open && !reduce) beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
-    else cancelAnimation(beat);
   }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (open && !reduce && !rests) {
+      beat.value = 0;
+      beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
+    } else {
+      cancelAnimation(beat);
+      if (rests) beat.value = 0;
+    }
+  }, [open, reduce, rests]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ring = useAnimatedProps(() => (reduce
     // Reduce Motion: the whole ring fades in and out, never drawn round.
