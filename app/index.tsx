@@ -44,8 +44,9 @@ export default function Index() {
   const launchUpdate = useLaunchUpdate();
   const [held, setHeld] = useState(false);
   const [gone, setGone] = useState(false);
-  // The launch look (white or dark, as the phone is) redrawn should the phone's mode be heard again while it shows.
-  useLaunchDark(!gone);
+  // The launch look (white or dark, as the phone is) redrawn should the phone's mode be heard again while it shows;
+  // or, where the launch was given the look picked (Nov 2, src/lib/launchLook.ts), that look, kept while it shows.
+  const launchIsDark = useLaunchDark(!gone);
   const [settledCode, setSettledCode] = useState(false);
   useEffect(() => {
     if (Platform.OS !== 'web' || !/[?&]code=/.test(window.location.search)) return;
@@ -201,8 +202,8 @@ export default function Index() {
   }
 
   return (
-    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }, launchGround()]}>
-      {NEW_SPLASH && Platform.OS !== 'web' ? <StatusBar style={launchStatusStyle()} /> : null}
+    <Animated.View onLayout={fromLaunch ? onThemedLayout : undefined} style={[styles.splash, { opacity }, launchGround(launchIsDark)]}>
+      {NEW_SPLASH && Platform.OS !== 'web' ? <StatusBar style={launchStatusStyle(launchIsDark)} /> : null}
       {Platform.OS !== 'web' || NEW_SPLASH ? (
         // On a phone the themed screen is the launch picture's own logo and line, cut from it
         // and drawn the same way (cover), in the theme's colours: the cream fades into it with
@@ -210,7 +211,7 @@ export default function Index() {
         // Splash C (NEW_SPLASH: a build whose launch picture is the new one, and the website, whose
         // loader is): the mark and line on white, in their own colours (Oct 24; white, not cream, Oct 25),
         // or on dark when the phone is in dark mode, as its own launch picture is (Oct 25).
-        <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} />
+        <LaunchMark ink={colors.brand} faint={colors.launchLine} line={launchUpdate.downloading ? 'Getting the newest version' : 'Growing the game'} dark={launchIsDark} />
       ) : (
         <>
           <Animated.View style={[styles.brand, { opacity: rise, transform: [{ scale: rise.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) }] }]}>
@@ -222,9 +223,9 @@ export default function Index() {
       )}
       {launchCover && !fromLaunch ? (
         // Coming here later (a sign-in, a switch of account): the cream drawn copy, faded once laid out.
-        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }, launchGround()]}>
-          <StatusBar style={launchStatusStyle()} />
-          <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
+        <Animated.View pointerEvents="none" onLayout={startCoverFade} style={[StyleSheet.absoluteFill, styles.splash, launchStyles.launch, { opacity: cover }, launchGround(launchIsDark)]}>
+          <StatusBar style={launchStatusStyle(launchIsDark)} />
+          <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} dark={launchIsDark} />
         </Animated.View>
       ) : null}
     </Animated.View>
