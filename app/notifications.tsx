@@ -397,28 +397,32 @@ export default function Notifications() {
   // court_link). The friend often has no pin of their own (I'm playing here without Up to hit), so the map on them showed
   // nothing. The court's spot from courts already loaded, else the map's courts; not found, the map on the friend as before.
   // One at a time (Nov 3): a second tap while the court is read, or while the map opens, opened it twice.
-  // And left meanwhile (back, another tab), the read's answer no longer opens the map late on top of it.
+  // Each tap has its own number, and leaving the page (back, another tab) moves the number on: a read whose
+  // tap is no longer the latest never opens the map, so it can't open late on top of where you went, even
+  // if you came back meanwhile. A read that never answers frees the taps after 8 s.
   const friendCourtBusy = useRef(false);
-  const friendCourtFocused = useRef(true);
+  const friendCourtTap = useRef(0);
   useFocusEffect(useCallback(() => {
-    friendCourtFocused.current = true;
     friendCourtBusy.current = false;
-    return () => { friendCourtFocused.current = false; };
+    return () => { friendCourtTap.current += 1; };
   }, []));
   const openFriendCourt = async (group: Group) => {
     if (friendCourtBusy.current) return;
     friendCourtBusy.current = true;
-    // Back here without the page ever being left (the map was already the one under it): taps work again.
-    const free = () => setTimeout(() => { friendCourtBusy.current = false; }, 1200);
+    const tap = ++friendCourtTap.current;
+    // Taps work again after a while, but only if no later tap (or a visit away and back) has taken over.
+    const freeAfter = (ms: number) => setTimeout(() => { if (friendCourtTap.current === tap) friendCourtBusy.current = false; }, ms);
     const id = group.targetId;
     const name = group.preview?.trim() || 'Tennis courts';
     const known = followedCourts?.find((x) => x.courtId === id) ?? courtRings.find((x) => x.courtId === id);
-    if (known) { showCourtOnMap({ id, name: known.name ?? name, lat: known.lat, lng: known.lng }); free(); return; }
+    if (known) { showCourtOnMap({ id, name: known.name ?? name, lat: known.lat, lng: known.lng }); freeAfter(1200); return; }
+    const hung = freeAfter(8000);
     const spot = isSupabaseConfigured ? await remote.fetchCourtSpot(id).catch(() => null) : null;
-    if (!friendCourtFocused.current) { friendCourtBusy.current = false; return; }
+    clearTimeout(hung);
+    if (friendCourtTap.current !== tap) return;
     if (spot) showCourtOnMap({ id, name: spot.name ?? name, lat: spot.lat, lng: spot.lng });
     else router.push(`/map?user=${group.actorIds[0]}`);
-    free();
+    freeAfter(1200);
   };
   // A tag of you, for an alert about one: what it was, from your side, and whether you have answered.
   const tagFor = (group: Group) => (group.kind === 'session-tag' ? sessionTags.find((t) => t.taggedId === currentUserId && t.sessionId === group.targetId) : undefined);
