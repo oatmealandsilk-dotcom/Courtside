@@ -27,8 +27,12 @@ import { simAction, simLog } from '@/lib/simDriver';
  *  - Anything else, the way it was: no picture yet, a different view (a court, a hit, a player, a place, a
  *    new fix), Only me (nothing of where you are is kept), the check-in zoom's swoop. A finger moving the map, a
  *    page that fails, or 4 s without drawing, and the picture goes at once.
- *  - The picture goes on a memory warning (and none is made for a while after), on sign-out, with Location
- *    off or Only me (forgetPlaces); a new view's picture replaces the old. One at a time, in the app's cache folder.
+ *  - The picture is kept in memory only: its file (the only way to hand it to the picture view) goes the moment it has been
+ *    read into memory, so nothing of where you are stays on the phone's storage (mapModel's rule for an exact centre). It
+ *    goes on a memory warning (and none is made for a while after), on sign-out, with Location off or Only me
+ *    (forgetPlaces); a new view's picture replaces the old. A file left by a run that stopped half way goes at the next start.
+ *  - The copy draws only while the Community card is on show and nothing else is happening there (no Up to hit, no zoom,
+ *    no page opening over it, not on Discussions), and stops the moment any of that starts (NearbyMap, MapWarmCopy).
  *
  * Admins first (MAP_WARM_FOR_EVERYONE), iPhone only: the website and Android are as they were.
  */
@@ -48,49 +52,58 @@ export function warmKey(o: { user: string; look: string; center: LatLng; zoom: n
 
 interface Warm { key: string; uri: string; at: number }
 let warm: Warm | null = null;
-/** Counts each letting go: a picture still being kept from before one (signed out meanwhile) is thrown away, never kept. */
+/** Counts each letting go: a picture from a copy started before one (signed out meanwhile) is thrown away, never kept. */
 let gen = 0;
 /** No new picture before this (a memory warning). */
 let restUntil = 0;
-/** Pictures being made for a key (one at a time) and how many tries each has had this launch. */
-const tries = new Map<string, number>();
+/** Copies that failed for a view this launch (a copy cut off by a tap, or one whose picture was kept, never counts). */
+const fails = new Map<string, number>();
 let version = 0;
 const listeners = new Set<() => void>();
 const tell = () => { version += 1; listeners.forEach((fn) => fn()); };
 
 const FOLDER = 'map-warm';
 let swept = false;
-/** Pictures from an earlier run (the app stopped before letting go of them): gone before the first new one. */
+/** Every picture file, this run's and any an earlier run left behind (the app stopped half way through keeping one). */
 function sweep() {
-  if (swept) return;
   swept = true;
   try { const dir = new Directory(Paths.cache, FOLDER); if (dir.exists) dir.delete(); } catch { /* none */ }
 }
 function remove(uri: string) {
   try { const f = new File(uri); if (f.exists) f.delete(); } catch { /* gone already */ }
 }
+// A file an earlier run left behind goes soon after the app starts (before any new one, keepMapWarm, whichever comes first).
+if (Platform.OS === 'ios') setTimeout(() => { if (!swept) sweep(); }, 8000);
 
 /** The picture for exactly this view, if there is one ready (decoded in memory, so it shows from the page's first frame). */
 export function takeMapWarm(key: string): string | null {
   return warm && warm.key === key ? warm.uri : null;
 }
 
-/** Whether a picture for this view should be made now: none ready for it, not resting, not tried too often. */
+/** Whether a picture for this view should be made now: none ready for it, not resting, not failed too often. */
 export function wantMapWarm(key: string): boolean {
   if (Date.now() < restUntil) return false;
   if (warm?.key === key) return false;
-  return (tries.get(key) ?? 0) < 3;
+  return (fails.get(key) ?? 0) < 3;
 }
 
-/** A try at a picture for this view has begun (the copy is drawing it). */
-export function triedMapWarm(key: string) {
-  tries.set(key, (tries.get(key) ?? 0) + 1);
+/** A copy has started drawing this view: the letting-go count it started under (keepMapWarm throws its picture away after any). */
+export function startMapWarm(): number {
+  return gen;
 }
 
-/** The copy's picture (a JPEG data URL from its page): kept as a file, read into memory, then offered to the full map. */
-export async function keepMapWarm(key: string, dataUrl: string): Promise<boolean> {
-  sweep();
-  const g = gen;
+/** A copy for this view failed (its page failed, or it gave up): three in a launch and none is tried again for it. */
+export function failedMapWarm(key: string) {
+  fails.set(key, (fails.get(key) ?? 0) + 1);
+}
+
+/**
+ * The copy's picture (a JPEG data URL from its page), from a copy started under `startGen`: written to a file, read into
+ * memory, then the file goes at once (memory only) and the picture is offered to the full map. False if it could not be.
+ */
+export async function keepMapWarm(key: string, dataUrl: string, startGen: number): Promise<boolean> {
+  if (!swept) sweep();
+  if (startGen !== gen) return false;
   let uri: string | null = null;
   try {
     const dir = new Directory(Paths.cache, FOLDER);
@@ -100,31 +113,35 @@ export async function keepMapWarm(key: string, dataUrl: string): Promise<boolean
     file.write(dataUrl.replace(/^data:image\/\w+;base64,/, ''), { encoding: 'base64' });
     uri = file.uri;
     const ok = await PhotoImage.prefetch(uri, 'memory').catch(() => false);
-    if (!ok || g !== gen || Date.now() < restUntil) { remove(uri); return false; }
+    remove(uri);
+    if (startGen !== gen || Date.now() < restUntil) return false;
+    if (!ok) { failedMapWarm(key); return false; }
   } catch {
     if (uri) remove(uri);
+    failedMapWarm(key);
     return false;
   }
-  const old = warm;
+  fails.delete(key);
+  // No redraw for this (the card's copy says it is over itself; the full map reads the picture as it opens).
   warm = { key, uri, at: Date.now() };
-  if (old && old.uri !== uri) remove(old.uri);
-  tell();
   simLog(`[warm] kept ${key.split('|').slice(2).join(' ')}`);
   return true;
 }
 
-/** Gone: the picture and its file (sign-out, Location off, Only me, a memory warning, a view that is no longer the full map's). */
+/**
+ * Gone: the picture, and the folder its files are made in (sign-out, Location off, Only me, a memory warning, a picture that
+ * would not load). Any copy started before this has its picture thrown away.
+ */
 export function dropMapWarm(why: string) {
   gen += 1;
+  sweep();
   if (!warm) return;
-  const old = warm;
   warm = null;
-  remove(old.uri);
   tell();
   simLog(`[warm] dropped ${why}`);
 }
 
-/** Short of memory: the picture goes, any copy drawing one stops (useMapWarmRest), and none is made for two minutes. */
+/** Short of memory: the picture goes, any copy drawing one stops (the Community card's), and none is made for two minutes. */
 function memoryWarning() {
   restUntil = Date.now() + 120_000;
   dropMapWarm('memory');
@@ -134,8 +151,11 @@ if (Platform.OS === 'ios') AppState.addEventListener('memoryWarning', memoryWarn
 
 /** Whether pictures are resting (a memory warning a moment ago); a screen using it redraws when that changes. */
 const resting = () => Date.now() < restUntil;
-export function useMapWarmVersion(): number {
-  return useSyncExternalStore((fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; }, () => version, () => version);
+const noListen = () => () => undefined;
+const listen = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
+/** Changes when a picture goes or the pictures rest (never when one is kept): the Community card only (`on`), nothing else redraws. */
+export function useMapWarmVersion(on: boolean): number {
+  return useSyncExternalStore(on ? listen : noListen, () => version, () => version);
 }
 export const mapWarmResting = resting;
 

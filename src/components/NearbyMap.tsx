@@ -38,7 +38,8 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import { homeFor, homeIsKnown, wideView, type LatLng } from '@/features/players/positions';
-import { mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { dropMapWarm, mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { useOnShowNow } from '@/features/navigation/tabFocus';
 import { useMyCity } from '@/features/players/useMyCity';
 import { MapWarmCopy, MapWarmPicture } from '@/components/map/MapWarm';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
@@ -68,6 +69,8 @@ const CITY_ZOOM = 11.5;
 const CLOSE_ZOOM = 13.5;
 /** mapWarm: how long the Community card is on show, drawn, before the hidden copy of the full map's first view starts. */
 const WARM_SETTLE_MS = 1500;
+/** mapWarm: how often the card asks whether its hidden copy may start (in view, nothing else happening there). */
+const WARM_POLL_MS = 250;
 /** mapWarm: the full map's picture goes by itself if its own map has not drawn by then (its loading look then shows, as before). */
 const WARM_MAX_MS = 4000;
 /** mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge is the system's swipe back. */
@@ -138,6 +141,9 @@ export function NearbyMap(props: NearbyMapProps) {
   const zoomOn = useCheckInZoom();
   // A grow under way (the page pushing in, the full map about to open over it): a tap on the card meanwhile opens no second full map.
   const growBusy = useRef(false);
+  // mapWarm: the card tapped, Up to hit, a court lit: the hidden copy of the full map (if one is drawing) stops at once, and
+  // none starts until the card has settled again (set below, where the copy lives).
+  const warmStopNow = useRef<() => void>(() => undefined);
   // The Community tab's card grows into the full map (mapGrow); what sits on it slips out of it as it does.
   const growsHere = !!props.grow && !expanded;
   // Reduce Motion (the phone's own setting): read here, before anything of the zoom (the iPhone's opens the full map straight
@@ -228,6 +234,7 @@ export function NearbyMap(props: NearbyMapProps) {
     if (expanded) { swoopTo(here, false); return false; }
     const seen = curtainState() !== 'up' && onScreen && props.visible !== false && props.inView?.() !== false && AppState.currentState !== 'background' && spot.onScreen();
     if (!onExpand || !seen) return false;
+    warmStopNow.current();
     swoopTo(here, true);
     // On the Community tab the card grows into the full map (mapGrow), with the pictures taken while you were found.
     const p = prep.current;
@@ -497,6 +504,7 @@ export function NearbyMap(props: NearbyMapProps) {
    * are up to hit; none if not (a court lit shows the court, not you).
    */
   const v7LightUp = (court: LatLng): Promise<void> => {
+    warmStopNow.current();
     zoomTap();
     v7Finding();
     const t = v7Now.current;
@@ -526,9 +534,12 @@ export function NearbyMap(props: NearbyMapProps) {
   // The timing log's tap (v7, zoomTiming): a row begins as the card's Up to hit is turned on.
   const checkInNow = useRef(checkIn);
   checkInNow.current = checkIn;
-  const v7Press = useRef(() => { const c = checkInNow.current; if (!c.on && !c.busy) zoomTap(); c.press(); }).current;
+  const v7Press = useRef(() => { warmStopNow.current(); const c = checkInNow.current; if (!c.on && !c.busy) zoomTap(); c.press(); }).current;
   const v7CheckIn = useMemo<CheckInControl>(() => ({ ...checkIn, press: v7Press }), [checkIn.on, checkIn.busy, checkIn.span, checkIn.until, checkIn.failed]); // eslint-disable-line react-hooks/exhaustive-deps
-  const cardCheckIn = v7On ? v7CheckIn : checkIn;
+  // mapWarm (admins first): the card's Up to hit without the zoom stops the hidden copy too. Everyone else: as it was.
+  const warmPress = useRef(() => { warmStopNow.current(); checkInNow.current.press(); }).current;
+  const warmCheckIn = useMemo<CheckInControl>(() => ({ ...checkIn, press: warmPress }), [checkIn.on, checkIn.busy, checkIn.span, checkIn.until, checkIn.failed]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cardCheckIn = v7On ? v7CheckIn : growsHere && mapWarmOn(me) ? warmCheckIn : checkIn;
   // The simulator's proof (simDriver, demo builds only): its "uth" is a tap of this card's Up to hit.
   const cardPressNow = useRef(cardCheckIn.press);
   cardPressNow.current = cardCheckIn.press;
@@ -944,27 +955,55 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // The full map ready before it opens (mapWarm: admins first, iPhone only). Its first view, worked out as the full map works
   // it out (mapModel: where you are now, else your last spot, else your city; your town at CITY_ZOOM), at the full map's size.
-  useMapWarmVersion();
+  const warmVersion = useMapWarmVersion(growsHere);
   const { town: myTown } = useMyCity(growsHere ? me : null);
   const mySpot = lastSeen[me.id];
   const warmWhere = at ?? (mySpot ? { lat: mySpot.lat, lng: mySpot.lng } : null);
   const warmView = useMemo(() => (homeIsKnown(me, warmWhere, myTown) ? { center: homeFor(me, warmWhere, myTown), zoom: CITY_ZOOM } : wideView()), [me, warmWhere?.lat, warmWhere?.lng, myTown?.lat, myTown?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   const fullLookSig = useMemo(() => hashText(JSON.stringify(fullLook) + STYLE), [fullLook]);
   const warmFor = growsHere ? warmKey({ user: me.id, look: fullLookSig, center: warmView.center, zoom: warmView.zoom, w: windowW, h: windowH, scale: PixelRatio.get() }) : '';
-  // Never with Only me (nothing of where you are is kept); only once this card has drawn and been on show a moment (never while
-  // the page is still coming in), and only while it stays on show with the app in front.
-  const warmShown = growsHere && !!warmFor && mapWarmOn(me) && !keepNone && cardUp && coverGone && onScreen && props.visible !== false && !mapWarmResting() && wantMapWarm(warmFor);
-  const [warmCopy, setWarmCopy] = useState<string | null>(null);
+  // Never with Only me (nothing of where you are is kept); only once this card has drawn, while its tab is on show.
+  const warmShown = growsHere && !!warmFor && mapWarmOn(me) && !keepNone && cardUp && coverGone && onScreen && props.visible !== false;
+  // Asked at the moment (never redrawing the card): the card in view (not Discussions, not scrolled away, the app in front),
+  // nothing opened over its tab yet (the tab's own "on show", not the later one), and nothing else going on on the card: no
+  // Up to hit being found, no zoom or grow under way, and the zoom's own hidden map (v7's layer) drawn and ready first, so
+  // the two never boot together.
+  const onShowNow = useOnShowNow();
+  const warmOk = () => onShowNow() && !checkInNow.current.busy && !v7Flying() && !growBusy.current
+    && !(v7Now.current && !v7Now.current.over && !v7Now.current.started) && !(v7Shown && !v7Layer()?.ready())
+    && !mapWarmResting() && inViewNow();
+  const warmOkNow = useRef(warmOk);
+  warmOkNow.current = warmOk;
+  // The copy drawing now (one at a time), which run of the card's asking it belongs to, and when a tap last stopped one.
+  const [warmCopy, setWarmCopy] = useState<{ key: string; run: number } | null>(null);
+  const warmLive = useRef(false);
+  const warmRun = useRef(0);
+  const warmCut = useRef(0);
+  const warmKill = useRef<(() => void) | null>(null);
+  // While the card is on show: once all of warmOk has held for WARM_SETTLE_MS (and no tap has stopped a copy in that time),
+  // the copy starts. A copy that was stopped or failed is tried again the same way; a picture kept, and the asking stops.
   useEffect(() => {
-    if (!warmShown) { setWarmCopy(null); return undefined; }
-    const t = setTimeout(() => { if (AppState.currentState === 'active') setWarmCopy(warmFor); }, WARM_SETTLE_MS);
-    const app = AppState.addEventListener('change', (st) => { if (st !== 'active') { clearTimeout(t); setWarmCopy(null); } });
-    return () => { clearTimeout(t); app.remove(); };
-  }, [warmShown, warmFor]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The card tapped (the full map opening): a copy still drawing is let go, so the two never start together.
-  const warmStop = () => { if (warmCopy) setWarmCopy(null); };
-  const warmCopyView = warmCopy && warmCopy === warmFor
-    ? <MapWarmCopy key={warmCopy} warmKey={warmCopy} center={warmView.center} zoom={warmView.zoom} look={fullLook} tpl={tpl} w={windowW} h={windowH} onDone={() => setWarmCopy(null)} />
+    if (!warmShown) { warmRun.current = 0; warmLive.current = false; return undefined; }
+    let since = 0;
+    const tick = setInterval(() => {
+      if (warmLive.current) { since = 0; return; }
+      if (!wantMapWarm(warmFor)) { if (!mapWarmResting()) clearInterval(tick); since = 0; return; }
+      const now = Date.now();
+      if (!warmOkNow.current() || now - warmCut.current < WARM_SETTLE_MS) { since = 0; return; }
+      if (!since) { since = now; return; }
+      if (now - since < WARM_SETTLE_MS) return;
+      since = 0;
+      warmLive.current = true;
+      warmRun.current = now;
+      setWarmCopy({ key: warmFor, run: now });
+    }, WARM_POLL_MS);
+    return () => { clearInterval(tick); warmRun.current = 0; warmLive.current = false; };
+  }, [warmShown, warmFor, warmVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The card tapped, Up to hit, a court lit: a copy drawing stops itself (nothing else redraws), and none starts for a while.
+  const warmStop = () => { warmCut.current = Date.now(); warmKill.current?.(); };
+  warmStopNow.current = warmStop;
+  const warmCopyView = warmShown && warmCopy && warmCopy.key === warmFor && warmCopy.run === warmRun.current
+    ? <MapWarmCopy key={warmCopy.run} warmKey={warmCopy.key} center={warmView.center} zoom={warmView.zoom} look={fullLook} tpl={tpl} w={windowW} h={windowH} alive={warmOk} stop={warmKill} onOver={() => { warmLive.current = false; }} />
     : null;
 
   // The card's picture (cardShot): for exactly this look (who, theme, centre, size, lock, Reduce Motion);
@@ -1151,7 +1190,7 @@ export function NearbyMap(props: NearbyMapProps) {
       pad={{ top: insets.top + PIN_FIT_TOP, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
         // The still card is one button: any tap on it opens the full map.
-        if (!expanded) { warmStop(); onExpand?.(); return; }
+        if (!expanded) { warmStopNow.current(); onExpand?.(); return; }
         // The same light tick as the map's other taps (Oct 22 sweep).
         haptics.tap();
         if (id === 'me') { model.select(null); model.selectCourt(null); model.selectHit(null); setMeOpen(true); }
@@ -1204,7 +1243,7 @@ export function NearbyMap(props: NearbyMapProps) {
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
-        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand ? () => { if (!growBusy.current) { warmStop(); onExpand(); } } : undefined}
+        onPress={failed ? () => { setLostFailed(false); canvas.current?.retry(); } : onExpand ? () => { if (!growBusy.current) { warmStopNow.current(); onExpand(); } } : undefined}
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
@@ -1326,7 +1365,7 @@ export function NearbyMap(props: NearbyMapProps) {
       ) : null}
       {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{mapView}</View> : mapView}
       {/* mapWarm: the picture of exactly what this map is about to draw, over it until it has (then gone in one frame). */}
-      {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} uri={warmPic} w={windowW} h={windowH} /> : null}
+      {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} uri={warmPic} w={windowW} h={windowH} onGone={() => { warmGo('gone'); dropMapWarm('not in memory'); }} /> : null}
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? (fz && chromeControl ? chromeControl : checkIn) : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={fz ? (fz.homeKnown ? fz.cityName : '') : model.homeKnown ? cityName : ''} weather={fz ? (fz.homeKnown ? fz.weather : null) : model.homeKnown ? weather : null} copy={!!fz} />
