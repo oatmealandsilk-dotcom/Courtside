@@ -13,7 +13,7 @@ import { TabOnShowContext, TabOnShowLaterContext } from '@/lib/useIsFocused';
 /** Well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
 const WARM_AFTER_MS = 1200;
 /** And once no page has scrolled for this long (a fling's glide included). */
-const STILL_FOR_MS = 700;
+const STILL_FOR_MS = 500;
 
 /**
  * Whether a warm preview is built yet (Nov 3, the sweep's worst catch: swiping back from a thread froze

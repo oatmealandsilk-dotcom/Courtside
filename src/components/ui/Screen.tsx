@@ -423,8 +423,9 @@ const ScreenBody = React.memo(function ScreenBody({
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
+      // (A glide's last slow crawl, under a point a frame, is as good as still.)
+      if (Math.abs(y - scrollY.value) >= 1) pageScrolledAt.value = Date.now();
       scrollY.value = y;
-      pageScrolledAt.value = Date.now();
       if (offsetY) offsetY.value = y;
       if (strip > 0) {
         gap.value = strip - y;
