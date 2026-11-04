@@ -31,18 +31,15 @@ function dayMinutes(day: TrainingDay) {
   return day.blocks.reduce((sum, b) => sum + b.minutes, 0);
 }
 
-/** A: today's session from his own week, under the box, with a plain way to ask about it. */
-export function AskToday({ plan, onAsk, onWeek }: { plan: TrainingPlan; onAsk: (text: string) => void; onWeek: () => void }) {
+/** One day of the week as a heading and its parts in hairline rows. */
+function DayRows({ caption, day }: { caption: string; day: TrainingDay }) {
   const styles = useThemedStyles(styleDefinitions);
-  const day = todayInPlan(plan);
-  if (!day) return null;
-  const main = mainBlock(day);
-  const title = day.restDay ? 'Rest day' : main?.title ?? 'Training';
+  const main = day.restDay ? null : mainBlock(day);
   return (
-    <View style={styles.block}>
-      <Text style={styles.caption}>Today · {day.label}</Text>
+    <View style={styles.dayGroup}>
+      <Text style={styles.caption}>{caption}</Text>
       <View style={styles.todayHead}>
-        <Text style={styles.todayTitle} numberOfLines={2}>{title}</Text>
+        <Text style={styles.todayTitle} numberOfLines={2}>{day.restDay ? 'Rest day' : main?.title ?? 'Training'}</Text>
         <Text style={styles.todayMinutes}>{duration(dayMinutes(day))}</Text>
       </View>
       {day.blocks.map((b) => (
@@ -51,9 +48,25 @@ export function AskToday({ plan, onAsk, onWeek }: { plan: TrainingPlan; onAsk: (
           <Text style={styles.rowMeta}>{duration(b.minutes)}</Text>
         </View>
       ))}
+    </View>
+  );
+}
+
+/** A: today's session from his own week, under the box (and on a rest day, the next session too), with a plain way to ask about it. */
+export function AskToday({ plan, onAsk, onWeek }: { plan: TrainingPlan; onAsk: (text: string) => void; onWeek: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const day = todayInPlan(plan);
+  if (!day) return null;
+  const next = day.restDay ? plan.days.find((d) => d.dayIndex > day.dayIndex && !d.restDay) : undefined;
+  const main = day.restDay ? null : mainBlock(day);
+  const question = main ? `How should I approach today’s ${main.title.toLowerCase()}?` : next ? `How should I get ready for ${next.label}’s session?` : 'What should I do on my rest day?';
+  return (
+    <View style={styles.block}>
+      <DayRows caption={`Today · ${day.label}`} day={day} />
+      {next ? <DayRows caption={`Next session · ${next.label}`} day={next} /> : null}
       <View style={styles.links}>
-        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => onAsk(day.restDay ? 'What should I do on my rest day?' : `How should I approach today’s ${title.toLowerCase()}?`)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-          <Text style={styles.link}>Ask about today</Text>
+        <Pressable accessibilityRole="button" hitSlop={8} onPress={() => onAsk(question)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+          <Text style={styles.link}>{main ? 'Ask about today' : next ? `Ask about ${next.label}` : 'Ask about today'}</Text>
         </Pressable>
         <Pressable accessibilityRole="link" hitSlop={8} onPress={onWeek} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
           <Text style={styles.linkQuiet}>See the week</Text>
@@ -131,6 +144,7 @@ export function openingLine(plan: TrainingPlan, firstName: string) {
 
 const styleDefinitions = StyleSheet.create({
   block: { gap: spacing.sm, marginTop: spacing.lg },
+  dayGroup: { gap: spacing.sm, paddingBottom: spacing.md },
   blockTight: { marginTop: spacing.sm },
   caption: { ...typography.small, color: colors.textMuted },
   captionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -327,7 +327,7 @@ function Train() {
 
       {/* Ask and This week side by side, slid between (Oct 20 sweep, as Profile's sections do). */}
       <SectionPager index={AI_SECTIONS.indexOf(section)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setSection(AI_SECTIONS[i])} panes={[(
-        <View style={[styles.section, askVar === 'D' && { minHeight: Math.max(360, screenHeight - 300) }]}>
+        <View style={[styles.section, askVar === 'D' && { minHeight: Math.max(360, screenHeight - 185) }]}>
           {askVar === 'D' ? (
             <View style={[styles.bubble, styles.theirs]}>
               <Text style={styles.bubbleText}>{openingLine(plan, currentUser.name.split(' ')[0])}</Text>
