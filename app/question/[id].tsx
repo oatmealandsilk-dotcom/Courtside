@@ -187,7 +187,7 @@ function QuestionDetail() {
   const canPin = actions.canPinQuestion;
   const isAdmin = !!currentUser?.isAdmin;
   const [pinnable, setPinnable] = useState(false);
-  // The "⋯" menu at the top (Oct 29, owner: the row of icons was "super super confusing"): Share stays out, the rest is in here.
+  // The "⋯" menu at the top (Oct 29, owner: the row of icons was "super super confusing"): Share stays beside it, and is in here too (Nov 4), with the rest.
   const [menuOpen, setMenuOpen] = useState(false);
   // The menu clears Android's navigation bar, and a message meanwhile shows as the phone's own alert (modalSheet).
   const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
@@ -286,16 +286,21 @@ function QuestionDetail() {
       showToast({ title: 'Thread deleted', icon: 'trash-outline' });
     },
   }) : undefined;
-  // The menu's rows, in this order, only those that apply: Edit (yours), the Question of the week pin and Take down
-  // (admins), Report (someone else's), Delete (yours, last and red). With none, there is no "⋯" at all, only Share.
+  // Share, from the menu too (owner, Nov 4: "Keep today's icons and just put everything into those 3 dots"): the same
+  // sheet the arrow at the top opens, once the menu has gone.
+  const share = removed ? undefined : () => afterMenu(() => router.push(`/share?kind=question&id=${question.id}`));
+  // The menu's rows, in this order, only those that apply: Share, Edit (yours), the Question of the week pin and Take
+  // down (admins), Report (someone else's), Delete (yours, last and red). With nothing but Share, there is no "⋯" at all.
   type MenuRow = { key: string; icon: React.ComponentProps<typeof Ionicons>['name']; label: string; spoken: string; danger?: boolean; onPress: () => void };
   const menu: MenuRow[] = [
+    share ? { key: 'share', icon: 'arrow-redo-outline', label: 'Share', spoken: 'Share this thread', onPress: share } : null,
     edit ? { key: 'edit', icon: 'pencil-outline', label: 'Edit', spoken: 'Edit this thread', onPress: edit } : null,
     pin ? { key: 'pin', icon: pinnedNow ? 'pin' : 'pin-outline', label: pinnedNow ? 'Unpin Question of the week' : 'Pin as Question of the week', spoken: pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week', onPress: pin } : null,
     moderate ? { key: 'moderate', icon: removed ? 'eye-outline' : 'eye-off-outline', label: removed ? 'Restore' : 'Take down', spoken: removed ? 'Restore this thread' : 'Take down this thread', danger: !removed, onPress: moderate } : null,
     theirs && !removed ? { key: 'report', icon: 'flag-outline', label: 'Report', spoken: 'Report this thread', onPress: report } : null,
     remove ? { key: 'delete', icon: 'trash-outline', label: 'Delete', spoken: 'Delete this thread', danger: true, onPress: remove } : null,
   ].filter((row): row is MenuRow => !!row);
+  const moreMenu = menu.some((row) => row.key !== 'share');
 
   const submit = () => {
     const text = draft.trim();
@@ -317,7 +322,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null} warm={-1}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null} warm={-1}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !moreMenu ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{moreMenu ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
