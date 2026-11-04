@@ -2011,6 +2011,17 @@ export const remote = {
     if (error) throw new Error(error.message);
     if (!(data ?? []).length) throw new Error('coach question not deleted');
   },
+  /**
+   * Deletes your own thread ("delete your own thread", migration 08). Its
+   * replies, its poll and its votes, and a Question of the week pin on it, go
+   * with it (the database's on delete cascade; migration 169 for the pin).
+   * Throws when nothing was deleted, as above.
+   */
+  async deleteQuestion(id: ID) {
+    const { data, error } = await need().from('questions').delete().eq('id', id).select('id');
+    if (error) throw new Error(error.message);
+    if (!(data ?? []).length) throw new Error('thread not deleted');
+  },
   async insertCoachReply(r: CoachReply) {
     const { error } = await need().from('coach_replies').upsert({ id: r.id, question_id: r.questionId, coach_user_id: r.coachUserId, body: r.body, created_at: r.createdAt });
     if (error) fail('coach reply save')(error);

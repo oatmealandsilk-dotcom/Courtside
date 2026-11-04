@@ -1252,6 +1252,8 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   toggleReplyHelpful: (replyId: ID) => void;
   /** The asker deletes their question, and the coaches' answers with it. Puts it back with a toast if the server refuses. */
   deleteCoachQuestion: (questionId: ID) => void;
+  /** Deletes your own thread for everyone, with its replies; it comes back, with a toast, if the server says no. */
+  deleteQuestion: (questionId: ID) => void;
   deleteAnswer: (answerId: ID) => void;
 
   /* Become a coach */
@@ -2098,6 +2100,22 @@ function idsIn(data: RemoteData): Set<string> {
   // A coach question its asker deleted on another phone comes off here too, answers and all.
   add(data.coachQuestions); add(data.coachReplies);
   return ids;
+}
+
+/**
+ * A load without the threads you deleted on this phone (deleteQuestion), their
+ * replies, the alerts about them and their place in Saved: one that went out
+ * before the delete landed never brings a thread back.
+ */
+function withoutThreads(data: RemoteData, gone: Set<ID>): RemoteData {
+  if (!gone.size) return data;
+  return {
+    ...data,
+    questions: data.questions.filter((q) => !gone.has(q.id)),
+    answers: data.answers.filter((a) => !gone.has(a.questionId)),
+    notifications: data.notifications.filter((n) => !(n.targetKind === 'question' && gone.has(n.targetId))),
+    userState: data.userState ? { ...data.userState, savedQuestionIds: data.userState.savedQuestionIds.filter((id) => !gone.has(id)) } : data.userState,
+  };
 }
 
 /**
@@ -3090,6 +3108,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // app comes back to the front, and when Notifications opens.
   /** Groups' invites, read again when a new one is heard (set once the groups' actions exist, below). */
   const loadInvitesRef = useRef<(() => Promise<void>) | null>(null);
+  // Threads you deleted on this phone (deleteQuestion): no load, catch-up or thread fetch that
+  // was already on its way brings one back, with its replies or the alerts about it.
+  const threadsDeleted = useRef(new Set<ID>());
+  // Threads of yours still on their way to the server (addQuestion): true once saved.
+  const questionSaves = useRef(new Map<ID, Promise<boolean>>());
   const catchUpNotifications = useCallback(async () => {
     const me = stateRef.current.currentUserId;
     if (!live(me) || !stateRef.current.remoteLoaded) return;
@@ -3099,7 +3122,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     heardNotes(me!, fresh);
     if (!fresh.length || stateRef.current.currentUserId !== me) return;
     setState((prev) => {
-      const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id));
+      const add = fresh.filter((n) => !prev.notifications.some((x) => x.id === n.id) && !(n.targetKind === 'question' && threadsDeleted.current.has(n.targetId)));
       if (!add.length) return prev;
       // An answer to an ask for a review: your asks are read again the next time one shows, so
       // "Review asked" turns to how it went without closing the app.
@@ -3205,7 +3228,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // One deleted for yourself a moment ago, before the server had it, stays gone too.
       const shown = { ...data, messages: unhidden(me, data.messages) };
       if (data.userState) zoneAge.current = { who: me, years: data.userState.ageYears };
-      setState((prev) => mergeRemote(prev, shown, me, email, snap, false));
+      // A thread deleted while this was on its way stays gone (read as it lands, for one deleted meanwhile).
+      setState((prev) => mergeRemote(prev, withoutThreads(shown, threadsDeleted.current), me, email, snap, false));
       // Your settings row came down (or there is none): what is on screen may be saved from now on.
       if (!data.userStateFailed) settingsRead.current = me;
       // The next open starts from this, straight after the logo.
@@ -6047,24 +6071,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
         href: `/question/${question.id}`, icon: 'chatbubbles',
       }));
       // The poll is saved once its thread is, since it hangs off the thread.
-      if (live(me, question.id)) void remote.upsertQuestion(question).then((r) => {
-        // Refused for its words (migration 117): it comes down again (the toast says why).
-        if (r === 'blocked') { setState((prev) => ({ ...prev, questions: prev.questions.filter((q) => q.id !== question.id) })); return; }
-        // Not saved for any other reason (offline, say): it comes down too, with its
-        // "posted" note, rather than looking posted and vanishing on the next open.
-        if (r === 'failed') {
-          setState((prev) => ({
-            ...prev,
-            questions: prev.questions.filter((q) => q.id !== question.id),
-            notifications: prev.notifications.filter((n) => !(n.kind === 'posted' && n.targetId === question.id)),
-          }));
-          // What was typed is kept: "Post again" opens Ask the room with it filled in.
-          keepUnsentThread({ title: question.title, body: question.body, topic: question.topic, poll: options && options.length >= 2 ? options : undefined });
-          showToast({ title: 'Your thread didn’t post', body: 'Your words are kept. Check your connection, then post it again.', icon: 'alert-circle-outline', action: { label: 'Post again', onPress: () => router.push('/ask') } });
-          return;
-        }
-        if (question.poll) void remote.insertPoll(question.id, question.poll.options);
-      });
+      if (live(me, question.id)) {
+        const saving = remote.upsertQuestion(question).then((r) => {
+          // Deleted while it was being saved: no poll and no "didn't post"; deleteQuestion takes it off the server if it got there.
+          if (threadsDeleted.current.has(question.id)) return !r;
+          // Refused for its words (migration 117): it comes down again (the toast says why).
+          if (r === 'blocked') { setState((prev) => ({ ...prev, questions: prev.questions.filter((q) => q.id !== question.id) })); return false; }
+          // Not saved for any other reason (offline, say): it comes down too, with its
+          // "posted" note, rather than looking posted and vanishing on the next open.
+          if (r === 'failed') {
+            setState((prev) => ({
+              ...prev,
+              questions: prev.questions.filter((q) => q.id !== question.id),
+              notifications: prev.notifications.filter((n) => !(n.kind === 'posted' && n.targetId === question.id)),
+            }));
+            // What was typed is kept: "Post again" opens Ask the room with it filled in.
+            keepUnsentThread({ title: question.title, body: question.body, topic: question.topic, poll: options && options.length >= 2 ? options : undefined });
+            showToast({ title: 'Your thread didn’t post', body: 'Your words are kept. Check your connection, then post it again.', icon: 'alert-circle-outline', action: { label: 'Post again', onPress: () => router.push('/ask') } });
+            return false;
+          }
+          if (question.poll) void remote.insertPoll(question.id, question.poll.options);
+          return true;
+        });
+        // Kept while it goes, so a delete straight after posting waits for it (deleteQuestion).
+        questionSaves.current.set(question.id, saving);
+        const forget = () => { questionSaves.current.delete(question.id); };
+        void saving.then(forget, forget);
+      }
       return question.id;
     },
     [requireUser],
@@ -7020,10 +7053,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
       return;
     }
+    // One you have deleted is never fetched again (deleteQuestion), nor its replies put back by a fetch already out.
+    if (threadsDeleted.current.has(questionId)) return;
     // A thread older than the first load's 300 is fetched on its own first.
     if (!stateRef.current.questions.some((q) => q.id === questionId)) {
       const found = await remote.fetchQuestion(questionId);
-      if (found) setState((prev) => (prev.questions.some((q) => q.id === questionId) ? prev : { ...prev, questions: [found, ...prev.questions] }));
+      if (found) setState((prev) => (prev.questions.some((q) => q.id === questionId) || threadsDeleted.current.has(questionId) ? prev : { ...prev, questions: [found, ...prev.questions] }));
     }
     // Replies of yours still being saved as this goes out may not be in what comes back.
     const saving = new Set(answerSaves.current.keys());
@@ -7032,6 +7067,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!replies) return;
     if (applyAfter) await applyAfter;
     setState((prev) => {
+      if (threadsDeleted.current.has(questionId)) return prev;
       // What the server sends is the thread now: its votes and pictures, and
       // no replies deleted since. Kept as well: replies of yours not saved
       // yet, or written after this went out. (Past the 1,000 a fetch brings,
@@ -7064,15 +7100,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, pinnedQuestion: pin }));
       return;
     }
-    const pin = await remote.fetchQuestionOfWeek().catch(() => undefined);
+    const asked = await remote.fetchQuestionOfWeek().catch(() => undefined);
     // Not asked (offline, or before migration 169): what was there stays.
-    if (pin === undefined || stateRef.current.currentUserId !== me) return;
+    if (asked === undefined || stateRef.current.currentUserId !== me) return;
+    // A pin on a thread you have just deleted went with it (migration 169), whatever an answer already on its way says.
+    const pin = asked && threadsDeleted.current.has(asked.id) ? null : asked;
     // A pinned thread older than the first load's 300 is fetched on its own.
     if (pin && !stateRef.current.questions.some((q) => q.id === pin.id)) {
       const found = await remote.fetchQuestion(pin.id).catch(() => null);
-      if (found) setState((prev) => (prev.questions.some((q) => q.id === pin.id) ? prev : { ...prev, questions: [found, ...prev.questions] }));
+      if (found) setState((prev) => (prev.questions.some((q) => q.id === pin.id) || threadsDeleted.current.has(pin.id) ? prev : { ...prev, questions: [found, ...prev.questions] }));
     }
-    setState((prev) => ({ ...prev, pinnedQuestion: pin }));
+    setState((prev) => ({ ...prev, pinnedQuestion: pin && threadsDeleted.current.has(pin.id) ? null : pin }));
   }, []);
   const canPinQuestion = useCallback(async (questionId: ID) => {
     const s = stateRef.current;
@@ -9334,6 +9372,65 @@ export function AppProvider({ children }: { children: ReactNode }) {
       },
     );
   }, [requireUser]);
+  /**
+   * Your own thread, gone for everyone with its replies and its poll (the
+   * database's "delete your own thread", migration 08; a Question of the week
+   * pin on it goes too). It leaves every list at once: Discussions, your
+   * profile, Saved, search, the Question of the week and your alerts about it.
+   * If the database says no (or the connection drops) it all comes back as it
+   * was and a toast says so, rather than vanishing here while it stays up for
+   * everyone else.
+   */
+  const deleteQuestion = useCallback((questionId: ID) => {
+    const me = requireUser();
+    const was = stateRef.current;
+    const question = was.questions.find((q) => q.id === questionId);
+    if (!question || question.authorId !== me) return;
+    const at = was.questions.indexOf(question);
+    const about = (n: Notification) => n.targetKind === 'question' && n.targetId === questionId;
+    const itsAnswers = was.answers.filter((a) => a.questionId === questionId);
+    const itsNotes = was.notifications.filter(about);
+    const wasSaved = was.saved.questionIds.includes(questionId);
+    const pin = was.pinnedQuestion?.id === questionId ? was.pinnedQuestion : null;
+    threadsDeleted.current.add(questionId);
+    haptics.commit();
+    setState((prev) => ({
+      ...prev,
+      questions: prev.questions.filter((q) => q.id !== questionId),
+      answers: prev.answers.filter((a) => a.questionId !== questionId),
+      notifications: prev.notifications.filter((n) => !about(n)),
+      saved: { ...prev.saved, questionIds: prev.saved.questionIds.filter((id) => id !== questionId) },
+      pinnedQuestion: prev.pinnedQuestion?.id === questionId ? null : prev.pinnedQuestion,
+    }));
+    // The demo: nothing on a server; a Question of the week pin on it comes off there too.
+    if (!live(me, questionId)) { void demoApi.deleteDemoQuestion(questionId); return; }
+    // Just posted and still being saved: the delete follows the save. Never saved: nothing to delete.
+    void (questionSaves.current.get(questionId) ?? Promise.resolve(true)).then((saved) => {
+      if (!saved) return;
+      remote.deleteQuestion(questionId).catch((err: unknown) => {
+        void reportError(err, { where: 'thread delete' });
+        threadsDeleted.current.delete(questionId);
+        if (stateRef.current.currentUserId !== me) return;
+        // Back in its old place, with its replies, its alerts, its place in Saved and its pin.
+        setState((prev) => {
+          if (prev.questions.some((q) => q.id === questionId)) return prev;
+          const questions = [...prev.questions];
+          questions.splice(Math.min(at, questions.length), 0, question);
+          const answerIds = new Set(prev.answers.map((a) => a.id));
+          const noteIds = new Set(prev.notifications.map((n) => n.id));
+          return {
+            ...prev,
+            questions,
+            answers: [...prev.answers, ...itsAnswers.filter((a) => !answerIds.has(a.id))],
+            notifications: [...prev.notifications, ...itsNotes.filter((n) => !noteIds.has(n.id))],
+            saved: wasSaved && !prev.saved.questionIds.includes(questionId) ? { ...prev.saved, questionIds: [questionId, ...prev.saved.questionIds] } : prev.saved,
+            pinnedQuestion: pin && !prev.pinnedQuestion ? pin : prev.pinnedQuestion,
+          };
+        });
+        showToast({ title: 'Couldn’t delete your thread', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      });
+    });
+  }, [requireUser]);
   const setPref = useCallback((key: PrefKey, value: boolean) => {
     haptics.tap();
     setState((prev) => ({ ...prev, prefs: { ...prev.prefs, [key]: value } }));
@@ -10172,6 +10269,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       replyToCoachQuestion,
       toggleReplyHelpful,
       deleteCoachQuestion,
+      deleteQuestion,
       deleteAnswer,
       submitCoachApplication,
       toggleSavePost,
@@ -10429,6 +10527,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       replyToCoachQuestion,
       toggleReplyHelpful,
       deleteCoachQuestion,
+      deleteQuestion,
       deleteAnswer,
       submitCoachApplication,
       toggleSavePost,

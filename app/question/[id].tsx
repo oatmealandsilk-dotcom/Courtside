@@ -36,7 +36,7 @@ import { RichText } from '@/components/RichText';
 import { PollView } from '@/components/PollView';
 import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useApp } from '@/store/AppContext';
-import type { Answer } from '@/data/types';
+import type { Answer, Question } from '@/data/types';
 import { colors, inkOn, radius, spacing, typography, buttonShape } from '@/theme';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { RemovedNote } from '@/features/moderation/RemovedNote';
@@ -173,7 +173,14 @@ function QuestionDetail() {
   const latest = useRef({ draft, media });
   latest.current = { draft, media };
 
-  const question = questions.find((q) => q.id === id);
+  // What the page last showed, kept while it slides away after its own delete, so it leaves as it
+  // was instead of flashing "This thread is gone" on the way out (as a coach question's page does).
+  const shown = useRef<{ question: Question; answers: Answer[] } | null>(null);
+  const leaving = useRef(false);
+  const found = questions.find((q) => q.id === id);
+  if (found) shown.current = { question: found, answers };
+  const question = found ?? (leaving.current ? shown.current?.question : undefined);
+  const threadAnswers = found || !shown.current ? answers : shown.current.answers;
   const asker = users.find((u) => u.id === question?.authorId);
   // Admins: only a thread by someone known to be an adult can be the Question of the week (teen rules;
   // the server says, as it alone knows ages). The pin shows only then, or to take off a pin already there.
@@ -206,9 +213,9 @@ function QuestionDetail() {
   const tint = topicTint(question.topic);
   // One hidden by your Hidden words (migration 117) shows only to whoever wrote it;
   // you find it under "Hidden replies" at the end, as the asker.
-  const hidden = hiddenAnswersOn(answers, question.id, currentUserId, question.authorId);
+  const hidden = hiddenAnswersOn(threadAnswers, question.id, currentUserId, question.authorId);
   const listed = question.answerIds
-    .map((aid) => answers.find((a) => a.id === aid))
+    .map((aid) => threadAnswers.find((a) => a.id === aid))
     .filter((a): a is Answer => Boolean(a) && shownInList(a!, a!.authorId, currentUserId));
   // Most votes first. No "accepted" answer pinned on top any more (Oct 12, owner: "I don't think this
   // feature is needed" / "Takes away from engagement"): a thread never reads as closed.
@@ -262,15 +269,32 @@ function QuestionDetail() {
     afterReport(actions.reportUser(question.authorId, `question:${question.id}`), asker, actions);
     goBack('/discuss');
   }, true);
-  const edit = question.authorId === currentUserId && !removed ? () => afterMenu(() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })) : undefined;
+  const mine = !isGuest && !!currentUserId && question.authorId === currentUserId;
+  const edit = mine && !removed ? () => afterMenu(() => router.push({ pathname: '/edit-post', params: { id: question.id, kind: 'question' } })) : undefined;
+  // Your own thread, gone for everyone with its replies (owner, Nov 4: "the three dots on top right of the discussion
+  // screen should allow me to delete"). Asked once, as a post's Delete asks; then back where you came from, the thread
+  // already gone from Discussions, while this page slides away as it was.
+  const remove = mine ? () => confirmAfterMenu({
+    title: 'Delete this thread?',
+    message: 'Its replies are deleted too. You can’t undo this.',
+    confirmLabel: 'Delete',
+    destructive: true,
+    onConfirm: () => {
+      leaving.current = true;
+      actions.deleteQuestion(question.id);
+      goBack('/discuss');
+      showToast({ title: 'Thread deleted', icon: 'trash-outline' });
+    },
+  }) : undefined;
   // The menu's rows, in this order, only those that apply: Edit (yours), the Question of the week pin and Take down
-  // (admins), Report (someone else's). With none, there is no "⋯" at all, only Share.
+  // (admins), Report (someone else's), Delete (yours, last and red). With none, there is no "⋯" at all, only Share.
   type MenuRow = { key: string; icon: React.ComponentProps<typeof Ionicons>['name']; label: string; spoken: string; danger?: boolean; onPress: () => void };
   const menu: MenuRow[] = [
     edit ? { key: 'edit', icon: 'pencil-outline', label: 'Edit', spoken: 'Edit this thread', onPress: edit } : null,
     pin ? { key: 'pin', icon: pinnedNow ? 'pin' : 'pin-outline', label: pinnedNow ? 'Unpin Question of the week' : 'Pin as Question of the week', spoken: pinnedNow ? 'Unpin the Question of the week' : 'Pin as Question of the week', onPress: pin } : null,
     moderate ? { key: 'moderate', icon: removed ? 'eye-outline' : 'eye-off-outline', label: removed ? 'Restore' : 'Take down', spoken: removed ? 'Restore this thread' : 'Take down this thread', danger: !removed, onPress: moderate } : null,
     theirs && !removed ? { key: 'report', icon: 'flag-outline', label: 'Report', spoken: 'Report this thread', onPress: report } : null,
+    remove ? { key: 'delete', icon: 'trash-outline', label: 'Delete', spoken: 'Delete this thread', danger: true, onPress: remove } : null,
   ].filter((row): row is MenuRow => !!row);
 
   const submit = () => {

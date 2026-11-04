@@ -957,6 +957,17 @@ export function setDemoQuestionOfWeek(pin: { id: ID; pinnedAt: string } | null) 
 // Read as the app opens, while the address may still say ?qotw=.
 demoQuestionOfWeek();
 
+/**
+ * The demo's delete of your own thread (remote.deleteQuestion with a
+ * database): nothing to send, but a Question of the week pin on it comes off,
+ * as the database's does (migration 169), so signed out it is not pinned to a
+ * thread that is gone. True: the demo never refuses.
+ */
+export async function deleteDemoQuestion(id: ID): Promise<boolean> {
+  if (demoQuestionOfWeek()?.id === id) setDemoQuestionOfWeek(null);
+  return delay(true, 120);
+}
+
 const demoPost = (id: ID) => posts.find((p) => p.id === id) ?? demoGroupPosts.find((p) => p.id === id);
 
 /**
