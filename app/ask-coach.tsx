@@ -61,7 +61,8 @@ export default function AskCoach() {
   const web = Platform.OS === 'web';
   // A question that didn't post comes back already typed (its toast's "Ask again").
   const [unsent] = useState(() => peekUnsentCoachQuestion(currentUserId));
-  useEffect(() => { clearUnsentCoachQuestion(); }, []);
+  // Cleared only once shown here, and only this account's (another account's stays for its writer).
+  useEffect(() => { if (unsent) clearUnsentCoachQuestion(currentUserId); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [title, setTitle] = useState(unsent?.title ?? '');
   const titleBox = useRef<TextInput>(null);
   const [body, setBody] = useState(unsent?.body ?? '');

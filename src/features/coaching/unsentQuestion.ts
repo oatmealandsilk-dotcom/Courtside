@@ -18,7 +18,9 @@ export function peekUnsentCoachQuestion(me?: ID | null): UnsentCoachQuestion | n
   if (!unsent || (unsent.who && me && unsent.who !== me)) return null;
   return { title: unsent.title, body: unsent.body, specialty: unsent.specialty };
 }
-export function clearUnsentCoachQuestion() { unsent = null; }
+/** Ask a coach has opened with the kept question: it goes. Only this account's (the one peek showed): another
+ * account opening Ask a coach on the same phone leaves it for its writer. */
+export function clearUnsentCoachQuestion(me?: ID | null) { if (peekUnsentCoachQuestion(me)) unsent = null; }
 
 /*
  * A question with a clip is saved only once the clip has uploaded (Nov 3). Its
