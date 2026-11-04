@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useRef, useState, memo } from 'react';
 import { useSoundMuted } from '@/features/feed/sound';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Animated as RNAnimated, Easing as RNEasing, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { Easing, FadeOut, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -22,6 +22,7 @@ import { STAGE_ON_ANDROID } from '@/features/feed/commentStage';
 import { StageChromeContext } from '@/features/feed/useStageMotion';
 import { TopBandContext } from '@/features/feed/topBand';
 import { usePageHeading } from '@/features/feed/pageLeaving';
+import { useTapFast } from '@/features/navigation/pressV2';
 
 /**
  * The play badge and the "2×" pill: a quick zoom and fade in (160 ms) and out
@@ -173,8 +174,21 @@ function ClipPlaybackInner({ uri, poster, active: wanted, onDeck = false, preloa
   // The progress line glides between the player's reports rather than
   // stepping — each report starts a short straight run to the next one.
   const progress = useSharedValue(0);
+  // Taps answering sooner (admins first): the line runs on React Native's native animation driver instead, the same
+  // straight 200 ms runs, so a playing clip no longer redraws the whole app every frame of every second it plays
+  // (Nov 4, owner: "Our app just runs so laggy"); every swipe and scroll over a playing clip had that much less phone.
+  const nativeBar = useTapFast();
+  const barNative = useRef(new RNAnimated.Value(0)).current;
+  const barTo = useRef(0);
   const onProgress = (fraction: number, _seconds: number, length: number) => {
     const step = Math.min(1, fraction + 0.2 / Math.max(0.2, length));
+    if (nativeBar) {
+      // Back to the start (a loop) or a jump back: straight there; else a straight run to just past the report.
+      if (fraction < barTo.current - 0.05) { barNative.stopAnimation(); barNative.setValue(fraction); barTo.current = fraction; return; }
+      barTo.current = step;
+      RNAnimated.timing(barNative, { toValue: step, duration: 200, easing: RNEasing.linear, useNativeDriver: true, isInteraction: false }).start();
+      return;
+    }
     progress.value = fraction < progress.value - 0.05 ? fraction : withTiming(step, { duration: 200, easing: Easing.linear });
   };
   // Scaled, not resized: a transform each frame, never a layout.
@@ -306,7 +320,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, onDeck = false, preloa
         </Pressable>
       )}
       {bare ? null : <View pointerEvents="none" style={styles.track}>
-        <Animated.View style={[styles.bar, barStyle]} />
+        {nativeBar ? <RNAnimated.View style={[styles.bar, { transform: [{ scaleX: barNative }] }]} /> : <Animated.View style={[styles.bar, barStyle]} />}
       </View>}
     </View>
   );
