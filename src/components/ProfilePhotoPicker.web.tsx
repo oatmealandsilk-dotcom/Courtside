@@ -8,7 +8,7 @@ import { colors, font } from '@/theme';
  * profile uses it as it is; a group chat passes its own picture (`preview`)
  * and words (`label`), so the same picker serves both.
  */
-export function ProfilePhotoPicker({ value, name, onChange, label = 'Change profile photo', accessibilityLabel, preview }: {
+export function ProfilePhotoPicker({ value, name, onChange, label = 'Change profile photo', accessibilityLabel, preview, seed = 'profile-photo-preview' }: {
   value?: string; name: string; onChange: (uri: string) => void;
   /** The link's words under the picture. */
   label?: string;
@@ -16,6 +16,8 @@ export function ProfilePhotoPicker({ value, name, onChange, label = 'Change prof
   accessibilityLabel?: string;
   /** Drawn in place of the default 88px avatar. */
   preview?: React.ReactNode;
+  /** Whose picture it is (their avatarSeed), so a face with no photo wears their colour: your own on Edit profile (SELF_AVATAR_COLOR). */
+  seed?: string;
 }) {
   useTheme();
   const input = useRef<HTMLInputElement>(null);
@@ -46,7 +48,7 @@ export function ProfilePhotoPicker({ value, name, onChange, label = 'Change prof
       reader.readAsDataURL(file); event.target.value = '';
     }}/>
     <Pressable accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} onPress={() => input.current?.click()} style={{alignItems:'center',gap:12}}>
-      {preview ?? <Avatar name={name} seed="profile-photo-preview" uri={value} size={88}/>}
+      {preview ?? <Avatar name={name} seed={seed} uri={value} size={88}/>}
       <Text style={{color:colors.brand,...font('600')}}>{label}</Text>
     </Pressable>
     {!!error && <Text style={{color:colors.danger}}>{error}</Text>}

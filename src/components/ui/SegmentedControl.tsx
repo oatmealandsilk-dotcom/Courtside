@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { TextScale, colors, oneLine, radius, spacing, typography } from '@/theme';
+import { TextScale, colors, font, lift, oneLine, pageIsDark, radius, spacing, typography, withAlpha } from '@/theme';
 import { trackCorner } from '@/theme/look';
 
 export interface Segment<T extends string> {
@@ -39,6 +39,13 @@ interface Props<T extends string> {
    * inside a form stay as they are.
    */
   slide?: boolean;
+  /**
+   * The Tennis profile's calm look (Nov 3, owner said yes to one look for the
+   * switches): a quiet grey bar with the chosen option raised in white (on a
+   * dark page, a shade lighter, with a faint lit edge) and its words in ink,
+   * instead of a solid brand block. AI coach, Followers and Edit profile.
+   */
+  calm?: boolean;
 }
 
 /** The track's inner padding and the gap between segments (the gliding pill is placed by it). */
@@ -59,8 +66,12 @@ export function SegmentedControl<T extends string>({
   radio = false,
   accessibilityLabel,
   slide = false,
+  calm = false,
 }: Props<T>) {
   const styles = useThemedStyles(styleDefinitions);
+  const dark = calm && pageIsDark();
+  // The chosen one, raised: white with a soft lift, or on a dark page a lighter shade with a faint lit edge.
+  const calmOn = dark ? [styles.calmOnDark, { borderColor: withAlpha(colors.borderStrong, 0.55) }] : styles.calmOn;
   // Sliding: one pill drawn behind the words, moved to the chosen one's place (all the segments are the same width).
   const gliding = slide && !scrollable && !wrap;
   const [box, setBox] = useState<{ first: number | null; second: number | null; w: number; h: number; step: number } | null>(null);
@@ -100,9 +111,9 @@ export function SegmentedControl<T extends string>({
             return was && was.first === next.first && was.second === next.second && was.w === next.w && was.h === next.h && was.step === next.step ? was : next;
           });
         } : undefined}
-        style={({ pressed }) => [styles.segment, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && !(gliding && box) && styles.segmentActive, active && tint && !(gliding && box) ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
+        style={({ pressed }) => [styles.segment, calm && styles.segmentCalm, large && styles.segmentLarge, wrap && styles.segmentWrapped, scrollable && styles.segmentLoose, active && !(gliding && box) && (calm ? calmOn : styles.segmentActive), active && tint && !(gliding && box) ? { backgroundColor: tint, borderColor: tint } : null, pressed && !active && styles.segmentPressed]}
       >
-        <Text style={[styles.label, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && styles.labelActive, active && ink ? { color: ink } : null]} {...(scrollable ? { numberOfLines: 1, maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE, 0.75))} numberOfLines={1}>
+        <Text style={[styles.label, calm && styles.labelCalm, large && styles.labelLarge, scrollable && { flexShrink: 0 }, active && (calm ? styles.labelCalmOn : styles.labelActive), active && ink ? { color: ink } : null]} {...(scrollable ? { numberOfLines: 1, maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE, 0.75))} numberOfLines={1}>
           {segment.label}
         </Text>
       </Pressable>
@@ -122,8 +133,8 @@ export function SegmentedControl<T extends string>({
   }
 
   return (
-    <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, wrap && styles.trackWrapped]}>
-      {gliding && box ? <Animated.View pointerEvents="none" style={[styles.glider, { width: box.w, height: box.h }, tint ? { backgroundColor: tint } : null, pill]} /> : null}
+    <View accessibilityRole={radio ? 'radiogroup' : undefined} accessibilityLabel={accessibilityLabel} style={[styles.track, calm && (dark ? styles.trackCalmDark : styles.trackCalm), wrap && styles.trackWrapped]}>
+      {gliding && box ? <Animated.View pointerEvents="none" style={[styles.glider, calm && styles.gliderCalm, calm && calmOn, { width: box.w, height: box.h }, tint ? { backgroundColor: tint } : null, pill]} /> : null}
       {items}
     </View>
   );
@@ -161,4 +172,13 @@ const styleDefinitions = StyleSheet.create({
   label: { ...typography.smallStrong, color: colors.textMuted },
   labelActive: { color: colors.brandInk },
   labelLarge: { ...typography.bodyStrong },
+  // The calm look (`calm`), as the Tennis profile's Activity · Health · Game bar draws it.
+  trackCalm: { backgroundColor: colors.surfaceAlt, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  trackCalmDark: { backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  segmentCalm: { minHeight: 38, paddingVertical: 8, justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  calmOn: { ...lift, backgroundColor: colors.surface },
+  calmOnDark: { backgroundColor: colors.surfaceAlt },
+  gliderCalm: { borderWidth: StyleSheet.hairlineWidth, borderColor: 'transparent' },
+  labelCalm: { ...typography.body, ...font('500'), color: colors.textMuted },
+  labelCalmOn: { ...font('600'), color: colors.text },
 });

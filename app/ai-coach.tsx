@@ -318,7 +318,7 @@ function Train() {
 
   return (
     <Screen title="AI coach" compactTitle onBack={() => goBack()}>
-      <SegmentedControl slide segments={[{ value: 'ask', label: 'Ask' }, { value: 'plan', label: 'This week' }]} value={section} onChange={setSection} />
+      <SegmentedControl slide calm segments={[{ value: 'ask', label: 'Ask' }, { value: 'plan', label: 'This week' }]} value={section} onChange={setSection} />
 
       {/* Ask and This week side by side, slid between (Oct 20 sweep, as Profile's sections do). */}
       <SectionPager index={AI_SECTIONS.indexOf(section)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setSection(AI_SECTIONS[i])} panes={[(

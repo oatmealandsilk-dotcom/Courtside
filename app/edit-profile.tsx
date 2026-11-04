@@ -155,7 +155,7 @@ export default function EditProfile() {
         ) : (
           <View style={styles.page}>
             {/* A chosen photo saves at once (Instagram's way, Oct 4); everything below waits for Save. */}
-            <ProfilePhotoPicker name={name} value={avatarUrl} label="Edit picture" accessibilityLabel="Change profile photo" onChange={(uri) => {
+            <ProfilePhotoPicker name={name} seed={currentUser.avatarSeed} value={avatarUrl} label="Edit picture" accessibilityLabel="Change profile photo" onChange={(uri) => {
               setAvatarUrl(uri);
               actions.updateIdentity({ avatarUrl: uri });
             }} />
@@ -195,7 +195,7 @@ export default function EditProfile() {
                         <Field row accessibilityLabel={`${system} rating`} value={ratingText} onChangeText={setRatingText} placeholder={system === 'UTR' ? '6.0' : '3.5'} keyboardType="decimal-pad" selectTextOnFocus />
                       </View>
                       <View style={styles.system}>
-                        <SegmentedControl<'NTRP' | 'UTR'> accessibilityLabel="Rating system" value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+                        <SegmentedControl<'NTRP' | 'UTR'> calm accessibilityLabel="Rating system" value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
                       </View>
                     </View>
                     <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.level, !ratingEmpty && !ratingOk && styles.ratingBad]}>
@@ -225,7 +225,7 @@ export default function EditProfile() {
         <View style={{ gap: 20 }}>
           {/* Instagram's way (Oct 4, owner): a chosen photo saves at once, without Save changes.
               Only the photo: anything typed above still waits for Save changes. */}
-          <ProfilePhotoPicker name={name} value={avatarUrl} onChange={(uri) => {
+          <ProfilePhotoPicker name={name} seed={currentUser.avatarSeed} value={avatarUrl} onChange={(uri) => {
             setAvatarUrl(uri);
             if (currentUser) actions.updateIdentity({ avatarUrl: uri });
           }} />
@@ -244,7 +244,7 @@ export default function EditProfile() {
               <Text style={styles.label}>Rating</Text>
               <View style={styles.ratingRow}>
                 <View style={{ flex: 1 }}>
-                  <SegmentedControl<'NTRP' | 'UTR'> value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
+                  <SegmentedControl<'NTRP' | 'UTR'> calm value={system} onChange={changeSystem} segments={[{ value: 'NTRP', label: 'NTRP' }, { value: 'UTR', label: 'UTR' }]} />
                 </View>
                 <View style={styles.ratingBox}>
                   <Field label="" accessibilityLabel={`${system} rating`} value={ratingText} onChangeText={setRatingText} placeholder={system === 'UTR' ? '6.0' : '3.5'} keyboardType="decimal-pad" />

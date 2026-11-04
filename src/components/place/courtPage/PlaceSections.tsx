@@ -230,7 +230,7 @@ export function HitsSection({ view, count }: { view: CourtView; count: number })
         title="Open hits"
         count={count ? String(count) : null}
         sub={sub}
-        link={view.closed ? null : { label: 'New hit', a11y: `Play here. Post a hit at ${view.name}`, onPress: () => playHere(view.here) }}
+        link={view.closed ? null : { label: 'New hit', a11y: `Find someone to play. Post a hit at ${view.name}`, onPress: () => playHere(view.here) }}
       />
       {count ? <CourtHits place={view.here} /> : null}
     </View>

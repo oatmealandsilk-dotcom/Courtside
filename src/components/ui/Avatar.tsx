@@ -4,7 +4,8 @@ import React from 'react';
 import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
-import { useUsers } from '@/store/AppContext';
+import { useMyId, useUsers } from '@/store/AppContext';
+import { SELF_AVATAR_COLOR } from '@/theme/look';
 import { initials } from '@/lib/format';
 import { colors, inkOn, radius, font } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -19,6 +20,16 @@ export function tintFor(seed: string): string {
   let hash = 0;
   for (let i = 0; i < seed.length; i += 1) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
   return palette[hash % palette.length];
+}
+
+/**
+ * Your own picture's colour with no photo (SELF_AVATAR_COLOR, Nov 3: "One
+ * color"): brand green, or the colour your seed gives you, which is what
+ * everyone else sees. For a page that sets the disc itself (Profile, the
+ * Tennis profile card); every other Avatar of you picks it up on its own.
+ */
+export function selfTint(seed: string): string {
+  return (SELF_AVATAR_COLOR as string) === 'brand' ? colors.brand : tintFor(seed);
 }
 
 /**
@@ -69,7 +80,12 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   // Only the people list, not the whole app: a like or a message elsewhere does not redraw every face on screen.
   const users = useUsers();
   const photo = uri ?? users.find(user => user.avatarSeed === seed || user.id === seed)?.avatarUrl;
-  const tint = quiet ? quietTintFor(seed) : tintFor(seed);
+  // Your own face: the one colour SELF_AVATAR_COLOR says, wherever it is drawn.
+  const myId = useMyId();
+  const mySeed = myId ? users.find((user) => user.id === myId)?.avatarSeed : undefined;
+  const mine = !!myId && (seed === myId || seed === mySeed);
+  // Always by your avatarSeed, whichever of your id or seed the caller passed, so you are one colour.
+  const tint = quiet ? quietTintFor(seed) : mine ? selfTint(mySeed ?? seed) : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
   // the player card's deeper shade) wins over the seed's tint, so the ink is chosen against that.
   const drawn = StyleSheet.flatten(style)?.backgroundColor;

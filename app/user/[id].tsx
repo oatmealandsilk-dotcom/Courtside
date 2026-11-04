@@ -21,7 +21,7 @@ import { PlayerName } from '@/components/PlayerName';
 import { StreakFlame } from '@/components/StreakFlame';
 import { shownStreak } from '@/features/practice/streakFlame';
 import { Tappable } from '@/components/Tappable';
-import { Avatar, Button, EmptyState, Screen } from '@/components/ui';
+import { Avatar, Button, EmptyState, Screen, selfTint } from '@/components/ui';
 import { PlayerCard } from '@/components/tennis/PlayerCard';
 import { compactNumber } from '@/lib/format';
 import { TileViews } from '@/components/TileViews';
@@ -241,7 +241,7 @@ function UserProfile() {
           // Left-aligned like your own Profile (Oct 25, "D all for less ai", item 12): the picture at the left, the name
           // and level beside it, the bio and counts under, rather than everything centred like a landing page.
           <View style={styles.identityRow}>
-            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} ring={user.isCoach} style={{ backgroundColor: colors.brand }} />
+            <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={80} ring={user.isCoach} style={{ backgroundColor: isMe ? selfTint(user.avatarSeed) : colors.brand }} />
             <View style={styles.identityWords}>
               <View style={styles.nameLine}>
                 <PlayerName userId={user.id} style={[styles.name, styles.nameLeft]}>{user.name}</PlayerName>
@@ -255,7 +255,7 @@ function UserProfile() {
             </View>
           </View>
         ) : <>
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: colors.brand, alignSelf: 'center' }} />
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={92} ring={user.isCoach} style={{ backgroundColor: isMe ? selfTint(user.avatarSeed) : colors.brand, alignSelf: 'center' }} />
         <View style={styles.nameRow}>
           {/* The name and, close after it, their streak's flame (3 days or more). */}
           <View style={styles.nameLine}>
