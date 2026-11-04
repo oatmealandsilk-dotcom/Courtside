@@ -5,7 +5,7 @@ import { useIsFocused as useRouteFocused } from 'expo-router';
 import { useNavigation } from 'expo-router/build/react-navigation/core/useNavigation';
 import { AppStateLater } from '@/store/AppContext';
 import { useGrowPageLive } from '@/features/players/mapGrow';
-import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
+import { TabOnShowContext, TabOnShowLaterContext, TabOnShowNowContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
 import { usePressV2, useTapFast } from '@/features/navigation/pressV2';
@@ -32,6 +32,8 @@ const TabActiveBox = createContext<{ active: boolean } | undefined>(undefined);
  * (useTabActive, useIsFocused).
  */
 const InTabRowContext = createContext<boolean | undefined>(undefined);
+/** A page is opened over the tab row, as the tab on show hears it (TabFocus): only with taps answering sooner. */
+const TabsCoveredContext = createContext(false);
 
 export function TabFocus({ active, children }: { active: boolean; children: React.ReactNode }) {
   // Whether this tab is on show (its slot on screen, and no page opened over the tabs), worked out
@@ -50,8 +52,14 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   // TOO LONG TO RESPOND"). Back on show (the page closed) is at once, as before.
   // Not under a see-through sheet (the Create box, comments...): the tab still shows round it, and hears it at once, as before.
   const tapFast = useTapFast();
-  const routeFocusedSoon = useDeferredValue(routeFocused);
+  // Off, nothing is deferred: no second, background draw of this on every page opened or closed.
+  const routeFocusedSoon = useDeferredValue(tapFast ? routeFocused : true);
   const onShow = (routeFocused || (tapFast && routeFocusedSoon && !sheetOnTop())) && active;
+  // A clip's player still hears it at once (useIsFocusedNow): covered, a clip stops in the same go, as before.
+  const onShowNow = routeFocused && active;
+  // A page is over the tabs, heard with the tab on show (above): covered tabs hold still only under a page
+  // (OffScreenLater), never on the tabs themselves, where a swipe can bring a neighbour into view at any moment.
+  const tabsCovered = tapFast && !routeFocusedSoon;
   // The parts that only stand down when covered (the map, court pictures, tips: useIsFocusedLater) hear
   // "covered" once the page opened over the tab has slid in, not in the tap that opens it. Before, the
   // map card, the court cards and their hidden picture-taker all redrew (the last one taken down) in that
@@ -65,7 +73,11 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
       <TabFocusContext.Provider value={active}>
         <TabActiveBox.Provider value={box}>
           <TabOnShowContext.Provider value={onShow}>
-            <TabOnShowLaterContext.Provider value={later}>{children}</TabOnShowLaterContext.Provider>
+            <TabOnShowNowContext.Provider value={onShowNow}>
+              <TabsCoveredContext.Provider value={tabsCovered}>
+                <TabOnShowLaterContext.Provider value={later}>{children}</TabOnShowLaterContext.Provider>
+              </TabsCoveredContext.Provider>
+            </TabOnShowNowContext.Provider>
           </TabOnShowContext.Provider>
         </TabActiveBox.Provider>
       </TabFocusContext.Provider>
@@ -199,9 +211,12 @@ function OffScreenLater({ pane, children }: { pane: string; children: React.Reac
   // (Community alone, 60 to 190 ms in the Simulator) while the page was sliding in (Nov 4, owner: "EVERY FUCKING
   // THING TAKES WAY TOO LONG TO RESPOND"). Back on show, it is live at once, as before.
   // Also while any page opens or closes over the tabs (a chat opened from Messages, say): justNavigated.
-  const navigating = useJustNavigated();
+  const tapFast = useTapFast();
+  const navigating = useJustNavigated(tapFast);
+  // Only while a page is over the tabs: back on the tabs, one a swipe brings into view shows the app as it is.
+  const covered = use(TabsCoveredContext);
   // Never under a see-through sheet, where the tab still shows round it.
-  const hold = useTapFast() && inRow && !onShow && (shownLater === true || navigating) && !sheetOnTop();
+  const hold = tapFast && inRow && covered && !onShow && (shownLater === true || navigating) && !sheetOnTop();
   const inner = <AppStateLater hidden={!onShow && !growing} hold={hold}>{children}</AppStateLater>;
   // Whether this tab sits in the row never changes while it is mounted.
   return inRow ? inner : <TabOnShowLaterContext.Provider value={later}>{inner}</TabOnShowLaterContext.Provider>;

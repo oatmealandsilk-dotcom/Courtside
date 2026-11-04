@@ -228,7 +228,10 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     return (...args: A) => {
       if (!tapFastOn()) { fn(...args); return; }
       if (later.current) show();
-      if (waitForLook && shownAt.current && Date.now() - shownAt.current < LOOK_FIRST_MS) { setTimeout(() => fn(...args), 0); return; }
+      if (waitForLook && shownAt.current && Date.now() - shownAt.current < LOOK_FIRST_MS) {
+        setTimeout(() => { afterLook = true; try { fn(...args); } finally { afterLook = false; } }, 0);
+        return;
+      }
       fn(...args);
     };
   };
@@ -236,3 +239,9 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
 }
 /** A look asked for this recently (ms) is taken as asked for in the same lift as the action (wrapPress). */
 const LOOK_FIRST_MS = 34;
+let afterLook = false;
+/**
+ * True while an action wrapPress held back for its look runs: the look is already on screen, so an action that would
+ * hold itself back for the same reason (a Discussion card, QuestionCard) need not wait a second time.
+ */
+export const pressWaitedForLook = () => afterLook;

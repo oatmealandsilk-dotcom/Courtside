@@ -1,5 +1,5 @@
 import React, { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedNow } from '@/lib/useIsFocused';
 import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetHeld, holdUntilBack, pageAway } from '@/features/feed/pauseWhenHidden';
 import { usePageLeaving } from '@/features/feed/pageLeaving';
@@ -25,11 +25,12 @@ export const ClipVideo = forwardRef<ClipVideoHandle, {
   // Plays only on the screen you are looking at, as on a phone: a page pushed
   // over this one, or a tab slid away, holds it until you come back. The
   // comments stage is the exception: its clip plays on above the sheet.
+  // Covered, it stops in the same go as the page opening over it (useIsFocusedNow), as the phone's does.
   // On a feed page a swipe has just been decided away from, it stops as the
   // finger lifts, before the next page has landed (pageLeaving).
   // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
   const windowsHeld = useWindowsHeld();
-  const onTop = (useIsFocused() && !windowsHeld) || held;
+  const onTop = (useIsFocusedNow() && !windowsHeld) || held;
   const leaving = usePageLeaving();
   const active = wanted && onTop && !leaving;
   const el = useRef<HTMLVideoElement>(null);

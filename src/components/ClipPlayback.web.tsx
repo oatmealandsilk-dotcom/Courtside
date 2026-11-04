@@ -10,7 +10,7 @@ import { CourtSpinner } from './CourtSpinner';
 import { TOP_SHADE } from './ReelCaption';
 import { cropCss } from '@/lib/crop';
 import type { MediaCrop } from '@/data/types';
-import { useIsFocused } from '@/lib/useIsFocused';
+import { useIsFocusedNow } from '@/lib/useIsFocused';
 import { useWindowsHeld } from '@/features/feed/feedWindows';
 import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { usePageHeading, usePageLeaving } from '@/features/feed/pageLeaving';
@@ -76,11 +76,12 @@ function ClipPlaybackInner({ uri, poster, active: asked, onDeck = false, preload
   // Plays only on the screen you are looking at: a page pushed over this one,
   // or a tab slid away, holds it until you come back (the phone's player does
   // the same in ClipVideo). The comments stage keeps its clip playing.
+  // Covered, it stops in the same go as the page opening over it (useIsFocusedNow), as the phone's does.
   // A swipe decided away from its page stops it as the finger lifts, before
   // the next page has landed (pageLeaving), as the phone's ClipVideo does.
   // The Feed's windows up: held on this frame, and on from it when they close (features/feed/feedWindows).
   const windowsHeld = useWindowsHeld();
-  const onTop = (useIsFocused() && !windowsHeld) || held;
+  const onTop = (useIsFocusedNow() && !windowsHeld) || held;
   const leaving = usePageLeaving();
   // On show, or (the swipe followed) its page is where a decided swipe is heading.
   const heading = usePageHeading(onDeck);

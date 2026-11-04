@@ -443,6 +443,12 @@ const stageStyles = StyleSheet.create({
 // closed over the tabs, before that page could slide in (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
 /** Which Feed on show last set the bottom bar's tuck, so only it gives the bar back its words on leaving. */
 let barHolder: string | null = null;
+/**
+ * The Feed the holder took the tuck from while that one had not yet heard it was covered (taps answering sooner tell
+ * the tab on show as background work: a post opened from For you puts its own feed on show first), so that one still
+ * gives the bar its words back when it hears, as it did when it heard first.
+ */
+let barTakenFrom: string | null = null;
 
 const useRouteFocusedInBrowser: () => boolean = Platform.OS === 'web' ? useRouteFocused : () => true;
 
@@ -611,11 +617,16 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     stopWaiting.current?.();
     stopWaiting.current = null;
     if (!focused || paused) return;
+    const from = barHolder;
     barHolder = owner;
-    if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5, { withPage: true }); keptDuck.current = null; }
+    barTakenFrom = from !== owner ? from : null;
+    if (keptDuck.current !== null) { setBarCompact(keptDuck.current > 0.5, { withPage: true }); keptDuck.current = null; barTakenFrom = null; }
     const giveBack = () => {
       keptDuck.current = barCompact.value;
-      if (barHolder !== owner) return;
+      if (barHolder !== owner) {
+        if (barTakenFrom === owner) { barTakenFrom = null; setBarCompact(false, { withPage: true }); }
+        return;
+      }
       barHolder = null;
       setBarCompact(false, { withPage: true });
     };

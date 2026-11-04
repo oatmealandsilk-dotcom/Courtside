@@ -49,13 +49,15 @@ const subscribe = (fn: () => void) => {
 /**
  * True from a router call until SLIDE_MS after the last one. Turning on is heard in the tap's own go (before the new
  * page writes anything); turning off redraws as background work, so the catching up never holds a tap up.
+ * `enabled` false (taps answering sooner off): always false, and nothing listens or redraws on any router call.
  */
-export function useJustNavigated(): boolean {
-  const [now, setNow] = useState(on);
+export function useJustNavigated(enabled: boolean): boolean {
+  const [now, setNow] = useState(enabled && on);
   useEffect(() => {
+    if (!enabled) return undefined;
     const off = subscribe(() => { if (on) setNow(true); else startTransition(() => setNow(false)); });
-    if (on !== now) setNow(on);
+    setNow(on);
     return off;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return now;
+  }, [enabled]);
+  return enabled && now;
 }
