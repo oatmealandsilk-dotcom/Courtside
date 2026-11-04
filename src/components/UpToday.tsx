@@ -239,7 +239,8 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
               <FilledFace face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />
             </Arrive>
           ))}
-          {!people.length && !fill.length ? <Arrive key="empty" slot={arriving() ? 0 : null} look="fade" leave="fade" style={styles.empty}>{emptyLine}</Arrive> : null}
+          {/* Keyed by what it says, so "Finding you…" becoming "No one's open near you yet" crossfades too. */}
+          {!people.length && !fill.length ? <Arrive key={`empty:${onLocation ? 'location' : finding ? 'finding' : 'nobody'}`} slot={arriving() ? 0 : null} look="fade" leave="fade" style={styles.empty}>{emptyLine}</Arrive> : null}
         </ScrollView>
         <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={MINE_CENTER - 6} on="page" style={styles.tip} />
         </View>
