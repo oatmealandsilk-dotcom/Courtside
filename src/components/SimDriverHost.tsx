@@ -2,6 +2,8 @@ import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 
 import { simAction, simCheckIn, simLog, startSimPolling } from '@/lib/simDriver';
+import { startJsGapWatch } from '@/lib/simTrace';
+import { forceBarLook } from '@/features/navigation/barLens';
 import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
 
@@ -27,6 +29,11 @@ export function SimDriverHost() {
         forceTapFast(q.on === '1' ? true : q.on === '0' ? false : null);
         simLog(`[sim] tapfast ${q.on ?? 'switch'}`);
       }),
+      // The admin bar look (barLens: the lens and the new bar) off or on for this build, or back to the switch.
+      simAction('barlook', (q) => {
+        forceBarLook(q.on === '1' ? true : q.on === '0' ? false : null);
+        simLog(`[sim] barlook ${q.on ?? 'switch'}`);
+      }),
       // Location off (Settings' "Use my location"): the Community card goes back to the profile's city.
       simAction('locoff', () => { void now.current.setLocationEnabled(false); }),
       // How Up to hit's check-in behaves from now on (simCheckIn): fix=ms, server=ms, shift=m, fail=1.
@@ -39,6 +46,7 @@ export function SimDriverHost() {
       }),
     ];
     startSimPolling();
+    startJsGapWatch();
     return () => off.forEach((f) => f());
   }, []);
   return null;

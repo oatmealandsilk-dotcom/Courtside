@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { useLoopsRun } from '@/lib/loopShown';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
@@ -15,14 +16,17 @@ export function LiveDot({ size = 8, color }: { size?: number; color?: string }) 
   useTheme();
   const ink = color ?? colors.brand;
   const ring = useSharedValue(0);
+  // Out of sight, it rests and starts again from the beginning when back (see useLoopsRun).
+  const runs = useLoopsRun();
   useEffect(() => {
+    if (!runs) { cancelAnimation(ring); ring.value = 0; return undefined; }
     let live = true;
     reduceMotionEnabled().then((reduced) => {
       if (!live || reduced) return;
       ring.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.out(Easing.cubic) }), -1, false);
     }).catch(() => {});
     return () => { live = false; };
-  }, [ring]);
+  }, [ring, runs]);
   const ringStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + ring.value * 1.8 }], opacity: 0.55 * (1 - ring.value) }));
   return (
     <View style={{ width: size, height: size }}>

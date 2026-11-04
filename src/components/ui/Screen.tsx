@@ -1,4 +1,5 @@
 import { PRESS_DIM } from '@/theme/press';
+import { pageScrollHeld, pageScrolledAt } from '@/features/navigation/scrollQuiet';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
 import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
 import React, { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
@@ -422,6 +423,8 @@ const ScreenBody = React.memo(function ScreenBody({
   const onScrollAnimated = useAnimatedScrollHandler({
     onScroll: (event) => {
       const y = event.contentOffset.y;
+      // (A glide's last slow crawl, under a point a frame, is as good as still.)
+      if (Math.abs(y - scrollY.value) >= 1) pageScrolledAt.value = Date.now();
       scrollY.value = y;
       if (offsetY) offsetY.value = y;
       if (strip > 0) {
@@ -449,6 +452,7 @@ const ScreenBody = React.memo(function ScreenBody({
     },
     onBeginDrag: () => {
       dragging.value = true;
+      pageScrollHeld.value = true;
       settling.value = false;
       // A finger on the page while it springs back catches it where it is.
       if (gliding.value) { cancelAnimation(glide); gliding.value = false; }
@@ -456,6 +460,8 @@ const ScreenBody = React.memo(function ScreenBody({
     },
     onEndDrag: (event) => {
       dragging.value = false;
+      pageScrollHeld.value = false;
+      pageScrolledAt.value = Date.now();
       const y = event.contentOffset.y;
       // Where the page was left is kept once the finger lifts and once the
       // glide ends, not on every frame: a message across to the app's logic
