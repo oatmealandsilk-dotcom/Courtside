@@ -14,7 +14,7 @@ import { SectionPager } from '@/components/SectionPager';
 import Reanimated from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { TileCover } from '@/components/TileCover';
-import { Arrive, useArriveGate, useArrivals } from '@/components/ui/Arrive';
+import { Arrive, useArrivals } from '@/components/ui/Arrive';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats, sessionOnly } from '@/features/activity/format';
@@ -143,8 +143,8 @@ function UserProfile() {
   const firstTiles = (Math.ceil(windowHeight / 2 / Math.max(tileH, 1)) + 1) * 3;
   // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): tiles that come in once their posts
   // load, after the page is on show, fade in a row at a time, and the "No posts yet" they replace fades out under them.
-  // What the page has in its first frame (and the rest of a long grid drawn once it has slid in) is simply there.
-  const arriving = useArriveGate();
+  // What the page has in its first frame (and the rest of a long grid, or the other grids, drawn once it has slid in) is
+  // simply there: an empty grid's "No posts yet" never fades in, as those grids are built after the page has slid in.
   const tileSlot = useArrivals(TABS.flatMap((t) => lists[t].map((p) => `${t}:${p.id}`)));
   const grid = (section: (typeof TABS)[number]) => {
     const items = arrived ? lists[section] : lists[section].slice(0, firstTiles);
@@ -169,7 +169,7 @@ function UserProfile() {
                 </Arrive>
               ))}
             </View>
-            {!lists[section].length && <Arrive slot={arriving() ? 0 : null} look="fade" leave="fade"><EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} /></Arrive>}
+            {!lists[section].length && <Arrive slot={null} leave="fade"><EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} /></Arrive>}
         </View>
     );
   };

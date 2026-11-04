@@ -104,15 +104,20 @@ function enterFor(look: ArriveLook, slot: number): EntryExitAnimationFunction {
   const from = { opacity: L.opacity, y: L.y, x: L.x, scale: L.scale };
   // Opacity is done a little sooner than the movement, so it reads as arrived while it settles.
   const fadeMs = back ? Math.round(ms * 0.55) : Math.round(ms * 0.8);
+  // Only what this look moves: every animated value is work on the phone's main thread in every frame it plays.
+  const moveX = from.x !== 0;
+  const moveY = from.y !== 0;
+  const grow = from.scale !== 1;
   const fn: EntryExitAnimationFunction = () => {
     'worklet';
-    return {
-      initialValues: { opacity: from.opacity, transform: [{ translateX: from.x }, { translateY: from.y }, { scale: from.scale }] },
-      animations: {
-        opacity: steady(1, fadeMs, wait, false),
-        transform: [{ translateX: steady(0, ms, wait, false) }, { translateY: steady(0, ms, wait, false) }, { scale: steady(1, ms, wait, back) }],
-      },
-    };
+    const startAt: Record<string, number>[] = [];
+    const moves: Record<string, number>[] = [];
+    if (moveX) { startAt.push({ translateX: from.x }); moves.push({ translateX: steady(0, ms, wait, false) }); }
+    if (moveY) { startAt.push({ translateY: from.y }); moves.push({ translateY: steady(0, ms, wait, false) }); }
+    if (grow) { startAt.push({ scale: from.scale }); moves.push({ scale: steady(1, ms, wait, back) }); }
+    return moves.length
+      ? { initialValues: { opacity: from.opacity, transform: startAt as never }, animations: { opacity: steady(1, fadeMs, wait, false), transform: moves as never } }
+      : { initialValues: { opacity: from.opacity }, animations: { opacity: steady(1, fadeMs, wait, false) } };
   };
   enterCache.set(id, fn);
   return fn;
@@ -161,6 +166,8 @@ export function Arrive({ slot, look = 'rise', leave, glide = false, style, child
   const [wrapped] = useState(() => play !== null || glide || (!!leave && loadInOn()));
   if (!wrapped) return <>{children}</>;
   if (!glide) return <Animated.View entering={entering} exiting={exiting} style={style} pointerEvents={pointerEvents}>{children}</Animated.View>;
+  // Gliding, with no arrival of its own (there in the first frame): one view is enough.
+  if (play === null) return <Animated.View layout={ARRIVE_GLIDE} exiting={exiting} style={style} pointerEvents={pointerEvents}>{children}</Animated.View>;
   return (
     <Animated.View layout={ARRIVE_GLIDE} exiting={exiting} style={style} pointerEvents={pointerEvents}>
       <Animated.View entering={entering}>{children}</Animated.View>

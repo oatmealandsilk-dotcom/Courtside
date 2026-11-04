@@ -7,7 +7,7 @@ import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui';
 import { Arrive, SwapText, useArriveGate, useArrivals, type ArriveLook } from '@/components/ui/Arrive';
-import { upArrival, useLoadIn } from '@/features/navigation/loadIn';
+import { upArrival, useLoadIn, useSimUp } from '@/features/navigation/loadIn';
 import { SIM_DRIVER, simLog } from '@/lib/simDriver';
 import { OpenRing } from '@/components/map/OpenRing';
 import { TipBubble } from '@/components/TipBubble';
@@ -129,10 +129,14 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people: allPeople, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill: allFill = NO_FILL, fillTitle }: { me: User; people: Up[];
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
+  // The simulator's proof only (loadIn.ts simUp; always null outside the harness): the row held back, to film arrivals.
+  const simUp = useSimUp();
+  const people = useMemo(() => (SIM_DRIVER && simUp ? allPeople.slice(0, simUp.people) : allPeople), [allPeople, simUp]);
+  const fill = SIM_DRIVER && simUp && !simUp.fill ? NO_FILL : allFill;
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);

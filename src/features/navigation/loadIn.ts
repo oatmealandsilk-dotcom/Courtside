@@ -54,10 +54,26 @@ export function useLoadIn(): boolean {
 /** Up to hit's look (UP_ARRIVAL, or the simulator's pick). */
 export const upArrival = (): 'A' | 'B' | 'C' => forcedLook ?? UP_ARRIVAL;
 
+/**
+ * The simulator's proof only: Up to hit held to its first `people` players, and its regulars held back (fill=0), until
+ * a later "loadin up=all&fill=1" lets them in, so every look is filmed with the same faces arriving at the same moment
+ * (the demo's own row is all there from the start). Null: the row as it is.
+ */
+let simUp: { people: number; fill: boolean } | null = null;
+export const simUpNow = () => simUp;
+export function useSimUp() {
+  return useSyncExternalStore(subscribe, simUpNow, simUpNow);
+}
+
 const simSet = (q: Record<string, string>) => {
   if (q.on !== undefined) forced = q.on === '1' ? true : q.on === '0' ? false : null;
   if (q.look === 'A' || q.look === 'B' || q.look === 'C') forcedLook = q.look;
-  simLog(`[sim] loadin on=${forced ?? 'switch'} look=${upArrival()}`);
+  if (q.up !== undefined || q.fill !== undefined) {
+    const people = q.up === 'all' ? 99 : q.up !== undefined ? Number(q.up) || 0 : simUp?.people ?? 99;
+    const fill = q.fill !== undefined ? q.fill === '1' : simUp?.fill ?? true;
+    simUp = people >= 99 && fill ? null : { people, fill };
+  }
+  simLog(`[sim] loadin on=${forced ?? 'switch'} look=${upArrival()} up=${simUp ? `${simUp.people}/${simUp.fill ? 'fill' : 'nofill'}` : 'all'}`);
   listeners.forEach((fn) => fn());
 };
 simAction('loadin', simSet);

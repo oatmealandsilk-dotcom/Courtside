@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
-import { Image as PhotoImage } from 'expo-image';
+import Animated from 'react-native-reanimated';
 import { WebView } from 'react-native-webview';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -97,33 +97,44 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw
   useEffect(() => { setShown(false); }, [shot]);
   useEffect(() => { onShown?.(shown); }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
   // With the load-in (admins first, loadIn.ts): React Native's fadeDuration only ever worked on Android, so on an iPhone
-  // the picture popped in over the stand-in, and a card built again (the page opened again) flashed its stand-in first.
-  // Now the picture is held in memory and laid over the stand-in: the first time this session it crossfades in (200 ms),
-  // and the stand-in is taken away under it once the fade is over; any later time it is there at once, over the stand-in.
+  // the picture popped in over the stand-in. Now, the first time this session, it fades in over the stand-in (200 ms, a
+  // transition of its own style, so it always ends shown however busy the phone is), and the stand-in is taken away under
+  // it once the fade is over. Any later time it shows as it loads, as before. Still React Native's own image, which
+  // decodes off the main thread (expo-image was tried, Nov 4: its resizing on the main thread made a scroll past the
+  // court cards drop frames on the Simulator).
   const fast = loadInOn();
+  // Whether this picture's showing is its first this session, decided once per picture (its load marks it shown).
+  const firstOf = useRef(new Map<string, boolean>());
+  if (shot && !firstOf.current.has(shot)) firstOf.current.set(shot, photoFirstShowing(shot));
+  const first = !!shot && !!firstOf.current.get(shot);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => { setLoaded(false); }, [shot]);
   const fadeEnd = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (fadeEnd.current) clearTimeout(fadeEnd.current); }, []);
-  if (fast) {
-    const first = photoFirstShowing(shot ?? undefined);
-    const loaded = () => {
-      if (!shot) return;
-      markPhotoShown(shot);
-      if (!first) { setShown(true); return; }
+  if (fast && first) {
+    const onLoad = () => {
+      if (shot) markPhotoShown(shot);
+      setLoaded(true);
       if (fadeEnd.current) clearTimeout(fadeEnd.current);
-      fadeEnd.current = setTimeout(() => { fadeEnd.current = null; setShown(true); }, THUMB_FADE_MS + 20);
+      fadeEnd.current = setTimeout(() => { fadeEnd.current = null; setShown(true); }, THUMB_FADE_MS + 40);
     };
     return (
       <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
         {!shown ? <ThumbStandIn look={look} seed={key} /> : null}
-        {shot ? <PhotoImage source={{ uri: shot }} cachePolicy="memory" transition={first ? THUMB_FADE_MS : 0} onLoad={loaded} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+        {shot ? (
+          <Animated.View style={[StyleSheet.absoluteFill, { opacity: loaded ? 1 : 0, transitionProperty: 'opacity', transitionDuration: THUMB_FADE_MS, transitionTimingFunction: 'ease-out' }]}>
+            <Image source={{ uri: shot }} onLoad={onLoad} fadeDuration={0} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          </Animated.View>
+        ) : null}
       </View>
     );
   }
+  const loadedNow = () => { if (fast && shot) markPhotoShown(shot); setShown(true); };
 
   return (
     <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
       {!shown ? <ThumbStandIn look={look} seed={key} /> : null}
-      {shot ? <Image source={{ uri: shot }} onLoad={() => setShown(true)} fadeDuration={180} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+      {shot ? <Image source={{ uri: shot }} onLoad={loadedNow} fadeDuration={180} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
     </View>
   );
 }

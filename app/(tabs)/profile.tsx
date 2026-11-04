@@ -15,7 +15,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { Avatar, Button, EmptyState, Screen, selfTint } from '@/components/ui';
 import { SectionPager } from '@/components/SectionPager';
 import { TileCover } from '@/components/TileCover';
-import { Arrive, useArriveGate, useArrivals } from '@/components/ui/Arrive';
+import { Arrive, useArrivals } from '@/components/ui/Arrive';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats, sessionOnly } from '@/features/activity/format';
@@ -160,7 +160,6 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const tileH = Math.round((tileW * 4) / 3);
  // Load-in (admins first, loadIn.ts): a tile that comes in while your profile is on show (your new post) fades in, and
  // the "No posts yet" it replaces fades out; what the tab already has (and anything landing while it is not on show) is simply there.
- const arriving = useArriveGate();
  const tileSlot = useArrivals(posts.map((p) => p.id));
  const content = (selected: string) => {
    if (!user) return null;
@@ -183,7 +182,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      </Pressable></Arrive>)}</View>
      {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip, unless the
          "Make your first move" card at the top of the page is already asking for it. */}
-     {!items.length && <Arrive slot={arriving() ? 0 : null} look="fade" leave="fade"><EmptyState title={selected==='Tagged'?'No tagged posts yet':selected==='Activity'?'No activity yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : selected==='Activity' ? 'Hits and matches you post with their stats show up here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : selected==='Activity' ? { label: 'Log a session', onPress: () => router.push('/log-session') } : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/></Arrive>}
+     {!items.length && <Arrive slot={null} leave="fade"><EmptyState title={selected==='Tagged'?'No tagged posts yet':selected==='Activity'?'No activity yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : selected==='Activity' ? 'Hits and matches you post with their stats show up here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : selected==='Activity' ? { label: 'Log a session', onPress: () => router.push('/log-session') } : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/></Arrive>}
    </View>;
  };
  // The four grids are rebuilt only when the posts change, so switching
