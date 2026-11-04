@@ -110,9 +110,13 @@ function useRestBuilt(lean: boolean): boolean {
       done = true;
       startTransition(() => setBuilt(true));
     };
-    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
-    const stop = events.addListener?.('transitionStart', (e) => { if (!e?.data?.closing && !beat) beat = setTimeout(build, REST_AFTER_MS); });
     const fallback = setTimeout(build, REST_FALLBACK_MS);
+    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    // Leaving before the rest is built: it is never built, so a swipe back is not held by the build.
+    const stop = events.addListener?.('transitionStart', (e) => {
+      if (e?.data?.closing) { done = true; clearTimeout(fallback); if (beat) clearTimeout(beat); return; }
+      if (!beat) beat = setTimeout(build, REST_AFTER_MS);
+    });
     return () => { done = true; clearTimeout(fallback); if (beat) clearTimeout(beat); stop?.(); };
   }, [navigation, built]);
   return built;
@@ -149,7 +153,8 @@ function QuestionDetail() {
   useEffect(() => { if (ready) void loadThread(String(id), viewLater ? landed.current?.promise : undefined).finally(() => setLooked(true)); }, [loadThread, id, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   // Taps that answer sooner: the first draw carries the question and the replies a screen can hold (FIRST_REPLIES), the rest
   // come as the page slides in. Not when it opens at a reply (`at`), which may be further down.
-  const restBuilt = useRestBuilt(tapFastOn() && !at);
+  // Not on the website: it has no native slide to build behind, so the page is built whole there, as before.
+  const restBuilt = useRestBuilt(tapFastOn() && !at && Platform.OS !== 'web');
   const screenHeight = useWindowDimensions().height;
   const firstReplies = firstRepliesFor(screenHeight);
   const jump = useJumpTo(at, looked);
