@@ -805,6 +805,8 @@ const TRAIL_RIDE = chase(1600);
  * than the front's 250 ms, so the front pulls ahead and the back catches up as it lands.
  */
 const LIQUID_TRAIL = { dampingRatio: 1, duration: 330, overshootClamping: true } as const;
+/** The tab the liquid capsule's trailing edge is on its way to (-1: chasing the front, or not aimed). */
+const trailAim = makeMutable(-1);
 /** The middle piece's own width before it is stretched (any width: it is only ever scaled). */
 const MID_W = 100;
 /** The lens's highlight: a short soft bar near its top that rides along with it. */
@@ -987,28 +989,48 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
   calm: boolean; st: BarStyles;
 }) {
   const h = geo.height;
+  // The lit tab's place, for while the lens is not placed. A shared value, not a dependency of the reaction below:
+  // a reaction made again starts with no `was`, and this one, made again on every change of tab (Nov 3 sweep, B3),
+  // used to put the trailing edge where the front stood at that moment and then never move it again, since the tab
+  // it was heading for had not changed (a page opened from another tab, Settings or Theme, left the capsule
+  // stretched between two tabs, both lit).
+  const placeAt = useSharedValue(fallback);
+  useLayoutEffect(() => { placeAt.value = fallback; }, [fallback, placeAt]);
   useAnimatedReaction(() => {
     if (!drive) return null;
     const own = lensAt.value;
-    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? fallback : own;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : own < 0 ? placeAt.value : own;
     return { at, goal: lensGoal.value, rides: lensRides.value };
   }, (now, was) => {
     if (now === null) return;
     const { at } = now;
     // Placed (the first time, or straight onto a tab: a jump, never a move) or calm: the trailing edge is simply there too.
-    if (calm || was === null || lensTrail.value < 0 || Math.abs(at - was.at) > 0.9) {
+    // A front that leapt while still on its way is not placed: frames the phone skipped (a page being opened over the
+    // tabs as the lens sets off) moved it far in one step, and the back carries on after it (Nov 3 sweep, B3: put
+    // straight where the front stood mid-way, the back stayed there, the capsule stretched between two tabs, both lit).
+    const leapt = was !== null && Math.abs(at - was.at) > 0.9 && !now.rides && Math.abs(at - now.goal) < 0.001;
+    if (calm || lensTrail.value < 0 || leapt) {
       cancelAnimation(lensTrail);
       lensTrail.value = at;
+      trailAim.value = now.goal;
       return;
     }
-    if (now.rides) { lensTrail.value = withSpring(at, TRAIL_RIDE); return; }
+    if (now.rides) { trailAim.value = -1; lensTrail.value = withSpring(at, TRAIL_RIDE); return; }
     if (kind === 1) {
-      // Liquid: the back on its own slower spring, aimed at the tab once for each new tab (and once a drag lets go).
-      if (now.goal >= 0 && (now.goal !== was.goal || was.rides)) lensTrail.value = withSpring(now.goal, LIQUID_TRAIL);
+      // Liquid: the back on its own slower spring, aimed at the tab once for each new tab (and once a drag lets go),
+      // and whenever it is found aimed anywhere else (the reaction made again part way: never left behind).
+      if (now.goal >= 0 && (now.goal !== trailAim.value || (was !== null && was.rides))) {
+        trailAim.value = now.goal;
+        lensTrail.value = withSpring(now.goal, LIQUID_TRAIL);
+      }
       return;
     }
-    if (at !== was.at) lensTrail.value = withSpring(at, TRAIL_SPRINGS[kind] ?? TRAIL_SPRINGS[0]);
-  }, [drive, fallback, calm, kind]);
+    // The others chase the front; made again part way (no `was`), they carry on from where the back stands.
+    if (was === null ? Math.abs(lensTrail.value - at) > 0.001 : at !== was.at) {
+      trailAim.value = -1;
+      lensTrail.value = withSpring(at, TRAIL_SPRINGS[kind] ?? TRAIL_SPRINGS[0]);
+    }
+  }, [drive, calm, kind]);
   useAnimatedReaction(() => {
     // Not while a finger is on the bar or drags the lens along it.
     if (!drive || lensPress.value || lensHeld.value || lensLift.value <= 0) return 0;
