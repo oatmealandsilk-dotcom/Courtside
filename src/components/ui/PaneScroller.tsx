@@ -1,3 +1,4 @@
+import { PaneShownContext } from '@/lib/loopShown';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Keyboard, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
@@ -386,7 +387,8 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
         >
           {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
           <View style={[styles.body, column ? { width: '100%', maxWidth: column, alignSelf: 'center' } : null, { paddingBottom: room + spacing.xxxl }]}>
-            {children}
+            {/* Whether this section is the one on show, for looping animations to rest out of sight (loopShown). */}
+            <PaneShownContext.Provider value={active}>{children}</PaneShownContext.Provider>
           </View>
           {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
         </Reanimated.ScrollView>

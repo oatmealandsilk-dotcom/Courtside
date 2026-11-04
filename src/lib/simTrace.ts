@@ -33,3 +33,12 @@ export function startJsGapWatch() {
   };
   requestAnimationFrame(frame);
 }
+
+/** [loop] NAME on/off: a looping animation started or stopped (SIM_DRIVER only), to find what animates out of sight. */
+export function useSimLoop(name: string, on = true) {
+  useLayoutEffect(() => {
+    if (!SIM_DRIVER || !on) return undefined;
+    simLog(`[loop] ${name} on`);
+    return () => simLog(`[loop] ${name} off`);
+  }, [name, on]);
+}

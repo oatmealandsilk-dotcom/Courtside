@@ -1,3 +1,4 @@
+import { simLog } from '@/lib/simDriver';
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, AppState, Platform, Pressable, StyleSheet, Text, View, type AccessibilityActionEvent } from 'react-native';
 import Animated, { Easing, cancelAnimation, interpolate, interpolateColor, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -447,6 +448,7 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       cancelAnimation(winTick);
       winTick.value = 0;
       // A phone only (a browser hands nothing back), and only while the real feed is a moving card.
+      if (!still && Platform.OS !== 'web') simLog('[loop] winTick on');
       if (!still && Platform.OS !== 'web') winTick.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear }), -1, true);
       if (still) {
         winStill.value = 1;

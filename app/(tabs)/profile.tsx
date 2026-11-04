@@ -1,3 +1,4 @@
+import { useSimLoop } from '@/lib/simTrace';
 import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
@@ -450,6 +451,7 @@ function MenuCard({ open, onGone, style, children }: { open: boolean; onGone: ()
  * its place but empty. The real numbers and words then fill in.
  */
 function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?: string; seed: string }) {
+  useSimLoop('ProfileSkeleton', true);
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The banner's own colours (the session box's: cream here, the court colour on the city courts), so it fades into the real one in place.
