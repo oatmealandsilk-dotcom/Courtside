@@ -4,7 +4,7 @@ import Animated, { Easing, Extrapolation, FadeIn, FadeOut, interpolate, interpol
 import { router } from 'expo-router';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
-import { DragSheet } from '@/components/DragSheet';
+import { DragSheet, type SheetCloseHow } from '@/components/DragSheet';
 import { OfficialCheck } from '@/components/OfficialCheck';
 import { topicMeta } from '@/components/QuestionCard';
 import { Avatar, Field } from '@/components/ui';
@@ -47,6 +47,28 @@ function caretToEnd(box: Box, length: number) {
     return;
   }
   box.setSelection?.(length, length);
+}
+
+/**
+ * A browser: runs `work` once the Escape key that asked for it is let go. The
+ * question card is drawn in the browser's pop-up layer, which closes itself
+ * when Escape comes up, so a card asked on the key going down was gone again
+ * as the key came up. Asked a moment after the key is up instead (at most
+ * 600 ms, should the key be held).
+ */
+function afterEscapeUp(work: () => void) {
+  if (typeof document === 'undefined') { work(); return; }
+  let done = false;
+  const go = () => {
+    if (done) return;
+    done = true;
+    document.removeEventListener('keyup', up, true);
+    clearTimeout(late);
+    setTimeout(work, 0);
+  };
+  const up = (e: KeyboardEvent) => { if (e.key === 'Escape') go(); };
+  document.addEventListener('keyup', up, true);
+  const late = setTimeout(go, 600);
 }
 
 /** A browser's text box as tall as its words (a phone's grows by itself). */
@@ -153,9 +175,9 @@ export function EditThreadSheet({ id }: { id: string }) {
   // The words on their way to the thread once the sheet is down.
   const pending = useRef<Words | null>(null);
   const ask = useScopedConfirm();
-  const mayClose = (): boolean => {
+  const mayClose = (how?: SheetCloseHow): boolean => {
     if (!status.current.dirty || pending.current) return true;
-    ask({
+    const askNow = () => ask({
       title: 'Discard your changes?',
       message: 'Your thread stays as it was.',
       confirmLabel: 'Discard',
@@ -165,6 +187,8 @@ export function EditThreadSheet({ id }: { id: string }) {
       // The caret goes back where it was, and the keyboard with it.
       onCancel: () => setTimeout(() => editor.current?.focusLast(), 60),
     });
+    if (WEB && how === 'escape') afterEscapeUp(askNow);
+    else askNow();
     return false;
   };
   // A quick second tap on Save would check twice.
@@ -231,7 +255,7 @@ export function EditThreadSheet({ id }: { id: string }) {
       slideOpen
       peekFraction={1}
       closeSignal={closeSignal}
-      beforeClose={() => latest.current.mayClose()}
+      beforeClose={(how) => latest.current.mayClose(how)}
       onDismissed={landed}
       header={header}
     >
@@ -348,8 +372,24 @@ const ThreadEditor = forwardRef<EditorHandle, {
   // The question opens with the caret at the end of it (a phone's keyboard rises with the sheet; a computer's box is just ready).
   // A browser on a phone shows no keyboard without a tap, so there it waits for one.
   const autoFocus = !WEB || isDesktopBrowser();
+  // The first focus is that one: the caret goes to the end of the question.
+  const placed = useRef(!autoFocus);
+  const firstFocus = () => {
+    if (placed.current) return;
+    placed.current = true;
+    requestAnimationFrame(() => caretToEnd(box('title'), lengths.current.title));
+  };
+  // A computer: the menu that opened this hands the focus back to the page behind as it closes; for that
+  // first moment the focus is brought back to the question (only from outside the box: a click inside is yours).
   useEffect(() => {
-    if (autoFocus) requestAnimationFrame(() => caretToEnd(box('title'), lengths.current.title));
+    if (!WEB || !autoFocus || typeof document === 'undefined') return undefined;
+    const put = () => box('title')?.focus();
+    const outside = (target: EventTarget | null) => !(target as Element | null)?.closest?.('[role="dialog"],[role="alertdialog"]');
+    const onFocusIn = (e: FocusEvent) => { if (outside(e.target)) put(); };
+    document.addEventListener('focusin', onFocusIn, true);
+    const first = setTimeout(() => { if (outside(document.activeElement)) put(); }, 30);
+    const stop = setTimeout(() => document.removeEventListener('focusin', onFocusIn, true), 1200);
+    return () => { clearTimeout(first); clearTimeout(stop); document.removeEventListener('focusin', onFocusIn, true); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // A browser's boxes grow with their words, as a phone's do.
   useLayoutEffect(() => {
@@ -425,7 +465,7 @@ const ThreadEditor = forwardRef<EditorHandle, {
             // The thread page's own cap for its title.
             maxFontSizeMultiplier={TextScale.CARD}
             accessibilityLabel="Your question"
-            onFocus={() => { focused.current = 'title'; lastField.current = 'title'; reveal?.(box('title')); }}
+            onFocus={() => { focused.current = 'title'; lastField.current = 'title'; firstFocus(); reveal?.(box('title')); }}
             onBlur={() => { if (focused.current === 'title') focused.current = null; }}
             onSelectionChange={(e) => { atEnd.current.title = e.nativeEvent.selection.end >= lengths.current.title; }}
             onContentSizeChange={() => followCaret('title')}
