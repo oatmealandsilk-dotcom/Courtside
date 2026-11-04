@@ -18,6 +18,14 @@ export const TabOnShowContext = createContext<boolean | undefined>(undefined);
  */
 export const TabOnShowLaterContext = createContext<boolean | undefined>(undefined);
 
+/**
+ * The same answer as TabOnShowContext, but always heard in the very go that covers the tab: with taps answering
+ * sooner (pressV2's TAP_FAST: admins first) the tab itself hears "covered" as background work just after the page
+ * opened over it is put on screen (TabFocus), and a clip must not play on under that page meanwhile (useIsFocusedNow).
+ * Undefined outside the tab row.
+ */
+export const TabOnShowNowContext = createContext<boolean | undefined>(undefined);
+
 const always = () => true;
 const quiet = () => () => undefined;
 
@@ -79,4 +87,14 @@ function useOnShow(row: typeof TabOnShowContext): boolean {
  */
 export function useIsFocusedLater(): boolean {
   return useOnShow(TabOnShowLaterContext);
+}
+
+/**
+ * useIsFocused for a clip's player only: covered, it stops at once, in the same go as the page opened over it, as
+ * it always did. Taps answering sooner tell the rest of the tab it is covered a moment later (TabFocus), and the
+ * clip went on playing, sound and all, into the new page's slide (Nov 4 review of the faster taps). Only the
+ * players redraw for this, as they did before. Anywhere else, the same answer as useIsFocused.
+ */
+export function useIsFocusedNow(): boolean {
+  return useOnShow(TabOnShowNowContext);
 }

@@ -1,7 +1,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { Platform, type GestureResponderEvent } from 'react-native';
 
-import { usePressV2 } from '@/features/navigation/pressV2';
+import { tapFastOn, usePressV2 } from '@/features/navigation/pressV2';
 import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { tapMark } from '@/features/navigation/tapTiming';
 
@@ -211,5 +211,37 @@ export function useSwipePressLook(look: (on: boolean) => void, { enabled = true,
     if (left > 0) hide.current = setTimeout(() => { hide.current = null; drop(); }, left);
     else drop();
   };
-  return { inSwipe, touchStart, pressMove, pressIn, pressOut, delay: inSwipe ? pressDelayProps(delayLongPress, quick) : undefined };
+  /**
+   * Taps answering sooner (pressV2's TAP_FAST: admins first), the phone only: wraps the button's own action so a quick
+   * tap's look is on screen before what the tap opens is built (Nov 4, owner: "EVERY FUCKING THING TAKES WAY TOO LONG TO
+   * RESPOND"). React Native runs a quick tap's press-in and its action in one go as the finger lifts, and the phone puts
+   * the app's changes on screen only once that go is over: a card's look (a React redraw, SwipePressable's `pressed`) then
+   * came in the same frame as the new page, 0.1 to 0.45 s after the lift. Now:
+   *   - a drifting finger's look still waiting (DRIFT_LOOK_DELAY) is shown at the lift, not 130 ms later with pressOut;
+   *   - with `waitForLook`, a look asked for in this same lift is put on screen first and the action runs a frame later
+   *     (the page then starts building a few ms later, and the look is not held up by it).
+   * Outside a swipeable area, off, or in a browser: the action itself, exactly as before.
+   */
+  const wrapPress = <A extends unknown[]>(fn: ((...args: A) => void) | null | undefined, waitForLook = false): ((...args: A) => void) | undefined => {
+    if (!fn) return undefined;
+    if (!inSwipe || Platform.OS === 'web') return fn;
+    return (...args: A) => {
+      if (!tapFastOn()) { fn(...args); return; }
+      if (later.current) show();
+      if (waitForLook && shownAt.current && Date.now() - shownAt.current < LOOK_FIRST_MS) {
+        setTimeout(() => { afterLook = true; try { fn(...args); } finally { afterLook = false; } }, 0);
+        return;
+      }
+      fn(...args);
+    };
+  };
+  return { inSwipe, touchStart, pressMove, pressIn, pressOut, wrapPress, delay: inSwipe ? pressDelayProps(delayLongPress, quick) : undefined };
 }
+/** A look asked for this recently (ms) is taken as asked for in the same lift as the action (wrapPress). */
+const LOOK_FIRST_MS = 34;
+let afterLook = false;
+/**
+ * True while an action wrapPress held back for its look runs: the look is already on screen, so an action that would
+ * hold itself back for the same reason (a Discussion card, QuestionCard) need not wait a second time.
+ */
+export const pressWaitedForLook = () => afterLook;

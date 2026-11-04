@@ -9,7 +9,10 @@ import { AppState, Linking, Platform, Pressable, StyleSheet, Text, View } from '
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { registerForPush } from '@/features/push/push';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+// The navigation library's own focus hook, as the router's is underneath, minus the router's wait of one draw for the
+// navigation to load (for a redirect before it exists): a page always has its navigation, and the wait drew it twice as it opened.
+import { useFocusEffect } from 'expo-router/build/react-navigation/core/useFocusEffect';
 import { goBack } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 

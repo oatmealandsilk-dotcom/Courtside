@@ -92,7 +92,8 @@ export function Tappable({
   return (
     <Pressable
       // The simulator's tap timing (tapTiming) notes when the action ran; anywhere else it is onPress itself.
-      onPress={disabled || immediate ? undefined : TAP_TIMING && onPress ? () => { tapMark('press'); onPress(); } : onPress}
+      // A drifting finger's look, still waiting as it lifts, shows at once (swipePress's wrapPress; the dip itself runs on the animation thread).
+      onPress={disabled || immediate ? undefined : press.wrapPress(TAP_TIMING && onPress ? () => { tapMark('press'); onPress(); } : onPress)}
       onLongPress={disabled ? undefined : onLongPress}
       delayLongPress={delayLongPress}
       {...press.delay}

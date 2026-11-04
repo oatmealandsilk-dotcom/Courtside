@@ -1,9 +1,10 @@
-import { useCallback, useMemo } from 'react';
+import { startTransition, useCallback, useMemo } from 'react';
 
 import { remote } from '@/data/remote';
 import { DEMO_FOLLOWED_AT, demoFactsFor, demoFollowsFor, demoMyCourts, demoNowFor, demoRegulars, demoRings, demoToday, withReview, type Seeing } from '@/data/mock/courtLife';
 import type { CourtAccess, CourtFacts, CourtFollowCount, CourtNow, CourtNowSaved, CourtReview, CourtRightNow, CourtRing, CourtToday, FollowedCourt, HitRequest, ID, MapVisibility, Post, TaggedCourt, User } from '@/data/types';
 import { isMapCourtId } from '@/features/places/courtName';
+import { tapFastOn } from '@/features/navigation/pressV2';
 import { atCourtFor } from '@/features/places/courtReach';
 import { notKnownAdult } from '@/features/players/age';
 import { dayKey, todayStart } from '@/features/places/playedToday';
@@ -111,6 +112,14 @@ const seeing = (s: Reads): Seeing => ({ me: s.currentUserId, users: s.users, fol
 /** The demo's answer for a court, its friends only those you follow (a player who just joined, ?new=1, has none there). */
 const demoNow = (id: string, s: Reads): CourtRightNow => { const r = demoNowFor(id); return { ...r, friendIds: r.friendIds.filter((f) => s.followingIds.includes(f)) }; };
 const byCourt = <T extends { courtId: string }>(rows: T[]) => Object.fromEntries(rows.map((r) => [r.courtId, r]));
+/** The same answer as already held (the same words), so nothing is written and nothing on screen redraws. */
+const same = (a: unknown, b: unknown) => a === b || JSON.stringify(a) === JSON.stringify(b);
+/**
+ * A court's answers written as background work with taps answering sooner (pressV2's TAP_FAST: admins first): a court's
+ * page or card asks as it opens, and the whole app's redraw for the answer came in the middle of the page sliding in,
+ * ahead of any tap meanwhile (Nov 4, owner: "Or courts. Or map ... EVERY FUCKING THING TAKES WAY TOO LONG TO RESPOND").
+ */
+const quietly = (fn: () => void) => { if (tapFastOn()) startTransition(fn); else fn(); };
 /**
  * Right now at courts as the server says it, keeping when yours ends where this phone knows it and the server
  * did not say (a database before migration 204): "You're here · till 6:30pm" stays right.
@@ -135,14 +144,17 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
       // The demo: its answers for courts not yet seen; anything changed here (a follow, an answer) stays.
       const s = stateRef.current;
       const regulars = demoRegulars(ids, s.posts, s.hitRequests, seeing(s));
-      setState((prev) => ({
+      // Every court already answered for and its regulars unchanged (a court opened again, its card and its page
+      // asking alike): nothing to write, so the whole app is not redrawn for nothing as the page opens.
+      if (s.courtExtras && ids.every((id) => id in s.courtFacts && id in s.courtFollows && id in s.courtNow) && Object.entries(regulars).every(([id, r]) => same(s.courtRegulars[id], r))) return;
+      quietly(() => setState((prev) => ({
         ...prev,
         courtExtras: true,
         courtFacts: { ...Object.fromEntries(ids.map((id) => [id, demoFactsFor(id)])), ...prev.courtFacts },
         courtFollows: { ...Object.fromEntries(ids.map((id) => [id, demoFollowsFor(id)])), ...prev.courtFollows },
         courtNow: { ...Object.fromEntries(ids.map((id) => [id, demoNow(id, s)])), ...prev.courtNow },
         courtRegulars: { ...prev.courtRegulars, ...regulars },
-      }));
+      })));
       return;
     }
     const [facts, follows, now, regulars] = await Promise.all([
@@ -153,15 +165,23 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     ]);
     if (stateRef.current.currentUserId !== me) return;
     const any = !!(facts || follows || now || regulars);
-    setState((prev) => ({
+    // The answer is what is already held (a court opened again, its card and its page asking alike): nothing is written.
+    const held = stateRef.current;
+    const regularsOf = (id: string) => regulars?.find((r) => r.courtId === id)?.userIds ?? [];
+    if (held.courtExtras === (any ? true : held.courtExtras ?? false)
+      && (!facts || facts.every((r) => same(held.courtFacts[r.courtId], r)))
+      && (!follows || follows.every((r) => same(held.courtFollows[r.courtId], r)))
+      && (!now || nowKeepingTill(held.courtNow, now).every((r) => same(held.courtNow[r.courtId], r)))
+      && (!regulars || ids.every((id) => same(held.courtRegulars[id], regularsOf(id))))) return;
+    quietly(() => setState((prev) => ({
       ...prev,
       // All four missing: a database without migration 60, so its buttons stay hidden.
       courtExtras: any ? true : prev.courtExtras ?? false,
       courtFacts: facts ? { ...prev.courtFacts, ...byCourt(facts) } : prev.courtFacts,
       courtFollows: follows ? { ...prev.courtFollows, ...byCourt(follows) } : prev.courtFollows,
       courtNow: now ? { ...prev.courtNow, ...byCourt(nowKeepingTill(prev.courtNow, now)) } : prev.courtNow,
-      courtRegulars: regulars ? { ...prev.courtRegulars, ...Object.fromEntries(ids.map((id) => [id, regulars.find((r) => r.courtId === id)?.userIds ?? []])) } : prev.courtRegulars,
-    }));
+      courtRegulars: regulars ? { ...prev.courtRegulars, ...Object.fromEntries(ids.map((id) => [id, regularsOf(id)])) } : prev.courtRegulars,
+    })));
   }, [stateRef, setState, live]);
 
   const loadMyCourtReview = useCallback(async (courtId: string) => {
@@ -364,7 +384,10 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     if (!rings || stateRef.current.currentUserId !== me) return;
     // This box's rings replace the ones it had; rings elsewhere stay for the other map.
     const inBox = (r: CourtRing) => r.lat >= box.minLat && r.lat <= box.maxLat && r.lng >= box.minLng && r.lng <= box.maxLng;
-    setState((prev) => ({ ...prev, courtRings: [...prev.courtRings.filter((r) => !inBox(r) && !rings.some((x) => x.courtId === r.courtId)), ...rings].slice(-400) }));
+    const next = (prev: CourtRing[]) => [...prev.filter((r) => !inBox(r) && !rings.some((x) => x.courtId === r.courtId)), ...rings].slice(-400);
+    // The same rings as already held (the map moved a little, the card asked again): nothing is written, nothing redraws.
+    if (same(next(stateRef.current.courtRings), stateRef.current.courtRings)) return;
+    setState((prev) => ({ ...prev, courtRings: next(prev.courtRings) }));
   }, [stateRef, setState, live]);
 
   const loadCourtsToday = useCallback(async (courtIds: string[]) => {
@@ -377,6 +400,9 @@ export function useCourtLife<S extends CourtLifeState & Reads>(
     const s = stateRef.current;
     const rows = live(me) ? await remote.fetchCourtsToday(ids, since, day).catch(() => null) : demoToday(ids, s.posts, s.hitRequests, seeing(s), since, day);
     if (!rows || stateRef.current.currentUserId !== me) return;
+    // The same answer as already held (asked again every 5 minutes, and by each card): nothing is written, nothing redraws.
+    const heldToday = stateRef.current.courtToday;
+    if (ids.every((id) => same(heldToday[id], rows.find((r) => r.courtId === id)))) return;
     // The courts asked about take this answer (none: nothing public there today); the rest keep theirs.
     setState((prev) => {
       const next = { ...prev.courtToday };

@@ -2,9 +2,12 @@ import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { LESS_AI, LESS_AI_ROUND2 } from '@/theme/look';
 import Animated, { Easing, FadeOut, LayoutAnimationConfig, LinearTransition } from 'react-native-reanimated';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+// The navigation library's own focus hook, as the router's is underneath, minus the router's wait of one draw for the
+// navigation to load (for a redirect before it exists): a page always has its navigation, and the wait drew it twice as it opened.
+import { useFocusEffect } from 'expo-router/build/react-navigation/core/useFocusEffect';
 import { show as showToast } from '@/lib/toast';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
@@ -426,11 +429,41 @@ export default function Notifications() {
   };
   // A tag of you, for an alert about one: what it was, from your side, and whether you have answered.
   const tagFor = (group: Group) => (group.kind === 'session-tag' ? sessionTags.find((t) => t.taggedId === currentUserId && t.sessionId === group.targetId) : undefined);
+  // Rows glide and fade only around a row you answer yourself (a follow request, a tag, a group invite). On the phone a glide
+  // started by anything else (rows coming in or put together again, a refresh, the page covered or left mid-move)
+  // could leave rows drawn over each other with a gap below them, and a row that went drawn on over its
+  // replacement (owner, Nov 4: "Fix this"), so there rows simply take their new places. The website glides as before.
+  const [closing, setClosing] = useState(false);
+  const closingEnd = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (closingEnd.current) clearTimeout(closingEnd.current); }, []);
+  const glide = Platform.OS === 'web' || closing;
+  const takeAway = (go: () => void) => {
+    if (Platform.OS === 'web') { go(); return; }
+    // The rows are handed their glide with this draw; the row goes a frame later, once they have it.
+    setClosing(true);
+    requestAnimationFrame(go);
+    if (closingEnd.current) clearTimeout(closingEnd.current);
+    closingEnd.current = setTimeout(() => setClosing(false), 700);
+  };
+  // The same for an answer that waits on the server (a tag, a group invite): the glide is handed out a frame before
+  // the answer goes, held while it is out, and ends 700 ms after it is back, so its row closes up as smoothly as today.
+  const holdGlide = async () => {
+    if (Platform.OS === 'web') return;
+    if (closingEnd.current) clearTimeout(closingEnd.current);
+    setClosing(true);
+    await new Promise<void>((done) => requestAnimationFrame(() => done()));
+  };
+  const releaseGlide = () => {
+    if (Platform.OS === 'web') return;
+    if (closingEnd.current) clearTimeout(closingEnd.current);
+    closingEnd.current = setTimeout(() => setClosing(false), 700);
+  };
   // Which tag is being answered, and which way, so only that button spins.
   const [answering, setAnswering] = useState<{ id: string; accept: boolean } | null>(null);
   const answerTag = async (tagId: string, accept: boolean) => {
     if (answering) return;
     setAnswering({ id: tagId, accept });
+    await holdGlide();
     try {
       await actions.respondSessionTag(tagId, accept);
       showToast(accept ? { title: 'Tag accepted', body: 'It’s in your sessions too.', icon: 'checkmark-circle-outline' } : { title: 'Tag declined', body: 'Your name stays off their posts.', icon: 'close-circle-outline' });
@@ -438,6 +471,7 @@ export default function Notifications() {
       showToast({ title: 'That didn’t go through', body: e instanceof Error ? e.message : undefined, icon: 'alert-circle-outline' });
     }
     setAnswering(null);
+    releaseGlide();
   };
   // Join / Not now on an invite to a group, while it is still open (migration 181).
   const inviteFor = (group: Group) => (group.kind === 'group-invite' ? feedGroupInvites.find((i) => i.groupId === group.targetId) : undefined);
@@ -445,8 +479,10 @@ export default function Notifications() {
   const answerInvite = async (groupId: string, name: string, accept: boolean) => {
     if (answeringInvite) return;
     setAnsweringInvite({ id: groupId, accept });
+    await holdGlide();
     const out = await actions.answerFeedGroupInvite(groupId, accept);
     setAnsweringInvite(null);
+    releaseGlide();
     if (out.ok) toastForJoin(out.outcome, name);
     else showToast({ title: out.error, icon: out.word === 'group_limit' ? 'people-outline' : 'alert-circle-outline', long: out.word === 'group_limit' });
   };
@@ -711,7 +747,7 @@ export default function Notifications() {
         />
       ) : (
         // The rows there on opening are simply there; one that goes (a request declined) fades out
-        // and the rest close up smoothly (Oct 22 sweep).
+        // and the rest close up smoothly (Oct 22 sweep). Only then on the phone (see takeAway).
         <LayoutAnimationConfig skipEntering>
         <View style={styles.list}>
           {shownGroups.flatMap((group, index) => {
@@ -747,11 +783,11 @@ export default function Notifications() {
             // takes it over without it fading out and jumping back in.
             return [
               heading ? (
-                <Animated.View key={`heading:${heading}`} layout={ROW_GLIDE} exiting={ROW_OUT}>
+                <Animated.View key={`heading:${heading}`} layout={glide ? ROW_GLIDE : undefined} exiting={glide ? ROW_OUT : undefined}>
                   <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text>
                 </Animated.View>
               ) : null,
-              <Animated.View key={group.key} layout={ROW_GLIDE} exiting={ROW_OUT}>
+              <Animated.View key={group.key} layout={glide ? ROW_GLIDE : undefined} exiting={glide ? ROW_OUT : undefined}>
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
                 accessibilityLabel={`${who} ${verb}`}
@@ -886,9 +922,9 @@ export default function Notifications() {
                     </View>
                   ) : null}
                   {group.kind === 'follow-request' && followRequests.some((r) => r.fromId === first && r.toId === currentUserId) ? (
-                    <Animated.View exiting={ROW_OUT} style={styles.askRow}>
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => actions.acceptFollowRequest(first)} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Accept</Text></Pressable>
-                      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${nameOf(first)}`} onPress={() => actions.declineFollowRequest(first)} style={({ pressed }) => [styles.decline, pressed && styles.buttonPressed]}><Text style={styles.declineText}>Decline</Text></Pressable>
+                    <Animated.View exiting={glide ? ROW_OUT : undefined} style={styles.askRow}>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Accept ${nameOf(first)}`} onPress={() => takeAway(() => actions.acceptFollowRequest(first))} style={({ pressed }) => [styles.accept, pressed && styles.buttonPressed]}><Text style={styles.acceptText}>Accept</Text></Pressable>
+                      <Pressable accessibilityRole="button" accessibilityLabel={`Decline ${nameOf(first)}`} onPress={() => takeAway(() => actions.declineFollowRequest(first))} style={({ pressed }) => [styles.decline, pressed && styles.buttonPressed]}><Text style={styles.declineText}>Decline</Text></Pressable>
                     </Animated.View>
                   ) : null}
                 </View>
