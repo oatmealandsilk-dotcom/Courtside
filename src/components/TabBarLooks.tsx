@@ -569,9 +569,17 @@ export const LookBar = React.memo(function LookBar({
     }
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
+  // Apple's motion (B): its bubble past the bar's edges, in the look the live glass shows. Laid between the live
+  // glass and its row (Face's `bubbleLayer`), so its edge passes under every tab's icon, word and count, as under the +.
+  const bubbleOn = newBar && kind === APPLE_KIND && litPlace >= 0 && !calm && !look.m.split;
+  const livePalette = themes[theme];
+  const bubble = bubbleLook(livePalette, (glassHeld ?? glassLook) || inkOn(livePalette.bg) === '#FFFFFF');
+  const bubbleEl = bubbleOn && lensGeo ? (
+    <LensBubble geo={lensGeo} fallback={litPlace} frost={bubble.frost} frostAlpha={bubble.frostAlpha} rim={bubble.rim} glint={bubble.glint} inset={look.m.lensInset} st={look.st} />
+  ) : null;
   const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
     <Face palette={palette} look={look} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace} kind={kind} onWordWidth={live && newBar ? onWordWidth : undefined}
-      onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
+      onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} bubbleLayer={live ? bubbleEl : null} />
   );
   // The swipe followed: the two copies' faces, built once as a swipe starts carrying the look (and
   // again only if what they show changes), so the redraw that turns the glass leaves them be.
@@ -593,10 +601,6 @@ export const LookBar = React.memo(function LookBar({
     return { transform: [{ translateY: y }, { scale: 1 + APPLE_BAR_SWELL * Math.max(0, Math.min(1.1, lensLift.value)) }] };
   }, [swells]);
   const st = look.st;
-  // Apple's motion (B): its bubble past the bar's edges, in the look the live glass shows.
-  const bubbleOn = newBar && kind === APPLE_KIND && litPlace >= 0 && !calm && !look.m.split;
-  const livePalette = themes[theme];
-  const bubble = bubbleLook(livePalette, (glassHeld ?? glassLook) || inkOn(livePalette.bg) === '#FFFFFF');
   return (
     <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[st.float, { bottom: newBar ? newBarFoot(bottom) : bottom }, outerStyle]}>
       <Animated.View style={[st.pillWrap, newBar ? newTuck : tuckStyle]}>
@@ -626,11 +630,6 @@ export const LookBar = React.memo(function LookBar({
           <FadeSpot store={activeFade} render={(layers) => layers.map((layer) => (
             <FadeCopy key={layer.key} op={layer.op} style={StyleSheet.absoluteFill} testID="theme-fade-bar">{face(themes[layer.theme], false)}</FadeCopy>
           ))} />
-          {/* Apple's motion (B): the part of the swelling bubble past the bar's edges, over everything (beside the glass, never holding it). */}
-          {bubbleOn && lensGeo ? (
-            <LensBubble geo={lensGeo} fallback={litPlace} frost={bubble.frost} frostAlpha={bubble.frostAlpha} rim={bubble.rim} glint={bubble.glint} inset={look.m.lensInset}
-              plus={PLUS_LOOK === 'icon' ? null : { brand: livePalette.brand, ink: livePalette.brandInk, size: look.m.plusW, icon: look.m.plusIcon }} st={st} />
-          ) : null}
         </View>
         </SlideOver>
       </Animated.View>
@@ -866,7 +865,7 @@ function lensBox(geo: LensGeo, at: number, trailAt: number, lift: number, calm: 
   const grow = calm ? 0 : liftBy * h * lift;
   const squashBy = SQUASHES[kind] ?? 0;
   const squash = squashBy > 0 && !calm ? 1 - squashBy * Math.min(1, stretch / stretchMax) : 1;
-  // (Apple's widens more than it grows taller; it passes under the round +, which LensBubble lays back on top.)
+  // (Apple's widens more than it grows taller; it passes under the round + and the row, which Face lays over it.)
   return { mid: (left + right) / 2, w: right - left + grow * (LIFT_WIDE[kind] ?? 1), h: (h + grow) * squash, lean: lead - back };
 }
 
@@ -915,18 +914,15 @@ const BUBBLE_BAND = 13;
 /**
  * Apple's bubble outside the bar (Nov 2, B; barLens's 'apple' motion): while a finger is down on the bar, the
  * capsule swells past the bar's top and bottom edges, as iOS 26's own tab bar does. The bar's glass clips what
- * is drawn in it (StretchLens), so this draws the rest, laid over the bar (beside the glass, never holding it):
- * its milky body only where it stands out past the bar's edges (two strips, so it never covers an icon), its
- * edge and its highlight. Seen only while lifted (its strength follows the lift); never on a fading copy.
+ * is drawn in it (StretchLens), so this draws the rest, laid over the bar's glass (beside it, never holding it)
+ * and under the bar's row (Face's `bubbleLayer`): its milky body only where it stands out past the bar's edges (two
+ * strips), its edge and its highlight. Under the row, its edge passes under every icon, word and count and under
+ * the round + (Nov 3 review: drawn over the row, it cut a white line through the next tab's word and icon and
+ * frosted Profile's count; the + alone was laid back on top before), as Apple's passes under its own round button.
+ * Seen only while lifted (its strength follows the lift); never on a fading copy.
  */
-const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostAlpha, rim, glint, inset, plus, st }: {
+const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostAlpha, rim, glint, inset, st }: {
   geo: LensGeo; fallback: number; frost: string; frostAlpha: number; rim: string; glint: string;
-  /**
-   * The round + laid back over the bubble while it is lifted (Nov 3: it passes under the +, as Apple's bubble passes
-   * under its own round button; drawn over it, its edge cut a line across the +). The same + in the same place, drawn
-   * only while lifted (never faded: there or not), never pressed (the live + under it takes the touch).
-   */
-  plus: { brand: string; ink: string; size: number; icon: number } | null;
   /** How far in from the bar's top and bottom the capsule sits at rest (the bar's edges, from it). */
   inset: number; st: BarStyles;
 }) {
@@ -939,7 +935,6 @@ const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostA
   const { startCap, endCap, middle, rimStart, rimEnd, glintMove } = usePieceStyles(box, h);
   const frostShow = useAnimatedStyle(() => ({ opacity: frostAlpha * Math.max(0, Math.min(1, lensLift.value)) }), [frostAlpha]);
   const edgeShow = useAnimatedStyle(() => ({ opacity: Math.max(0, Math.min(1, lensLift.value)) }));
-  const plusShow = useAnimatedStyle(() => ({ opacity: lensLift.value > 0.01 ? 1 : 0 }));
   // The body's three pieces, in the capsule's own place (a strip past the top edge, or past the bottom one, shows its part).
   const body = (
     <>
@@ -968,14 +963,6 @@ const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostA
         </Animated.View>
         <Animated.View style={[st.stretchCap, { width: GLINT_W, height: GLINT_H, borderRadius: GLINT_H / 2, backgroundColor: glint }, glintMove]} />
       </Animated.View>
-      {plus && geo.plusAt >= 0 ? (
-        <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, plusShow]}>
-          <View style={[st.plus, st.plusOver, { left: geo.plusAt - plus.size / 2, top: (h - plus.size) / 2, width: plus.size, height: plus.size, borderRadius: plus.size / 2, backgroundColor: plus.brand }]}>
-            <BrandWash radius={plus.size / 2} />
-            <Ionicons name="add" size={plus.icon} color={plus.ink} />
-          </View>
-        </Animated.View>
-      ) : null}
     </>
   );
 });
@@ -998,6 +985,102 @@ function MagnifyIf({ on, place, fallback, children }: { on: boolean; place: numb
   if (!on) return children;
   return <Magnify place={place} fallback={fallback}>{children}</Magnify>;
 }
+
+/** An Ionicons icon's character in its font (what Ionicons itself draws). */
+function glyphOf(name: keyof typeof Ionicons.glyphMap): string {
+  const g = Ionicons.glyphMap[name];
+  return typeof g === 'number' ? String.fromCodePoint(g) : g;
+}
+
+/** How far into its magnify (0 to 1) a tab's icon and word hand over to their sharp copy (CrispMagnify). */
+const CRISP_FROM = 0.02;
+/**
+ * The live bar's Magnify (Nov 3 review, B): a picture of the icon and word scaled up (Magnify's) looks soft, so
+ * under the lifted bubble a copy of them is drawn at the magnified size itself, frame by frame, as the bubble
+ * swells and travels (its icon, word, Profile's count and their gap each that much bigger: never a scaled picture),
+ * centred where the tab's own are. At rest, and for the first hair of a swell, the tab's own icon and word
+ * (`children`) exactly as they were. The two never show at once (one is there, the other not, in the same frame,
+ * never faded); neither holds glass. The copy's colours follow the capsule as the tab's own do, and it settles and
+ * lets its word go as the bar ducks, by as much.
+ */
+const CrispMagnify = React.memo(function CrispMagnify({ place, fallback, m, st, icon, activeIcon, label, idleIcon, idleLabel, lit, badge, badgeBg, badgeInk, children }: {
+  place: number; fallback: number; m: BarSpec; st: BarStyles;
+  icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap; label: string;
+  idleIcon: string; idleLabel: string; lit: string;
+  /** Profile's count as shown ('9+' past nine), or none. */
+  badge: string | null; badgeBg: string; badgeInk: string;
+  children: React.ReactNode;
+}) {
+  // How lit the tab is (`near`, litNear's) and how magnified (`f`, 0 to 1). Each value read here by name (see Lens).
+  const mag = useDerivedValue(() => {
+    const o = lensAt.value;
+    const at = lensRides.value ? Math.max(0, Math.min(3, lensRow.value)) + lensLag.value : o < 0 ? fallback : o;
+    const near = litNear(place, at, lensTrail.value);
+    return { f: Math.max(0, Math.min(1, lensLift.value)) * near, near };
+  }, [place, fallback]);
+  const own = useAnimatedStyle(() => ({ opacity: mag.value.f > CRISP_FROM ? 0 : 1 }));
+  const shown = useAnimatedStyle(() => ({ opacity: mag.value.f > CRISP_FROM ? 1 : 0 }));
+  // The copy's measures: the tab's own, `k` times (held at the tab's own while it is not shown, so it is not redrawn).
+  const gap = st.inner.gap;
+  const iconSize = m.icon;
+  const { top: bTop, left: bLeft, minWidth: bMin, height: bH, borderRadius: bR, paddingHorizontal: bPad } = st.badge;
+  const { fontSize: bFont, lineHeight: bLine } = st.badgeText;
+  const { fontSize: wordSize, letterSpacing: wordTrack } = st.label;
+  const inner = useAnimatedStyle(() => {
+    const v = mag.value;
+    const k = v.f > CRISP_FROM ? 1 + MAGNIFY * v.f : 1;
+    return { gap: gap * k, transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, m.settle]) * k * PX) / PX }] };
+  }, [gap, m.settle]);
+  const glyphIdle = useAnimatedStyle(() => {
+    const v = mag.value;
+    if (v.f <= CRISP_FROM) return { fontSize: iconSize, opacity: 1 };
+    return { fontSize: iconSize * (1 + MAGNIFY * v.f), opacity: 1 - v.near };
+  }, [iconSize]);
+  const glyphLit = useAnimatedStyle(() => {
+    const v = mag.value;
+    if (v.f <= CRISP_FROM) return { fontSize: iconSize, opacity: 0 };
+    return { fontSize: iconSize * (1 + MAGNIFY * v.f), opacity: v.near };
+  }, [iconSize]);
+  const badgeBox = useAnimatedStyle(() => {
+    const v = mag.value;
+    const k = v.f > CRISP_FROM ? 1 + MAGNIFY * v.f : 1;
+    return { top: bTop * k, left: bLeft * k, minWidth: bMin * k, height: bH * k, borderRadius: bR * k, paddingHorizontal: bPad * k };
+  }, [bTop, bLeft, bMin, bH, bR, bPad]);
+  const badgeWord = useAnimatedStyle(() => {
+    const v = mag.value;
+    const k = v.f > CRISP_FROM ? 1 + MAGNIFY * v.f : 1;
+    return { fontSize: bFont * k, lineHeight: bLine * k };
+  }, [bFont, bLine]);
+  const word = useAnimatedStyle(() => {
+    const v = mag.value;
+    const on = v.f > CRISP_FROM;
+    const k = on ? 1 + MAGNIFY * v.f : 1;
+    return {
+      fontSize: wordSize * k, letterSpacing: wordTrack * k,
+      color: interpolateColor(on ? v.near : 0, [0, 1], [idleLabel, lit]),
+      opacity: interpolate(barCompact.value, [0, 0.6], [1, 0], 'clamp'),
+    };
+  }, [wordSize, wordTrack, idleLabel, lit]);
+  return (
+    <View>
+      <Animated.View style={own}>{children}</Animated.View>
+      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.crisp, shown]}>
+        <Animated.View style={[st.inner, inner]}>
+          <View>
+            <Animated.Text allowFontScaling={false} selectable={false} style={[st.glyph, { color: idleIcon }, glyphIdle]}>{glyphOf(icon)}</Animated.Text>
+            <Animated.Text allowFontScaling={false} selectable={false} style={[st.glyph, st.glyphOver, { color: lit }, glyphLit]}>{glyphOf(activeIcon)}</Animated.Text>
+            {badge !== null ? (
+              <Animated.View style={[st.badge, { backgroundColor: badgeBg }, badgeBox]}>
+                <Animated.Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: badgeInk }, badgeWord]}>{badge}</Animated.Text>
+              </Animated.View>
+            ) : null}
+          </View>
+          <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, word]}>{label}</Animated.Text>
+        </Animated.View>
+      </Animated.View>
+    </View>
+  );
+});
 
 /**
  * The new bar's lens (Oct 28, owner: "Also the animation is inportant for tab switching", then "The new
@@ -1228,7 +1311,7 @@ function PopWrap({ active, pop, children }: { active: boolean; pop: boolean; chi
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth }: {
+function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth, bubbleLayer }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; look: BarLook; calm: boolean; media: boolean; glassMedia: boolean; live: boolean;
   /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
@@ -1244,6 +1327,8 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   kind: number;
   /** The live new bar's: each tab's word as drawn, for its capsule's width. */
   onWordWidth?: (route: string, w: number) => void;
+  /** Apple's motion (B), the live bar's lifted bubble (LensBubble): laid between the glass and the row. */
+  bubbleLayer?: React.ReactNode;
 }) {
   const { m, st, fresh } = look;
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
@@ -1300,6 +1385,30 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
 
   // The new bar with its lens: each tab's colour follows the capsule (FollowGlyph, FollowWord).
   const follow = fresh && !!lens;
+  // Apple's motion (B) on the live bar: the magnified icon and word drawn sharp (CrispMagnify).
+  const crisp = live && follow && kind === APPLE_KIND;
+  // A tab's icon (with Profile's count) and word.
+  const tabBody = (item: LookItem, active: boolean) => (
+    <Animated.View style={[st.inner, settle]}>
+      <View>
+        {follow ? (
+          <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm && kind !== APPLE_KIND} />
+        ) : (
+          <TabGlyph name={active ? item.activeIcon : item.icon} size={m.icon} color={active ? litOf(item.route) : idleIcon} active={active} pop={fresh && live && !calm} />
+        )}
+        {item.route === 'profile' && profileAlerts > 0 ? (
+          <View style={[st.badge, { backgroundColor: c.danger }]}>
+            <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+          </View>
+        ) : null}
+      </View>
+      {follow ? (
+        <FollowWord place={lensPlace(item.route)} fallback={lensFallback} idle={idleLabel} lit={litOf(item.route)} style={st.label} fade={labelFade} onWidth={onWordWidth ? (w) => onWordWidth(item.route, w) : undefined}>{item.label}</FollowWord>
+      ) : (
+        <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
+      )}
+    </Animated.View>
+  );
   const row: React.ReactNode[] = [];
   items.forEach((item, index) => {
     if (index === 2 && !m.split) row.push(plus);
@@ -1329,28 +1438,18 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
         >
           {/* What the tutorial lights: the tab's width, the icon and its word's height, as today. */}
           <View ref={live ? tourRef(item.route) : undefined} style={st.target}>
-            {/* Apple's motion (B): the icon and word a size bigger under the lifted bubble; otherwise exactly as before. */}
-            <MagnifyIf on={follow && kind === APPLE_KIND} place={lensPlace(item.route)} fallback={lensFallback}>
-            <Animated.View style={[st.inner, settle]}>
-              <View>
-                {follow ? (
-                  <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm && kind !== APPLE_KIND} />
-                ) : (
-                  <TabGlyph name={active ? item.activeIcon : item.icon} size={m.icon} color={active ? litOf(item.route) : idleIcon} active={active} pop={fresh && live && !calm} />
-                )}
-                {item.route === 'profile' && profileAlerts > 0 ? (
-                  <View style={[st.badge, { backgroundColor: c.danger }]}>
-                    <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
-                  </View>
-                ) : null}
-              </View>
-              {follow ? (
-                <FollowWord place={lensPlace(item.route)} fallback={lensFallback} idle={idleLabel} lit={litOf(item.route)} style={st.label} fade={labelFade} onWidth={onWordWidth ? (w) => onWordWidth(item.route, w) : undefined}>{item.label}</FollowWord>
-              ) : (
-                <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
-              )}
-            </Animated.View>
-            </MagnifyIf>
+            {/* Apple's motion (B): the icon and word a size bigger under the lifted bubble (on the live bar drawn at the
+                magnified size, CrispMagnify, so they stay sharp); otherwise exactly as before. */}
+            {crisp ? (
+              <CrispMagnify place={lensPlace(item.route)} fallback={lensFallback} m={m} st={st} icon={item.icon} activeIcon={item.activeIcon} label={item.label} idleIcon={idleIcon} idleLabel={idleLabel} lit={litOf(item.route)}
+                badge={item.route === 'profile' && profileAlerts > 0 ? (profileAlerts > 9 ? '9+' : String(profileAlerts)) : null} badgeBg={c.danger} badgeInk={c.onDanger}>
+                {tabBody(item, active)}
+              </CrispMagnify>
+            ) : (
+              <MagnifyIf on={follow && kind === APPLE_KIND} place={lensPlace(item.route)} fallback={lensFallback}>
+                {tabBody(item, active)}
+              </MagnifyIf>
+            )}
           </View>
         </Pressable>
         </FeedHold>
@@ -1371,25 +1470,29 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   const lensGlint = withAlpha(c.onMedia, lensDark || darkPage ? 0.5 : 0.95);
   // Apple's motion (B): the clear-glass brightness the swelling bubble fills with (bubbleLook, LookBar's bubble too).
   const bubble = bubbleLook(c, lensDark || darkPage);
+  const lensEl = lens ? (fresh
+    ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} rim={lensRim} glint={lensGlint} body={bubble.frost} bodyAlpha={bubble.frostAlpha} kind={kind} drive={live} calm={calm} st={st} />
+    : <Lens geo={lens} fallback={lensFallback} fill={lensFill} glass={live && liquidGlass && LENS_LOOK === 'glass'} glassDark={lensDark || darkPage} st={st} />) : null;
+  // The hairline edge is a plain layer of its own, never a border on the glass, and above the
+  // Create box's veil, so the bar keeps its own edge while the box is up.
+  const rimEl = <View pointerEvents="none" style={[st.rim, { borderColor: line }]} />;
+  // The new bar's bright inner edge, as Apple's glass has its own (so not there on iOS 26).
+  const glintEl = fresh && !liquidGlass ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null;
+  // While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
+  // gets dark grey"): a veil of its own ground, not the page's dim, steps the four tabs back so the
+  // lit + stands out, and catches a tap there to close the box. Only this child fades, never the glass.
+  const veilEl = live ? (
+    <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[st.veil, { backgroundColor: withAlpha(ground, BAR_RECEDE) }, veilStyle]}>
+      <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
+    </Animated.View>
+  ) : null;
   const inside = (
     <>
-      {lens ? (fresh
-        ? <StretchLens geo={lens} fallback={lensFallback} color={tint.color} alpha={tint.alpha} rim={lensRim} glint={lensGlint} body={bubble.frost} bodyAlpha={bubble.frostAlpha} kind={kind} drive={live} calm={calm} st={st} />
-        : <Lens geo={lens} fallback={lensFallback} fill={lensFill} glass={live && liquidGlass && LENS_LOOK === 'glass'} glassDark={lensDark || darkPage} st={st} />) : null}
+      {lensEl}
       {row}
-      {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
-          Create box's veil, so the bar keeps its own edge while the box is up. */}
-      <View pointerEvents="none" style={[st.rim, { borderColor: line }]} />
-      {/* The new bar's bright inner edge, as Apple's glass has its own (so not there on iOS 26). */}
-      {fresh && !liquidGlass ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
-      {/* While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
-          gets dark grey"): a veil of its own ground, not the page's dim, steps the four tabs back so the
-          lit + stands out, and catches a tap there to close the box. Only this child fades, never the glass. */}
-      {live ? (
-        <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[st.veil, { backgroundColor: withAlpha(ground, BAR_RECEDE) }, veilStyle]}>
-          <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      ) : null}
+      {rimEl}
+      {glintEl}
+      {veilEl}
     </>
   );
   // A fading copy is never glass: it is the one thing here whose opacity moves, and glass under a
@@ -1425,6 +1528,26 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades. The new bar's is lighter.
+  if (bubbleLayer) {
+    // Apple's motion (B), the live bar: the glass holds only its capsule; the lifted bubble (LensBubble) is laid
+    // over the glass, and the row (with its edge and the Create box's veil, in the same order) over the bubble, on
+    // a plain layer of the glass's own shape (never glass, never faded), so the bubble's edge passes under every
+    // icon, word, count and the round + instead of drawing a line through them (Nov 3 review).
+    return (
+      <>
+        <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={st.pill}>
+          {lensEl}
+        </Glass>
+        {bubbleLayer}
+        <View pointerEvents="box-none" style={[st.pill, st.rowOver]}>
+          {row}
+          {rimEl}
+          {glintEl}
+          {veilEl}
+        </View>
+      </>
+    );
+  }
   return (
     <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={st.pill}>
       {inside}
@@ -1585,12 +1708,18 @@ function barStyles(m: BarSpec, fresh: boolean) {
     rimLine: { borderTopWidth: 1, borderBottomWidth: 1 },
     rimHalf: { overflow: 'hidden' },
     rimRing: { position: 'absolute', top: 0, left: 0, borderWidth: 1 },
-    plusOver: { position: 'absolute' },
     // Apple's bubble (LensBubble): a strip past the bar's top or bottom edge, and the capsule's own place inside it.
     bubbleBand: { position: 'absolute', left: 0, right: 0, overflow: 'hidden' },
     // Apple's lifted bubble stands off the bar: a soft shadow cast by its edge.
     bubbleEdge: { shadowColor: '#000000', shadowOpacity: 0.22, shadowRadius: 6, shadowOffset: { width: 0, height: 1.5 } },
     bubbleInBand: { position: 'absolute', left: 0, right: 0 },
+    // Apple's motion (B), the live bar: the row on a plain layer of the glass's own shape, laid over the glass and the bubble.
+    rowOver: { position: 'absolute', top: 0, left: 0, right: 0 },
+    // CrispMagnify's copy: centred on the tab's own icon and word, with room all round for it at its biggest; its icon
+    // the tab's own (Ionicons' font, as Ionicons draws it), the lit one laid over the plain one.
+    crisp: { position: 'absolute', top: -40, bottom: -40, left: -60, right: -60, alignItems: 'center', justifyContent: 'center' },
+    glyph: { fontFamily: 'ionicons', fontWeight: 'normal', fontStyle: 'normal' },
+    glyphOver: { position: 'absolute', top: 0, left: 0 },
   });
 }
 type BarStyles = ReturnType<typeof barStyles>;
