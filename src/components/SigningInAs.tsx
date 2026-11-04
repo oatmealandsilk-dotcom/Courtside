@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
@@ -59,7 +58,6 @@ export function Lingering<T>({ value, children }: { value: T | null | undefined;
  * list you just tapped.
  */
 export function SigningInAs({ name, handle, avatarUrl, seed }: { name: string; handle?: string; avatarUrl?: string; seed: string }) {
-  useSimLoop('SigningInAs', true);
   const styles = useThemedStyles(styleDefinitions);
   const spin = useSpin();
   return (

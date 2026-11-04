@@ -1,4 +1,3 @@
-import { SIM_DRIVER, simLog } from '@/lib/simDriver';
 import { tapFastOn } from '@/features/navigation/pressV2';
 import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
@@ -1961,7 +1960,6 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     // An Instant seen here counts on its views, as in the full-screen viewer
     // (once per person; your own is left out of its count anyway).
     const count = () => {
-      if (SIM_DRIVER) simLog(`[feed-view] ${showing.type}`);
       if (showing.type === 'hit') { if (showing.story.authorId !== currentUserId) actions.markStoryViewed(showing.story.id); return; }
       if (showing.type === 'tip' || showing.type === 'challenge' || showing.type === 'act-start' || showing.type === 'caught-up') return;
       actions.recordView(

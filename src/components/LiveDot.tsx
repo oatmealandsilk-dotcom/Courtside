@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
@@ -14,7 +13,6 @@ import { reduceMotionEnabled } from '@/lib/useReducedMotion';
  * person. Still for anyone who has asked for less motion.
  */
 export function LiveDot({ size = 8, color }: { size?: number; color?: string }) {
-  useSimLoop('LiveDot', useLoopsRun());
   useTheme();
   const ink = color ?? colors.brand;
   const ring = useSharedValue(0);

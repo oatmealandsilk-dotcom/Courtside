@@ -1,5 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
-import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { PlayerName } from '@/components/PlayerName';
@@ -72,7 +70,6 @@ function inSection(p: Post, section: string): boolean {
 }
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
-  useSimTrace(previewSection ? 'ProfilePreview' : 'Profile');
   const styles = useThemedStyles(styleDefinitions);
  const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
@@ -451,7 +448,6 @@ function MenuCard({ open, onGone, style, children }: { open: boolean; onGone: ()
  * its place but empty. The real numbers and words then fill in.
  */
 function ProfileSkeleton({ name, avatarUrl, seed }: { name?: string; avatarUrl?: string; seed: string }) {
-  useSimLoop('ProfileSkeleton', true);
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The banner's own colours (the session box's: cream here, the court colour on the city courts), so it fades into the real one in place.

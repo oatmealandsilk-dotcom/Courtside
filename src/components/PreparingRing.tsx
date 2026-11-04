@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
@@ -17,7 +16,6 @@ const STROKE = 3;
  * full circle the moment the video lands.
  */
 export function PreparingRing({ label, note, done = false, size = 68 }: { label?: string; note?: string; done?: boolean; /** The ring's width; small enough to stand in for an icon. */ size?: number }) {
-  useSimLoop('PreparingRing', true);
   const styles = useThemedStyles(styleDefinitions);
   const SIZE = size;
   const R = (SIZE - STROKE) / 2;

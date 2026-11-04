@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import { PRESS_DIM } from '@/theme/press';
 import React, { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -193,7 +192,6 @@ function SoftSweep() {
 
 /** The band itself, made once the card's width is known (so nothing in its motion is guessed at first). */
 function SweepBand({ width }: { width: number }) {
-  useSimLoop('SweepBand', true);
   const { theme, dark } = useTheme();
   // The map's own road colour, the lightest thing on its ground; on a light page that is white over a near-white
   // ground, so it is held stronger there than on a dark one, where the same colour stands out far more.

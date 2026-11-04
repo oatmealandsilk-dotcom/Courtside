@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import { useTheme } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -11,7 +10,6 @@ import { colors } from '@/theme';
  * faint ring, in the theme colour. Sits over a clip while it fetches its first frame.
  */
 export function CourtSpinner({ size = 40, ink }: { size?: number; ink?: string }) {
-  useSimLoop('CourtSpinner', true);
   useTheme();
   // Two arcs on one faint ring, turning at different speeds: a bright lead
   // and a softer tail that keeps catching up with it. It reads as motion with

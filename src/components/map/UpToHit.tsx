@@ -1,4 +1,3 @@
-import { useSimLoop } from '@/lib/simTrace';
 import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -142,7 +141,6 @@ function Tick({ left, size, color }: { left: SharedValue<number>; size: number; 
  * (Reduce Motion: the light simply rests over it). Gone with a short fade of its own.
  */
 function FindingBand({ width, radius }: { width: number; radius: number }) {
-  useSimLoop('FindingBand', true);
   const styles = useThemedStyles(styleDefinitions);
   const { dark } = useTheme();
   const reduce = useReducedMotion();

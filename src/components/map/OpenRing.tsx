@@ -1,4 +1,3 @@
-import { simLog } from '@/lib/simDriver';
 import React, { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
@@ -67,7 +66,6 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
   }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (open && !reduce && !rests) {
-      simLog('[loop] OpenRing beat on');
       beat.value = 0;
       beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
     } else {
