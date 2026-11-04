@@ -6,6 +6,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
 import { Avatar, selfTint } from '@/components/ui';
+import { CornerWash } from '@/components/ui/CornerWash';
 import { CardWash, boxLook, cardLook, quietBox, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
@@ -19,7 +20,6 @@ import { usePerWeek } from '@/features/players/usePerWeek';
 import { isOfficial } from '@/features/players/official';
 import { OfficialCheck } from '@/components/OfficialCheck';
 import { useTheme } from '@/theme/ThemeProvider';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SCALES } from '@/features/players/ratingScales';
 import { colors, font, inkOn, lift } from '@/theme';
 import { TextScale } from '@/theme/textScale';
@@ -111,7 +111,7 @@ function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | '
       <SwipePressable accessibilityRole="link" accessibilityLabel={spoken} onPress={onPress} style={({ pressed }) => [styles.banner, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift], pressed && styles.pressed]}>
         <CardWash look={look} radius={corner(16)} />
         {/* A: a soft wash of the court's pale accent from the top corner (the quiet box's own tint), fading to the card by the middle. */}
-        {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+        {pop === 'A' || pop === 'D' ? <CornerWash from={look.tint ?? colors.brandDim} to={colors.surface} radius={corner(16)} /> : null}
         {/* B: a green edge down the left side. C: a thin green line along the top. */}
         {pop === 'B' ? <View pointerEvents="none" style={[styles.popEdge, { backgroundColor: colors.brand }]} /> : null}
         {pop === 'C' ? <View pointerEvents="none" style={[styles.popTop, { backgroundColor: colors.brand }]} /> : null}
@@ -147,7 +147,7 @@ function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | '
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.card, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, fullPop && [{ borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: corner(16) }, lift, styles.popLift]]}>
       <CardWash look={look} radius={fullPop ? corner(16) : corner(20)} />
       {/* Clean: the same soft wash as the Profile tab's banner, so the two cards match (Oct 29, owner). */}
-      {fullPop ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+      {fullPop ? <CornerWash from={look.tint ?? colors.brandDim} to={colors.surface} radius={corner(16)} /> : null}
       <View style={styles.identity}>
         {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
             a deeper shade of the card instead (a brand disc would vanish into it). */}
@@ -224,7 +224,7 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   return (
     <View accessible accessibilityRole="summary" accessibilityLabel={spoken} style={[styles.setupCard, draft.roomy && styles.setupRoomy, { backgroundColor: look.fill, borderColor: look.border }, look.dark && styles.bordered, (pop === 'A' || pop === 'D') && { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }, (pop === 'C' || pop === 'D') && [lift, styles.popLift]]}>
       <CardWash look={look} radius={corner(16)} />
-      {pop === 'A' || pop === 'D' ? <LinearGradient pointerEvents="none" colors={[look.tint ?? colors.brandDim, colors.surface]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: corner(16) }]} /> : null}
+      {pop === 'A' || pop === 'D' ? <CornerWash from={look.tint ?? colors.brandDim} to={colors.surface} radius={corner(16)} /> : null}
       <View style={styles.setupTop}>
         {/* The disc and its initials change apart: a new disc colour grows in over the old; new initials swap on the same disc. */}
         <View>

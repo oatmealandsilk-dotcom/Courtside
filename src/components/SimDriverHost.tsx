@@ -6,6 +6,7 @@ import { simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '
 import { startJsGapWatch } from '@/lib/simTrace';
 import { forceBarLook } from '@/features/navigation/barLens';
 import { forceTapFast } from '@/features/navigation/pressV2';
+import { forceDrawFast } from '@/lib/drawFast';
 import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { launchLookAtOpen, launchLookNow, launchLookStatus } from '@/lib/launchLook';
@@ -74,6 +75,12 @@ export function SimDriverHost() {
       simAction('tapfast', (q) => {
         forceTapFast(q.on === '1' ? true : q.on === '0' ? false : null);
         simLog(`[sim] tapfast ${q.on ?? 'switch'}`);
+      }),
+      // Gradients drawn by iOS itself (lib/drawFast: the page wash, the Tennis card) off or on for this build, or back to
+      // TAP_FAST, so one build is photographed both ways for the side-by-side look check.
+      simAction('drawfast', (q) => {
+        forceDrawFast(q.on === '1' ? true : q.on === '0' ? false : null);
+        simLog(`[sim] drawfast ${q.on ?? 'switch'}`);
       }),
       // The admin bar look (barLens: the lens and the new bar) off or on for this build, or back to the switch.
       simAction('barlook', (q) => {

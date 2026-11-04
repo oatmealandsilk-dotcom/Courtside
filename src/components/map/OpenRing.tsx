@@ -1,9 +1,11 @@
 import React, { useEffect, useRef } from 'react';
-import { View } from 'react-native';
+import { Animated as RNAnimated, Easing as RNEasing, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import Animated, { Easing, cancelAnimation, useAnimatedProps, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useLoopsRun } from '@/lib/loopShown';
+import { useNativeLoop } from '@/lib/nativeLoop';
+import { useTapFast } from '@/features/navigation/pressV2';
 
 import { useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
@@ -19,6 +21,9 @@ const BEAT = 2800;
 const REACH = { full: 0.85, small: 0.4 } as const;
 /** Reduce Motion: the halo held still, this big. */
 const REST = { full: 1.3, small: 1.2 } as const;
+/** The breath's curve (the map pins' beat). */
+const BREATH_EASE = [0.22, 0.61, 0.36, 1] as const;
+const BREATH_NATIVE = RNEasing.bezier(...BREATH_EASE);
 
 /**
  * A face wearing the Open to hit look, the same one the map's pins wear:
@@ -50,6 +55,10 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
   const prev = useRef(open);
   // Out of sight (its section or tab slid away, or a page opened over it), the breath rests (see useLoopsRun).
   const rests = !useLoopsRun();
+  // Taps answering sooner (admins first): the breath runs on React Native's native driver (lib/nativeLoop), which
+  // moves the halo without redrawing the app every frame. The same curve, timing, reach and fade.
+  const native = useTapFast() && !reduce;
+  const nativeBeat = useNativeLoop(native && open && !rests, BEAT, BREATH_NATIVE);
 
   useEffect(() => {
     const changed = prev.current !== open;
@@ -65,14 +74,14 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
     }
   }, [open, reduce]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (open && !reduce && !rests) {
+    if (open && !reduce && !rests && !native) {
       beat.value = 0;
-      beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }), -1, false);
+      beat.value = withRepeat(withTiming(1, { duration: BEAT, easing: Easing.bezier(...BREATH_EASE) }), -1, false);
     } else {
       cancelAnimation(beat);
       if (rests) beat.value = 0;
     }
-  }, [open, reduce, rests]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [open, reduce, rests, native]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const ring = useAnimatedProps(() => (reduce
     // Reduce Motion: the whole ring fades in and out, never drawn round.
@@ -90,12 +99,24 @@ export function OpenRing({ open, size, hairline = false, halo = 'full', children
     const t = beat.value;
     return { opacity: on.value * 0.45 * Math.max(0, 1 - t / 0.7), transform: [{ scale: 1 + reach * t }] };
   }, [reduce, reach, rest]);
+  // The native breath: the switch's fade (on) on a holder, the breath itself on the halo inside it (on × breath, as before).
+  const onFade = useAnimatedStyle(() => ({ opacity: on.value }));
   const face = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
   const inner = size + GAP * 2;
 
   return (
     <View style={{ width: box, height: box, alignItems: 'center', justifyContent: 'center' }}>
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.open }, breath]} />
+      {native ? (
+        <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: inner, height: inner }, onFade]}>
+          <RNAnimated.View
+            style={{
+              width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.open,
+              opacity: nativeBeat.interpolate({ inputRange: [0, 0.7, 1], outputRange: [0.45, 0, 0] }),
+              transform: [{ scale: nativeBeat.interpolate({ inputRange: [0, 1], outputRange: [1, 1 + reach] }) }],
+            }}
+          />
+        </Animated.View>
+      ) : <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: inner, height: inner, borderRadius: inner / 2, backgroundColor: colors.open }, breath]} />}
       {hairline ? <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: box - 2, height: box - 2, borderRadius: box / 2, borderWidth: 1.5, borderColor: colors.borderStrong }, line]} /> : null}
       <Svg pointerEvents="none" width={box} height={box} style={{ position: 'absolute', transform: [{ rotate: '-90deg' }] }}>
         <ACircle cx={box / 2} cy={box / 2} r={r} fill="none" stroke={colors.open} strokeWidth={RING} strokeLinecap="round" strokeDasharray={`${lap} ${lap}`} animatedProps={ring} />

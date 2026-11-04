@@ -17,6 +17,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { FirstReveal } from '@/features/feed/FirstReveal';
+import { useClipOffscreen } from '@/lib/clipOffscreen';
 
 const CARD = 168;
 
@@ -48,6 +49,8 @@ function nameOf(c: FollowedCourt, from: LatLng | null): string {
  * Nothing until you follow one. `from` is where distances are measured from.
  */
 export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null; /** On the start page: its place in the first showing's stagger (FirstReveal). */ revealOrder?: number }) {
+  // Cards scrolled well off the side leave iOS's screen list (lib/clipOffscreen, TAP_FAST, iOS).
+  const clip = useClipOffscreen();
   const styles = useThemedStyles(styleDefinitions);
   const { followedCourts, courtExtras, courtNow, currentUserId, actions } = useApp();
   useEffect(() => { if (currentUserId) void actions.loadFollowedCourts(); }, [currentUserId, actions]);
@@ -58,7 +61,7 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
         <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Your courts</Text>
         <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{followedCourts.length === 1 ? '1 court' : `${followedCourts.length} courts`}</Text>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row} removeClippedSubviews={clip}>
         {followedCourts.map((c) => {
           const name = nameOf(c, from);
           const news = whatsNew(c);

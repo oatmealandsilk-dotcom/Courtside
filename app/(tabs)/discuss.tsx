@@ -15,6 +15,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { slidePagesTo } from '@/features/navigation/pageSlide';
 import { pressV2On, tapFastOn, useTapFast } from '@/features/navigation/pressV2';
+import { useClipOffscreen } from '@/lib/clipOffscreen';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
@@ -137,6 +138,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // leaves out what is never in sight. The real tab under the thread already loaded it all (Nov 3 review).
   const tapFast = useTapFast();
   const pictureOnly = !!previewSection && tapFast;
+  // Sections and threads scrolled well out of sight leave iOS's screen list (lib/clipOffscreen, TAP_FAST, iOS).
+  const clip = useClipOffscreen();
   const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded, pinnedQuestion, remoteLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made
@@ -739,6 +742,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
+        {/* Everything under the map, in one container whose sections leave iOS's screen list while scrolled well out of
+            sight (clipOffscreen, TAP_FAST, iOS): the same gap between them, the map and the search box kept outside it. */}
+        <View removeClippedSubviews={clip} style={styles.underMap}>
         {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
             only when the phone already knows you're standing at one; one tap, nothing shared before it. */}
         {currentUser && pane === 'players' && !search ? <AtCourtPrompt active={!previewSection || section === 'players'} /> : null}
@@ -946,6 +952,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             ) : null}
           </View>
         </Fold>}
+        </View>
       </View> : <>
       {/* A tap anywhere outside the open sort menu closes it (under the controls, over the threads). */}
       {sortOpen ? <Pressable accessibilityLabel="Close sort menu" onPress={() => setSortOpen(false)} style={[StyleSheet.absoluteFill, { zIndex: 4, elevation: 4 }]} /> : null}
@@ -1022,7 +1029,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           action={{ label: 'Ask a question', onPress: () => router.push(topic === 'all' ? '/ask' : { pathname: '/ask', params: { topic } }) }}
         />
       ) : (
-        <View style={styles.list}>
+        <View removeClippedSubviews={clip} style={styles.list}>
           {pinned ? (
             <View style={styles.pinned}>
               <View style={styles.pinnedLabel} accessible accessibilityLabel={LESS_AI_DISCUSS ? 'Question of the week' : 'Question of the week, this week'}>
@@ -1190,6 +1197,8 @@ const styleDefinitions = StyleSheet.create({
   placeTile: { width: 52, height: 52, borderRadius: corner(14), backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
   courtNameMatch: { ...font('700'), color: colors.text },
   sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', zIndex: 5 },
+  // The sections under the map: the players pane's own gap between them (clipOffscreen).
+  underMap: { gap: 12 },
   sortCount: { ...typography.small, color: colors.textFaint },
   sortButton: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill },
   sortButtonText: { ...typography.smallStrong, color: colors.textMuted },

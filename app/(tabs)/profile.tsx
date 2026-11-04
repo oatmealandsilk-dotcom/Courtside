@@ -57,6 +57,9 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { PROFILE_TABS_LOOK, ProfileTabRow } from '@/features/profile/ProfileTabRow';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { SwipePressable } from '@/components/SwipePressable';
+import { useTapFast } from '@/features/navigation/pressV2';
+import { PRESS_DIM } from '@/theme/press';
 
 /** Edit profile and Share stand a touch taller than other compact rows (owner, Oct 24). */
 const tallButton = { minHeight: buttonShape.profileHeight };
@@ -71,6 +74,10 @@ function inSection(p: Post, section: string): boolean {
 
 function Profile({ previewSection }: { previewSection?: string } = {}) {
   const styles = useThemedStyles(styleDefinitions);
+  // A grid tile and the follower counts show the press look every other card has (taps answering sooner, admins
+  // first): dimmed like Saved's tiles, the look waiting a beat on a page that swipes (SwipePressable).
+  const tapFast = useTapFast();
+  const Tile = tapFast ? SwipePressable : Pressable;
  const { currentUser: user, posts, questions, answers, saved, notifications, detectedActivities, currentUserId, savedAccounts, coaches, coachingRequests, coachQuestions, actions, feedGroups, feedGroupInvites, blockedIds, isGuest } = useApp();
  // A coach's studio, first of your links: what is waiting there, or how far setup has got.
  const myCoach = coaches.find((c) => c.userId === currentUserId);
@@ -162,7 +169,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
    // Pinned first, then newest.
    const items = (selected === 'Tagged' ? posts.filter(p => isTaggedIn(p, user.id) && !p.archived && !p.groupId) : own.filter(p => inSection(p, selected))).sort((a,b) => Number(!!b.pinned) - Number(!!a.pinned) || Date.parse(b.createdAt)-Date.parse(a.createdAt));
    return <View style={{ minHeight: 320, backgroundColor: colors.bg }}>
-     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Activity' ? 'activity' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+     <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>{items.map(p => <Tile key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && selected !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: user.id, post: p.id, set: selected === 'Clips' ? 'clips' : selected === 'Activity' ? 'activity' : selected === 'Tagged' ? 'tagged' : 'own' } })} style={({ pressed }) => [styles.tile, { width: tileW, height: tileH }, pressed && tapFast && { opacity: PRESS_DIM }]}>
        <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
        {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120}/> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW}/> : null}
        {/* Several photos: the stacked mark, where a clip has its play mark. */}
@@ -175,7 +182,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
        {p.pinned && selected !== 'Tagged' ? <TilePin /> : null}
        {/* Taken down by an admin (migration 108): still yours to see, dimmed and marked; nobody else sees it. */}
        {p.removed ? <TileRemoved /> : null}
-     </Pressable>)}</View>
+     </Tile>)}</View>
      {/* Never a dead end (Oct 5): your own grid, empty, offers the first clip, unless the
          "Make your first move" card at the top of the page is already asking for it. */}
      {!items.length && <EmptyState title={selected==='Tagged'?'No tagged posts yet':selected==='Activity'?'No activity yet':`No ${selected.toLowerCase()} yet`} body={selected==='Tagged' ? 'Posts you’re tagged in will appear here.' : selected==='Activity' ? 'Hits and matches you post with their stats show up here.' : 'Your shared moments will appear here.'} action={selected==='Tagged' || !hasMoved ? undefined : selected==='Activity' ? { label: 'Log a session', onPress: () => router.push('/log-session') } : { label: 'Post your first clip', onPress: () => router.push('/compose') }}/>}
@@ -184,7 +191,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  // The four grids are rebuilt only when the posts change, so switching
  // section (which re-renders this page) does not rebuild every tile.
  // eslint-disable-next-line react-hooks/exhaustive-deps
- const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
+ const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved, tapFast]);
  // A guest (guest mode, Oct 17): your profile is what an account is for.
  if (!user && isGuest) {
    return <Screen memoryKey="profile" title="Profile" wash right={<GuestSignIn />}><View style={{ paddingTop: spacing.lg }}><GuestJoinCard title="Your tennis, in one place" body="Make a free account to post your clips, log your sessions and find people to hit with." /></View></Screen>;
@@ -241,9 +248,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
      <View style={styles.followRow}>
        {([['followers', user.followers, 'followers'], ['following', user.following, 'following']] as const).map(([tab, n, label], i) => <React.Fragment key={tab}>
          {i > 0 && <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followDot}>·</Text>}
-         <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab } })} style={styles.follow}>
+         <Tile accessibilityRole="link" accessibilityLabel={`${n} ${label}`} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab } })} style={({ pressed }) => [styles.follow, pressed && tapFast && { opacity: PRESS_DIM }]}>
            <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.followCount}>{compactNumber(Number(n))}</Text><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}> {label}</Text>
-         </Pressable>
+         </Tile>
        </React.Fragment>)}
      </View>
      <View style={styles.buttons}><View style={{ flex: 1 }}><Button label="Edit profile" variant="secondary" onPress={() => router.push('/edit-profile')} full size="sm" style={tallButton}/></View><View style={{ flex: 1 }}><Button label="Share" variant="secondary" onPress={share} full size="sm" style={tallButton}/></View></View>

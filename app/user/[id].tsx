@@ -50,6 +50,8 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { SwipePressable } from '@/components/SwipePressable';
+import { PRESS_DIM } from '@/theme/press';
 
 // Activity (Oct 24, owner): their posts that carry a hit's or a match's numbers, as on your own profile.
 const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
@@ -130,6 +132,9 @@ function UserProfile() {
   const quick = usePressV2();
   // Taps answering sooner (pressV2's TAP_FAST, admins first): Message, below.
   const tapFast = useTapFast();
+  // A grid tile shows the press look every other card has (taps answering sooner, admins first): dimmed like Saved's
+  // tiles, the look waiting a beat in the grids that swipe (SwipePressable). The follower counts dim too.
+  const Tile = tapFast ? SwipePressable : Pressable;
   const arrived = useArrived(quick);
   const built = useRef(new Set<(typeof TABS)[number]>()).current;
   built.add(tab);
@@ -146,7 +151,7 @@ function UserProfile() {
         <View style={{ minHeight: 320 }}>
             <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
               {items.map((p) => (
-                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: userId ?? '', post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+                <Tile key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: userId ?? '', post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={({ pressed }) => [styles.tile, { width: tileW, height: tileH }, pressed && tapFast && { opacity: PRESS_DIM }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                   {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
                   {/* Several photos: the stacked mark, where a clip has its play mark. */}
@@ -158,7 +163,7 @@ function UserProfile() {
                   {p.pinned && section !== 'Tagged' ? <TilePin /> : null}
                   {/* Taken down (migration 108): only admins ever see someone else's, dimmed and marked. */}
                   {p.removed ? <TileRemoved /> : null}
-                </Pressable>
+                </Tile>
               ))}
             </View>
             {!lists[section].length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
@@ -168,7 +173,7 @@ function UserProfile() {
   // Built again only when what they show changes, not on every redraw of the page (a Follow, the menu).
   const panes = useMemo(
     () => TABS.map((section) => (built.has(section) ? grid(section) : <View style={{ minHeight: 320 }} />)),
-    [lists, builtKey, arrived, firstTiles, gridW, tileW, tileH, styles, userId], // eslint-disable-line react-hooks/exhaustive-deps
+    [lists, builtKey, arrived, firstTiles, gridW, tileW, tileH, styles, userId, tapFast], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   if (!user) {
@@ -275,7 +280,7 @@ function UserProfile() {
           {([['followers', user.followers + quick.delta, 'followers'], ['following', user.following, 'following']] as const).map(([which, n, label], i) => (
             <React.Fragment key={which}>
               {i > 0 && <Text style={styles.followDot}>·</Text>}
-              <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} disabled={locked} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab: which } })} style={styles.follow}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`${n} ${label}`} disabled={locked} onPress={() => router.push({ pathname: '/follows', params: { userId: user.id, tab: which } })} style={({ pressed }) => [styles.follow, pressed && tapFast && { opacity: PRESS_DIM }]}>
                 <Text style={styles.followCount}>{compactNumber(Number(n))}</Text><Text style={styles.meta}> {label}</Text>
               </Pressable>
             </React.Fragment>

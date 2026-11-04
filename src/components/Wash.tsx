@@ -5,6 +5,7 @@ import Svg, { Defs, LinearGradient, RadialGradient, Rect, Stop } from 'react-nat
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
 import { WASH_SCALE } from '@/theme/look';
+import { rgbaOf, useDrawFast } from '@/lib/drawFast';
 
 interface Props {
   /** How tall the wash is before it has faded out entirely. */
@@ -49,6 +50,24 @@ const ellipse = (cx: number, cy: number, rx: number, ry: number) => (Platform.OS
   : { cx, cy, rx, ry });
 
 const rgb = (g: Glow) => `rgb(${g[0]}, ${g[1]}, ${g[2]})`;
+const rgba = (g: Glow, a: number) => `rgba(${g[0]}, ${g[1]}, ${g[2]}, ${+a.toFixed(4)})`;
+
+/**
+ * The same wash as the SVG below, as React Native's own gradients (a style's backgroundImage, drawn by iOS's
+ * compositor): the same two oval glows (centre and size as shares of the box, as the SVG's 0-100 box stretched to
+ * the page) under the same fade into the page. The first layer is drawn on top, so the fade comes first and the
+ * left glow, drawn first in the SVG, last. Null when the colour to fade into is not written out (keeps the SVG).
+ */
+function washLayers(l: Glow, r: Glow, strength: number, to: string): string | null {
+  const clear = rgbaOf(to, 0);
+  const full = rgbaOf(to, 1);
+  if (!clear || !full) return null;
+  return [
+    `linear-gradient(180deg, ${clear} 35%, ${full} 100%)`,
+    `radial-gradient(60% 64% at 94% 12%, ${rgba(r, r[3] * strength)} 0%, ${rgba(r, 0)} 100%)`,
+    `radial-gradient(62% 58% at 6% 58%, ${rgba(l, l[3] * strength)} 0%, ${rgba(l, 0)} 100%)`,
+  ].join(', ');
+}
 
 /**
  * The waitlist page's wash: one glow low on the left, one high on the right,
@@ -75,7 +94,11 @@ function WashDrawing({ height = 320, strength: given = 1, style, fade: to, theme
   // its id and would not repaint one whose colours changed under the same
   // name, which left the old court's glow on the new court's page.
   const id = `${useId().replace(/[^a-zA-Z0-9]/g, '')}${theme.replace(/-/g, '')}`;
+  // iOS's own gradient layers instead of the SVG painted by hand (lib/drawFast: TAP_FAST, iOS; never a court's swatch).
+  const fast = useDrawFast() && !swatch;
   if (strength <= 0) return null;
+  const layers = fast ? washLayers(l, r, strength, to) : null;
+  if (layers) return <View pointerEvents="none" style={[styles.wrap, { height }, style, { experimental_backgroundImage: layers }]} />;
   return (
     <View pointerEvents="none" style={[styles.wrap, { height }, style]}>
       <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none">

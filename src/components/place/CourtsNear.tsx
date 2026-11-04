@@ -26,6 +26,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { useClipOffscreen } from '@/lib/clipOffscreen';
 
 /**
  * Which card Courts near you shows (Oct 24, owner: "Ok do map peek, but fix the wording under"):
@@ -131,6 +132,8 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
   /** The gap above it in its list, which the held strip takes with it as it folds shut. */ foldGap?: number;
   /** False in a picture of the page sliding in (a swipe back from a thread): only maps kept from before show, nothing new is drawn mid-swipe. */ pictures?: boolean;
 }) {
+  // Cards scrolled well off the side leave iOS's screen list (lib/clipOffscreen, TAP_FAST, iOS).
+  const clip = useClipOffscreen();
   const styles = useThemedStyles(styleDefinitions);
   const LOOK = usePeekLook();
   // The soft light behind this section (CourtsGlow; Oct 26, owner: "only under courts near you").
@@ -206,6 +209,7 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
       </View>
       {/* Starts and ends at the page's margins like the topic strip (the pane clips anything wider), so a card cut at the edge says there are more; a drag along it never turns the page. */}
       <ScrollView nativeID="courts-near-strip" horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}
+        removeClippedSubviews={clip}
         onLayout={LOOK === 'now' ? undefined : (e) => sawTo(e.nativeEvent.layout.width)}
         onScroll={LOOK === 'now' ? undefined : (e) => sawTo(e.nativeEvent.contentOffset.x + e.nativeEvent.layoutMeasurement.width)}
         scrollEventThrottle={LOOK === 'now' ? undefined : 100}>

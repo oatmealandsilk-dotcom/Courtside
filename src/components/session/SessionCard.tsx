@@ -4,7 +4,6 @@ import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
 import Svg, { Line } from 'react-native-svg';
-import { LinearGradient } from 'expo-linear-gradient';
 
 import { BrandMark } from '@/components/BrandMark';
 import { ShadedMark } from '@/components/share/ShadedMark';
@@ -24,6 +23,7 @@ import { Pop } from './Pop';
 import { ScoreBoard, boardSides, boxInks } from './ScoreBoard';
 import { ZoneBar } from './ZoneBar';
 import type { CountPlay } from './countFormat';
+import { CornerWash } from '@/components/ui/CornerWash';
 
 /** Someone on the session as the card shows them; `pending` only ever on the author's own preview. */
 export type CardPerson = { id: ID; handle: string; name: string; role: 'opponent' | 'partner'; pending?: boolean };
@@ -344,7 +344,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
   if (look.wash === 'soft') {
     return (
       <>
-        <LinearGradient pointerEvents="none" colors={[look.tint ?? look.fill, look.fill]} locations={[0, 0.75]} start={{ x: 0, y: 0 }} end={{ x: 0.9, y: 1 }} style={[StyleSheet.absoluteFill, { borderRadius: radius }]} />
+        <CornerWash from={look.tint ?? look.fill} to={look.fill} radius={radius} />
         {rim}
       </>
     );

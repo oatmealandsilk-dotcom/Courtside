@@ -23,6 +23,8 @@ import { openPlayer } from '@/features/navigation/openPlayer';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_ROUND2 } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { useTapFast } from '@/features/navigation/pressV2';
+import { PRESS_DIM } from '@/theme/press';
 
 /**
  * The post itself, at the top of its comments: who, the whole caption (never
@@ -49,6 +51,8 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
     const t = setInterval(() => tick((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, [story]);
+  // The author's face shows the press look every other link has (taps answering sooner, admins first).
+  const tapFast = useTapFast();
   if (!author || (!post && !story)) return null;
 
   const words = post
@@ -88,7 +92,7 @@ export function CommentsCaption({ kind, id }: { kind: 'post' | 'hit'; id: string
   return (
     <View>
       <View style={styles.row}>
-        <Pressable accessibilityRole="link" accessibilityLabel={`Open ${author.name}'s profile`} onPress={openProfile}>
+        <Pressable accessibilityRole="link" accessibilityLabel={`Open ${author.name}'s profile`} onPress={openProfile} style={({ pressed }) => (pressed && tapFast ? { opacity: PRESS_DIM } : null)}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={40} ring={author.isCoach} />
         </Pressable>
         <View style={styles.column}>

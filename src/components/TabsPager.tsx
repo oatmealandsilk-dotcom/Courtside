@@ -14,7 +14,7 @@ import { catchUpNow } from '@/theme/catchUp';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { setPendingTab } from '@/features/navigation/pendingTab';
 import { askedSection, requestSection } from '@/features/navigation/swipeOrder';
-import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
+import { isPageSwipeLocked, notePageDragging, pageDraggingUI, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { followRow } from '@/features/navigation/barShrink';
@@ -260,7 +260,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
         settled.value = false;
         // The bar's lens (features/navigation/barLens) rides the row with the finger, from where it stands.
         lensRide(position.value);
-        runOnJS(setPageDragging)(true);
+        pageDraggingUI.value = true;
+        runOnJS(notePageDragging)(true);
       })
       .onUpdate((e) => {
         'worklet';
@@ -288,7 +289,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
         else dest = Math.round(from);
         dest = Math.max(0, Math.min(LAST, dest));
         settled.value = true;
-        runOnJS(setPageDragging)(false);
+        pageDraggingUI.value = false;
+        runOnJS(notePageDragging)(false);
         runOnJS(heading)(dest);
         const distance = Math.abs(position.value - dest);
         const ms = 120 + Math.min(160, distance * 220);
@@ -306,7 +308,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
         if (!settled.value) {
           settled.value = true;
           const dest = Math.max(0, Math.min(LAST, Math.round(position.value)));
-          runOnJS(setPageDragging)(false);
+          pageDraggingUI.value = false;
+          runOnJS(notePageDragging)(false);
           runOnJS(heading)(dest);
           position.value = withTiming(dest, { duration: 160, easing: EASE }, (finished) => {
             if (finished) runOnJS(land)(dest);

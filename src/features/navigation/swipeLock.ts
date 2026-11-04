@@ -20,7 +20,19 @@ export const subscribePageSwipeLock = (fn: () => void) => { lockListeners.add(fn
  */
 let dragging = false;
 const dragListeners = new Set<() => void>();
+/**
+ * The same, on the animation thread (Nov 4, owner: "Swiping back is super laggy", "Our app just runs so laggy"): with
+ * taps answering sooner, the pages' scrollers stand down from this (an animated prop), set by the tab and section
+ * swipes in the very frame they take the finger. Before, every page and section scroller on the app (five or more)
+ * was drawn again by React for it, at the start and at the end of every swipe, and that redraw held the swipe.
+ */
+export const pageDraggingUI = makeMutable(false);
 export const setPageDragging = (on: boolean) => {
+  pageDraggingUI.value = on;
+  notePageDragging(on);
+};
+/** For a swipe that already set pageDraggingUI on the animation thread (the tab and section swipes): the rest only. */
+export const notePageDragging = (on: boolean) => {
   if (dragging === on) return;
   dragging = on;
   dragListeners.forEach((fn) => fn());

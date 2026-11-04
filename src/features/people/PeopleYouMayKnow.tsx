@@ -13,6 +13,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { PRESS_DIM } from '@/theme/press';
 import { TextScale } from '@/theme/textScale';
+import { useClipOffscreen } from '@/lib/clipOffscreen';
 
 /*
  * People you may know (owner, Oct 28, picking B1 of the mutuals mocks: "I
@@ -101,6 +102,8 @@ export function usePeopleYouMayKnow() {
 export type PymkModel = NonNullable<ReturnType<typeof usePeopleYouMayKnow>>;
 
 export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
+  // Cards scrolled well off the side leave iOS's screen list (lib/clipOffscreen, TAP_FAST, iOS).
+  const clip = useClipOffscreen();
   useTheme();
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, followRequests, currentUserId } = useApp();
@@ -117,7 +120,7 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
         </Pressable>
       </View>
       {/* The row runs to the screen's edges, so a card half in view says "there is more this way". */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.strip}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.strip} removeClippedSubviews={clip}>
         {cards.map(({ user, followsYou, line, second }) => {
           const following = followingIds.includes(user.id);
           const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);

@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, cancelAnimation, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from 'react-native-reanimated';
 
 import { PAGE_GUTTER, activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
-import { isPageSwipeLocked, sectionPan, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
+import { isPageSwipeLocked, notePageDragging, pageDraggingUI, sectionPan, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { useResponsive } from '@/lib/useResponsive';
 import { useTabActive } from '@/features/navigation/tabFocus';
 import { SwipeArea } from '@/features/navigation/swipePress';
@@ -257,7 +257,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       'worklet';
       settled.value = true;
       sectionPan.value = false;
-      runOnJS(setPageDragging)(false);
+      pageDraggingUI.value = false;
+      runOnJS(notePageDragging)(false);
       const c = config.value;
       const at = position.value;
       let dest = Math.round(at);
@@ -328,7 +329,8 @@ export function SectionPager({ index, panes, onIndex, onLand, progress, depth = 
       settled.value = false;
       driving.value = true;
       sectionPan.value = true;
-      runOnJS(setPageDragging)(true);
+      pageDraggingUI.value = true;
+      runOnJS(notePageDragging)(true);
       // A pane that is a scroller of its own (fill) needs no unclipping: no render at the start of a swipe.
       if (!config.value.fill) runOnJS(setMoving)(true);
     })

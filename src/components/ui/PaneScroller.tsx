@@ -1,14 +1,14 @@
 import { PaneShownContext } from '@/lib/loopShown';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Keyboard, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
-import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedProps, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import * as haptics from '@/lib/haptics';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_SPIN, PULL_RETURN, WEB_PULL_LINE, fingerFor, pullFetch, pullRowLift, pullRowOpacity, rubberBand } from '@/lib/pullRefresh';
-import { isPageDragging, sectionPan, subscribePageDragging } from '@/features/navigation/swipeLock';
+import { isPageDragging, pageDraggingUI, sectionPan, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measurable } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
@@ -19,6 +19,11 @@ import { useResponsive } from '@/lib/useResponsive';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale, colors, spacing, typography } from '@/theme';
 import { scrollMemory } from './scrollMemory';
+import { useTapFast } from '@/features/navigation/pressV2';
+
+/** Taps answering sooner: the scroller hears a swipe on the animation thread instead (see dragUI). */
+const noDragSubscribe = () => () => {};
+const notDragging = () => false;
 
 const IOS = Platform.OS === 'ios';
 const WEB = Platform.OS === 'web';
@@ -79,7 +84,11 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
   const { isPhone } = useResponsive();
   const tabActive = useTabActive();
   // While a sideways swipe is under way, this scroller stands down.
-  const swiping = useSyncExternalStore(subscribePageDragging, isPageDragging, () => false);
+  // With taps answering sooner (iOS): from the animation thread (swipeLock's pageDraggingUI, an animated prop) in the
+  // swipe's own frame, with no redraw of this page by React at the start and the end of every swipe.
+  const dragUI = useTapFast() && Platform.OS === 'ios';
+  const swiping = useSyncExternalStore(dragUI ? noDragSubscribe : subscribePageDragging, dragUI ? notDragging : isPageDragging, () => false);
+  const dragProps = useAnimatedProps(() => ({ scrollEnabled: !pageDraggingUI.value }));
   const scroller = useRef<ScrollView | null>(null);
   // Captured once, so the starting place is set before the first paint rather than scrolled to after.
   const initial = useRef(scrollMemory.get(memoryKey) ?? 0);
@@ -356,7 +365,8 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
           testID={`pane-${memoryKey}`}
           contentContainerStyle={[styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
           onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
-          scrollEnabled={!swiping}
+          scrollEnabled={dragUI ? undefined : !swiping}
+          animatedProps={dragUI ? dragProps : undefined}
           // A tap on an iPhone's clock takes the section on show to its top; only one scroller may say yes.
           scrollsToTop={active && tabActive}
           directionalLockEnabled

@@ -30,6 +30,7 @@ import { font } from '@/theme';
 import { tagsNotInCaption } from '@/features/feed/tags';
 import { TextScale } from '@/theme/textScale';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { useTapFast } from '@/features/navigation/pressV2';
 
 /*
  * Every word over a clip or an Instant follows one set of rules, the ones
@@ -201,16 +202,21 @@ function Who({ author, onAuthor, newHere = false, place = '', court }: { author:
   // Unknown until measured, and the tag stays out of sight until then, so it never flashes in the wrong place.
   // The copy lays itself out again whenever the handle or the width changes, so the answer stays current.
   const [tagFits, setTagFits] = useState<boolean | null>(null);
+  // The face and the handle show the press look every other link has (taps answering sooner, admins first).
+  const tapFast = useTapFast();
+  const [handleDown, setHandleDown] = useState(false);
   return (
     <>
       <View style={styles.who}>
         {/* The face opens the profile too; the handle beside it is the one a screen reader hears. */}
-        <Pressable accessible={false} importantForAccessibility="no" onPress={onAuthor} hitSlop={4} style={styles.avatarRing}>
+        <Pressable accessible={false} importantForAccessibility="no" onPress={onAuthor} hitSlop={4} style={({ pressed }) => [styles.avatarRing, pressed && tapFast && styles.pressed]}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
         </Pressable>
         <View style={styles.whoWords}>
-          <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}${streakWords(streak)}, open profile`} onPress={onAuthor} style={styles.nameRow} hitSlop={NAME_SLOP}>
-            <Text style={styles.handle} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text><OfficialCheck userId={author.id} size={13} onMedia style={styles.flame} />
+          <Pressable accessibilityRole="link" accessibilityLabel={`${author.name}${newHere ? ', new to CourtSide' : ''}${streakWords(streak)}, open profile`} onPress={onAuthor} onPressIn={tapFast ? () => setHandleDown(true) : undefined} onPressOut={tapFast ? () => setHandleDown(false) : undefined} style={styles.nameRow} hitSlop={NAME_SLOP}>
+            {/* The handle dims while pressed (taps answering sooner), not the whole row: the level pill beside it is glass,
+                and nothing over glass may change its see-through. */}
+            <Text style={[styles.handle, handleDown && tapFast && styles.pressed]} numberOfLines={1} maxFontSizeMultiplier={MAX_GROW}>{author.handle}</Text><OfficialCheck userId={author.id} size={13} onMedia style={styles.flame} />
             <StreakFlame days={streak} onMedia textStyle={EDGE_SMALL} maxFontSizeMultiplier={MAX_GROW} style={styles.flame} />
             <LevelPill profile={author.profile} userId={author.id} small onMedia style={styles.badge} />
             {newHere && tagFits ? <View style={styles.badge}><NewHereTag onMedia short /></View> : null}

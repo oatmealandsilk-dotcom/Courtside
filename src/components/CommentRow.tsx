@@ -24,6 +24,8 @@ import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { useCommentsV2 } from '@/features/feed/commentsV2';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { useTapFast } from '@/features/navigation/pressV2';
+import { PRESS_DIM } from '@/theme/press';
 
 /**
  * A comment's first few words, in quotes, so a card about it says which one
@@ -98,6 +100,8 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const liked = !!currentUserId && comment.likedBy.includes(currentUserId);
   const streak = shownStreak(who, currentUserId);
   const openProfile = () => { if (who) openPlayer(who.id, currentUserId); };
+  // The author's face shows the press look every other link has (taps answering sooner, admins first).
+  const tapFast = useTapFast();
   // A photo in the comment opens to the whole screen; a tap anywhere puts it away.
   const [viewing, setViewing] = useState(false);
   // The photo opened larger is a dark room: the clock and battery go light over it, and on Android
@@ -147,7 +151,7 @@ export function CommentRow({ comment, big = false, reply = false, onPressBody, o
   const holdHint = deleteOwn ? 'Hold to delete it' : moderate ? (comment.removed ? 'Hold to restore it' : 'Hold to take it down') : deleteTheirs ? 'Hold to delete or report it' : report ? 'Hold to report' : undefined;
   return (
     <View style={[styles.row, reply && { marginLeft: replyIndent(big) }]} onLayout={onLayout ? (e) => onLayout(e.nativeEvent.layout.y) : undefined}>
-      <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile}>
+      <Pressable accessibilityRole="link" accessibilityLabel={who ? `Open ${who.name}'s profile` : undefined} onPress={openProfile} style={({ pressed }) => (pressed && tapFast ? { opacity: PRESS_DIM } : null)}>
         <Avatar name={who?.name ?? '?'} seed={who?.avatarSeed ?? comment.authorId} uri={who?.avatarUrl} size={reply ? (big ? 30 : 24) : big ? 40 : 32} />
       </Pressable>
       <View style={styles.body}>

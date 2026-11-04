@@ -9,14 +9,14 @@ import { PullDisc, usePullDisc } from '@/components/PullDisc';
 import { PULL_DISARM, PULL_DISC, PULL_GAP, PULL_LAND_SLACK, PULL_LINE, PULL_MIN_SPIN, PULL_RETURN, WEB_PULL_LINE, fingerFor, pullFetch, pullRowLift, pullRowOpacity, rubberBand } from '@/lib/pullRefresh';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePathname } from 'expo-router';
-import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
+import { isPageDragging, pageDraggingUI, subscribePageDragging } from '@/features/navigation/swipeLock';
 import { KeyboardScrollContext, afterKeyboard, visibleAboveKeyboard, type Measurable } from '@/lib/keyboardScroll';
 import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
-import { usePressV2 } from '@/features/navigation/pressV2';
+import { usePressV2, useTapFast } from '@/features/navigation/pressV2';
 import { tapPage } from '@/features/navigation/tapTiming';
-import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
+import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedProps, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, useDerivedValue, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
@@ -26,6 +26,10 @@ import { useBarInset } from '@/features/navigation/barInset';
 // Where each page that names itself was left (see scrollMemory).
 import { scrollMemory } from './scrollMemory';
 import { TextScale, colors, oneLine, spacing, typography } from '@/theme';
+
+/** Taps answering sooner: the scroller hears a swipe on the animation thread instead (see dragUI). */
+const noDragSubscribe = () => () => {};
+const notDragging = () => false;
 
 
 // Pull-to-refresh on the phone, the same way the Home feed does it (the
@@ -190,7 +194,11 @@ const ScreenBody = React.memo(function ScreenBody({
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   // While a sideways page swipe is under way, this scroller stands down.
-  const swiping = useSyncExternalStore(subscribePageDragging, isPageDragging, () => false);
+  // With taps answering sooner (iOS): from the animation thread (swipeLock's pageDraggingUI, an animated prop) in the
+  // swipe's own frame, with no redraw of this page by React at the start and the end of every swipe.
+  const dragUI = useTapFast() && Platform.OS === 'ios';
+  const swiping = useSyncExternalStore(dragUI ? noDragSubscribe : subscribePageDragging, dragUI ? notDragging : isPageDragging, () => false);
+  const dragProps = useAnimatedProps(() => ({ scrollEnabled: !pageDraggingUI.value }));
   const key = routeKey;
   // Only a page that names itself picks up where it was left (see scrollMemory).
   const remembers = memoryKey !== undefined;
@@ -364,7 +372,11 @@ const ScreenBody = React.memo(function ScreenBody({
   // Where the page is, so the wash behind the top scrolls away with it.
   const scrollY = useSharedValue(0);
   // A browser pays for every frame of this on the main thread, so there the wash simply stays put.
-  const washStyle = useAnimatedStyle(() => (Platform.OS === 'web' ? {} : { transform: [{ translateY: -Math.max(0, scrollY.value - strip) }] }));
+  // How far the wash has gone up, held once it is fully out of sight (its own height above the top): the wash's look
+  // then stops changing, so scrolling further down a long page no longer redraws the whole app every frame just to
+  // move something nobody can see (Nov 4, owner: "Our app just runs so laggy"). On screen it moves exactly as before.
+  const washUp = useDerivedValue(() => Math.min(PAGE_WASH.height, Math.max(0, scrollY.value - strip)));
+  const washStyle = useAnimatedStyle(() => (Platform.OS === 'web' ? {} : { transform: [{ translateY: -washUp.value }] }));
   const list = useAnimatedRef<Reanimated.ScrollView>();
   // A finger is down; the line has been crossed; the fetch is running; a
   // move back past the strip is under way.
@@ -688,7 +700,8 @@ const ScreenBody = React.memo(function ScreenBody({
           style={styles.flex}
           contentContainerStyle={[styles.scrollContent, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
           onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
-          scrollEnabled={!swiping}
+          scrollEnabled={dragUI ? undefined : !swiping}
+          animatedProps={dragUI ? dragProps : undefined}
           directionalLockEnabled
           keyboardShouldPersistTaps="handled"
           // Keeps whatever box you are typing in above the keyboard (on Android, the keyboard's room at the end does).

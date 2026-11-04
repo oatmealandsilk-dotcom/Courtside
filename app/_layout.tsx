@@ -3,6 +3,8 @@
 import '@/lib/usedBefore';
 // Before any animated view is built: the latest animated value always wins (src/lib/animatedValuesStay.ts).
 import '@/lib/animatedValuesStay';
+// Before any tap can ask for a page: a quick second tap never opens the same page twice (src/features/navigation/oneOpen.ts).
+import '@/features/navigation/oneOpen';
 // First, before any text is drawn: text follows the phone's size setting, with a ceiling.
 import '@/lib/textScale';
 import '@/lib/launchSplash';

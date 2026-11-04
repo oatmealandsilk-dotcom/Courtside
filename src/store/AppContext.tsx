@@ -14,6 +14,7 @@ import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
 import { setPressV2Admin, tapFastOn } from '@/features/navigation/pressV2';
+import { setPostLookup } from '@/features/feed/postOpen';
 import { setQuickStartAdmin } from '@/features/feed/quickStart';
 import { computeStats, localDay, publicStreak, streakAtRisk } from '@/features/practice/stats';
 import { streakSeen } from '@/features/practice/streakFlame';
@@ -3420,6 +3421,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Keep a ref so async actions read fresh state without re-creating callbacks.
   const stateRef = React.useRef(state);
   stateRef.current = state;
+  // A post's address opens its feed page in one slide when the app has the post (features/feed/postOpen, TAP_FAST).
+  useEffect(() => {
+    setPostLookup((id) => {
+      const s = stateRef.current;
+      if (!s.currentUserId) return null;
+      const p = s.posts.find((x) => x.id === id);
+      return p ? { authorId: p.authorId, archived: !!p.archived, mine: p.authorId === s.currentUserId } : null;
+    });
+    return () => setPostLookup(null);
+  }, []);
   // Counts every account arriving on screen (a sign-in, a switch, the same account again), so a
   // Log out still finishing never takes away the login of whoever signed in after it (signOut).
   const signInTurn = useRef(0);
