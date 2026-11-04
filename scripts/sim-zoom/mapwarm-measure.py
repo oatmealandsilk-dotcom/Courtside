@@ -1,4 +1,4 @@
-# mapwarm-measure.py DIR... (Nov 4, the warm map: mapWarm): the full map's opening from recordings only. Per open per open (DIR/openN.mp4, recN.txt, taps.txt "openN <wall> tapped", modes.txt "openN mode"), ms after the
+# mapwarm-measure.py DIR... (Nov 4, the warm map: mapWarm): the full map's opening, from recordings only. Per open
 # finger went down. Frames at half points (iPhone 18 Pro, 402x874 pt).
 #   slide_start   first frame with >8% of the screen changed
 #   slide_end     the map page has landed: its top row (search bar, y 80-112 pt) found at no offset (tracked frame by frame)
