@@ -571,7 +571,11 @@ export const LookBar = React.memo(function LookBar({
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   // Apple's motion (B): its bubble past the bar's edges, in the look the live glass shows. Laid between the live
   // glass and its row (Face's `bubbleLayer`), so its edge passes under every tab's icon, word and count, as under the +.
-  const bubbleOn = newBar && kind === APPLE_KIND && litPlace >= 0 && !calm && !look.m.split;
+  // The live bar is laid that way (Face's `layered`) whether or not a tab is lit, so the row never changes parent at a
+  // touch (Nov 3 review: on a link opened cold, with no tab lit, the tab lighting at the touch moved the row out of the
+  // glass, which rebuilt the tab under the finger mid-press and lost the tap). The bubble alone comes and goes.
+  const layered = newBar && !!lens && kind === APPLE_KIND && !calm && !look.m.split;
+  const bubbleOn = layered && litPlace >= 0;
   const livePalette = themes[theme];
   const bubble = bubbleLook(livePalette, (glassHeld ?? glassLook) || inkOn(livePalette.bg) === '#FFFFFF');
   const bubbleEl = bubbleOn && lensGeo ? (
@@ -579,7 +583,7 @@ export const LookBar = React.memo(function LookBar({
   ) : null;
   const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
     <Face palette={palette} look={look} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace} kind={kind} onWordWidth={live && newBar ? onWordWidth : undefined}
-      onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} bubbleLayer={live ? bubbleEl : null} />
+      onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} layered={live && layered} bubbleLayer={live ? bubbleEl : null} />
   );
   // The swipe followed: the two copies' faces, built once as a swipe starts carrying the look (and
   // again only if what they show changes), so the redraw that turns the glass leaves them be.
@@ -1001,7 +1005,10 @@ const CRISP_FROM = 0.02;
  * centred where the tab's own are. At rest, and for the first hair of a swell, the tab's own icon and word
  * (`children`) exactly as they were. The two never show at once (one is there, the other not, in the same frame,
  * never faded); neither holds glass. The copy's colours follow the capsule as the tab's own do, and it settles and
- * lets its word go as the bar ducks, by as much.
+ * lets its word go as the bar ducks, by as much. Its word sits centred in a box as wide as the copy's room, never one
+ * measured to the word (Nov 3 review: a redraw of the bar mid-slide could measure it at the tab's own size while it was
+ * drawn bigger, which cut it to "Coachi..." for a frame or two). Drawn once at its biggest and scaled down instead, it
+ * looked blocky in between (Simulator), so it is still drawn at each size.
  */
 const CrispMagnify = React.memo(function CrispMagnify({ place, fallback, m, st, icon, activeIcon, label, idleIcon, idleLabel, lit, badge, badgeBg, badgeInk, children }: {
   place: number; fallback: number; m: BarSpec; st: BarStyles;
@@ -1065,7 +1072,7 @@ const CrispMagnify = React.memo(function CrispMagnify({ place, fallback, m, st, 
     <View>
       <Animated.View style={own}>{children}</Animated.View>
       <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.crisp, shown]}>
-        <Animated.View style={[st.inner, inner]}>
+        <Animated.View style={[st.inner, st.crispInner, inner]}>
           <View>
             <Animated.Text allowFontScaling={false} selectable={false} style={[st.glyph, { color: idleIcon }, glyphIdle]}>{glyphOf(icon)}</Animated.Text>
             <Animated.Text allowFontScaling={false} selectable={false} style={[st.glyph, st.glyphOver, { color: lit }, glyphLit]}>{glyphOf(activeIcon)}</Animated.Text>
@@ -1075,7 +1082,7 @@ const CrispMagnify = React.memo(function CrispMagnify({ place, fallback, m, st, 
               </Animated.View>
             ) : null}
           </View>
-          <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, word]}>{label}</Animated.Text>
+          <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, st.crispWord, word]}>{label}</Animated.Text>
         </Animated.View>
       </Animated.View>
     </View>
@@ -1311,7 +1318,7 @@ function PopWrap({ active, pop, children }: { active: boolean; pop: boolean; chi
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth, bubbleLayer }: {
+function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth, layered, bubbleLayer }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
   palette: Palette; look: BarLook; calm: boolean; media: boolean; glassMedia: boolean; live: boolean;
   /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
@@ -1327,7 +1334,12 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   kind: number;
   /** The live new bar's: each tab's word as drawn, for its capsule's width. */
   onWordWidth?: (route: string, w: number) => void;
-  /** Apple's motion (B), the live bar's lifted bubble (LensBubble): laid between the glass and the row. */
+  /**
+   * Apple's motion (B), the live bar: laid in three, the glass, then `bubbleLayer`, then the row (never changing with
+   * which tab is lit, so the row and the press under a finger are never rebuilt at a touch).
+   */
+  layered?: boolean;
+  /** The lifted bubble (LensBubble) laid between the glass and the row while a tab is lit; none otherwise. */
   bubbleLayer?: React.ReactNode;
 }) {
   const { m, st, fresh } = look;
@@ -1528,17 +1540,18 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades. The new bar's is lighter.
-  if (bubbleLayer) {
+  if (layered) {
     // Apple's motion (B), the live bar: the glass holds only its capsule; the lifted bubble (LensBubble) is laid
     // over the glass, and the row (with its edge and the Create box's veil, in the same order) over the bubble, on
     // a plain layer of the glass's own shape (never glass, never faded), so the bubble's edge passes under every
-    // icon, word, count and the round + instead of drawing a line through them (Nov 3 review).
+    // icon, word, count and the round + instead of drawing a line through them (Nov 3 review). The bubble's place
+    // is kept while there is none (no tab lit), so the row is always the third: never rebuilt as a tab lights.
     return (
       <>
         <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={st.pill}>
           {lensEl}
         </Glass>
-        {bubbleLayer}
+        {bubbleLayer ?? null}
         <View pointerEvents="box-none" style={[st.pill, st.rowOver]}>
           {row}
           {rimEl}
@@ -1718,6 +1731,11 @@ function barStyles(m: BarSpec, fresh: boolean) {
     // CrispMagnify's copy: centred on the tab's own icon and word, with room all round for it at its biggest; its icon
     // the tab's own (Ionicons' font, as Ionicons draws it), the lit one laid over the plain one.
     crisp: { position: 'absolute', top: -40, bottom: -40, left: -60, right: -60, alignItems: 'center', justifyContent: 'center' },
+    // Its row and word as wide as that room (the word centred in it): the word's box never hangs on how wide the word is
+    // drawn, so a redraw of the bar mid-swell (a slide crossing the +) can never measure it at the tab's own size while
+    // it is drawn bigger, which cut it short ("Coachi...") for a frame or two (Nov 3 review).
+    crispInner: { alignSelf: 'stretch' },
+    crispWord: { alignSelf: 'stretch', textAlign: 'center' },
     glyph: { fontFamily: 'ionicons', fontWeight: 'normal', fontStyle: 'normal' },
     glyphOver: { position: 'absolute', top: 0, left: 0 },
   });
