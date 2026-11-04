@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
+import { Image as PhotoImage } from 'expo-image';
 import { WebView } from 'react-native-webview';
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -8,6 +9,8 @@ import { ENGINE_JS } from '@/components/map/engineLoader';
 import { THUMB_ZOOM, ThumbStandIn, keyName, makeQueue, thumbKey } from '@/components/map/thumbShared';
 import { themes, useTheme } from '@/theme/ThemeProvider';
 import { colors } from '@/theme';
+import { loadInOn } from '@/features/navigation/loadIn';
+import { markPhotoShown, photoFirstShowing } from '@/lib/photoSeen';
 
 /*
  * The phone's court picture. The map engine runs in a web view (as the big
@@ -19,6 +22,8 @@ import { colors } from '@/theme';
  */
 
 const queue = makeQueue();
+/** A court picture's first showing: its crossfade over the stand-in (load-in only). */
+const THUMB_FADE_MS = 200;
 /** Key → the picture's address (a file in the cache folder), once drawn. */
 const shots = new Map<string, string>();
 /** Spots that could not be drawn this session (no signal): they keep the stand-in, and are tried again next time the app opens. */
@@ -91,6 +96,29 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
   useEffect(() => { onShown?.(shown); }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // With the load-in (admins first, loadIn.ts): React Native's fadeDuration only ever worked on Android, so on an iPhone
+  // the picture popped in over the stand-in, and a card built again (the page opened again) flashed its stand-in first.
+  // Now the picture is held in memory and laid over the stand-in: the first time this session it crossfades in (200 ms),
+  // and the stand-in is taken away under it once the fade is over; any later time it is there at once, over the stand-in.
+  const fast = loadInOn();
+  const fadeEnd = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (fadeEnd.current) clearTimeout(fadeEnd.current); }, []);
+  if (fast) {
+    const first = photoFirstShowing(shot ?? undefined);
+    const loaded = () => {
+      if (!shot) return;
+      markPhotoShown(shot);
+      if (!first) { setShown(true); return; }
+      if (fadeEnd.current) clearTimeout(fadeEnd.current);
+      fadeEnd.current = setTimeout(() => { fadeEnd.current = null; setShown(true); }, THUMB_FADE_MS + 20);
+    };
+    return (
+      <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
+        {!shown ? <ThumbStandIn look={look} seed={key} /> : null}
+        {shot ? <PhotoImage source={{ uri: shot }} cachePolicy="memory" transition={first ? THUMB_FADE_MS : 0} onLoad={loaded} style={StyleSheet.absoluteFill} contentFit="cover" /> : null}
+      </View>
+    );
+  }
 
   return (
     <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">

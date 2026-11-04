@@ -29,6 +29,8 @@ import { canReadContacts } from '@/features/contacts/phoneContacts';
 import { CONTACTS_LABEL, CONTACTS_NOTE } from '@/features/invite/friendsWords';
 import { useFindable } from '@/features/people/findable';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
+import { useArriveGate } from '@/components/ui/Arrive';
+import { ArriveFold } from '@/components/ui/ArriveFold';
 import { openCourt as openCourtPage } from '@/features/players/courtLink';
 import { useCourtSearch } from '@/features/places/useCourtSearch';
 import { fetchCourts, type Court } from '@/features/players/courts';
@@ -208,6 +210,9 @@ export default function Search() {
   const [followedHere, setFollowedHere] = useState<string[]>([]);
   const noteFollowed = useCallback((id: string) => setFollowedHere((cur) => (cur.includes(id) ? cur : [...cur, id])), []);
   const suggested = useSuggestedPlayers({ keep: followedHere }).slice(0, 5);
+  // Load-in (admins first, loadIn.ts): "Suggested players", which comes in once its people load after the page is on
+  // show, unfolds under your recent searches rather than popping in.
+  const arriving = useArriveGate();
   // "Players in your town" only when every one of them is: one in your town under it, the rest for other reasons, read wrong.
   const allNear = suggested.length > 0 && suggested.every((s) => !!myTown && townOf(s.user.location) === myTown);
   // Short enough to fit beside the Follow button on a phone.
@@ -524,12 +529,12 @@ export default function Search() {
           </View>
         ) : null}
         {suggested.length ? (
-          <View style={styles.gapAbove}>
+          <ArriveFold key="suggested" arriving={arriving()}><View style={styles.gapAbove}>
             {head(allNear ? 'Players in your town' : 'Suggested players')}
             {suggested.map((s, i) => (
               <PersonRow key={s.user.id} user={s.user} reason={suggestionReason(s.user, s.reason)} first={i === 0} onPress={() => openPerson(s.user)} onFollowed={noteFollowed} />
             ))}
-          </View>
+          </View></ArriveFold>
         ) : null}
       </ScrollView>
     );

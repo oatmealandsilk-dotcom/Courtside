@@ -19,6 +19,7 @@ import { biggerFirst, courtRows, fetchCourts, isClosedCourt, peekCourts, peekSav
 import { FirstReveal } from '@/features/feed/FirstReveal';
 import { CourtsGlow, useCourtsGlowOn } from '@/features/community/CourtsGlow';
 import { Fold } from '@/components/ui/Fold';
+import { Arrive, useArrivals } from '@/components/ui/Arrive';
 import { formatMiles, milesBetween } from '@/features/players/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import type { LatLng } from '@/features/players/positions';
@@ -158,6 +159,9 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
   // Nothing known about here yet: the strip's own shape holds its place, quietly, so nothing below
   // it moves when the courts come (Oct 21). Once the answer is in and there are none, it folds shut,
   // and the page under it glides up (Oct 22 sweep, item 47: it vanished and the page jumped 180 pt).
+  // Load-in (admins first, loadIn.ts): the cards that come in after the strip is on show (in place of its held shapes,
+  // which have the cards' own frames) fade their contents in, a beat apart, instead of swapping in one frame.
+  const slotOf = useArrivals(rows.map((r) => r.c.id));
   const holding = !!center && !rows.length && near.loading;
   const [heldShown, setHeldShown] = useState(holding);
   useEffect(() => { if (holding) setHeldShown(true); }, [holding]);
@@ -223,12 +227,14 @@ export function CourtsNear({ center, revealOrder, foldGap = 0, pictures = true }
               onPress={() => openCourt({ id: c.id, name: labelOf(c), lat: c.lat, lng: c.lng })}
               style={({ pressed }) => [styles.card, LOOK === 'N' && peekFrame, pressed && styles.cardPressed]}
             >
-              {LOOK === 'N' ? (
-                <PeekCardBody name={labelOf(c)} lat={c.lat} lng={c.lng} meta={meta} kind={kind} tint={surfaceTint(kind)}
-                  hit={badge?.hit ?? null} posts={badge?.posts ?? null} draw={picturesGo && i < seen} />
-              ) : (
-                <NowCardBody name={labelOf(c)} meta={meta} kind={kind} tint={surfaceTint(kind)} hit={badge?.hit ?? null} posts={badge?.posts ?? null} />
-              )}
+              <Arrive slot={slotOf(c.id)} look="fade" style={LOOK === 'N' ? undefined : styles.cardBody}>
+                {LOOK === 'N' ? (
+                  <PeekCardBody name={labelOf(c)} lat={c.lat} lng={c.lng} meta={meta} kind={kind} tint={surfaceTint(kind)}
+                    hit={badge?.hit ?? null} posts={badge?.posts ?? null} draw={picturesGo && i < seen} />
+                ) : (
+                  <NowCardBody name={labelOf(c)} meta={meta} kind={kind} tint={surfaceTint(kind)} hit={badge?.hit ?? null} posts={badge?.posts ?? null} />
+                )}
+              </Arrive>
             </SwipePressable>
           );
         })}
@@ -254,6 +260,8 @@ const styleDefinitions = StyleSheet.create({
   // A light card: no fill and no shadow, just a hairline in the theme's border colour, so the strip sits quietly on the page.
   card: { width: CARD, padding: PAD, gap: 4, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border },
   cardPressed: { transform: [{ scale: PRESS_SHRINK }] },
+  // An arriving card's contents, in their own view (Arrive): the card's own spacing between its lines.
+  cardBody: { gap: 4 },
   allCard: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   allDisc: { width: 40, height: 40, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   allText: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },

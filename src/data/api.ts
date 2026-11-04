@@ -9,7 +9,7 @@
 import { achievements } from './mock/achievements';
 import { coaches, coachingRequests, coachResults, coachReviews } from './mock/coaching';
 import { answers, questions } from './mock/discussions';
-import { simLongThread } from '@/lib/simSeed';
+import { simFaces, simLongThread } from '@/lib/simSeed';
 import { coachQuestions, coachReplies } from './mock/coachQuestions';
 import { comments, posts } from './mock/feed';
 import { demoGroupPosts } from './mock/groups';
@@ -207,7 +207,7 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
   return delay(
     clone({
       // ?admin=1: the demo's own player is an admin (demoAdmin), to try the admin pages without a database.
-      users: demoAdmin() ? users.map((u) => (u.id === CURRENT_USER_ID ? { ...u, isAdmin: true } : u)) : users,
+      users: simFaces(demoAdmin() ? users.map((u) => (u.id === CURRENT_USER_ID ? { ...u, isAdmin: true } : u)) : users),
       // The demo reels are gone: real clips and hits come from people now.
       // The demo written posts and threads stay, so the app is never empty,
       // and so does the one clip tagged at a demo court, for its page and reel.

@@ -20,6 +20,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, surfaceColorFor, typography, withAlpha } from '@/theme';
 
 import { ASK_ABOUT, PlayersSayRows, SectionHead } from './parts';
+import { Arrive, useArrivals } from '@/components/ui/Arrive';
 import type { CourtView } from './view';
 import { corner } from '@/theme/look';
 
@@ -67,6 +68,9 @@ export function ClipsSection({ view, quiet = false }: {
   const tileH = Math.round(tileW * TILE);
   const shown = all ? posts : posts.slice(0, FIRST);
   const measure = (next: number) => { const r = Math.floor(next); if (r > 0 && r !== w) setW(r); };
+  // Load-in (admins first, loadIn.ts): tiles that come in after the page is on show (in place of the blank ones held for
+  // them, or older posts) fade in, a beat apart, instead of swapping in one frame. Those in its first frame are simply there.
+  const tileSlot = useArrivals(posts.map((p) => p.id));
 
   const postLink = view.onPost ? { label: 'Post', a11y: `Post a clip or photo from ${name}`, onPress: view.onPost } : null;
   // The court page (quiet): while asked, the head and its one line held blank, the height of "No clips
@@ -141,7 +145,7 @@ export function ClipsSection({ view, quiet = false }: {
         ) : null}
       />
       <View style={styles.grid} onLayout={(e) => measure(e.nativeEvent.layout.width)}>
-        {tileW ? shown.map((p) => <GridTile key={p.id} post={p} author={byId.get(p.authorId)} width={tileW} height={tileH} onPress={() => view.onOpenReel(p)} />) : null}
+        {tileW ? shown.map((p) => <Arrive key={p.id} slot={tileSlot(p.id)} look="fade"><GridTile post={p} author={byId.get(p.authorId)} width={tileW} height={tileH} onPress={() => view.onOpenReel(p)} /></Arrive>) : null}
       </View>
       {hidden > 0 ? (
         <Pressable accessibilityRole="button" accessibilityLabel={`See all ${posts.length} ${word}`} onPress={() => setAll(true)} style={({ pressed }) => [styles.moreRow, pressed && styles.pressed]}>

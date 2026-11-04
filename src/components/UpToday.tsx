@@ -1,11 +1,14 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { memo, useMemo, useState } from 'react';
+import React, { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
 
 import { Avatar } from '@/components/ui';
+import { Arrive, SwapText, useArriveGate, useArrivals, type ArriveLook } from '@/components/ui/Arrive';
+import { upArrival, useLoadIn } from '@/features/navigation/loadIn';
+import { SIM_DRIVER, simLog } from '@/lib/simDriver';
 import { OpenRing } from '@/components/map/OpenRing';
 import { TipBubble } from '@/components/TipBubble';
 import type { ID, LastSeen, User } from '@/data/types';
@@ -47,6 +50,12 @@ const META_LINE = 14;
 const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
 
 const NO_FILL: FillFace[] = [];
+/** Up to hit's look for its faces (loadIn.ts UP_ARRIVAL: one line picks A, B or C). */
+const FACE_LOOK: Record<'A' | 'B' | 'C', ArriveLook> = { A: 'rise', B: 'pop', C: 'slide' };
+/** A regular's key in the row, never the same as their ringed face's: turning up today, they go from one to the other. */
+const fillKey = (id: ID) => `fill:${id}`;
+const DIVIDER = '~divider';
+const NO_KEYS: string[] = [];
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -159,6 +168,84 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
     eatClickAfterHold();
     edit();
   };
+  // Your own: the ring is the switch; once on, the "Free today" under it opens the sheet. Two presses one above the other, never one inside the other.
+  const mineItem = (
+    <View style={[styles.item, styles.mine]}>
+      <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
+        <View>
+          <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
+          {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
+        </View>
+        {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>I’m free</Text>}
+      </Pressable>
+      {/* On: one line where a player's name sits, ink words after a small green dot (green words were too faint on the court palettes).
+          44pt to tap, all of it below the switch, so a near miss never turns your ring off. */}
+      {up ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Free today${till ? `, ${till}` : ''}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.freeLink, pressed && styles.pressed]}>
+          <View style={styles.freeLine}>
+            <Animated.View entering={FadeIn.duration(160)} style={styles.dot} />
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>Free today</Text>
+          </View>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+  // The row with nobody in it: how to fill it, in the section's own words.
+  const emptyLine = onLocation ? (
+    <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>Turn on Location</Text>
+    </Pressable>
+    ) : finding ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>Finding you…</Text>
+    // Who is missing, in the section's own words, then (your ring off) what the "+" on your face is for.
+    : (
+      <>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'No friends open near you yet' : 'No one’s open near you yet'}</Text>
+        {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyHint}>Tap I’m free when you want a hit</Text>}
+      </>
+    );
+  // Load-in (Nov 4, owner: "the people in the up to hit bar don't load in with good animation"; admins first, loadIn.ts):
+  // the faces, the regulars and the divider that turn up after the row is on show arrive a beat apart, left to right;
+  // one that goes fades out as the others glide over; the title, the count and the empty line crossfade. What the row
+  // has in its first frame, or gets while its tab is not on show or a swipe is moving, is simply there.
+  const fast = useLoadIn();
+  const look = FACE_LOOK[upArrival()];
+  // The simulator's proof only: when the row's faces change, to line up with a recording.
+  useEffect(() => { if (SIM_DRIVER) simLog(`[up] people ${people.length} fill ${fill.length}`); }, [people.length, fill.length]);
+  const slotOf = useArrivals(fast ? [...people.map((p) => p.user.id), ...(fill.length ? [DIVIDER] : []), ...fill.map((f) => fillKey(f.user.id))] : NO_KEYS);
+  const arriving = useArriveGate(!fast);
+  const titled = !people.length && !!fill.length && !!fillTitle;
+  if (fast) {
+    return (
+      <View style={styles.wrap}>
+        <View style={styles.head}>
+          {/* "Most active in Los Angeles" while the regulars fill an empty row (one line, shrinking), else "Open to hit". */}
+          {titled && fillTitle
+            ? <SwapText maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, styles.titleFit]} text={fillTitle} />
+            : <SwapText maxFontSizeMultiplier={TextScale.CARD} style={styles.title} text="Open to hit" />}
+          <SwapText maxFontSizeMultiplier={TextScale.CHROME} style={styles.count} text={people.length ? `${people.length} near you` : ''} />
+        </View>
+        <View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
+          {mineItem}
+          {people.map((p) => (
+            <Arrive key={p.user.id} slot={slotOf(p.user.id)} look={look} leave="shrink" glide>
+              <UpFace p={p} />
+            </Arrive>
+          ))}
+          {fill.length ? <Arrive key={DIVIDER} slot={slotOf(DIVIDER)} look="fade" leave="fade" glide><FillDivider size={FACE} /></Arrive> : null}
+          {fill.map((f) => (
+            <Arrive key={fillKey(f.user.id)} slot={slotOf(fillKey(f.user.id))} look={look} leave="shrink" glide>
+              <FilledFace face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />
+            </Arrive>
+          ))}
+          {!people.length && !fill.length ? <Arrive key="empty" slot={arriving() ? 0 : null} look="fade" leave="fade" style={styles.empty}>{emptyLine}</Arrive> : null}
+        </ScrollView>
+        <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={MINE_CENTER - 6} on="page" style={styles.tip} />
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={styles.wrap}>
       <View style={styles.head}>
@@ -170,60 +257,18 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
-        {/* Your own: the ring is the switch; once on, the "Free today" under it opens the sheet. Two presses one above the other, never one inside the other. */}
-        <View style={[styles.item, styles.mine]}>
-          <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
-            <View>
-              <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
-              {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
-            </View>
-            {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>I’m free</Text>}
-          </Pressable>
-          {/* On: one line where a player's name sits, ink words after a small green dot (green words were too faint on the court palettes).
-              44pt to tap, all of it below the switch, so a near miss never turns your ring off. */}
-          {up ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={`Free today${till ? `, ${till}` : ''}. Change your time and distance`} hitSlop={{ left: 8, right: 8 }} onPress={edit} style={({ pressed }) => [styles.freeLink, pressed && styles.pressed]}>
-              <View style={styles.freeLine}>
-                <Animated.View entering={FadeIn.duration(160)} style={styles.dot} />
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, styles.nameIn]} numberOfLines={1}>Free today</Text>
-              </View>
-            </Pressable>
-          ) : null}
-        </View>
-        {people.map((p) => {
-          const theirs = tillLabel(p.until);
-          // A friend's check-in: how far. Anyone else: only the town they chose ("Raleigh"), never a distance.
-          const far = p.town ? p.town : p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
-          return (
-            <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
-              <Pressable accessibilityRole="link" accessibilityLabel={p.town ? `${p.user.name}, free today in ${p.town}${theirs ? `, ${theirs}` : ''}. Open profile` : `${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => (p.town ? router.push(`/user/${p.user.id}`) : router.push({ pathname: '/map', params: { user: p.user.id } }))} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
-                <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
-                {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
-                {far ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
-                {theirs ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
-              </Pressable>
-            </Animated.View>
-          );
-        })}
+        {mineItem}
+        {people.map((p) => (
+          <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
+            <UpFace p={p} />
+          </Animated.View>
+        ))}
         {/* City boards (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
         {fill.length ? <FillDivider size={FACE} /> : null}
         {fill.map((f) => <FilledFace key={f.user.id} face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />)}
         {!people.length && !fill.length ? (
           <View style={styles.empty}>
-            {onLocation ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>Turn on Location</Text>
-              </Pressable>
-            ) : finding ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>Finding you…</Text>
-              // Who is missing, in the section's own words, then (your ring off) what the "+" on your face is for.
-              : (
-                <>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'No friends open near you yet' : 'No one’s open near you yet'}</Text>
-                  {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyHint}>Tap I’m free when you want a hit</Text>}
-                </>
-              )}
+            {emptyLine}
           </View>
         ) : null}
       </ScrollView>
@@ -233,6 +278,23 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
     </View>
   );
 });
+
+/** A player who is up: their ring, first name, then how far (or their town) and until when. A tap shows them on the map (or opens a town player's profile). */
+function UpFace({ p }: { p: Up }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const theirs = tillLabel(p.until);
+  // A friend's check-in: how far. Anyone else: only the town they chose ("Raleigh"), never a distance.
+  const far = p.town ? p.town : p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
+  return (
+    <Pressable accessibilityRole="link" accessibilityLabel={p.town ? `${p.user.name}, free today in ${p.town}${theirs ? `, ${theirs}` : ''}. Open profile` : `${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => (p.town ? router.push(`/user/${p.user.id}`) : router.push({ pathname: '/map', params: { user: p.user.id } }))} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
+      <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
+      {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
+      {far ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
+      {theirs ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
+    </Pressable>
+  );
+}
 
 const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },

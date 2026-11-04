@@ -17,6 +17,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { FirstReveal } from '@/features/feed/FirstReveal';
+import { useArriveGate } from '@/components/ui/Arrive';
+import { ArriveFold } from '@/components/ui/ArriveFold';
 
 const CARD = 168;
 
@@ -51,6 +53,9 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
   const styles = useThemedStyles(styleDefinitions);
   const { followedCourts, courtExtras, courtNow, currentUserId, actions } = useApp();
   useEffect(() => { if (currentUserId) void actions.loadFollowedCourts(); }, [currentUserId, actions]);
+  // Load-in (admins first, loadIn.ts): the strip that turns up once your courts are in, after the page is on show, unfolds
+  // (its height growing as it fades in, Courts near you gliding down under it) instead of popping in.
+  const arriving = useArriveGate();
   if (courtExtras === false || !followedCourts?.length) return null;
   const strip = (
     <View style={styles.wrap}>
@@ -93,7 +98,7 @@ export function YourCourts({ from = null, revealOrder }: { from?: LatLng | null;
       </ScrollView>
     </View>
   );
-  return revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>;
+  return <ArriveFold arriving={arriving()} gap={16}>{revealOrder === undefined ? strip : <FirstReveal order={revealOrder}>{strip}</FirstReveal>}</ArriveFold>;
 }
 
 const styleDefinitions = StyleSheet.create({

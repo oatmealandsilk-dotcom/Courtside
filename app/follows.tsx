@@ -18,6 +18,7 @@ import { compactNumber } from '@/lib/format';
 import { colors, spacing, typography } from '@/theme';
 import { LESS_AI_ROUND2 } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { Arrive, useArrivals } from '@/components/ui/Arrive';
 
 type Tab = 'followers' | 'following';
 const TABS: Tab[] = ['followers', 'following'];
@@ -84,13 +85,16 @@ export default function Follows() {
     following: subject?.following ?? 0,
   };
 
+  // Load-in (admins first, loadIn.ts): the people who come in once the list loads (after the page is on show) fade up a
+  // beat apart, as the spinner fades out, instead of swapping in one frame. Those there as the page opens are simply there.
+  const rowSlot = useArrivals([...idsOf.followers.map((id) => `followers:${id}`), ...idsOf.following.map((id) => `following:${id}`)]);
   const pane = (tab: Tab) => {
     const whole = listOf(tab);
     const list = opened.has(tab) ? whole : whole.slice(0, PEEK);
     return (
       <View>
         {list.length === 0 && !loaded ? (
-          <View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View>
+          <Arrive slot={null} leave="fade"><View style={styles.loading}><ActivityIndicator color={colors.textMuted} /></View></Arrive>
         ) : list.length === 0 && search.trim() !== '' && idsOf[tab].length > 0 ? (
           // A search that matches nobody says so, not that the list itself is empty.
           <EmptyState icon="search-outline" title={`No one matches “${search.trim()}”`} />
@@ -107,11 +111,12 @@ export default function Follows() {
             <EmptyState icon="people-outline" title={tab === 'followers' ? 'No followers yet' : 'Not following anyone yet'} />
           )
         ) : (
-          list.map((user) => {
+          list.map((user, i) => {
             const isMe = user.id === currentUserId;
             const following = followingIds.includes(user.id);
             return (
-              <Pressable key={user.id} accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.row}>
+              <Arrive key={user.id} slot={rowSlot(`${tab}:${user.id}`) === null ? null : i} look="lift">
+              <Pressable accessibilityRole="link" onPress={() => router.push(`/user/${user.id}`)} style={styles.row}>
                 <Avatar name={user.name} seed={user.avatarSeed} size={48} ring={user.isCoach} />
                 <View style={{ flex: 1, gap: 3 }}>
                   <View style={styles.nameLine}>
@@ -128,6 +133,7 @@ export default function Follows() {
                   <FollowPill soft={LESS_AI_ROUND2} following={following} userId={user.id} name={user.name} small onPress={following ? () => confirmUnfollow(user, () => actions.toggleFollow(user.id)) : () => actions.toggleFollow(user.id)} />
                 )}
               </Pressable>
+              </Arrive>
             );
           })
         )}

@@ -22,6 +22,9 @@ import { openCourtNow } from '@/features/players/courtLink';
 import { goBack } from '@/lib/goBack';
 import { useArrived } from '@/lib/useArrived';
 import { usePressV2 } from '@/features/navigation/pressV2';
+import { useLoadIn } from '@/features/navigation/loadIn';
+import { SwapText, useArriveGate } from '@/components/ui/Arrive';
+import { ArriveFold } from '@/components/ui/ArriveFold';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useResponsive } from '@/lib/useResponsive';
@@ -110,6 +113,10 @@ export function PlaceCard({ view }: { view: CourtView }) {
   const belowBuilt = useRef(false);
   const below = belowBuilt.current || arrived || !isPhone || view.posts.length <= 3;
   belowBuilt.current = below;
+  // Load-in (admins first, loadIn.ts): the line under the name ("Austin · 1.2 mi · 3 followers") crossfades as its words
+  // come in rather than swapping, and "Played here by" unfolds when its players come in after the page is on show.
+  const loadIn = useLoadIn();
+  const arriving = useArriveGate();
   const nameText = <Text accessibilityRole="header" style={[styles.name, nameSize, look === 'final' && styles.nameGrow]} numberOfLines={3}>{view.name}</Text>;
 
   return (
@@ -120,9 +127,10 @@ export function PlaceCard({ view }: { view: CourtView }) {
           <View style={styles.gutter}>
             {look === 'final' ? <View style={styles.nameRow}>{nameText}<NameHeart view={view} /></View> : nameText}
             {look === 'final' ? <FactsLine view={view} /> : null}
-            {meta || view.areaPending ? <Text style={styles.meta} numberOfLines={2}>{meta || ' '}</Text> : null}
+            {loadIn ? <SwapText style={styles.meta} numberOfLines={2} text={meta || (view.areaPending ? ' ' : '')} />
+              : meta || view.areaPending ? <Text style={styles.meta} numberOfLines={2}>{meta || ' '}</Text> : null}
             {view.players.length ? (
-              <View style={styles.people}>
+              <ArriveFold key="played-here" arriving={arriving()}><View style={styles.people}>
                 <View style={styles.faces}>
                   {view.players.slice(0, 3).map((u, i) => (
                     <Pressable key={u.id} accessibilityRole="link" accessibilityLabel={`${u.name}, open profile`} hitSlop={4} onPress={() => router.push(`/user/${u.id}`)} style={({ pressed }) => [i > 0 && styles.faceOver, pressed && styles.pressed]}>
@@ -131,7 +139,7 @@ export function PlaceCard({ view }: { view: CourtView }) {
                   ))}
                 </View>
                 <Text style={styles.peopleText} numberOfLines={1}>Played here by <Text style={styles.peopleNames}>{view.playedBy}</Text></Text>
-              </View>
+              </View></ArriveFold>
             ) : null}
             {look === 'final' ? (
               <>

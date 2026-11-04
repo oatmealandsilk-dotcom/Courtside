@@ -52,3 +52,19 @@ export function simLongThread(): { questions: Question[]; answers: Answer[] } {
   };
   return { questions: [question], answers };
 }
+
+/**
+ * The simulator's proof only (load-in, Nov 4): with EXPO_PUBLIC_SIM_FACES=1 bundled, every demo player has a profile photo,
+ * a file the Mac puts in the app's Documents folder (sim-face-<id>.jpg), as the live app's players have; the demo's own
+ * have none, so a face's photo arriving over its initials could not be seen. Nothing at all outside the harness.
+ */
+export function simFaces<T extends { id: string; avatarUrl?: string }>(users: T[]): T[] {
+  if (!SIM_DRIVER || process.env.EXPO_PUBLIC_SIM_FACES !== '1') return users;
+  let docs = '';
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Paths } = require('expo-file-system') as typeof import('expo-file-system');
+    docs = Paths.document.uri.replace(/\/?$/, '/');
+  } catch { return users; }
+  return users.map((u) => (u.avatarUrl ? u : { ...u, avatarUrl: `${docs}sim-face-${u.id}.jpg` }));
+}

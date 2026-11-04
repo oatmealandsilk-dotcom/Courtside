@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { Tappable } from '@/components/Tappable';
+import { arriveEntering, arriveExiting, useArriveGate } from '@/components/ui/Arrive';
 import { useApp } from '@/store/AppContext';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { blockedDirect, isGroupChat, isMuted, unreadChatCount } from '@/features/messages/groupRules';
@@ -23,8 +24,13 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
   const styles = useThemedStyles(styleDefinitions);
   const scale = useSharedValue(1);
   const last = useRef(count);
+  // Load-in (admins first, loadIn.ts): a first count arriving while its page is on show grows in (from 60%, as it fades
+  // in) rather than appearing whole and then swelling; the last one going shrinks out rather than vanishing.
+  const arriving = useArriveGate();
+  const live = arriving();
   useEffect(() => {
-    if (count > last.current && count > 0) {
+    // (A count growing in from nothing has its own way in: no swell on top of it.)
+    if (count > last.current && count > 0 && !(live && last.current <= 0)) {
       scale.value = withSequence(
         withTiming(1.12, { duration: 120, easing: Easing.out(Easing.quad) }),
         withSpring(1, { damping: 20, stiffness: 320 }),
@@ -35,7 +41,7 @@ export function UnreadBadge({ count, style }: { count: number; style?: StyleProp
   const pop = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   if (count <= 0) return null;
   return (
-    <Reanimated.View pointerEvents="none" style={[styles.badge, style, pop]}>
+    <Reanimated.View pointerEvents="none" entering={arriveEntering(live ? 0 : null)} exiting={arriveExiting(live)} style={[styles.badge, style, pop]}>
       <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.badgeText}>{count > 9 ? '9+' : count}</Text>
     </Reanimated.View>
   );

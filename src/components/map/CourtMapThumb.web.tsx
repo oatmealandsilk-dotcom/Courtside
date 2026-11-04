@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View, type ImageStyle } from 'react-native';
 
 import { lookFor, thumbLook } from '@/components/map/look';
 import { THUMB_ZOOM, ThumbStandIn, keyName, makeQueue, thumbKey } from '@/components/map/thumbShared';
 import { themes, useTheme } from '@/theme/ThemeProvider';
+import { loadInOn } from '@/features/navigation/loadIn';
+import { markPhotoShown, photoFirstShowing } from '@/lib/photoSeen';
 
 /*
  * The browser twin of the phone's court picture. The same map engine the big
@@ -104,13 +106,20 @@ export function CourtMapThumb({ lat, lng, width, height, zoom = THUMB_ZOOM, draw
   const [shown, setShown] = useState(false);
   useEffect(() => { setShown(false); }, [shot]);
   useEffect(() => { onShown?.(shown); }, [shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  // With the load-in (admins first, loadIn.ts): the first showing this visit is a 200 ms fade over the stand-in (a CSS
+  // transition, as the phone's crossfade), the stand-in kept under it; any later showing is there as it loads.
+  const fast = loadInOn();
+  const fade = fast && photoFirstShowing(shot ?? undefined);
   return (
     <View style={{ width, height, overflow: 'hidden' }} pointerEvents="none">
-      {!shown ? <ThumbStandIn look={look} seed={key} /> : null}
-      {shot ? <Image source={{ uri: shot }} onLoad={() => setShown(true)} style={[StyleSheet.absoluteFill, { opacity: shown ? 1 : 0 }]} resizeMode="cover" /> : null}
+      {!shown || fast ? <ThumbStandIn look={look} seed={key} /> : null}
+      {shot ? <Image source={{ uri: shot }} onLoad={() => { if (fast) markPhotoShown(shot); setShown(true); }} style={[StyleSheet.absoluteFill, { opacity: shown ? 1 : 0 }, fade ? FADE : null]} resizeMode="cover" /> : null}
     </View>
   );
 }
+
+/** A CSS transition for react-native-web; not a type React Native knows. */
+const FADE = { transitionProperty: 'opacity', transitionDuration: '200ms', transitionTimingFunction: 'ease-out' } as unknown as ImageStyle;
 
 /** The phone draws its court pictures in a hidden web view this mounts; a browser draws them off screen itself, so there is nothing to mount. */
 export function CourtMapSnapshots() {

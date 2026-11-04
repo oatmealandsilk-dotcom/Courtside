@@ -5,6 +5,8 @@ import { Image, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'r
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { useMyId, useUsers } from '@/store/AppContext';
+import { loadInOn } from '@/features/navigation/loadIn';
+import { markPhotoShown, photoFirstShowing, photoTransition } from '@/lib/photoSeen';
 import { SELF_AVATAR_COLOR } from '@/theme/look';
 import { initials } from '@/lib/format';
 import { colors, inkOn, radius, font } from '@/theme';
@@ -110,7 +112,11 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
     >
       {/* White initials where white reads on the fill, else black: white alone fell to 1.5:1 on New York's yellow. */}
       {plain ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.label, quietInk ? { fontSize: size * 0.36, color: colors.text, ...font('500') } : { fontSize: size * 0.38, color: inkOn(fill) }]}>{initials(name)}</Text>}
-      {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
+      {/* The photo over the initials. With the load-in (admins first, loadIn.ts): kept in memory too, so a face
+          seen before is there in the very first frame (not read back from the phone's storage, decoded and
+          swapped in after the initials have shown), and the first time this session it crossfades in over
+          the initials rather than snapping (Nov 4, owner: "nothing should just cut in"). */}
+      {photo && <ExpoImage source={{uri:photo}} accessibilityLabel={`${name} profile photo`} contentFit="cover" recyclingKey={photo} cachePolicy={loadInOn() ? 'memory-disk' : undefined} transition={photoTransition(photo)} onLoad={photoFirstShowing(photo) ? () => markPhotoShown(photo) : undefined} style={{position:"absolute",width:size,height:size,borderRadius:size/2}}/>}
       {ring ? (
         <View
           accessibilityLabel="Coach"

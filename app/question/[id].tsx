@@ -1,4 +1,6 @@
 import { useSimTrace } from '@/lib/simTrace';
+import { Arrive, SwapText, useArriveGate, useArrivals } from '@/components/ui/Arrive';
+import { useLoadIn } from '@/features/navigation/loadIn';
 import { useArrived } from '@/lib/useArrived';
 import { tapFastOn, useTapFast } from '@/features/navigation/pressV2';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
@@ -12,7 +14,7 @@ import { goToTab } from '@/features/navigation/startTab';
 import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { startTransition, useEffect, useRef, useState } from 'react';
+import React, { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { openJoinSheet } from '@/features/guest/joinAsk';
@@ -98,6 +100,8 @@ const REST_FALLBACK_MS = 300;
  * draw; true REST_AFTER_MS after the slide has begun (the native slide plays on by itself then, so building them does
  * not hold it), as background work. Always true without the switch, or when the page opens at a reply (`at`).
  */
+const NO_REPLY_IDS: string[] = [];
+
 function useRestBuilt(lean: boolean): boolean {
   const navigation = useNavigation();
   const [built, setBuilt] = useState(!lean);
@@ -193,6 +197,14 @@ function QuestionDetail() {
     return () => { on = false; };
   }, [isAdmin, question?.id, question?.removed, canPin, arrived]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): replies that come in after the page is
+  // on show (the rest of the thread loading, yours posted) fade up into place; "No answers yet" fades out under them and
+  // the count crossfades. Counted over every reply the phone holds for the thread (not just those drawn yet), so the rest
+  // of a long thread being drawn once the page has slid in is never taken for replies arriving. (When the replies load is
+  // not this; only how they come in.)
+  const loadInNow = useLoadIn();
+  const replyArriving = useArriveGate();
+  const replySlot = useArrivals(useMemo(() => (question ? question.answerIds.filter((aid) => answers.some((a) => a.id === aid)) : NO_REPLY_IDS), [question, answers]));
   if (!question) {
     return (
       <Screen title="Thread" compactTitle onBack={() => goBack()}>
@@ -223,6 +235,7 @@ function QuestionDetail() {
   // their photos back until then (only ones surely below the first screen).
   const topReplies = thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId));
   const shownReplies = restBuilt ? topReplies : topReplies.slice(0, firstReplies);
+
   const photoLater = restBuilt ? [] : belowFirstScreen(shownReplies, thread, screenHeight);
 
 
@@ -372,12 +385,13 @@ function QuestionDetail() {
       <View style={styles.section}>
         <View style={styles.sectionHead}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Replies</Text>
-          {thread.length > 0 ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{thread.length}</Text> : null}
+          {loadInNow ? <SwapText maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount} text={thread.length > 0 ? String(thread.length) : ''} />
+            : thread.length > 0 ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{thread.length}</Text> : null}
         </View>
 
         {/* Only hidden replies so far: "Hidden replies" below says so, not "No answers yet". */}
         {thread.length === 0 && !hidden.length ? (
-          question.source ? (
+          <Arrive key="no-replies" slot={replyArriving() ? 0 : null} look="fade" leave="fade">{question.source ? (
             <EmptyState
               icon="chatbubble-ellipses-outline"
               title={`${question.source.replies} ${question.source.replies === 1 ? 'reply' : 'replies'} on ${question.source.label}`}
@@ -392,13 +406,15 @@ function QuestionDetail() {
                 ? 'We’ll let you know when a player or coach answers.'
                 : 'Know this one? A specific answer beats three vague ones.'}
             />
-          )
+          )}</Arrive>
         ) : null}
 
         <JumpProvider value={jump.ctx}>
           {shownReplies.map((answer, k) => (
             <MediaLaterContext.Provider key={answer.id} value={!restBuilt && photoLater[k]}>
-              <ThreadReply answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+              <Arrive slot={replySlot(answer.id)} look="lift">
+                <ThreadReply answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+              </Arrive>
             </MediaLaterContext.Provider>
           ))}
         </JumpProvider>

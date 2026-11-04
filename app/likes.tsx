@@ -17,6 +17,7 @@ import { colors, spacing, typography } from '@/theme';
 import { openPlayer } from '@/features/navigation/openPlayer';
 import { LESS_AI_ROUND2 } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { Arrive, useArriveGate } from '@/components/ui/Arrive';
 
 /**
  * Who liked a post or a hit, the way Instagram shows it: opened by holding
@@ -27,6 +28,7 @@ import { OfficialCheck } from '@/components/OfficialCheck';
  */
 export default function Likes() {
   const styles = useThemedStyles(styleDefinitions);
+  const arriving = useArriveGate();
   const params = useLocalSearchParams<{ id?: string; kind?: string; set?: string }>();
   // "played": the players who accepted their tag on the post's session (migration 62), the "+2" over a clip.
   const played = params.set === 'played';
@@ -65,12 +67,14 @@ export default function Likes() {
 
   return (
     <Screen title={played ? 'Who played' : tagged ? 'Tagged' : 'Likes'} compactTitle onBack={() => goBack()}>
+      {/* Load-in (admins first, loadIn.ts): the list that comes in after the page is on show fades in as the shapes held
+          for it fade out, rather than swapping in one frame. */}
       {!item && !looked ? (
-        <PeopleSkeleton />
+        <Arrive key="held" slot={null} leave="fade"><PeopleSkeleton /></Arrive>
       ) : !item ? (
         <EmptyState icon="lock-closed-outline" title="This post isn't available" body="It was deleted, or it's from a private account you don't follow." />
       ) : (
-        <>
+        <Arrive key="list" slot={arriving() ? 0 : null} look="fade">
           <Text style={styles.count}>{played ? (count === 1 ? '1 player' : `${count} players`) : tagged ? (count === 1 ? '1 person tagged' : `${count} people tagged`) : count === 1 ? '1 like' : `${count.toLocaleString()} likes`}</Text>
           {people.length > 6 ? (
             <View style={styles.searchWrap}>
@@ -109,7 +113,7 @@ export default function Likes() {
               );
             })
           )}
-        </>
+        </Arrive>
       )}
     </Screen>
   );

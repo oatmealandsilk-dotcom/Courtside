@@ -3,6 +3,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, LayoutAnimationConfig, LinearTransition, runOnJS, useAnimatedReaction, useSharedValue } from 'react-native-reanimated';
+import { Arrive, useArriveGate } from '@/components/ui/Arrive';
+import { ArriveFold } from '@/components/ui/ArriveFold';
 import * as haptics from '@/lib/haptics';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -82,6 +84,9 @@ export default function Inbox() {
   const styles = useThemedStyles(styleDefinitions);
   const { conversations, messages, users, currentUserId, currentUser, blockedIds, hitRequests, actions, lastSeen } = useApp();
   const [search, setSearch] = useState('');
+  // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): what turns up after the page is on
+  // show (Up to hit today, the first chats into an empty list, the empty note when the last one goes) comes in softly.
+  const arriving = useArriveGate();
   // Found the chats on your own: the "Your chats live here" tip on Profile is never needed.
   useEffect(() => { learned('messages'); }, []);
   // Opened from the Coaching tab's chats button: straight onto Coaches (or Clients, for a coach).
@@ -299,7 +304,7 @@ export default function Inbox() {
       <SearchField value={search} onChangeText={(t) => { setOpenRow(null); setSearch(t); }} placeholder="Search" accessibilityLabel="Search messages" style={styles.searchWrap} />
       {upToday.length && !search.trim() ? (
         // Instagram has notes here; CourtSide has who is up to hit today. A tap opens the chat with them.
-        <View style={styles.upToday}>
+        <ArriveFold key="up-today" arriving={arriving()}><View style={styles.upToday}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.upTodayTitle}>Up to hit today</Text>
           <ScrollView horizontal {...pageSwipeStrip} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.upTodayRow} style={styles.upTodayScroll}>
             {upToday.map((u) => (
@@ -311,7 +316,7 @@ export default function Inbox() {
               </Pressable>
             ))}
           </ScrollView>
-        </View>
+        </View></ArriveFold>
       ) : null}
       <View style={styles.sections}>
         {sections.map((seg) => (
@@ -320,10 +325,14 @@ export default function Inbox() {
       </View>
 
       {threads.length === 0 ? (
-        <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
+        <Arrive key="empty" slot={arriving() ? 0 : null} look="fade" leave="fade">
+          <EmptyState icon="chatbubble-ellipses-outline" title={emptyCopy.title} body={emptyCopy.body} action={{ label: 'New message', onPress: () => router.push('/messages/new') }} />
+        </Arrive>
       ) : (
-        // The rows there when the page opens are simply there; only later changes move.
-        <LayoutAnimationConfig skipEntering>
+        // The rows there when the page opens are simply there; only later changes move. With the load-in, chats coming
+        // into an empty list after the page is on show fade in as any later chat does (the list is built then, and
+        // skipping its first draw's arrivals skipped all of them).
+        <LayoutAnimationConfig skipEntering={!arriving()}>
         <View style={styles.list}>
           {shownThreads.map((t, index) => {
             const { conversation, muted, unread, name } = t;

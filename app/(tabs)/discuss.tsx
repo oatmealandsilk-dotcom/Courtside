@@ -5,6 +5,8 @@ import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
 import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { Fold, FoldList, Pop } from '@/components/ui/Fold';
+import { ArriveFold } from '@/components/ui/ArriveFold';
+import { useArriveGate } from '@/components/ui/Arrive';
 import { useRestKey } from '@/components/ui/restMotion';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
@@ -118,6 +120,8 @@ const FURTHER_MILES = 100;
 const NEW_DAYS = 14;
 /** New players shown before "Show more". */
 const NEW_SHOWN = 6;
+/** The threads list's own gap (styles.list), for a fold at its top. */
+const LIST_GAP = spacing.md;
 /** Keys for the folding lists (FoldList): a hit by its id, a player by theirs. */
 const hitKey = (x: { hit: { id: string } }) => x.hit.id;
 const userKey = (u: { id: string }) => u.id;
@@ -137,6 +141,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // leaves out what is never in sight. The real tab under the thread already loaded it all (Nov 3 review).
   const tapFast = useTapFast();
   const pictureOnly = !!previewSection && tapFast;
+  // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): a section that turns up after this
+  // page is on show (People you may know, Near you, the invite card) unfolds, so the page under it glides down rather
+  // than jumping. Never in a picture of the page (a swipe's preview), never for what is there in its first frame.
+  const arriving = useArriveGate(!!previewSection);
   const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded, pinnedQuestion, remoteLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made
@@ -748,8 +756,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             on their map yet, the same card as "Bring your friends". */}
         {/* Under the map (whose frame is there at once), the sections arrive in a short, quiet
             stagger as the opening curtain lifts, the first time only (FirstReveal, Oct 21). */}
-        {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
-        {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
+        {!search && early ? <ArriveFold key="early" arriving={arriving()} gap={12}><FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal></ArriveFold> : null}
+        {!search && friendsEarly ? <ArriveFold key="friends-early" arriving={arriving()} gap={12}><FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal></ArriveFold> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
         {currentUser && !search && showUpToday ? (
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
@@ -760,7 +768,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         ) : null}
         {/* People you may know (admins first, Oct 28): people who follow you to follow back, then people you may know.
             People first: under Up to hit / "Most active in <city>", above the city board. */}
-        {!search && pymk ? <FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal> : null}
+        {!search && pymk ? <ArriveFold key="pymk" arriving={arriving()} gap={12}><FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal></ArriveFold> : null}
         {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
             People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
         {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
@@ -873,7 +881,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {/* Near you: friends checked in within 30 miles (only friends since migration 189), with how far, then the players
             whose profile town is yours (migration 190), by their town only: the same "near" as the map's Near me. */}
         {!search && (nearPlayers.length || townNear.length) ? (
-          <View>
+          <ArriveFold key="near-you" arriving={arriving()} gap={12}><View>
             <View style={styles.playersHead}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
               {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends up to hit, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends up to hit within 30 miles'}</Text>}
@@ -909,7 +917,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 <Ionicons name={nearOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
               </Pressable>
             ) : null}
-          </View>
+          </View></ArriveFold>
         ) : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
         {/* New players in other cities: the link folds away as the list unfolds in its place (Oct 22 sweep, item 7). */}
@@ -1024,7 +1032,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       ) : (
         <View style={styles.list}>
           {pinned ? (
-            <View style={styles.pinned}>
+            // Load-in: loaded after the page is on show (it is not kept between launches), it unfolds at the top and the
+            // threads glide down under it, rather than everything jumping (admins first, loadIn.ts).
+            <ArriveFold key="pinned" arriving={arriving()} gap={LIST_GAP}><View style={styles.pinned}>
               <View style={styles.pinnedLabel} accessible accessibilityLabel={LESS_AI_DISCUSS ? 'Question of the week' : 'Question of the week, this week'}>
                 <Ionicons name="pin" size={13} color={colors.brand} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.pinnedTitle}>Question of the week</Text>
@@ -1039,7 +1049,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
                 onShare={() => router.push(`/share?kind=question&id=${pinned.id}`)}
                 onPress={() => router.push(`/question/${pinned.id}`)}
               />
-            </View>
+            </View></ArriveFold>
           ) : null}
           {slice.map((q) => (
             <QuestionCard

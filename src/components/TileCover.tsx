@@ -2,6 +2,7 @@ import React, { useSyncExternalStore } from 'react';
 import { Image as ExpoImage, type ImageProps } from 'expo-image';
 
 import { smallCoverOf } from '@/lib/smallCover';
+import { markPhotoShown, photoFirstShowing, photoTransition } from '@/lib/photoSeen';
 
 // Small covers found missing this session (one whose small copy did not make
 // it, or was still on its way). Every tile showing that cover switches to the
@@ -25,14 +26,20 @@ function markMissing(small: string) {
  * there it swaps to the full cover in place, so the tile never shows a
  * broken picture. Full-screen pages keep the full cover.
  */
-export function TileCover({ uri, onError, ...rest }: Omit<ImageProps, 'source'> & { uri?: string }) {
+export function TileCover({ uri, onError, onLoad, transition, ...rest }: Omit<ImageProps, 'source'> & { uri?: string }) {
   useSyncExternalStore(subscribe, version, version);
   if (!uri) return null;
   const small = smallCoverOf(uri);
   const trySmall = !!small && !missing.has(small);
+  const shown = trySmall ? small : uri;
+  // The caller's fade only the first time this cover is shown this session (load-in, admins first: photoSeen.ts),
+  // so a profile or a grid opened again has its tiles there at once rather than fading them all in again.
+  const first = photoFirstShowing(shown);
   return (
     <ExpoImage
       {...rest}
+      transition={photoTransition(shown, transition)}
+      onLoad={first ? (e) => { markPhotoShown(shown); onLoad?.(e); } : onLoad}
       // A fresh picture for the swap: kept as the same one, the browser
       // version fades the failed small copy out again, asking for it twice.
       key={trySmall ? 'small' : 'full'}

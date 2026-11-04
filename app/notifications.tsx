@@ -42,6 +42,8 @@ import { reasonFromLabel } from '@/features/moderation/reasons';
 import { openRules } from '@/features/moderation/RemovedNote';
 import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSwitch';
 import { useArrived } from '@/lib/useArrived';
+import { Arrive, arriveEntering, useArriveGate, useArrivals } from '@/components/ui/Arrive';
+import { ArriveFold } from '@/components/ui/ArriveFold';
 import { toastForJoin } from '@/features/groups/GroupInvitesSection';
 
 /**
@@ -658,6 +660,12 @@ export default function Notifications() {
   // still look one row back in `groups`: the rows drawn are always its first ones.
   const arrived = useArrived();
   const shownGroups = arrived ? groups : groups.slice(0, FIRST_ROWS);
+  // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): a notification that comes in while the
+  // page is on show fades up into place as the rows under it glide down; "Was this tennis?" unfolds; the empty note and
+  // the first rows crossfade. Counted over every row the page holds (not just those drawn yet), so the rest of a long
+  // list being drawn after the page has slid in is never taken for new rows arriving.
+  const arriving = useArriveGate();
+  const slotOf = useArrivals(groups.map((g) => g.key));
   // A take-down's or a kept review's reason and thing, from the row's own words.
   const reasonOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).reason : reviewNotice(group.preview).reason);
   const thingOf = (group: Group) => (group.kind === 'removed' ? removedNotice(group.preview).thing : reviewNotice(group.preview).thing);
@@ -690,7 +698,7 @@ export default function Notifications() {
         // Fitbit files tennis as "Sport" (migration 185); a yes logs every one waiting, and after two yeses
         // its Sport sessions log themselves as tennis (migration 193; owner, Oct 27: "mutuals default auto log fitbit.").
         // Only once the database has 193 (its settings row says so), so the button never says "Couldn't".
-        <View style={[styles.row, styles.rowUnread, styles.welcomeGap]}>
+        <ArriveFold key="unsure" arriving={arriving()}><View style={[styles.row, styles.rowUnread, styles.welcomeGap]}>
           <View style={[styles.brandFace, styles.brandFaceOnTint]}><BrandMark size={24} /></View>
           <View style={styles.body}>
             <Text style={styles.who}>Was this tennis?</Text>
@@ -699,9 +707,10 @@ export default function Notifications() {
           <Pressable accessibilityRole="button" accessibilityLabel={unsure.length === 1 ? 'Yes, this was tennis' : `Yes, these ${unsure.length} were tennis`} accessibilityState={{ busy: unsureBusy }} disabled={unsureBusy} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={() => { void yesAll(); }} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
             {unsureBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.acceptText}>{unsure.length === 1 ? 'Yes' : `Yes, all ${unsure.length}`}</Text>}
           </Pressable>
-        </View>
+        </View></ArriveFold>
       ) : null}
       {groups.length === 0 ? (
+        <Arrive key="empty" slot={arriving() ? 0 : null} look="fade" leave="fade">
         <EmptyState
           icon="notifications-outline"
           title={welcome.shown ? 'Nothing else yet' : 'Nothing yet'}
@@ -709,10 +718,12 @@ export default function Notifications() {
           // The welcome above already offers the way on.
           action={welcome.shown ? undefined : { label: 'Find players', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }}
         />
+        </Arrive>
       ) : (
         // The rows there on opening are simply there; one that goes (a request declined) fades out
-        // and the rest close up smoothly (Oct 22 sweep).
-        <LayoutAnimationConfig skipEntering>
+        // and the rest close up smoothly (Oct 22 sweep). (Built after the page is on show, with the load-in,
+        // its first rows are arrivals too: below.)
+        <LayoutAnimationConfig skipEntering={!arriving()}>
         <View style={styles.list}>
           {shownGroups.flatMap((group, index) => {
             const icon = ICON[group.kind] ?? { name: 'notifications', tint: 'brand' };
@@ -751,7 +762,7 @@ export default function Notifications() {
                   <Text style={[styles.heading, index > 0 && { marginTop: spacing.lg }]}>{heading}</Text>
                 </Animated.View>
               ) : null,
-              <Animated.View key={group.key} layout={ROW_GLIDE} exiting={ROW_OUT}>
+              <Animated.View key={group.key} layout={ROW_GLIDE} entering={arriveEntering(slotOf(group.key), 'lift')} exiting={ROW_OUT}>
               <Pressable
                 accessibilityRole={dead ? 'text' : 'link'}
                 accessibilityLabel={`${who} ${verb}`}

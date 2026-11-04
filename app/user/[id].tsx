@@ -14,6 +14,7 @@ import { SectionPager } from '@/components/SectionPager';
 import Reanimated from 'react-native-reanimated';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { TileCover } from '@/components/TileCover';
+import { Arrive, useArriveGate, useArrivals } from '@/components/ui/Arrive';
 import { CarouselMark } from '@/components/CarouselMark';
 import { SessionTile } from '@/components/session/SessionTile';
 import { hasSessionStats, sessionOnly } from '@/features/activity/format';
@@ -140,13 +141,19 @@ function UserProfile() {
   // screen down), with the page; the rest once it has slid in, below the screen's edge, so the page
   // never waits on tiles nobody can see yet (the quicker press feel's, like the other grids).
   const firstTiles = (Math.ceil(windowHeight / 2 / Math.max(tileH, 1)) + 1) * 3;
+  // Load-in (Nov 4, owner: "nothing should just cut in"; admins first, loadIn.ts): tiles that come in once their posts
+  // load, after the page is on show, fade in a row at a time, and the "No posts yet" they replace fades out under them.
+  // What the page has in its first frame (and the rest of a long grid drawn once it has slid in) is simply there.
+  const arriving = useArriveGate();
+  const tileSlot = useArrivals(TABS.flatMap((t) => lists[t].map((p) => `${t}:${p.id}`)));
   const grid = (section: (typeof TABS)[number]) => {
     const items = arrived ? lists[section] : lists[section].slice(0, firstTiles);
     return (
         <View style={{ minHeight: 320 }}>
             <View style={styles.grid} onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== gridW) setGridW(w); }}>
-              {items.map((p) => (
-                <Pressable key={p.id} accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: userId ?? '', post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
+              {items.map((p, i) => (
+                <Arrive key={p.id} slot={tileSlot(`${section}:${p.id}`) === null ? null : Math.floor(i / 3)} look="fade">
+                <Pressable accessibilityRole="link" accessibilityLabel={`Open ${p.pinned && section !== 'Tagged' ? 'pinned ' : ''}${p.kind}: ${p.body}`} onPress={() => router.push({ pathname: '/posts/[userId]', params: { userId: userId ?? '', post: p.id, set: section === 'Clips' ? 'clips' : section === 'Activity' ? 'activity' : section === 'Tagged' ? 'tagged' : 'own' } })} style={[styles.tile, { width: tileW, height: tileH }]}>
                   <View style={[StyleSheet.absoluteFill, styles.tileBlank]}><Text numberOfLines={5} style={styles.tileText}>{p.body}</Text></View>
                   {p.thumbnailUrl ? <TileCover accessibilityIgnoresInvertColors uri={p.thumbnailUrl} style={StyleSheet.absoluteFill} contentFit="cover" recyclingKey={p.id} transition={120} /> : p.session && hasSessionStats(p.session) && !p.imageUrl && !p.videoUrl ? <SessionTile session={p.session} width={tileW} /> : null}
                   {/* Several photos: the stacked mark, where a clip has its play mark. */}
@@ -159,9 +166,10 @@ function UserProfile() {
                   {/* Taken down (migration 108): only admins ever see someone else's, dimmed and marked. */}
                   {p.removed ? <TileRemoved /> : null}
                 </Pressable>
+                </Arrive>
               ))}
             </View>
-            {!lists[section].length && <EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} />}
+            {!lists[section].length && <Arrive slot={arriving() ? 0 : null} look="fade" leave="fade"><EmptyState title={section === 'Tagged' ? 'No tagged posts yet' : section === 'Activity' ? 'No activity yet' : `No ${section.toLowerCase()} yet`} body={section === 'Activity' ? 'Hits and matches they post with their stats show up here.' : 'Their shared moments will appear here.'} /></Arrive>}
         </View>
     );
   };
