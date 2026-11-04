@@ -59,7 +59,7 @@ import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getPosition, recentPosition } from '@/lib/geo';
-import { simCheckIn } from '@/lib/simDriver';
+import { simCheckIn, simThreadFetch } from '@/lib/simDriver';
 import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
 import { smallCoverOf } from '@/lib/smallCover';
@@ -7003,7 +7003,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const loadThreads = useCallback(async (): Promise<boolean | null> => false, []);
   // Opening a thread: all of its replies, not only the newest that came with the app.
   const loadThread = useCallback(async (questionId: ID) => {
-    if (!live(stateRef.current.currentUserId, questionId)) return;
+    if (!live(stateRef.current.currentUserId, questionId)) {
+      // The simulator's proof only (simThreadFetch): the server's answer as the live app gets it, the same replies as new lists.
+      if (simThreadFetch.ms > 0) {
+        await simThreadFetch.wait(simThreadFetch.ms);
+        setState((prev) => ({ ...prev, answers: [...prev.answers], questions: prev.questions.map((q) => (q.id === questionId ? { ...q } : q)) }));
+      }
+      return;
+    }
     // A thread older than the first load's 300 is fetched on its own first.
     if (!stateRef.current.questions.some((q) => q.id === questionId)) {
       const found = await remote.fetchQuestion(questionId);
