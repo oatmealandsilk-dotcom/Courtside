@@ -45,9 +45,13 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
   // Covered or another tab: gone in this same draw (and for good: a new copy starts once the card has settled again).
   if (!shown && !over) setOver(true);
   const endedRef = useRef(false);
+  // Its clocks and its ear for fingers, stopped the moment it ends (it stays mounted, drawing nothing, until the card moves on):
+  // a copy whose picture was shot is never counted as failed later by its give-up clock (v3).
+  const stopAll = useRef<() => void>(() => undefined);
   const end = useRef((why: 'shot' | 'failed' | 'cut', by = '') => {
     if (endedRef.current) return;
     endedRef.current = true;
+    stopAll.current();
     simLog(`[warm] copy ${why}${by ? ` ${by}` : ''} ${Date.now() - t0.current}ms`);
     setOver(true);
     overNow.current();
@@ -56,10 +60,11 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
     startGen.current = startMapWarm();
     simLog('[warm] copy start');
     stop.current = () => end('cut', 'tap');
-    const giveUp = setTimeout(() => { failedMapWarm(warmKey); end('failed'); }, GIVE_UP_MS);
+    const giveUp = setTimeout(() => { if (endedRef.current) return; failedMapWarm(warmKey); end('failed'); }, GIVE_UP_MS);
     const check = setInterval(() => { if (!aliveNow.current()) end('cut', 'busy'); }, ALIVE_MS);
     const offFinger = onFingerDown(() => end('cut', 'finger'));
-    return () => { clearTimeout(giveUp); clearInterval(check); offFinger(); if (stop.current) stop.current = null; end('cut'); };
+    stopAll.current = () => { clearTimeout(giveUp); clearInterval(check); offFinger(); };
+    return () => { stopAll.current(); if (stop.current) stop.current = null; end('cut'); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (over) end('cut'); }, [over]); // eslint-disable-line react-hooks/exhaustive-deps
   if (over) return null;
