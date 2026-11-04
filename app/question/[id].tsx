@@ -1,20 +1,20 @@
 import { useSimTrace } from '@/lib/simTrace';
 import { useArrived } from '@/lib/useArrived';
-import { useTapFast } from '@/features/navigation/pressV2';
+import { tapFastOn, useTapFast } from '@/features/navigation/pressV2';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { ThreadReply } from '@/components/ThreadReplies';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
 import { useMentionDraft } from '@/features/mentions/useMentionDraft';
-import { AttachButton, AttachedPreview, type ReplyAttachment } from '@/components/ReplyMedia';
+import { AttachButton, AttachedPreview, MediaLaterContext, type ReplyAttachment } from '@/components/ReplyMedia';
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
 import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
-import React, { useEffect, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import React, { startTransition, useEffect, useRef, useState } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, TextInput, View, useWindowDimensions } from 'react-native';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { openJoinSheet } from '@/features/guest/joinAsk';
 import { goBack } from '@/lib/goBack';
 import { afterMenu, confirmAfterMenu, confirmReport } from '@/lib/confirm';
@@ -53,6 +53,70 @@ import { OfficialCheck } from '@/components/OfficialCheck';
 
 /** How long after the page has slid in its view is counted (taps that answer sooner only). */
 const VIEW_AFTER_MS = 400;
+/**
+ * Taps that answer sooner (pressV2's TAP_FAST, admins first): how many replies, from the top, the page's first draw
+ * carries. A phone cannot start the slide until every part of the page is built, and a long thread's replies (each
+ * with its votes, its fold and maybe a photo) held the slide back by a third of a second (Nov 4, owner: "Tapping a
+ * discussion thread is not instant response and open"). Six (more on a taller phone: firstRepliesFor) is more than a
+ * screen holds even when every reply is one line, so the ones after are always out of sight below; they are built a
+ * moment after the slide has begun (REST_AFTER_MS), well before it lands. So are the photos of replies that are surely
+ * below the first screen (MediaLaterContext, belowFirstScreen); one that may be in sight is drawn with the page, as before.
+ */
+const FIRST_REPLIES = 6;
+/** The shortest a reply can be (one line, its name and its buttons), and the least the page has above its replies. */
+const SHORTEST_REPLY = 100;
+const ABOVE_REPLIES = 320;
+/** Six, or more on a phone tall enough to show more one-line replies than that. */
+const firstRepliesFor = (screenHeight: number) => Math.max(FIRST_REPLIES, Math.ceil((screenHeight - ABOVE_REPLIES) / SHORTEST_REPLY));
+/**
+ * The least room a reply and the replies under it can take: its name and buttons, each line of its words past the first
+ * (never more than LINE_CHARS letters to a line, at any text size), and its photo or clip (never under SHORTEST_MEDIA).
+ */
+const LINE_CHARS = 60;
+const LINE = 23;
+const SHORTEST_MEDIA = 200;
+const SHORTEST_REPLY_BOX = 90;
+function leastHeight(answer: Answer, thread: Answer[]): number {
+  const lines = Math.max(1, Math.ceil((answer.body?.length ?? 0) / LINE_CHARS));
+  const own = SHORTEST_REPLY_BOX + (lines - 1) * LINE + (answer.media ? SHORTEST_MEDIA : 0);
+  return own + thread.filter((c) => c.parentAnswerId === answer.id).reduce((sum, c) => sum + leastHeight(c, thread), 0);
+}
+/**
+ * For each reply in `replies` (top-level, in order): whether it starts below the first screen whatever the text size or
+ * phone, i.e. the least room everything above it can take already fills the screen. Only those keep their photos back.
+ */
+function belowFirstScreen(replies: Answer[], thread: Answer[], screenHeight: number): boolean[] {
+  let above = ABOVE_REPLIES;
+  return replies.map((a) => { const below = above >= screenHeight; above += leastHeight(a, thread); return below; });
+}
+const REST_AFTER_MS = 60;
+/** In case the slide never says it has begun (opened without one, or the event lost): the rest is built anyway. */
+const REST_FALLBACK_MS = 300;
+
+/**
+ * Taps that answer sooner only: whether the replies past the first FIRST_REPLIES are built yet. False on the first
+ * draw; true REST_AFTER_MS after the slide has begun (the native slide plays on by itself then, so building them does
+ * not hold it), as background work. Always true without the switch, or when the page opens at a reply (`at`).
+ */
+function useRestBuilt(lean: boolean): boolean {
+  const navigation = useNavigation();
+  const [built, setBuilt] = useState(!lean);
+  useEffect(() => {
+    if (built) return undefined;
+    let done = false;
+    let beat: ReturnType<typeof setTimeout> | undefined;
+    const build = () => {
+      if (done) return;
+      done = true;
+      startTransition(() => setBuilt(true));
+    };
+    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    const stop = events.addListener?.('transitionStart', (e) => { if (!e?.data?.closing && !beat) beat = setTimeout(build, REST_AFTER_MS); });
+    const fallback = setTimeout(build, REST_FALLBACK_MS);
+    return () => { done = true; clearTimeout(fallback); if (beat) clearTimeout(beat); stop?.(); };
+  }, [navigation, built]);
+  return built;
+}
 
 function QuestionDetail() {
   useSimTrace('Thread');
@@ -76,7 +140,18 @@ function QuestionDetail() {
   const loadThread = actions.loadThread;
   const { ready } = useApp();
   const [looked, setLooked] = useState(false);
-  useEffect(() => { if (ready) void loadThread(String(id)).finally(() => setLooked(true)); }, [loadThread, id, ready]);
+  // With taps that answer sooner, they are asked for at once but put in once the page has landed: put in as the server
+  // answered, every page in the app redrew for them, often right as the slide began (Nov 4). Leaving first puts them in too.
+  const landed = useRef<{ promise: Promise<void>; done: () => void } | null>(null);
+  if (!landed.current) { let done!: () => void; const promise = new Promise<void>((r) => { done = r; }); landed.current = { promise, done }; }
+  useEffect(() => { if (arrived) landed.current?.done(); }, [arrived]);
+  useEffect(() => () => landed.current?.done(), []);
+  useEffect(() => { if (ready) void loadThread(String(id), viewLater ? landed.current?.promise : undefined).finally(() => setLooked(true)); }, [loadThread, id, ready]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Taps that answer sooner: the first draw carries the question and the replies a screen can hold (FIRST_REPLIES), the rest
+  // come as the page slides in. Not when it opens at a reply (`at`), which may be further down.
+  const restBuilt = useRestBuilt(tapFastOn() && !at);
+  const screenHeight = useWindowDimensions().height;
+  const firstReplies = firstRepliesFor(screenHeight);
   const jump = useJumpTo(at, looked);
   // The order the replies were put in (most votes first), kept while you read: a vote never moves a
   // reply under your thumb, as on Reddit. Worked out again when the thread has loaded and on a
@@ -106,10 +181,12 @@ function QuestionDetail() {
   const menuBottom = useModalSheetBottom(menuOpen, spacing.xxl);
   useEffect(() => {
     if (!isAdmin || !question || question.removed) { setPinnable(false); return undefined; }
+    // Taps that answer sooner: asked once the page has landed (the answer only changes the "⋯" menu, and it redrew the page mid-slide).
+    if (viewLater && !arrived) return undefined;
     let on = true;
     void canPin(question.id).then((ok) => { if (on) setPinnable(ok); });
     return () => { on = false; };
-  }, [isAdmin, question?.id, question?.removed, canPin]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isAdmin, question?.id, question?.removed, canPin, arrived]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!question) {
     return (
@@ -137,6 +214,11 @@ function QuestionDetail() {
   const rank = replyOrder.current.rank;
   const placeOf = (a: Answer) => rank.get(a.id) ?? Number.MAX_SAFE_INTEGER;
   const thread = listed.sort((a, b) => placeOf(a) - placeOf(b) || b.votes - a.votes);
+  // The replies drawn now (the first screen's, until the rest are built: taps that answer sooner), and which of them keep
+  // their photos back until then (only ones surely below the first screen).
+  const topReplies = thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId));
+  const shownReplies = restBuilt ? topReplies : topReplies.slice(0, firstReplies);
+  const photoLater = restBuilt ? [] : belowFirstScreen(shownReplies, thread, screenHeight);
 
 
   // Taken down by an admin (migration 108): only its author and admins can open it, and nobody can reply.
@@ -309,14 +391,18 @@ function QuestionDetail() {
         ) : null}
 
         <JumpProvider value={jump.ctx}>
-          {thread.filter(answer => !answer.parentAnswerId || !thread.some(parent => parent.id === answer.parentAnswerId)).map(answer => (
-            <ThreadReply key={answer.id} answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+          {shownReplies.map((answer, k) => (
+            <MediaLaterContext.Provider key={answer.id} value={!restBuilt && photoLater[k]}>
+              <ThreadReply answer={answer} thread={thread} askerId={question.authorId} closed={!!removed} />
+            </MediaLaterContext.Provider>
           ))}
         </JumpProvider>
 
-        <HiddenComments count={hidden.length} noun="replies">
-          {hidden.map((a) => <HiddenReplyRow key={a.id} authorId={a.authorId} body={a.body} createdAt={a.createdAt} onUnhide={() => actions.unhideByWords('answer', a.id)} />)}
-        </HiddenComments>
+        {restBuilt ? (
+          <HiddenComments count={hidden.length} noun="replies">
+            {hidden.map((a) => <HiddenReplyRow key={a.id} authorId={a.authorId} body={a.body} createdAt={a.createdAt} onUnhide={() => actions.unhideByWords('answer', a.id)} />)}
+          </HiddenComments>
+        ) : null}
 
       </View>
 

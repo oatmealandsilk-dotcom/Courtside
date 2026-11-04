@@ -15,3 +15,4 @@ export const simCheckIn = {
   reading: async (fix: GeoResult): Promise<GeoResult> => fix,
   server: async (): Promise<boolean> => true,
 };
+export const simThreadFetch = { ms: 0, wait: async (_ms: number): Promise<void> => undefined };
