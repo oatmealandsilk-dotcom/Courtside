@@ -42,6 +42,7 @@ import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, H
 import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
 import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
+import { useTapFast } from '@/features/navigation/pressV2';
 import { askToHit } from '@/features/players/courtLink';
 import { isOpenToHit } from '@/features/players/openToHit';
 import { useOpenClock } from '@/features/players/useOpenClock';
@@ -1221,6 +1222,7 @@ export function NearbyMap(props: NearbyMapProps) {
         </Reanimated.View>
       ) : null}
       {mapView}
+      <EdgeBackStrip />
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? (fz && chromeControl ? chromeControl : checkIn) : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={fz ? (fz.homeKnown ? fz.cityName : '') : model.homeKnown ? cityName : ''} weather={fz ? (fz.homeKnown ? fz.weather : null) : model.homeKnown ? weather : null} copy={!!fz} />
@@ -1377,6 +1379,25 @@ function tempPicture(dataUrl: string): string | null {
     return null;
   }
 }
+
+/** How far in from the left edge a finger is the iPhone's swipe back, never the map (EdgeBackStrip). */
+const EDGE_BACK = 20;
+
+/**
+ * On the iPhone, with taps that answer sooner (pressV2's TAP_FAST: admins first): a clear strip down the full map's
+ * left edge, over the map's web page and under everything else on it (Nov 4, owner: "Swiping back is super laggy").
+ * A swipe back from the edge that lands on the web page waits for the page to answer the touch; while the page is
+ * busy (loading, the first second or so, or a busy phone) the wait outlasts the swipe, so the map took it as a drag
+ * and nothing went back. A finger that lands here never reaches the page, so the edge is always the swipe back.
+ * Nothing is drawn, nothing listens to it, and a drag that starts further in is the map's exactly as before.
+ */
+function EdgeBackStrip() {
+  const on = useTapFast();
+  if (Platform.OS !== 'ios' || !on) return null;
+  // Never folded away as a mere box (collapsable): it has to be a real view for the finger to land on.
+  return <View collapsable={false} accessible={false} importantForAccessibility="no" style={edgeStrip} />;
+}
+const edgeStrip = { position: 'absolute' as const, left: 0, top: 0, bottom: 0, width: EDGE_BACK };
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },

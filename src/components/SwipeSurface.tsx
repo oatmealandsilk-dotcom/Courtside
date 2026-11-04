@@ -1,16 +1,18 @@
-import React, { startTransition, useEffect, useMemo, useState } from 'react';
-import { View } from 'react-native';
+import React, { startTransition, use, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
+import { NavigationContext } from 'expo-router/build/react-navigation/core/NavigationContext';
 import { useResponsive } from '@/lib/useResponsive';
 import { isPageSwipeLocked, setPageDragging, subscribePageSwipeLock } from '@/features/navigation/swipeLock';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { SwipeArea } from '@/features/navigation/swipePress';
-import { tapFastOn } from '@/features/navigation/pressV2';
-import { pagesStillFor } from '@/features/navigation/scrollQuiet';
+import { tapFastOn, useTapFast } from '@/features/navigation/pressV2';
+import { pageScrollHeld, pagesStillFor } from '@/features/navigation/scrollQuiet';
 import { TabOnShowContext, TabOnShowLaterContext } from '@/lib/useIsFocused';
+import { simLog } from '@/lib/simDriver';
 
-/** Well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
+/** The latest it is built: well after the page has slid in (the phone's push is about 350 ms, starting up to 0.4 s after the tap), as background work. */
 const WARM_AFTER_MS = 1200;
 /** And once no page has scrolled for this long (a fling's glide included). */
 const STILL_FOR_MS = 500;
@@ -20,23 +22,47 @@ const STILL_FOR_MS = 500;
  * 272-595 ms mid-swipe on the Simulator, because the whole Community page was built as the finger
  * started to move, and the slide waited on it). With taps that answer sooner only (pressV2's TAP_FAST:
  * admins first): it keeps a second Community drawn out of sight while a thread is open.
+ *
+ * Built as soon as the page has landed (Nov 4, owner: "Swiping back is super laggy"): a swipe started in
+ * the first 1.2 s still built it as the finger began to move, and froze 0.15-0.38 s on the Simulator. Now
+ * one frame after the push says it has landed (its transitionEnd, never inside the slide), on the iPhone;
+ * 1.2 s stays as the latest, for a page that never says (and on Android). `keep` marks it built when a drag that way built it first, so
+ * letting go never takes it down to be built again.
  */
-function useWarmPreview(want: boolean): boolean {
+function useWarmPreview(want: boolean): { ready: boolean; keep: () => void } {
   const [ready, setReady] = useState(false);
+  const navigation = use(NavigationContext);
+  const asked = useRef(false);
   useEffect(() => {
     if (!want || ready || !tapFastOn()) return undefined;
+    const build = (why: string) => {
+      if (asked.current) return;
+      asked.current = true;
+      simLog(`[warm] build ${why}`);
+      startTransition(() => setReady(true));
+    };
     // Never in the middle of a scroll: built while the page under it was moving, it caught that scroll for
     // 40-45 ms (Nov 3 review); it waits until no page has moved for a moment.
     let t: ReturnType<typeof setTimeout>;
     const tryNow = () => {
       if (pagesStillFor() < STILL_FOR_MS) { t = setTimeout(tryNow, 250); return; }
-      startTransition(() => setReady(true));
+      build('later');
     };
     t = setTimeout(tryNow, WARM_AFTER_MS);
-    return () => clearTimeout(t);
-  }, [want, ready]);
+    let frame = 0;
+    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void } | undefined;
+    // The iPhone's only (the one proved on the Simulator); elsewhere 1.2 s, as before.
+    const stop = Platform.OS !== 'ios' ? undefined : events?.addListener?.('transitionEnd', (e) => {
+      if (e?.data?.closing) return;
+      simLog('[warm] landed');
+      // A frame after landing, unless a finger is already scrolling the page (then it waits for a still page, as above).
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => { if (!pageScrollHeld.value) build('landed'); });
+    });
+    return () => { clearTimeout(t); cancelAnimationFrame(frame); stop?.(); };
+  }, [want, ready, navigation]);
   // Once built it stays (a drag never finds it half there); it only starts while no drag is on.
-  return ready;
+  return { ready, keep: () => { if (!tapFastOn()) return; asked.current = true; setReady(true); } };
 }
 
 /**
@@ -47,7 +73,7 @@ function useWarmPreview(want: boolean): boolean {
  * JavaScript only hears from the gesture at three moments: when it starts (to
  * mount the preview), when it is known to be going through, and when it lands.
  */
-export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest, gap = 0, commitAt = 0.28, warm }: {
+export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress, enabled: requestedEnabled = true, fill = true, renderPreview, delegateRight = false, delegateLeft = false, settledKey, progress: progressValue, depth = 1, slideRef, onRest, gap = 0, commitAt = 0.28, warm, onWarm }: {
   children: React.ReactNode; onSwipe: (direction: 1 | -1) => void;
   /** Fires the instant the gesture is known to be going through, before the animation. */
   onCommit?: (direction: 1 | -1) => void;
@@ -88,6 +114,8 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
    * that way finds it ready (see useWarmPreview). Undefined: built as the drag starts, as before.
    */
   warm?: 1 | -1;
+  /** Fires once the warm preview is built (taps that answer sooner): the page may hold its own landing work till then. */
+  onWarm?: () => void;
 }) {
   const { isPhone } = useResponsive();
   const enabled = requestedEnabled && isPhone;
@@ -112,9 +140,15 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const [dragging, setDragging] = useState(false);
 
   // Callbacks the UI thread can reach without re-creating the gesture.
-  const latest = React.useRef({ onSwipe, onCommit, onDragTo, onProgress, onRest });
-  latest.current = { onSwipe, onCommit, onDragTo, onProgress, onRest };
-  const begin = (next: 1 | -1) => { setPageDragging(true); setDragging(true); setDirection(next); };
+  const latest = React.useRef({ onSwipe, onCommit, onDragTo, onProgress, onRest, warm });
+  latest.current = { onSwipe, onCommit, onDragTo, onProgress, onRest, warm };
+  // The warm preview's own (useWarmPreview, below): built now for a drag that way.
+  const warmCalls = React.useRef({ keep: () => {} });
+  const begin = (next: 1 | -1) => {
+    setPageDragging(true); setDragging(true); setDirection(next);
+    // Taps that answer sooner: a drag toward the warm side before it was built builds it now, in its own place, and it stays.
+    if (next === latest.current.warm) warmCalls.current.keep();
+  };
   const turn = (next: 1 | -1) => setDirection(next);
   const heading = (next: 1 | -1 | null) => latest.current.onDragTo?.(next);
   const progress = (fraction: number) => latest.current.onProgress?.(fraction);
@@ -264,12 +298,20 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const pageStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   const previewStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   // Built ahead (warm): the same element in the same place, so a drag that way only moves it.
-  const warmReady = useWarmPreview(warm !== undefined && enabled && !dragging);
+  const warmState = useWarmPreview(warm !== undefined && enabled && !dragging);
+  const warmReady = warmState.ready;
+  warmCalls.current = { keep: warmState.keep };
+  const tapFast = useTapFast();
   // Once built, the warm side is always drawn, whichever way a drag goes (a drag the other way, even a
   // rubber-band one with nothing there, never tears it down to be rebuilt at release). The other way's
-  // preview is drawn beside it only while dragged, as before.
-  const warmSide = warmReady && warm !== undefined ? warm : undefined;
+  // preview is drawn beside it only while dragged, as before. With taps that answer sooner, a drag toward
+  // the warm side before it is built draws it in that same place (and keeps it), so it is built once only.
+  const warmSide = warm !== undefined && (warmReady || (tapFast && dragging && direction === warm)) ? warm : undefined;
   const warmPreview = warmSide !== undefined ? renderPreview?.(warmSide) : null;
+  const warmBuilt = !!warmPreview && warmSide === warm;
+  const onWarmNow = useRef(onWarm);
+  onWarmNow.current = onWarm;
+  useEffect(() => { if (warmBuilt) onWarmNow.current?.(); }, [warmBuilt]);
   const dragSide = dragging && !(warmPreview && direction === warmSide) ? direction : undefined;
   const dragPreview = dragSide !== undefined ? renderPreview?.(dragSide) : null;
   const frame = (side: 1 | -1) => [{ position: 'absolute' as const, top: 0, bottom: 0, width: '100%' as const, left: `${side * 100}%` as const, marginLeft: side * gap }, previewStyle];

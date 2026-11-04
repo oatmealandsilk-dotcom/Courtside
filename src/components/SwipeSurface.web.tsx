@@ -52,6 +52,8 @@ export interface SwipeSurfaceProps {
   commitAt?: number;
   /** The phone's only (SwipeSurface.tsx): the preview that way built ahead. A browser builds it as the drag starts. */
   warm?: 1 | -1;
+  /** The phone's only (SwipeSurface.tsx): fires once the warm preview is built. Never in a browser. */
+  onWarm?: () => void;
 }
 
 const SETTLE_MS = 300;

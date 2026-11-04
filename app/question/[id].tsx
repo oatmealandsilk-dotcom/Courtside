@@ -9,6 +9,7 @@ import { AttachButton, AttachedPreview, MediaLaterContext, type ReplyAttachment 
 import { SwipeSurface } from '@/components/SwipeSurface';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';
+import { isPageDragging, subscribePageDragging } from '@/features/navigation/swipeLock';
 import Discuss from '../(tabs)/discuss';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { PlayerName } from '@/components/PlayerName';
@@ -90,6 +91,8 @@ function belowFirstScreen(replies: Answer[], thread: Answer[], screenHeight: num
   return replies.map((a) => { const below = above >= screenHeight; above += leastHeight(a, thread); return below; });
 }
 const REST_AFTER_MS = 60;
+/** Taps that answer sooner, on the iPhone: the longest the server's replies wait after landing for the swipe-back preview. */
+const WARM_WAIT_MS = 600;
 /** In case the slide never says it has begun (opened without one, or the event lost): the rest is built anyway. */
 const REST_FALLBACK_MS = 300;
 
@@ -148,7 +151,31 @@ function QuestionDetail() {
   // answered, every page in the app redrew for them, often right as the slide began (Nov 4). Leaving first puts them in too.
   const landed = useRef<{ promise: Promise<void>; done: () => void } | null>(null);
   if (!landed.current) { let done!: () => void; const promise = new Promise<void>((r) => { done = r; }); landed.current = { promise, done }; }
-  useEffect(() => { if (arrived) landed.current?.done(); }, [arrived]);
+  // On the iPhone they also wait for the swipe-back preview to be built (SwipeSurface's onWarm, at most WARM_WAIT_MS
+  // after landing), and for a finger dragging the page to let go (Nov 4, owner: "Swiping back is super laggy"): put in
+  // as the page landed, the whole app's redraw for them held up a swipe back started then for 0.1-0.2 s on the Simulator,
+  // on top of building the preview.
+  const warm = useRef<{ built: boolean; heard: (() => void) | null }>({ built: false, heard: null });
+  useEffect(() => {
+    if (!arrived) return undefined;
+    if (!viewLater || Platform.OS !== 'ios') { landed.current?.done(); return undefined; }
+    let gone = false;
+    let off: (() => void) | undefined;
+    const putIn = () => {
+      if (gone) return;
+      if (isPageDragging()) {
+        if (!off) off = subscribePageDragging(() => { if (!isPageDragging()) { off?.(); off = undefined; putIn(); } });
+        return;
+      }
+      gone = true;
+      landed.current?.done();
+    };
+    if (warm.current.built) { putIn(); return () => { gone = true; off?.(); }; }
+    warm.current.heard = putIn;
+    const t = setTimeout(putIn, WARM_WAIT_MS);
+    return () => { gone = true; clearTimeout(t); off?.(); warm.current.heard = null; };
+  }, [arrived]); // eslint-disable-line react-hooks/exhaustive-deps
+  const onWarm = () => { warm.current.built = true; const heard = warm.current.heard; warm.current.heard = null; heard?.(); };
   useEffect(() => () => landed.current?.done(), []);
   useEffect(() => { if (ready) void loadThread(String(id), viewLater ? landed.current?.promise : undefined).finally(() => setLooked(true)); }, [loadThread, id, ready]); // eslint-disable-line react-hooks/exhaustive-deps
   // Taps that answer sooner: the first draw carries the question and the replies a screen can hold (FIRST_REPLIES), the rest
@@ -293,7 +320,7 @@ function QuestionDetail() {
   };
 
   return (
-    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null} warm={-1}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
+    <SwipeSurface onSwipe={direction=>{if(direction===-1) { requestSection('/discuss', 'discussions'); goToTab('/discuss', true); }}} renderPreview={direction=>direction===-1 ? <Discuss previewSection="discussions"/> : null} warm={-1} onWarm={onWarm}><Screen title="Thread" compactTitle onBack={() => goBack()} scrollRef={jump.scrollRef} onRefresh={isDesktopBrowser() ? undefined : () => loadThread(String(id)).finally(() => setOrderRound((n) => n + 1))} right={removed && !menu.length ? undefined : <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>{removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Share this thread" hitSlop={10} onPress={() => router.push(`/share?kind=question&id=${question.id}`)}><Ionicons name="arrow-redo-outline" size={23} color={colors.text} /></Pressable>}{menu.length ? <Pressable accessibilityRole="button" accessibilityLabel="More options" hitSlop={10} onPress={() => setMenuOpen(true)} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}><Ionicons name="ellipsis-horizontal" size={24} color={colors.text} /></Pressable> : null}</View>}>
       <Card style={styles.questionCard}>
         {removed ? <RemovedNote removed={removed} align="start" item={{ kind: 'question', id: question.id, authorId: question.authorId }} /> : null}
         {/* Who asked, up top and at full size — the way a reply shows its author. */}
