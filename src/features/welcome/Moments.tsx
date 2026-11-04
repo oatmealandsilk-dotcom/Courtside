@@ -190,7 +190,8 @@ const styleDefinitions = StyleSheet.create({
   // The map.
   map: { width: MOMENT_W, height: MOMENT_H, borderRadius: corner(28), overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   court: { position: 'absolute', width: 26, height: 26, borderRadius: 13, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', boxShadow: '0px 2px 6px rgba(42, 36, 24, 0.12)' },
-  you: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: colors.info, borderWidth: 2, borderColor: colors.surface },
+  // The hard slot: what this style sheet has always drawn on every court (the theme switch used to read info as it).
+  you: { position: 'absolute', width: 12, height: 12, borderRadius: 6, backgroundColor: colors.hard, borderWidth: 2, borderColor: colors.surface },
   youHalo: { position: 'absolute', width: 28, height: 28, borderRadius: 14 },
   pin: { position: 'absolute', width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // An open hit's flag, as on the map: the brand's fill, the hit mark on it.

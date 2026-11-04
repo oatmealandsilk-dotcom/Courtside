@@ -176,7 +176,8 @@ const styleDefinitions = StyleSheet.create({
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 20, paddingHorizontal: spacing.xs },
   note: { ...typography.small, flexShrink: 1 },
   muted: { color: colors.textFaint },
-  good: { color: colors.success },
+  // The court slot: what this style sheet has always drawn on every court (the theme switch used to read success as it).
+  good: { color: colors.court },
   bad: { color: colors.danger },
   // The rules as one quiet list, the way Settings reads.
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.md },

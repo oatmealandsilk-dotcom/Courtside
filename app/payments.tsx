@@ -76,5 +76,6 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.body, ...font('500'), color: colors.text },
   meta: { ...typography.small, color: colors.textMuted },
   amount: { ...typography.bodyStrong, color: colors.text, fontVariant: ['tabular-nums'] },
-  amountBack: { color: colors.success },
+  // The court slot: what this style sheet has always drawn on every court (the theme switch used to read success as it).
+  amountBack: { color: colors.court },
 });

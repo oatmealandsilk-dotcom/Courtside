@@ -24,7 +24,7 @@ export const darkColors: Palette = {
   bg: '#0F1412', bgElevated: '#161D19', surface: '#1A221E', surfaceAlt: '#232C27',
   border: '#2C3832', borderStrong: '#46554D', text: '#EDF1EE', textMuted: '#A6B1AB', textFaint: '#8A948F',
   brand: '#6FB483', brandInk: '#0C1710', brandDim: '#1F2E25', brandBright: '#7ED492', court: '#6FB484', clay: '#C98A6A',
-  hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C5', success: '#6FB485', warning: '#D2B36A', danger: '#D97F73',
+  hard: '#7FA9C4', grass: '#86B393', info: '#7FA9C5', success: '#6FB482', warning: '#D2B36A', danger: '#D97F73',
   surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A9490',
   sun: '#E0BE66', rose: '#E592B4',
   open: '#4FD487',
@@ -35,9 +35,9 @@ export const darkColors: Palette = {
   // The Night shirt: its near-black green, a deeper green glowing top right, a warm clay-gold bottom
   // left, green lettering; the quiet words in the page's muted grey.
   cardFill: '#15251D', cardGlowTop: '#22412D', cardGlowBottom: '#413425',
-  cardFigure: '#6FB486', cardInk: '#6FB487', cardMuted: '#A6B1AC',
-  cardTouch: '#6FB488',
-  launchLine: '#8A9491',
+  cardFigure: '#6FB383', cardInk: '#6FB583', cardMuted: '#A6B1AC',
+  cardTouch: '#6EB483',
+  launchLine: '#8A948E',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2E3A34', avatarTint2: '#3A3530', avatarTint3: '#3B3034', avatarTint4: '#2D3640', avatarTint5: '#35313D', avatarTint6: '#363A2E',
   // The metals at night: bright inks on deep coins, warm against the green-black page.
@@ -85,7 +85,7 @@ const cleanColors: Palette = {
 const aoColors: Palette = {
   bg: '#EBF5FC', bgElevated: '#D7E9F4', surface: '#F8FCFF', surfaceAlt: '#C8DEEE',
   border: '#AECFE5', borderStrong: '#6394BC', text: '#0D2B43', textMuted: '#34566E', textFaint: '#496273',
-  brand: '#2E85BF', brandInk: '#FFFFFA', brandDim: '#CFE4F2', brandBright: '#7ED492', court: '#4179A8', clay: '#B97753',
+  brand: '#2E85BF', brandInk: '#FFFEFE', brandDim: '#CFE4F2', brandBright: '#7ED492', court: '#4179A8', clay: '#B97753',
   hard: '#2E85C0', grass: '#4E8A57', info: '#3979AF', success: '#2A7F60', warning: '#9C7016', danger: '#B8463F',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#A8781A', rose: '#AE4F80',
@@ -93,14 +93,14 @@ const aoColors: Palette = {
   overlay: 'rgba(7, 26, 42, 0.58)',
   link: '#1F64A0', onMedia: '#FFFFFF',
   bubble: '#D9EAF6',
-  bubbleMine: '#2471A6', onDanger: '#FFFFF9',
+  bubbleMine: '#2471A6', onDanger: '#FFFEFF',
   // The Melbourne shirt as light as the shirt itself (Oct 6, owner: "AO card could be more light the
   // color of her shirt"): its light court blue, a sky sheen top right, the aqua shirt's aqua bottom left.
   // Cream can't hold on a blue this light, so the lettering is the court's deep navy: small and quiet
   // words 4.7:1 or more on the fill and both corners, the big numbers 5.7:1.
   cardFill: '#6EA8D5', cardGlowTop: '#9CCBEC', cardGlowBottom: '#8FE3DD',
   cardFigure: '#0B2A47', cardInk: '#0E2F4F', cardMuted: '#143858',
-  cardTouch: '#2E85C1',
+  cardTouch: '#2E85BE',
   launchLine: '#496274',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#D3E3EF', avatarTint2: '#E4DED2', avatarTint3: '#EBD8D4', avatarTint4: '#D5E5DD', avatarTint5: '#DDD9EA', avatarTint6: '#E3E6D3',
@@ -119,18 +119,18 @@ const rolandGarrosColors: Palette = {
   bg: '#F8F0E9', bgElevated: '#EFDFD1', surface: '#FFFAF5', surfaceAlt: '#E6D2C0',
   border: '#D6BCA2', borderStrong: '#B08A66', text: '#33201A', textMuted: '#664836', textFaint: '#6D5745',
   brand: '#AD4E2E', brandInk: '#FFF6F0', brandDim: '#ECD9CB', brandBright: '#7ED492', court: '#9E432E', clay: '#C67443',
-  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6984', success: '#1F5F40', warning: '#9A6718', danger: '#9E432F',
+  hard: '#3E6982', grass: '#1F5F3F', info: '#3E6981', success: '#1F5F40', warning: '#9A6718', danger: '#9E432F',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#9E7416', rose: '#A2456E',
   open: '#1A8147',
   overlay: 'rgba(46, 22, 12, 0.58)',
   link: '#2F6587', onMedia: '#FFFFFF',
   bubble: '#F0E2D5',
-  bubbleMine: '#AB4D2D', onDanger: '#FFFFF8',
+  bubbleMine: '#AB4D2D', onDanger: '#FFFEFF',
   // The Paris shirt, deepened so its cream lettering holds: brick clay, a brighter clay top right, the
   // shirt's gold glow bottom left.
   cardFill: '#A44627', cardGlowTop: '#B24D25', cardGlowBottom: '#A4570A',
-  cardFigure: '#FAF8F1', cardInk: '#FAF8F2', cardMuted: '#F6EFE6',
+  cardFigure: '#FAF8F1', cardInk: '#FAF8EF', cardMuted: '#F6EFE6',
   cardTouch: '#AD4E2F',
   launchLine: '#6D5746',
   checker: '#26292A', checkerAlt: '#323637',
@@ -148,7 +148,7 @@ const rolandGarrosColors: Palette = {
 const wimbledonColors: Palette = {
   bg: '#F2F6EC', bgElevated: '#E4EDD8', surface: '#FBFDF7', surfaceAlt: '#D7E3C9',
   border: '#C4D5B3', borderStrong: '#8CA37B', text: '#18291A', textMuted: '#485943', textFaint: '#586552',
-  brand: '#256B3A', brandInk: '#FFFFF7', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
+  brand: '#256B3A', brandInk: '#FFFEFE', brandDim: '#D9E6D4', brandBright: '#7ED492', court: '#4E8A4A', clay: '#A9694A',
   hard: '#4F2683', grass: '#4E8A4B', info: '#4F2684', success: '#256B3B', warning: '#8A6A19', danger: '#943634',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#94701A', rose: '#A4497A',
@@ -156,11 +156,11 @@ const wimbledonColors: Palette = {
   overlay: 'rgba(14, 26, 16, 0.55)',
   link: '#245E93', onMedia: '#FFFFFF',
   bubble: '#E2EBD6',
-  bubbleMine: '#246A39', onDanger: '#FFFFF6',
+  bubbleMine: '#246A39', onDanger: '#FFFEFF',
   // The London shirt, deepened so its cream lettering holds: grass green, a fresher green top right,
   // the club's purple bottom left. (Oct 6: lilac was tried; owner: "for the London one green looks better".)
   cardFill: '#326F37', cardGlowTop: '#377A34', cardGlowBottom: '#615782',
-  cardFigure: '#FAF8F3', cardInk: '#FAF8F4', cardMuted: '#F0F1E7',
+  cardFigure: '#FAF8F1', cardInk: '#FAF8EF', cardMuted: '#F0F1E7',
   // London's purple, deepened to an aubergine that sits with its greens (10.1:1 on the card, 10.3:1 under white words).
   cardTouch: '#5A2D6E',
   launchLine: '#586553',
@@ -181,7 +181,7 @@ const usOpenColors: Palette = {
   border: '#32557A', borderStrong: '#5C82AC', text: '#E9F0F8', textMuted: '#BDCDDE', textFaint: '#A9B9CA',
   brand: '#F5D460', brandInk: '#1B1A0A', brandDim: '#4A4A2C', brandBright: '#7ED492', court: '#4E87C4', clay: '#D08A5E',
   hard: '#4E87C5', grass: '#5C9BD8', info: '#5C9BD9', success: '#FFDF79', warning: '#E3B85A', danger: '#E07E72',
-  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A9492',
+  surfaceHard: '#3A77AA', surfaceClay: '#B65E36', surfaceGrass: '#3F8048', surfaceOther: '#8A9490',
   sun: '#F0B04A', rose: '#EE97BA',
   // The one green on this court, kept for Open to hit: the ring a player wears reads as green, as promised.
   open: '#4FD487',
@@ -192,8 +192,8 @@ const usOpenColors: Palette = {
   // The New York shirt: night blue, a lighter blue top right, the ball's yellow glowing bottom left
   // (held low, so the yellow lettering holds on it); the quiet words a shade lighter than the page's.
   cardFill: '#22497B', cardGlowTop: '#325D91', cardGlowBottom: '#675A38',
-  cardFigure: '#F5D461', cardInk: '#F5D462', cardMuted: '#CBD8E6',
-  cardTouch: '#F5D463',
+  cardFigure: '#F5D461', cardInk: '#F5D45F', cardMuted: '#CBD8E6',
+  cardTouch: '#F5D360',
   launchLine: '#A9B9CB',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#2C4560', avatarTint2: '#3A3F55', avatarTint3: '#45394C', avatarTint4: '#2F4A49', avatarTint5: '#4A4433', avatarTint6: '#3D4A5E',

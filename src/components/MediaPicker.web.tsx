@@ -763,5 +763,6 @@ const styleDefinitions = StyleSheet.create({
   coverUpload: { alignItems: 'center', justifyContent: 'center', gap: 3, borderColor: colors.border },
   coverUploadLabel: { ...typography.caption, color: colors.textMuted },
   textButton: { paddingVertical: 2 },
-  textButtonLabel: { ...typography.smallStrong, color: colors.info },
+  // The hard slot: what this style sheet has always drawn on every court (the theme switch used to read info as it).
+  textButtonLabel: { ...typography.smallStrong, color: colors.hard },
 });

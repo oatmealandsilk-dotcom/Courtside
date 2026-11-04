@@ -38,7 +38,7 @@ export const lightColors = {
   // Words and icons on a danger-red button (the inbox's Delete): white, or dark on the two dark courts,
   // where white on their lighter red fell short. Read from `colors` when drawing, not from a style sheet:
   // white is also a page colour, so a style sheet would recolour it as the page.
-  onDanger: '#FFFFFB',
+  onDanger: '#FFFEFF',
   // The session box (a session's card, its photo strip and tile, the share stamp, the Tennis profile
   // card): each court's shirt (Oct 6, owner: "make those the darker full color card. like how we did
   // with the default"). Its fill; the shirt's two-colour fade as it shows at the very corner, top right
@@ -51,7 +51,7 @@ export const lightColors = {
   cardFigure: '#3F704A', cardInk: '#3A6141', cardMuted: '#5D584D',
   // A touch of the court's second colour on the quiet cards in the app (Oct 25, owner: "a touch of purple on cards" for
   // London): the result pill, the rating and the week's bars. Every court without one keeps its brand here, so nothing changes.
-  cardTouch: '#3F704B',
+  cardTouch: '#3F7048',
   // "Growing the game" on the app's copy of the launch screen. Here, the launch picture's own grey
   // (assets/splash.png), a shade lighter than textFaint: on this court the copy is the picture to the
   // pixel, so the line must not darken as the picture hands over (Oct 7). Every other court: its textFaint.
