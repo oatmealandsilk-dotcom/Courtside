@@ -3,7 +3,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { TextScale } from '@/theme/textScale';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { router, useLocalSearchParams } from 'expo-router';
 import { goBack } from '@/lib/goBack';
@@ -21,6 +21,8 @@ import { askAiCoach, fetchAiPlan, type AiCoachReply, type CoachOption } from '@/
 import { generatePlan } from '@/features/aiCoach/planGenerator';
 import { useAiCoachLive, useAiCoachOn } from '@/features/aiCoach/switch';
 import { useAiCoachConsent } from '@/features/aiCoach/consent';
+import { AskAbout, AskKnows, AskToday, openingLine } from '@/features/aiCoach/AskStartOptions';
+import { designVar } from '@/lib/designVar';
 import { usePaidBooking } from '@/features/coaching/bookings';
 import { openLegal } from '@/lib/legal';
 import { confirmReport } from '@/lib/confirm';
@@ -239,6 +241,9 @@ function Train() {
   const [error, setError] = useState('');
   const [remaining, setRemaining] = useState<number | undefined>(undefined);
   const [lines, setLines] = useState<Line[]>([]);
+  // Design options for the Ask side before the first question (web demo only, ?var=ai-coach-ask:A…D); null is today's page.
+  const askVar = designVar('ai-coach-ask');
+  const { height: screenHeight } = useWindowDimensions();
 
   // WHOOP's numbers stay out of everything the coach is told or writes from (WHOOP's terms bar AI use):
   // the summary, and the stand-in week that goes into each question when the coach's own week is not in.
@@ -322,8 +327,12 @@ function Train() {
 
       {/* Ask and This week side by side, slid between (Oct 20 sweep, as Profile's sections do). */}
       <SectionPager index={AI_SECTIONS.indexOf(section)} depth={1} edgeBack slideOnTap bleed={spacing.lg} onIndex={(i) => setSection(AI_SECTIONS[i])} panes={[(
-        <View style={styles.section}>
-          {!lines.length ? (
+        <View style={[styles.section, askVar === 'D' && { minHeight: Math.max(360, screenHeight - 300) }]}>
+          {askVar === 'D' ? (
+            <View style={[styles.bubble, styles.theirs]}>
+              <Text style={styles.bubbleText}>{openingLine(plan, currentUser.name.split(' ')[0])}</Text>
+            </View>
+          ) : !lines.length && askVar !== 'A' && askVar !== 'C' ? (
             <View style={styles.intro}>
               {/* Oct 25 ("D all for less ai", item 9): no paragraph about itself, and one quiet suggestion in place of three bubbles. */}
               {LESS_AI_ROUND2 ? null : <Text style={styles.lead}>Ask about your next session, a shot, or recovery. It answers from your profile and this week’s plan, and remembers what you talk about.</Text>}
@@ -369,6 +378,7 @@ function Train() {
           </LayoutAnimationConfig>
           {error ? <Text style={styles.error} accessibilityLiveRegion="polite">{error}</Text> : null}
 
+          {askVar === 'D' ? <View style={{ flex: 1 }} /> : null}
           <TipComposer
             key={draft?.n ?? 0}
             initial={draft?.text}
@@ -385,6 +395,9 @@ function Train() {
               </Pressable>
             ) : null}
           </View>
+          {!lines.length && askVar === 'A' ? <AskToday plan={plan} onAsk={(text) => setDraft({ text, n: Date.now() })} onWeek={() => setSection('plan')} /> : null}
+          {!lines.length && askVar === 'B' ? <AskKnows profile={currentUser.profile} recovery={signal.recovery} tracker={signal.hasWearable} /> : null}
+          {!lines.length && askVar === 'C' ? <AskAbout plan={plan} profile={currentUser.profile} onPick={(text) => setDraft({ text, n: Date.now() })} /> : null}
         </View>
       ), <View key="plan">{written === undefined ? (
         <View style={styles.writing}>
