@@ -48,19 +48,26 @@ function useNoScrollWhileSliding() {
  * `onHold(x)`: the hold landed (JS side): open the windows with the finger still down, at `x` across
  * the screen. Without it, the children are given back exactly as they are (no gesture at all).
  */
-export function FeedHold({ onHold, children }: { onHold?: (x: number) => void; children: React.ReactElement }) {
+/** Where on what it holds a hold may start (its own points); anywhere on it without one. Apple's bar (NativeBar): the Feed's place only. */
+export type HoldRegion = { left: number; top: number; width: number; height: number };
+
+export function FeedHold({ onHold, region, children }: { onHold?: (x: number) => void; region?: HoldRegion; children: React.ReactElement }) {
   if (!onHold) return children;
-  return <HoldDetector onHold={onHold}>{children}</HoldDetector>;
+  return <HoldDetector onHold={onHold} region={region}>{children}</HoldDetector>;
 }
 
-function HoldDetector({ onHold, children }: { onHold: (x: number) => void; children: React.ReactElement }) {
+function HoldDetector({ onHold, region, children }: { onHold: (x: number) => void; region?: HoldRegion; children: React.ReactElement }) {
   useNoScrollWhileSliding();
   const x0 = useSharedValue(0);
   const y0 = useSharedValue(0);
   const far = useSharedValue(0);
   const stepped = useSharedValue(0);
   const aim = useSharedValue(0);
-  const gesture = useMemo(() => Gesture.Pan()
+  const gesture = useMemo(() => {
+    const pan = Gesture.Pan();
+    // (Only with a region: without one, exactly as before.)
+    if (region) pan.hitSlop({ left: -region.left, top: -region.top, width: region.width, height: region.height });
+    return pan
     .activateAfterLongPress(HOLD_MS)
     .onStart((e) => {
       'worklet';
@@ -125,6 +132,7 @@ function HoldDetector({ onHold, children }: { onHold: (x: number) => void; child
       if (!winScrub.value) return;
       winScrub.value = 0;
       runOnJS(end)('stay', winSel.value);
-    }), [onHold, x0, y0, far, stepped, aim]);
+    });
+  }, [onHold, region?.left, region?.top, region?.width, region?.height, x0, y0, far, stepped, aim]); // eslint-disable-line react-hooks/exhaustive-deps
   return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
 }

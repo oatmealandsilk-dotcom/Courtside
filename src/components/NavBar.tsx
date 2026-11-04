@@ -260,6 +260,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         veilStyle={veilStyle}
         veilBlocks={veilBlocks}
         onVeil={closeVeil}
+        onFeedHold={onFeedHold}
       />
     );
   }

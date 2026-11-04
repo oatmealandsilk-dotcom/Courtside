@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PixelRatio, Pressable, StyleSheet, View, type NativeSyntheticEvent } from 'react-native';
+import { PixelRatio, Pressable, StyleSheet, View, useWindowDimensions, type NativeSyntheticEvent } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import {
@@ -12,6 +12,8 @@ import {
 } from 'react-native-screens';
 
 import { BrandWash } from '@/components/ui/BrandWash';
+import { FeedHold } from '@/features/feed/FeedHold';
+import { holdFeedTab } from '@/features/feed/feedWindows';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
 import { LENS_TABS } from '@/features/navigation/barLens';
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
@@ -111,12 +113,28 @@ function tabKey(route: string | undefined): string | null {
   return route && (LENS_TABS as readonly string[]).includes(route) ? route : null;
 }
 
+/**
+ * Where Apple's bar puts the middle of each of its five places, on a screen 402 points wide (Nov 2, measured in the
+ * Simulator on an iPhone 18 Pro; not five equal places: its ends sit further in). Other widths are scaled from these.
+ * The tutorial's targets and the Feed tab's hold sit on them (Nov 3: on five equal places they were up to 17 points off).
+ */
+const PLACE_X_402 = [74, 144, 201, 271, 336] as const;
+const PLACE_W_402 = 402;
+/** How wide each target is: about the icon and its word. */
+const PLACE_MARK_W = 62;
+/** The court themes, whose glass carries the court's colour on today's bar. */
+const COURT_THEMES: readonly string[] = ['ao', 'roland-garros', 'wimbledon', 'us-open'];
+/** How strong the court's colour under Apple's glass is (as today's bar's glass tint, LIGHT_GLASS_ALPHA on an iPhone). */
+const COURT_UNDER_ALPHA = 0.45;
+/** After a hold on the Feed tab opened its windows, a selection of the Feed by Apple's bar this soon is that same finger's, not a tap. */
+const HOLD_SWALLOW_MS = 1500;
+
 /** How long a tab picked on the bar waits for the app to say it is there before the app's word counts again. */
 const PICK_WAIT_MS = 1500;
 
 export const NativeBar = React.memo(function NativeBar({
   items, icons, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onCreate, tourRef, tourCreate,
-  inset, outerStyle, hideFromReader, veilStyle, veilBlocks, onVeil,
+  inset, outerStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold,
 }: {
   items: readonly LookItem[];
   icons: NativeIcons;
@@ -136,8 +154,12 @@ export const NativeBar = React.memo(function NativeBar({
   veilStyle: React.ComponentProps<typeof Animated.View>['style'];
   veilBlocks: boolean;
   onVeil: () => void;
+  /** A hold on the Feed tab while on the Feed: the Feed's windows (features/feed/feedWindows), as today's bar. Only given while they are on. */
+  onFeedHold?: () => void;
 }) {
   const { theme } = useTheme();
+  const { width } = useWindowDimensions();
+  const placeX = (i: number) => (PLACE_X_402[i] * width) / PLACE_W_402;
   const c = themes[theme];
   const darkPage = inkOn(c.bg) === '#FFFFFF';
   // Over a clip on the Feed itself, dark glass (as today's bar: the same two signals, TabBarLooks).
@@ -150,6 +172,7 @@ export const NativeBar = React.memo(function NativeBar({
   // The lit tab in the court's own colour (lightened in its own hue over a clip on a light court, as the new bar's);
   // the rest in the page's ink, white over a clip.
   const lit = media && !darkPage ? lightened(c.brand) : c.brand;
+  const courtUnder = !media && COURT_THEMES.includes(theme);
   const idle = media ? withAlpha(c.onMedia, 0.92) : c.text;
   const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.bg;
   // One look for every place (a tab item's look is the whole bar's while that tab is lit), made again only when its colours change.
@@ -171,6 +194,8 @@ export const NativeBar = React.memo(function NativeBar({
   if (wanted && !picked.current && wanted !== request.selectedScreenKey) {
     setRequest({ selectedScreenKey: wanted, baseProvenance: provenance.current });
   }
+  const heldAt = useRef(0);
+  const onHold = useCallback(() => { heldAt.current = Date.now(); holdFeedTab(); }, []);
   const now = useRef({ onTab, onCreate });
   now.current = { onTab, onCreate };
   const onSelected = useCallback((e: NativeSyntheticEvent<TabSelectedEvent>) => {
@@ -178,6 +203,8 @@ export const NativeBar = React.memo(function NativeBar({
     provenance.current = Math.max(provenance.current, p);
     // Only a finger on the bar opens a tab; the bar following the app is the app's own doing.
     if (actionOrigin !== 'user') return;
+    // The finger that held the Feed tab for its windows lifting over it: not a tap on the Feed (back to the top).
+    if (key === 'index' && Date.now() - heldAt.current < HOLD_SWALLOW_MS) return;
     picked.current = { key, at: Date.now() };
     // A tap on the tab already on show too: back to the top, as today.
     now.current.onTab(key);
@@ -225,6 +252,13 @@ export const NativeBar = React.memo(function NativeBar({
       style={[styles.float, { height: room }, outerStyle]}
     >
       <Animated.View pointerEvents="box-none" style={[StyleSheet.absoluteFill, tuck]}>
+        {/* A court theme: the court's colour under Apple's glass, which shows it through as today's bar's glass is tinted
+            with it (Apple's glass itself is only light or dark). Not over a clip, nor in Clean or Night (unchanged). */}
+        {courtUnder ? (
+          <View pointerEvents="none" style={[styles.courtUnder, { height: capsule, borderRadius: capsule / 2, backgroundColor: withAlpha(c.bg, COURT_UNDER_ALPHA) }]} />
+        ) : null}
+        <FeedHold onHold={onFeedHold ? onHold : undefined} region={onFeedHold ? { left: placeX(1) - PLACE_MARK_W / 2, width: PLACE_MARK_W, top: 0, height: capsule } : undefined}>
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
         <Tabs.Host
           navStateRequest={request}
           onTabSelected={onSelected}
@@ -236,13 +270,12 @@ export const NativeBar = React.memo(function NativeBar({
         >
           {screens}
         </Tabs.Host>
-        {/* What the tutorial lights: each tab's place on Apple's capsule (five equal places, as its own), never touched. */}
+        </View>
+        </FeedHold>
+        {/* What the tutorial lights: each tab's place on Apple's capsule (where Apple's bar puts it), never touched. */}
         <View pointerEvents="none" style={[styles.places, { height: capsule }]}>
           {items.map((item, index) => (
-            <React.Fragment key={item.route}>
-              {index === 2 ? <View style={styles.place} /> : null}
-              <View style={styles.place}><View ref={tourRef(item.route)} style={styles.placeMark} /></View>
-            </React.Fragment>
+            <View key={item.route} ref={tourRef(item.route)} style={[styles.placeMark, { left: placeX(index < 2 ? index : index + 1) - PLACE_MARK_W / 2, top: (capsule - 44) / 2 }]} />
           ))}
         </View>
         {/* While the Create box is up, a veil of the bar's own ground steps the tabs back and catches a tap to
@@ -267,10 +300,10 @@ export const NativeBar = React.memo(function NativeBar({
 const styles = StyleSheet.create({
   // At the screen's bottom edge, as tall as the phone's bar takes (nativeBarRoom), over the pages.
   float: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30 },
-  places: { position: 'absolute', top: 0, left: NATIVE_BAR.side, right: NATIVE_BAR.side, flexDirection: 'row' },
-  place: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  places: { position: 'absolute', top: 0, left: 0, right: 0 },
   // The icon and its word's height, as today's targets.
-  placeMark: { alignSelf: 'stretch', height: 44 },
+  placeMark: { position: 'absolute', width: PLACE_MARK_W, height: 44 },
+  courtUnder: { position: 'absolute', top: 0, left: NATIVE_BAR.side, right: NATIVE_BAR.side },
   veil: { position: 'absolute', top: 0, left: NATIVE_BAR.side, right: NATIVE_BAR.side },
   plusRow: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   plus: { width: NEW_BAR.plus, height: NEW_BAR.plus, borderRadius: NEW_BAR.plus / 2, alignItems: 'center', justifyContent: 'center', ...brandShadow },

@@ -585,7 +585,13 @@ export const LookBar = React.memo(function LookBar({
   // page slid or scrolled under the glass (Oct 25 audit). The same shadow to look at. Quicker press feel only (admins first).
   const quick = usePressV2();
   // The new bar tucks less as you scroll down (it already sits lower, nearer the home bar).
-  const newTuck = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, NEW_BAR.tuck]) * PX) / PX }] }));
+  // Apple's motion (B): the whole bar swells a touch while a finger holds it, as Apple's own (a transform, never a fade).
+  const swells = kind === APPLE_KIND && !calm;
+  const newTuck = useAnimatedStyle(() => {
+    const y = Math.round(interpolate(barCompact.value, [0, 1], [0, NEW_BAR.tuck]) * PX) / PX;
+    if (!swells) return { transform: [{ translateY: y }] };
+    return { transform: [{ translateY: y }, { scale: 1 + APPLE_BAR_SWELL * Math.max(0, Math.min(1.1, lensLift.value)) }] };
+  }, [swells]);
   const st = look.st;
   // Apple's motion (B): its bubble past the bar's edges, in the look the live glass shows.
   const bubbleOn = newBar && kind === APPLE_KIND && litPlace >= 0 && !calm && !look.m.split;
@@ -653,7 +659,11 @@ const FollowCopy = React.memo(function FollowCopy({ dark, children }: { dark: bo
  * Where the lens sits along the bar: each tab's middle (in the row's order), the lens's width and its
  * height; on the new bar, its width on each tab (`widths`: sized to that tab's word), otherwise all `width`.
  */
-interface LensGeo { centers: readonly number[]; width: number; widths: readonly number[]; height: number }
+interface LensGeo {
+  centers: readonly number[]; width: number; widths: readonly number[]; height: number;
+  /** The round +'s middle along the bar and its half width (-1: none in the row, the split bar's). */
+  plusAt: number; plusHalf: number;
+}
 
 /**
  * The new bar's words at 11 points in Apple's own font (San Francisco, semibold), measured on a Mac: the
@@ -694,7 +704,9 @@ function lensGeometry(pillW: number, m: BarSpec, words: Readonly<Record<string, 
   const slotW = (tabsW - 2 * m.pad) / (m.split ? 4 : 5);
   const centers = [0, 1, 2, 3].map((i) => m.pad + slotW * ((m.split || i < 2 ? i : i + 1) + 0.5));
   const width = slotW + 2 * m.pad - 2 * m.lensInset;
-  if (!words) return { centers, width, widths: [width, width, width, width], height: m.height - 2 * m.lensInset };
+  const plusAt = m.split ? -1 : m.pad + slotW * 2.5;
+  const plusHalf = m.plus / 2;
+  if (!words) return { centers, width, widths: [width, width, width, width], height: m.height - 2 * m.lensInset, plusAt, plusHalf };
   // The new bar: as wide as the tab's word on screen plus NEW_BAR.room each side (never under minLit), but
   // never past 4 in from the bar's round ends, and always 3 clear of the next tab's icon or the round +.
   const scale = m.label / NEW_BAR.label;
@@ -706,7 +718,7 @@ function lensGeometry(pillW: number, m: BarSpec, words: Readonly<Record<string, 
     const right = i === 3 ? pillW - c - m.lensInset : slotW - (i === 1 ? m.plus / 2 : m.icon / 2) - 3;
     return Math.min(want, 2 * Math.min(left, right));
   });
-  return { centers, width: Math.max(...widths), widths, height: m.height - 2 * m.lensInset };
+  return { centers, width: Math.max(...widths), widths, height: m.height - 2 * m.lensInset, plusAt, plusHalf };
 }
 
 /**
@@ -745,7 +757,14 @@ const STRETCH_MAX = [0.25, 0.36, 0.15, 0.32] as const;
  * 1.06, the lens's swell 1.14). Apple's (Nov 2): the bubble grows from the 52-point capsule to about 70, so
  * it stands 5 points out past the 60-point bar's top and bottom while the finger is down, as iOS 26's does.
  */
-const LIFTS = [0.06, 0.04, 0.14, 0.35] as const;
+const LIFTS = [0.06, 0.04, 0.14, 0.44] as const;
+/**
+ * How much wider than taller each one grows as it lifts (1: as much). Apple's (Nov 3, measured on its own bar, option A,
+ * in the Simulator: about 88 x 52 at rest, 125 x 75 lifted) grows wider than tall: 37 against 23 points.
+ */
+const LIFT_WIDE = [1, 1, 1, 1.6] as const;
+/** The least room left between Apple's widened bubble and the round + (lensBox). */
+const PLUS_AIR = 2;
 /** The liquid capsule this much flatter at its longest (a drop pulled thin), back to round as it gathers; Apple's gel a little more. */
 const SQUASHES = [0, 0.08, 0, 0.1] as const;
 /** Up at the touch, quickly; down, once the finger is up and the lens has landed, on a soft spring with no bounce. */
@@ -769,6 +788,13 @@ function liftUp(kind: number) {
   'worklet';
   return kind === APPLE_KIND ? withSpring(1, APPLE_LIFT_UP) : withTiming(1, LIFT_UP);
 }
+/**
+ * How much of its tint Apple's capsule loses as it lifts: lifted, Apple's bubble is clear glass, the lit colour gone
+ * from it (Nov 3, from Apple's own bar, option A; ours kept half its tint and read as a pale ring).
+ */
+const APPLE_CLEAR = 0.85;
+/** Apple's whole bar swells this much while a finger holds it (Nov 3, seen on option A: a few percent). */
+const APPLE_BAR_SWELL = 0.022;
 /** How much bigger the icon and word under Apple's lifted bubble look, as under a lens. */
 const MAGNIFY = 0.16;
 /** Apple's bubble, outside the bar while lifted: how milky it is over the page, and its edge. */
@@ -842,7 +868,16 @@ function lensBox(geo: LensGeo, at: number, trailAt: number, lift: number, calm: 
   const grow = calm ? 0 : liftBy * h * lift;
   const squashBy = SQUASHES[kind] ?? 0;
   const squash = squashBy > 0 && !calm ? 1 - squashBy * Math.min(1, stretch / stretchMax) : 1;
-  return { mid: (left + right) / 2, w: right - left + grow, h: (h + grow) * squash, lean: lead - back };
+  // It widens either side, but never out over the round + beside it (Nov 3: Apple's bubble passes under its own
+  // round button; ours, drawn over the +, would cut a ring across it): the side toward the + widens only as far as the
+  // room it has, the other side the same.
+  let half = (grow * (LIFT_WIDE[kind] ?? 1)) / 2;
+  if (half > 0 && geo.plusAt >= 0) {
+    const clear = geo.plusHalf + PLUS_AIR;
+    const room = left >= geo.plusAt ? left - (geo.plusAt + clear) : right <= geo.plusAt ? geo.plusAt - clear - right : half;
+    half = Math.min(half, Math.max(grow / 4, room));
+  }
+  return { mid: (left + right) / 2, w: right - left + 2 * half, h: (h + grow) * squash, lean: lead - back };
 }
 
 /** The capsule as lensBox works it out, as the animation thread holds it. */
@@ -885,7 +920,7 @@ function usePieceStyles(box: LensBoxValue, h: number) {
 }
 
 /** How far past the bar's top and bottom edge Apple's bubble may be seen (it reaches about 5 out, a little more at its swell's give). */
-const BUBBLE_BAND = 9;
+const BUBBLE_BAND = 13;
 
 /**
  * Apple's bubble outside the bar (Nov 2, B; barLens's 'apple' motion): while a finger is down on the bar, the
@@ -926,7 +961,7 @@ const LensBubble = React.memo(function LensBubble({ geo, fallback, frost, frostA
           <View style={[st.bubbleInBand, { top: -h - inset, height: h }]}>{body}</View>
         </View>
       </Animated.View>
-      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, { height: h }, edgeShow]}>
+      <Animated.View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants" aria-hidden style={[st.stretch, st.bubbleEdge, { height: h }, edgeShow]}>
         <Animated.View style={[st.stretchMid, st.rimLine, { height: h, borderColor: rim }, middle]} />
         <Animated.View style={[st.stretchCap, st.rimHalf, { width: h / 2, height: h }, rimStart]}>
           <View style={[st.rimRing, { width: h, height: h, borderRadius: h / 2, borderColor: rim }]} />
@@ -1071,7 +1106,7 @@ const StretchLens = React.memo(function StretchLens({ geo, fallback, color, alph
   const lensFill = useAnimatedStyle(() => ({
     opacity: calm ? alpha
       : kind === 2 ? alpha * (1 + 0.6 * lensLift.value)
-        : kind === APPLE_KIND ? alpha * (1 - 0.45 * Math.max(0, Math.min(1, lensLift.value)))
+        : kind === APPLE_KIND ? alpha * (1 - APPLE_CLEAR * Math.max(0, Math.min(1, lensLift.value)))
           : alpha,
   }), [kind, calm, alpha]);
   const rimShow = useAnimatedStyle(() => ({ opacity: 0.45 + 0.55 * lensLift.value }));
@@ -1401,7 +1436,9 @@ function bubbleLook(c: Palette, dark: boolean) {
   return {
     frost: c.onMedia,
     frostAlpha: dark ? BUBBLE_FROST_DARK : BUBBLE_FROST,
-    rim: dark ? withAlpha(c.onMedia, 0.38) : withAlpha(c.text, 0.14),
+    // A bright edge, as the light catching Apple's glass (Nov 3: a grey one read as a pale ring); its depth is the
+    // soft shadow under it (st.bubbleEdge).
+    rim: dark ? withAlpha(c.onMedia, 0.5) : withAlpha('#FFFFFF', 0.95),
     glint: withAlpha(c.onMedia, dark ? 0.55 : 0.95),
   };
 }
@@ -1545,6 +1582,8 @@ function barStyles(m: BarSpec, fresh: boolean) {
     rimRing: { position: 'absolute', top: 0, left: 0, borderWidth: 1 },
     // Apple's bubble (LensBubble): a strip past the bar's top or bottom edge, and the capsule's own place inside it.
     bubbleBand: { position: 'absolute', left: 0, right: 0, overflow: 'hidden' },
+    // Apple's lifted bubble stands off the bar: a soft shadow cast by its edge.
+    bubbleEdge: { shadowColor: '#000000', shadowOpacity: 0.16, shadowRadius: 5, shadowOffset: { width: 0, height: 1.5 } },
     bubbleInBand: { position: 'absolute', left: 0, right: 0 },
   });
 }
