@@ -1863,6 +1863,28 @@ const STEPS = [
     },
   },
   {
+    // Nov 4, owner: "the three dots on top right of the discussion screen should allow me to delete", then "Keep
+    // today's icons and just put everything into those 3 dots". Your own thread's "⋯" menu has Share too, and ends
+    // with Delete: asked once, then the thread is gone, from Discussions too, with a toast.
+    name: 'thread-delete',
+    title: 'Discussions: delete your own thread from its "⋯" menu',
+    async run(page) {
+      await page.goto('/question/q1');
+      await page.waitFor({ text: /^Full poly at 4\.0/ }, 45000);
+      await page.tap({ label: 'More options' });
+      await page.waitFor({ text: 'Share' });
+      await page.tap({ label: 'Delete this thread' });
+      await page.waitFor({ text: 'Delete this thread?' });
+      await page.tap({ text: 'Delete' });
+      await page.waitFor({ text: 'Thread deleted' });
+      await page.gone({ label: 'Reply to this thread' });
+      await page.tap({ text: 'Discussions' });
+      await page.waitFor({ text: /^\d+ threads?$/ }, 20000);
+      if (await page.find({ text: /^Full poly at 4\.0/ })) throw new Error('the deleted thread is still in Discussions');
+    },
+    expect: [{ text: /^\d+ threads?$/ }],
+  },
+  {
     // Oct 18 ("build tracking"): courtsidebase.com/?ref=fb&go=app, in a tab of its own (see checkAppHop).
     name: 'app-link',
     title: 'Website link straight to the iPhone app',
