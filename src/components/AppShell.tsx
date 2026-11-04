@@ -7,15 +7,15 @@ import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, 
 import { NavBar } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
-import { LiveBar } from '@/components/session/LiveBar';
-import { StillPlaying } from '@/components/session/StillPlaying';
-import { WarmCurtain } from '@/components/WarmCurtain';
-import { TourOverlay } from '@/components/TourOverlay';
+import { LiveBar as LiveBarPlain } from '@/components/session/LiveBar';
+import { StillPlaying as StillPlayingPlain } from '@/components/session/StillPlaying';
+import { WarmCurtain as WarmCurtainPlain } from '@/components/WarmCurtain';
+import { TourOverlay as TourOverlayPlain } from '@/components/TourOverlay';
 import { isTourOpen, useTourOpen } from '@/features/tour/tourStore';
 import { Toast } from './Toast';
-import { MessageBanner } from './MessageBanner';
-import { AutoLogAsk } from './AutoLogAsk';
-import { HitFollowUp } from './HitFollowUp';
+import { MessageBanner as MessageBannerPlain } from './MessageBanner';
+import { AutoLogAsk as AutoLogAskPlain } from './AutoLogAsk';
+import { HitFollowUp as HitFollowUpPlain } from './HitFollowUp';
 import { RouteTransition } from './RouteTransition';
 import { useResponsive } from '@/lib/useResponsive';
 import { getPendingTab, setPendingTab, subscribePendingTab } from '@/features/navigation/pendingTab';
@@ -29,7 +29,7 @@ import { useApp } from '@/store/AppContext';
 import { isPublicPath } from '@/features/share/publicPaths';
 import { guestAskFor } from '@/features/guest/guestPaths';
 import { openJoinSheet } from '@/features/guest/joinAsk';
-import { JoinSheet } from '@/features/guest/JoinSheet';
+import { JoinSheet as JoinSheetPlain } from '@/features/guest/JoinSheet';
 import { GetAppBar } from '@/features/guest/GetAppBar';
 import { rememberReferrer } from '@/features/invite/referral';
 import { rememberCampaign } from '@/features/guest/campaign';
@@ -42,7 +42,7 @@ import { auth as remoteAuth } from '@/data/remote';
 import { setCrashScreen } from '@/lib/crashReporting';
 import { listenForPushTaps, registerForPush } from '@/features/push/push';
 import { ALERTS_WHY, noteAlertsLaunch } from '@/features/push/alertsWhy';
-import { PhoneAppWelcome } from '@/features/phoneApp/PhoneAppCard';
+import { PhoneAppWelcome as PhoneAppWelcomePlain } from '@/features/phoneApp/PhoneAppCard';
 import { recoverChatPick } from '@/features/messages/pendingPick';
 import { setUpNotificationChannels } from '@/features/push/channels';
 import { isSupabaseConfigured } from '@/lib/supabase';
@@ -59,6 +59,22 @@ import { v7Bar } from '@/features/players/zoomV7';
 import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
 import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
+
+/**
+ * The app-wide hosts drawn after the pages, each drawn again only when what it is given changes (Nov 4, owner:
+ * "Our app just runs so laggy"): the shell redraws as a tab swipe heads for its tab (the bar follows the finger),
+ * and every one of these was drawn again with it, mid-swipe, the tutorial's 1,300 lines included. Each one follows
+ * the app and the address through its own hooks, so it still redraws for everything it shows.
+ */
+const LiveBar = React.memo(LiveBarPlain);
+const StillPlaying = React.memo(StillPlayingPlain);
+const WarmCurtain = React.memo(WarmCurtainPlain);
+const TourOverlay = React.memo(TourOverlayPlain);
+const MessageBanner = React.memo(MessageBannerPlain);
+const AutoLogAsk = React.memo(AutoLogAskPlain);
+const HitFollowUp = React.memo(HitFollowUpPlain);
+const JoinSheet = React.memo(JoinSheetPlain);
+const PhoneAppWelcome = React.memo(PhoneAppWelcomePlain);
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
