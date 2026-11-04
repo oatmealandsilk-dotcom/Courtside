@@ -25,3 +25,6 @@ function read(): Record<string, string> {
 export function designVar(page: string): string | null {
   return read()[page] ?? null;
 }
+
+// Read once as the app loads too, so a link to any page (the sign-in page included) keeps the option for the tab.
+read();

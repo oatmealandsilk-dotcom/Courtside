@@ -44,6 +44,8 @@ import { CourtTimeHost } from '@/components/place/CourtTimeHost';
 import { AlertsWhyHost } from '@/components/AlertsWhyHost';
 import { arrivingHeight } from '@/components/sheetHandOver';
 import { useInstantUpdates } from '@/lib/instantUpdates';
+// Design previews on the web demo (?var=…): read as the app loads, before sign-in drops the query. Does nothing on a phone.
+import '@/lib/designVar';
 
 // Any error the app does not catch itself is filed as a crash report.
 installCrashReporting();
