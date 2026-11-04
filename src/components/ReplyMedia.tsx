@@ -17,10 +17,11 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 export type ReplyAttachment = NonNullable<Answer['media']>;
 
 /**
- * True while a page's first draw is going on (the thread page, with taps that answer sooner): a reply's photo, or a
- * clip's still, shows its usual empty frame and the picture goes in a moment later. A picture the phone already had
- * was shrunk to size on the phone's main thread as the page was built, about 50 ms a photo on the Simulator, and the
- * slide in could not start until it was done (Nov 4). One it did not have yet always came in later, into this frame.
+ * True for a reply that is surely below the first screen while the page's first draw is going on (the thread page,
+ * with taps that answer sooner): its photo, or its clip's still, shows its usual empty frame and the picture goes in a
+ * moment later, out of sight. A picture the phone already had was shrunk to size on the phone's main thread as the page
+ * was built, about 50 ms a photo on the Simulator, and the slide in could not start until it was done (Nov 4). A reply
+ * that may be on the first screen keeps its picture in the first draw, so what slides in looks as it always did.
  */
 export const MediaLaterContext = createContext(false);
 
