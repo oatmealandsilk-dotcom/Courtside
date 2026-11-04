@@ -82,6 +82,7 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
 import { designVariant } from '@/lib/designVariant';
+import { useBarInset } from '@/features/navigation/barInset';
 
 /** The plain Create list (round 2, item 2): off until the owner says (Oct 25: "Don't change create tab yet"). */
 const CREATE_PLAIN = false;
@@ -365,6 +366,8 @@ function Compose() {
   // A challenge entry's one card is left exactly as it was.
   const { height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // Options B and C only (a sheet from the bottom): its rows sit clear of the floating bar, which stays above it.
+  const barInset = useBarInset();
   const menuMaxH = Math.max(320, windowH - insets.top - insets.bottom - 40);
   const tight = windowH < 900 && !entering;
   const tighter = windowH < 760 && !entering;
@@ -1389,7 +1392,7 @@ function Compose() {
     return <View style={styles.varBackdrop}>
       <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
       <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
-      <Reanimated.View style={[styles.varSheet, { maxHeight: menuMaxH, paddingBottom: insets.bottom + 12 }, popStyle]}>
+      <Reanimated.View style={[styles.varSheet, { maxHeight: menuMaxH, paddingBottom: Math.max(insets.bottom, barInset) + 12 }, popStyle]}>
         <View style={styles.varGrabber}/>
         <View style={styles.varHeader}><Text style={styles.choiceTitle}>Create</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
         <ScrollView style={styles.choiceScroll} bounces={false} showsVerticalScrollIndicator={false}>
