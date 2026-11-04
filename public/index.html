@@ -36,6 +36,24 @@
       body { overflow: hidden; margin: 0; -webkit-tap-highlight-color: transparent; }
       #root { display: flex; height: 100%; flex: 1; }
     </style>
+    <!-- The loader in the look picked, not the browser's light or dark mode, where one was saved (Nov 2, owner:
+         "if someone selects night, then the opening screen is always night, if it's day it's always day";
+         admins first: src/lib/launchLook.ts saves it, LaunchLookGate decides). Nothing saved: the browser's mode, as before.
+         Out of the launch:start/end block, so scripts/make-splash-c.py leaves it alone; the colours are the loader's own. -->
+    <script>
+      try {
+        var look = window.localStorage.getItem('courtside-launch-look');
+        if (look === 'light' || look === 'dark') document.documentElement.setAttribute('data-launch', look);
+      } catch (e) { /* the browser's mode */ }
+    </script>
+    <style>
+      html[data-launch=light] #cs-launch { background: #FFFFFF; }
+      html[data-launch=light] #cs-launch .cs-mark { fill: #2E7E4B; }
+      html[data-launch=light] #cs-launch .cs-line { fill: #536471; }
+      html[data-launch=dark] #cs-launch { background: #0F1412; }
+      html[data-launch=dark] #cs-launch .cs-mark { fill: #6FB483; }
+      html[data-launch=dark] #cs-launch .cs-line { fill: #A6B1AB; }
+    </style>
   </head>
   <body>
     <!-- The loader: the app's launch look (the mark on white, the line low down) until the

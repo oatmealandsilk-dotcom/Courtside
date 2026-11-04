@@ -9,6 +9,7 @@
 import { achievements } from './mock/achievements';
 import { coaches, coachingRequests, coachResults, coachReviews } from './mock/coaching';
 import { answers, questions } from './mock/discussions';
+import { simLongThread } from '@/lib/simSeed';
 import { coachQuestions, coachReplies } from './mock/coachQuestions';
 import { comments, posts } from './mock/feed';
 import { demoGroupPosts } from './mock/groups';
@@ -215,8 +216,9 @@ export async function fetchBootstrap(): Promise<Bootstrap> {
       // or put away, so the Archive has something to show.
       stories: stories.filter((s) => s.authorId === CURRENT_USER_ID && (s.archived || Date.parse(s.expiresAt) <= Date.now())),
       comments,
-      questions,
-      answers,
+      // The simulator's proof only (simSeed): one long thread with photos; nothing anywhere else.
+      questions: [...simLongThread().questions, ...questions],
+      answers: [...answers, ...simLongThread().answers],
       coaches,
       coachQuestions,
       coachReplies,

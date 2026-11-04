@@ -129,7 +129,8 @@ export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';
  * photo was brand green on Profile, Edit profile and the Tennis profile card,
  * but your own colour (the one everyone else sees you in) in Settings,
  * Account center, the comment box and your Discussions posts. One colour
- * everywhere your own picture is drawn; he has not said which yet:
+ * everywhere your own picture is drawn. Nov 4, his pick: "Profile pic should be your profile pic, or just
+ * brand green if it's default" (a photo always shows; with none, brand green):
  *   'today'  exactly as now, until he picks: brand green on Profile (and its
  *            loading placeholder), the Tennis profile card, your own page and
  *            the sign-up card; Edit profile's picture keeps its fixed preview
@@ -141,4 +142,4 @@ export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';
  * vanish into it); no palette uses a filled card today.
  */
 export type SelfAvatarColor = 'today' | 'own' | 'brand';
-export const SELF_AVATAR_COLOR: SelfAvatarColor = 'today';
+export const SELF_AVATAR_COLOR: SelfAvatarColor = 'brand';
