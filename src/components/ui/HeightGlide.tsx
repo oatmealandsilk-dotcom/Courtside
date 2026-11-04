@@ -28,7 +28,8 @@ export function HeightGlide({ children, style, duration = 240 }: { children: Rea
       <View
         onLayout={(e) => {
           const next = e.nativeEvent.layout.height;
-          if (box.target.current == null || reduce) { box.jump(next); return; }
+          // A duration of 0: it follows at once, exactly as a plain box would (the thread page between edits).
+          if (box.target.current == null || reduce || duration <= 0) { box.jump(next); return; }
           if (next === box.target.current) return;
           box.glide(next, (to, done) => withTiming(to, { duration, easing: CURVE }, done));
         }}

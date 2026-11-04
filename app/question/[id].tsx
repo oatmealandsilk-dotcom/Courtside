@@ -50,6 +50,8 @@ import { QUESTION_OF_WEEK_MS } from '@/data/api';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, corner } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { HeightGlide } from '@/components/ui/HeightGlide';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 /** How long after the page has slid in its view is counted (taps that answer sooner only). */
 const VIEW_AFTER_MS = 400;
@@ -175,6 +177,16 @@ function QuestionDetail() {
 
   const question = questions.find((q) => q.id === id);
   const asker = users.find((u) => u.id === question?.authorId);
+  // Just edited (Edit thread, Nov 4): as the edit lands, the new words glide the replies to their place and "Edited"
+  // fades in by the date, for the moment that takes (the page may draw again meanwhile, as the sheet's page leaves).
+  // Any other change to the words (a refresh, a late load) shows at once, as before.
+  const seenEdit = useRef(question?.editedAt);
+  const glideUntil = useRef(0);
+  if (question?.editedAt && question.editedAt !== seenEdit.current) {
+    seenEdit.current = question.editedAt;
+    glideUntil.current = Date.now() + 800;
+  }
+  const freshEdit = glideUntil.current > Date.now();
   // Admins: only a thread by someone known to be an adult can be the Question of the week (teen rules;
   // the server says, as it alone knows ages). The pin shows only then, or to take off a pin already there.
   const canPin = actions.canPinQuestion;
@@ -302,7 +314,10 @@ function QuestionDetail() {
             <Avatar name={asker?.name ?? '?'} seed={asker?.avatarSeed ?? question.authorId} uri={asker?.avatarUrl} size={32} />
             <View style={{ flex: 1 }}>
               <View style={styles.askerNameLine}><Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.askerName, styles.shrink]} numberOfLines={1}>{asker?.name ?? 'Unknown'}</Text><OfficialCheck userId={asker?.id} size={13} /></View>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>
+              <View style={styles.timeLine}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>{asker ? `@${asker.handle}` : ''} · {relativeTime(question.createdAt)}</Text>
+                {question.editedAt ? <Animated.Text entering={freshEdit ? FadeIn.duration(220).delay(60) : undefined} maxFontSizeMultiplier={TextScale.CARD} style={styles.time}> · Edited</Animated.Text> : null}
+              </View>
             </View>
           </Pressable>
           {/* The hand-made look (Oct 24): the topic a muted word, not a filled chip; still a tap to its threads. */}
@@ -312,8 +327,12 @@ function QuestionDetail() {
             </Pressable>
           ) : <Chip label={meta.label} selected tint={tint} ink={inkOn(tint)} small onPress={() => openTopic(question.topic)} />}
         </View>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
-        <RichText style={styles.body}>{question.body}</RichText>
+        <HeightGlide duration={freshEdit ? 240 : 0}>
+          <View style={styles.words}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{question.title}</Text>
+            <RichText style={styles.body}>{question.body}</RichText>
+          </View>
+        </HeightGlide>
         {question.poll ? <PollView question={question} /> : null}
         <View style={styles.tagRow}>
           {question.tags.map((tag) => (LESS_AI_DISCUSS ? (
@@ -462,6 +481,8 @@ const styleDefinitions = StyleSheet.create({
   askerNameLine: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   shrink: { flexShrink: 1 },
   time: { ...typography.small, color: colors.textFaint },
+  timeLine: { flexDirection: 'row', flexWrap: 'wrap' },
+  words: { gap: spacing.md },
   title: { ...typography.title, color: colors.text, lineHeight: 28 },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },

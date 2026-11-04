@@ -15,6 +15,7 @@ import { POST_MAX } from '@/features/feed/limits';
 import { notKnownAdult } from '@/features/players/age';
 import { openPlacePicker } from '@/features/places/picker';
 import { TagPlayers } from '@/components/TagPlayers';
+import { EditThreadSheet } from '@/components/thread/EditThreadSheet';
 import { Button, Field, Toggle } from '@/components/ui';
 import { canBeFeatured } from '@/features/compose/featuring';
 import * as haptics from '@/lib/haptics';
@@ -23,25 +24,31 @@ import { useApp } from '@/store/AppContext';
 import { colors, spacing, typography } from '@/theme';
 
 /**
- * Editing something of yours after it is up: a post's caption, who is in it
- * and where it was, or a thread's question and details. Saving stamps it
+ * Editing something of yours after it is up. A thread (kind=question) has
+ * its own editor, the full sheet with the keyboard (EditThreadSheet, Nov 4);
+ * a post or a clip has the one below.
+ */
+export default function EditPost() {
+  const { id = '', kind } = useLocalSearchParams<{ id?: string; kind?: string }>();
+  return kind === 'question' ? <EditThreadSheet id={id} /> : <EditPostSheet />;
+}
+
+/**
+ * A post's caption, who is in it and where it was. Saving stamps it
  * "Edited" next to the date, so Save wakes only once something has changed.
  * Opened before the post is here (a link, a reload), it is fetched first. A tracker session's post also has "Share health
  * data" (Oct 4, owner), as in the composer. A post that can be featured has
  * the composer's "Let CourtSide feature this on its Instagram" switch, so it
  * can be switched off any time after posting (Oct 5, owner).
  */
-export default function EditPost() {
+function EditPostSheet() {
   const styles = useThemedStyles(styleDefinitions);
-  const { id = '', kind: rawKind, pickPlace: pickParam } = useLocalSearchParams<{ id?: string; kind?: string; pickPlace?: string }>();
-  const { posts, questions, currentUserId, currentUser, detectedActivities, sessions, ready, actions } = useApp();
-  const isQuestion = rawKind === 'question';
-  const post = isQuestion ? undefined : posts.find((p) => p.id === id);
-  const question = isQuestion ? questions.find((q) => q.id === id) : undefined;
-  const mine = (post?.authorId ?? question?.authorId) === currentUserId;
+  const { id = '', pickPlace: pickParam } = useLocalSearchParams<{ id?: string; pickPlace?: string }>();
+  const { posts, currentUserId, currentUser, detectedActivities, sessions, ready, actions } = useApp();
+  const post = posts.find((p) => p.id === id);
+  const mine = post?.authorId === currentUserId;
 
-  const [body, setBody] = useState(post?.body ?? question?.body ?? '');
-  const [title, setTitle] = useState(question?.title ?? '');
+  const [body, setBody] = useState(post?.body ?? '');
   const [tagged, setTagged] = useState<string[]>(post?.taggedUserIds ?? []);
   const [location, setLocation] = useState(post?.location ?? '');
   const [court, setCourt] = useState<TaggedCourt | null>(post?.court ?? null);
@@ -58,28 +65,27 @@ export default function EditPost() {
   // Opened before the post had loaded (a reload, a link): the fields fill in
   // once, when it arrives, and Save stays off until then, so saving can
   // never write a blank caption over the real one.
-  const [filled, setFilled] = useState(!!(post || question));
+  const [filled, setFilled] = useState(!!post);
   useEffect(() => {
-    if (filled || !(post || question)) return;
-    setBody(post?.body ?? question?.body ?? '');
-    setTitle(question?.title ?? '');
+    if (filled || !post) return;
+    setBody(post?.body ?? '');
     setTagged(post?.taggedUserIds ?? []);
     setLocation(post?.location ?? '');
     setCourt(post?.court ?? null);
     setFeature(post ? post.featureOk !== false : true);
     setFilled(true);
-  }, [filled, post, question]);
+  }, [filled, post]);
 
   // Not here yet (a link, a reload): asked for once the app is up; until the answer, a spinner, never "not yours".
   const [looked, setLooked] = useState(false);
-  const here = !!(post || question);
+  const here = !!post;
   useEffect(() => {
     if (!ready || here || looked || !id) return undefined;
     let on = true;
-    const ask: Promise<unknown> = isQuestion ? actions.loadThread(id) : actions.loadPost(id);
+    const ask: Promise<unknown> = actions.loadPost(id);
     void ask.catch(() => undefined).finally(() => { if (on) setLooked(true); });
     return () => { on = false; };
-  }, [ready, here, looked, id, isQuestion, actions]);
+  }, [ready, here, looked, id, actions]);
   // The sheet opens only as tall as what is in it.
   const [contentH, setContentH] = useState(0);
 
@@ -121,9 +127,7 @@ export default function EditPost() {
 
   // Something anyone would see changed (or a switch on it): until then Save stays asleep, and nothing is marked "Edited".
   const sameList = (a: string[], b: string[]) => a.length === b.length && a.every((x) => b.includes(x));
-  const dirty = question
-    ? title.trim() !== question.title.trim() || body.trim() !== (question.body ?? '').trim()
-    : !!post && (
+  const dirty = !!post && (
       body.trim() !== (post.body ?? '').trim()
       || !sameList(tagged, post.taggedUserIds ?? [])
       || location.trim() !== (post.location ?? '').trim()
@@ -131,7 +135,7 @@ export default function EditPost() {
       || (!!health && available.length > 0 && !sameShare(chosenShare(health, available), postShare(post.session)))
       || (featurable && feature !== (post.featureOk !== false))
     );
-  const canSave = filled && mine && dirty && (isQuestion ? title.trim().length >= 3 : true);
+  const canSave = filled && mine && dirty;
   // A quick second tap on Save would ask twice.
   const [checking, setChecking] = useState(false);
   const save = () => {
@@ -139,7 +143,7 @@ export default function EditPost() {
     setChecking(true);
     // Words CourtSide refuses (migration 117) are said here, and the sheet
     // stays open with what you wrote, to change and save again.
-    void actions.wordsRefused(isQuestion ? [title, body] : [body, location]).then((refused) => {
+    void actions.wordsRefused([body, location]).then((refused) => {
       setChecking(false);
       if (refused) {
         haptics.reject();
@@ -147,7 +151,6 @@ export default function EditPost() {
         return;
       }
       if (post) actions.editPost(post.id, { body: body.trim(), taggedUserIds: tagged, location: placeOk ? location : '', court: courtOk ? court : null, ...(health && available.length ? { share: chosenShare(health, available) } : {}), ...(featurable ? { featureOk: feature } : {}) });
-      if (question) actions.editQuestion(question.id, { title: title.trim(), body: body.trim() });
       setCloseSignal((n) => n + 1);
     });
   };
@@ -160,7 +163,7 @@ export default function EditPost() {
       contentHeight={contentH || undefined}
       header={
         <View style={styles.headerRow}>
-          <Text style={styles.heading}>{isQuestion ? 'Edit thread' : post?.kind === 'clip' ? 'Edit clip' : 'Edit post'}</Text>
+          <Text style={styles.heading}>{post?.kind === 'clip' ? 'Edit clip' : 'Edit post'}</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={10} onPress={() => setCloseSignal((n) => n + 1)}>
             <Ionicons name="close" size={22} color={colors.textMuted} />
           </Pressable>
@@ -170,15 +173,10 @@ export default function EditPost() {
       <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled" onContentSizeChange={(_, h) => { const r = Math.ceil(h); if (r !== contentH) setContentH(r); }}>
         {!filled ? (
           looked
-            ? <Text style={styles.note}>{isQuestion ? 'This thread isn’t available.' : 'This post isn’t available.'} It may have been deleted.</Text>
+            ? <Text style={styles.note}>This post isn’t available. It may have been deleted.</Text>
             : <View style={styles.wait}><CourtSpinner size={26} /></View>
         ) : !mine ? (
           <Text style={styles.note}>Only the person who posted this can change it.</Text>
-        ) : isQuestion ? (
-          <>
-            <Field label="Question" value={title} onChangeText={setTitle} maxLength={300} />
-            <Field label="Details" value={body} onChangeText={setBody} multiline minHeight={120} mentions maxLength={10000} />
-          </>
         ) : (
           <>
             <Field label="Caption" labelRight={placeOk ? <LocationLink value={location} court={!!court && courtOk} onPress={() => pickPlace(location)} onClear={() => { setLocation(''); setCourt(null); }} /> : undefined} value={body} onChangeText={setBody} multiline minHeight={80} mentions maxLength={POST_MAX} />

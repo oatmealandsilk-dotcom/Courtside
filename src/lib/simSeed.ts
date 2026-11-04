@@ -1,10 +1,12 @@
 import type { Answer, Question } from '@/data/types';
 import { SIM_DRIVER } from '@/lib/simDriver';
+import { CURRENT_USER_ID } from '@/data/mock/users';
 
 /*
  * The simulator's proof only (simDriver: a demo build bundled with EXPO_PUBLIC_SIM_DRIVER=1; nothing at all in a store
  * build, an over-the-air update or the website, simSeed.web.ts): one long thread with photos added to the demo, for
- * timing a long thread's open, as the demo's own threads are all short and have no pictures. Its photos are files the
+ * timing a long thread's open, as the demo's own threads are all short and have no pictures; and a short thread of the
+ * demo player's own, for Edit thread's proof (q-sim-edit). Its photos are files the
  * Mac puts in the app's Documents folder (sim-photo-1.jpg ...), so they load the same way every time.
  */
 const AUTHORS = ['u-tomas', 'u-june', 'u-dev', 'u-mira', 'u-nadia', 'u-leo', 'u-sam', 'u-priya', 'u-marcus', 'u-rosa', 'u-kai', 'u-ella'];
@@ -50,5 +52,24 @@ export function simLongThread(): { questions: Question[]; answers: Answer[] } {
     votedBy: {},
     answerIds: answers.map((a) => a.id),
   };
-  return { questions: [question], answers };
+  // Edit thread's proof (Nov 4): a short thread of the demo player's own, to edit the way the owner did, with a few
+  // replies under it so the page can be seen taking the new words.
+  const editReplies: Answer[] = [
+    { id: 'a-sim-edit-1', questionId: 'q-sim-edit', authorId: 'u-mira', body: 'Club final, 5-5 in the third. Called a clean ace out. I asked once, nicely, then let it go.', createdAt: at(1), votes: 9, votedBy: {}, fromCoach: false },
+    { id: 'a-sim-edit-2', questionId: 'q-sim-edit', authorId: 'u-dev', body: 'If there is no umpire, I offer to replay the point. Most people take it.', createdAt: at(0.7), votes: 5, votedBy: {}, fromCoach: false },
+    { id: 'a-sim-edit-3', questionId: 'q-sim-edit', authorId: 'u-june', body: 'A foot out on match point. Shook hands. Still think about it.', createdAt: at(0.4), votes: 3, votedBy: {}, fromCoach: false },
+  ];
+  const editThread: Question = {
+    id: 'q-sim-edit',
+    authorId: CURRENT_USER_ID,
+    title: 'What’s the worst line call',
+    body: '',
+    topic: 'rules',
+    createdAt: at(2),
+    tags: [],
+    votes: 12,
+    votedBy: {},
+    answerIds: editReplies.map((a) => a.id),
+  };
+  return { questions: [editThread, question], answers: [...answers, ...editReplies] };
 }

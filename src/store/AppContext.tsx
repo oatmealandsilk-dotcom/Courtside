@@ -82,6 +82,7 @@ import { show as showToast } from '@/lib/toast';
 import { opensAtFor } from '@/features/hits/audience';
 import { isFlexibleHit, isFlexiblePlace } from '@/features/hits/flexible';
 import { keepUnsentThread } from '@/features/community/unsentThread';
+import { keepUnsentEdit } from '@/features/community/unsentEdit';
 import { holdCoachQuestionWhileUploading, keepUnsentCoachQuestion, releaseCoachQuestion } from '@/features/coaching/unsentQuestion';
 import { forgetPushToken, registerForPush } from '@/features/push/push';
 import { ALERTS_WHY, askForAlertsAt } from '@/features/push/alertsWhy';
@@ -5616,7 +5617,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!r || !was) return;
       // Refused for its words (migration 117; the toast says why) or not saved at all: the thread goes back to what it said.
       setState((prev) => ({ ...prev, questions: prev.questions.map((q) => (q.id === questionId && q.title === patch.title && q.body === patch.body ? { ...q, title: was.title, body: was.body, tags: was.tags, editedAt: was.editedAt } : q)) }));
-      if (r === 'failed') showToast({ title: 'Your edit didn’t save', body: 'Check your connection and try again.', icon: 'alert-circle-outline' });
+      if (r !== 'failed') return;
+      // What was typed is kept: "Edit again" opens Edit thread with it filled in (unsentEdit).
+      keepUnsentEdit({ id: questionId, title: patch.title, body: patch.body });
+      showToast({ title: 'Your edit didn’t save', body: 'Your words are kept. Check your connection and try again.', icon: 'alert-circle-outline', action: { label: 'Edit again', onPress: () => router.push({ pathname: '/edit-post', params: { id: questionId, kind: 'question' } }) } });
     });
   }, [requireUser]);
   const acceptAnswer = useCallback((questionId: ID, answerId: ID) => {

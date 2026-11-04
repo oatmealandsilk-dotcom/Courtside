@@ -1,6 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useRef, useState } from 'react';
-import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type KeyboardTypeOptions } from 'react-native';
+import { Platform, StyleSheet, Text, TextInput, View, useWindowDimensions, type KeyboardTypeOptions, type StyleProp, type TextStyle } from 'react-native';
 
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { MentionSuggestions } from '@/components/MentionSuggestions';
@@ -70,6 +70,12 @@ interface Props {
   autoComplete?: React.ComponentProps<typeof TextInput>['autoComplete'];
   /** The most characters the box takes (what the database keeps, so nothing longer looks saved and is lost). */
   maxLength?: number;
+  /** The box's words in a page's own type, on top of its look (Edit thread's details: the thread page's body). Nothing else changes. */
+  inputStyle?: StyleProp<TextStyle>;
+  /** The caret's (and a selection's) colour: the court's own, say. The phone's blue when left out. */
+  selectionColor?: string;
+  /** A dark keyboard on a dark page. The phone's own when left out. */
+  keyboardAppearance?: 'default' | 'light' | 'dark';
 }
 
 /**
@@ -108,6 +114,9 @@ export function Field({
   row = false,
   autoComplete,
   maxLength,
+  inputStyle,
+  selectionColor,
+  keyboardAppearance,
 }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   const submits = Boolean(onSubmitEditing) && (submitOnEnter || !multiline);
@@ -182,6 +191,9 @@ export function Field({
         secureTextEntry={secureTextEntry}
         autoComplete={autoComplete}
         maxLength={maxLength}
+        selectionColor={selectionColor}
+        cursorColor={selectionColor}
+        keyboardAppearance={keyboardAppearance}
         selectTextOnFocus={selectTextOnFocus}
         onFocus={() => { setFocused(true); reveal(box()); onFocus?.(); }}
         onBlur={() => { setFocused(false); onBlur?.(); }}
@@ -203,6 +215,7 @@ export function Field({
           flush && { borderBottomLeftRadius: 0, borderBottomRightRadius: 0 },
           bare && styles.bare,
           row && styles.row,
+          inputStyle,
         ]}
       />
       </View>
