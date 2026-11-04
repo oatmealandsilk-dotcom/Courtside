@@ -1321,8 +1321,12 @@ interface AppActions extends CourtLifeActions, FeedGroupsActions, LiveSessionAct
   /** "Typing…" in a chat: `ping` while you type; `onTyping` hears the others. No-op in the demo. */
   watchTyping: (conversationId: ID, onTyping: (userId: ID, stopped?: boolean) => void) => { ping: () => void; stop: () => void; off: () => void };
   watchInboxTyping: (onTyping: (conversationId: ID, userId: ID, stopped?: boolean) => void) => () => void;
-  /** Every reply in a thread, loaded when it is opened. */
-  loadThread: (questionId: ID) => Promise<void>;
+  /**
+   * Every reply in a thread, loaded when it is opened. With `applyAfter` (the thread page, with taps that answer sooner),
+   * they are asked for at once and put in once it settles (the page has landed), so the app's redraw for them never
+   * lands in the page's slide.
+   */
+  loadThread: (questionId: ID, applyAfter?: Promise<unknown>) => Promise<void>;
   /** Asks which thread is the Question of the week (and brings the thread in when the app does not have it). */
   loadPinnedQuestion: () => Promise<void>;
   /**
@@ -2435,10 +2439,14 @@ function dropComment(prev: AppState, commentId: ID): AppState {
  * Demo build in a browser: `?as=handle` on any address signs that fixture in
  * and keeps it for the tab, so a screen can be opened straight from its
  * address — which is how the design checks take their pictures. Never with a
- * real database, never on a phone.
+ * real database, never on a phone. The iPhone Simulator's proof build (simDriver), bundled with
+ * EXPO_PUBLIC_SIM_DRIVER=1 and EXPO_PUBLIC_SIM_SIGNED_IN=1, opens signed in to the demo every time, as a
+ * phone keeps its session (Nov 2: the launch look follows the theme of a signed-in player from one open to
+ * the next, which the demo's sign-in, forgotten at every open, could not show).
  */
 const demoHandle: string | null = (() => {
-  if (isSupabaseConfigured || Platform.OS !== 'web') return null;
+  if (isSupabaseConfigured) return null;
+  if (Platform.OS !== 'web') return process.env.EXPO_PUBLIC_SIM_DRIVER === '1' && process.env.EXPO_PUBLIC_SIM_SIGNED_IN === '1' ? 'you' : null;
   try {
     const asked = new URLSearchParams(window.location.search).get('as');
     if (asked) { window.sessionStorage.setItem('courtside-demo-as', asked); return asked; }
@@ -7006,11 +7014,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Signed in, the first load already brought the threads (the newest 300): nothing more to page in.
   const loadThreads = useCallback(async (): Promise<boolean | null> => false, []);
   // Opening a thread: all of its replies, not only the newest that came with the app.
-  const loadThread = useCallback(async (questionId: ID) => {
+  const loadThread = useCallback(async (questionId: ID, applyAfter?: Promise<unknown>) => {
     if (!live(stateRef.current.currentUserId, questionId)) {
       // The simulator's proof only (simThreadFetch): the server's answer as the live app gets it, the same replies as new lists.
       if (simThreadFetch.ms > 0) {
         await simThreadFetch.wait(simThreadFetch.ms);
+        if (applyAfter) await applyAfter;
         setState((prev) => ({ ...prev, answers: [...prev.answers], questions: prev.questions.map((q) => (q.id === questionId ? { ...q } : q)) }));
       }
       return;
@@ -7025,6 +7034,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const asked = Date.now();
     const replies = await remote.fetchThreadAnswers(questionId);
     if (!replies) return;
+    if (applyAfter) await applyAfter;
     setState((prev) => {
       // What the server sends is the thread now: its votes and pictures, and
       // no replies deleted since. Kept as well: replies of yours not saved
@@ -7040,6 +7050,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // One your Hidden words hid (migration 117), or a reply under it, is not counted for you, the asker.
       const hiddenIds = new Set(here.filter((a) => a.hiddenByWords).map((a) => a.id));
       const inThread = here.filter((a) => !hiddenIds.has(a.id) && !(a.parentAnswerId && hiddenIds.has(a.parentAnswerId))).sort((a, b) => (a.createdAt < b.createdAt ? -1 : 1)).map((a) => a.id);
+      // Nothing new (the app already had every reply, as it was): no change at all, so no page in the app redraws for it.
+      // It used to redraw them all on every thread opened (Nov 4).
+      const asWas = prev.questions.find((q) => q.id === questionId);
+      const accepted = asWas?.acceptedAnswerId && !here.some((a) => a.id === asWas.acceptedAnswerId) ? undefined : asWas?.acceptedAnswerId;
+      const same = (a: Answer, b: Answer) => a === b || JSON.stringify(a) === JSON.stringify(b);
+      if (asWas && answers.length === prev.answers.length && answers.every((a, i) => same(a, prev.answers[i]))
+        && accepted === asWas.acceptedAnswerId && inThread.length === asWas.answerIds.length && inThread.every((aid, i) => aid === asWas.answerIds[i])) return prev;
       return { ...prev, answers, questions: prev.questions.map((q) => (q.id === questionId ? { ...q, answerIds: inThread, acceptedAnswerId: q.acceptedAnswerId && !here.some((a) => a.id === q.acceptedAnswerId) ? undefined : q.acceptedAnswerId } : q)) };
     });
   }, []);
@@ -7097,24 +7114,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const key = `${targetKind}:${targetId}`;
     if (seenThisSession.current.has(key)) return;
     seenThisSession.current.add(key);
-    if (targetKind === 'post' && live(stateRef.current.currentUserId, targetId)) { remote.bumpViews(targetId); return; }
+    // A thread's view count is shown nowhere and sent nowhere: counting it only redrew every page in the app, about a
+    // tenth of a second of the phone's time just as a thread opened (Nov 4). Posts and clips still count theirs.
+    if (targetKind === 'question') return;
+    if (live(stateRef.current.currentUserId, targetId)) { remote.bumpViews(targetId); return; }
     // A view count is never what you are looking at: background work, so the
     // page turn that recorded it is not held up by every screen redrawing.
-    startTransition(() => setState((prev) =>
-      targetKind === 'post'
-        ? {
-            ...prev,
-            posts: prev.posts.map((p) =>
-              p.id === targetId ? { ...p, views: (p.views ?? 0) + 1 } : p,
-            ),
-          }
-        : {
-            ...prev,
-            questions: prev.questions.map((q) =>
-              q.id === targetId ? { ...q, views: (q.views ?? 0) + 1 } : q,
-            ),
-          },
-    ));
+    startTransition(() => setState((prev) => ({
+      ...prev,
+      posts: prev.posts.map((p) =>
+        p.id === targetId ? { ...p, views: (p.views ?? 0) + 1 } : p,
+      ),
+    })));
   }, []);
 
   const toggleSavePost = useCallback((postId: ID, quiet?: boolean) => {

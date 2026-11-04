@@ -374,6 +374,28 @@ const shownNow = () => (signedOut ? (phoneIsDark ? 'night' : DEFAULT_THEME) : sh
 /** Whether this app can offer Match phone (it can see the phone's light or dark mode). */
 export const AUTO_DARK_AVAILABLE = PHONE_APPEARANCE;
 
+/**
+ * The launch screen's look for what is picked (Nov 2, owner: "if someone selects night, then the opening
+ * screen is always night, if it's day it's always day. If it's whatever mode phone on then it responds
+ * according too"; src/lib/launchLook.ts): dark for a court whose page is dark (Night, New York), white for
+ * the others, and the phone's own mode with Match phone on (Night while the phone is dark) or for anyone
+ * signed out (Clean or Night by the phone). Saved for the next open by LaunchLookGate.
+ */
+export function launchLookWanted(): 'light' | 'dark' | 'phone' {
+  if (signedOut) return 'phone';
+  if (DARK_THEMES.has(chosen)) return 'dark';
+  if (autoDark && PHONE_APPEARANCE) return 'phone';
+  return 'light';
+}
+const lookListeners = new Set<() => void>();
+const subscribeLook = (listener: () => void) => { lookListeners.add(listener); return () => { lookListeners.delete(listener); }; };
+/** Told whenever the court picked, Match phone or signed in or out may have changed what launchLookWanted says. */
+const lookMayHaveChanged = () => lookListeners.forEach((listener) => listener());
+/** launchLookWanted, for a part that saves it when it changes (LaunchLookGate). */
+export function useLaunchLookWanted(): 'light' | 'dark' | 'phone' {
+  return useSyncExternalStore(subscribeLook, launchLookWanted, launchLookWanted);
+}
+
 const autoListeners = new Set<() => void>();
 const subscribeAuto = (listener: () => void) => { autoListeners.add(listener); return () => { autoListeners.delete(listener); }; };
 const getAuto = () => autoDark && PHONE_APPEARANCE;
@@ -455,6 +477,7 @@ function setTheme(name: ThemeName) {
   chosen = name;
   save(STORAGE_KEY, name);
   show(shownNow());
+  lookMayHaveChanged();
 }
 
 /**
@@ -469,12 +492,14 @@ export function replacePicked(name: ThemeName) {
   chosen = name;
   save(STORAGE_KEY, name);
   show(shownNow());
+  lookMayHaveChanged();
 }
 
 function setAutoFlag(on: boolean) {
   autoDark = on;
   save(AUTO_DARK_KEY, on ? '1' : '0');
   autoListeners.forEach((listener) => listener());
+  lookMayHaveChanged();
 }
 
 /**
@@ -578,6 +603,7 @@ export function setSignedOut(on: boolean) {
   accountKnown = true;
   if (on === signedOut) return;
   signedOut = on;
+  lookMayHaveChanged();
   phoneIsDark = phoneDark();
   const next = shownNow();
   if (next === live) return;
@@ -638,7 +664,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // picture's cream meanwhile, so the loading screen opens in your own theme
   // instead of snapping to it (Oct 2).
   const [loaded, setLoaded] = useState(Platform.OS === 'web');
-  useLaunchDark(!loaded);
+  const launchIsDark = useLaunchDark(!loaded);
   useEffect(() => {
     if (Platform.OS === 'web') return undefined;
     let alive = true;
@@ -651,6 +677,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         if (saved && saved in themes) chosen = saved as ThemeName;
         autoDark = matchPhoneFrom(pairs[1]?.[1], keysBefore);
         if (autoDark) autoListeners.forEach((listener) => listener());
+        lookMayHaveChanged();
         phoneIsDark = phoneDark();
         const next = shownNow();
         if (next !== live) applyNow(next);
@@ -662,12 +689,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeSourceContext.Provider value={rootSource}>
-      <View style={[{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }, loaded ? null : launchGround()]}>
+      <View style={[{ flex: 1, backgroundColor: loaded ? undefined : lightColors.bg }, loaded ? null : launchGround(launchIsDark)]}>
         {/* While your last theme is read (a blink), the launch picture itself, not a bare cream
             screen: the logo never drops out between the phone's picture and the app's (Oct 4).
             Splash C (Oct 24): the same drawn mark and line as the font gate and the splash before it. */}
         {loaded ? children : NEW_SPLASH
-          ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} />
+          ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} dark={launchIsDark} />
           : <Image source={require('../../assets/splash.png')} resizeMode="cover" style={StyleSheet.absoluteFill} />}
         {/* The picture of the old look while the app changes look by itself (Match phone): last, over everything. */}
         {loaded ? <><DrawnWatch /><ScreenFadeHost /></> : null}
