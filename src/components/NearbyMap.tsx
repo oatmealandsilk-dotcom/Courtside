@@ -2,7 +2,7 @@ import * as haptics from '@/lib/haptics';
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AppState, PixelRatio, Platform, Pressable, StyleSheet, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
-import { Image as PhotoImage } from 'expo-image';
+import { Image as PhotoImage, type ImageRef } from 'expo-image';
 import { captureRef, releaseCapture } from 'react-native-view-shot';
 import { File, Paths } from 'expo-file-system';
 import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -38,7 +38,8 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import { homeFor, homeIsKnown, wideView, type LatLng } from '@/features/players/positions';
-import { dropMapWarm, mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { dropMapWarm, mapWarmKeeping, mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, mapWarmSimSlow, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { fingersQuietMs } from '@/lib/fingers';
 import { useOnShowNow } from '@/features/navigation/tabFocus';
 import { useMyCity } from '@/features/players/useMyCity';
 import { MapWarmCopy, MapWarmPicture } from '@/components/map/MapWarm';
@@ -71,8 +72,12 @@ const CLOSE_ZOOM = 13.5;
 const WARM_SETTLE_MS = 1500;
 /** mapWarm: how often the card asks whether its hidden copy may start (in view, nothing else happening there). */
 const WARM_POLL_MS = 250;
-/** mapWarm: the full map's picture goes by itself if its own map has not drawn by then (its loading look then shows, as before). */
-const WARM_MAX_MS = 4000;
+/**
+ * mapWarm: the full map's picture stays until its own map has drawn (or failed, or a finger moves it): never taken away
+ * before, so a slow map never shows streets, then nothing, then streets (v3; it went after 4 s). If the map has still not
+ * drawn by this, only its pins are let go (under the picture: nothing on screen changes); the streets stay.
+ */
+const WARM_PINS_MAX_MS = 15_000;
 /** mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge is the system's swipe back. */
 const WARM_MOVE = 8;
 const WARM_EDGE = 24;
@@ -636,16 +641,19 @@ export function NearbyMap(props: NearbyMapProps) {
   // mapWarm (admins first, iPhone only): the full map opened on exactly the view its picture was made for (the plain way in:
   // no court, hit, player, spot or place, no grow, no swoop) shows that picture from its first frame, over its own map and
   // under its buttons. Its pins wait meanwhile; the moment its own map has drawn the same streets the picture goes, in one
-  // frame, and the pins come in as their usual wave. A finger moving the map, a page that fails, a swoop or a theme change, or
-  // WARM_MAX_MS without drawing: it goes at once (the map's own loading look, as before).
-  const [warmPic, setWarmPic] = useState<string | null>(() => {
+  // frame, and the pins come in as their usual wave. A finger moving the map, a move asked for (a search, a pin, a new fix,
+  // Recentre), a page that fails, a swoop or a theme change: it goes at once (the map's own loading look, as before). Never
+  // because the map is slow (WARM_PINS_MAX_MS).
+  const [warmPic, setWarmPic] = useState<ImageRef | null>(() => {
     if (!expanded || growFrom || focusCourt || focusHit || focusUser || focusSpot || focusPlace || swoop.busy || keepNone || !mapWarmOn(me)) return null;
     const fullSig = hashText(JSON.stringify(lookFor(themes[theme])) + STYLE);
     const k = warmKey({ user: me.id, look: fullSig, center: view.center, zoom: view.zoom, w: windowW, h: windowH, scale: PixelRatio.get() });
-    const uri = takeMapWarm(k);
-    simLog(`[warm] open ${uri ? 'picture' : 'none'} ${k.split('|').slice(2).join(' ')}`);
-    return uri;
+    const picture = takeMapWarm(k);
+    simLog(`[warm] open ${picture ? 'picture' : 'none'} ${k.split('|').slice(2).join(' ')}`);
+    return picture;
   });
+  // Its pins held while the picture is up (all but the slowest map: WARM_PINS_MAX_MS).
+  const [warmPins, setWarmPins] = useState(true);
   const warmUp = useRef(!!warmPic);
   const warmT0 = useRef(Date.now());
   const warmPicture = useRef<{ hide: () => void } | null>(null);
@@ -686,9 +694,31 @@ export function NearbyMap(props: NearbyMapProps) {
   };
   useEffect(() => {
     if (!warmUp.current) return undefined;
-    const t = setTimeout(() => warmGoNow.current('late'), WARM_MAX_MS);
+    const t = setTimeout(() => {
+      if (!warmUp.current) return;
+      setWarmPins(false);
+      if (!holdNow.current) canvas.current?.v7('window.__cs.hold(false)');
+      simLog(`[warm] pins let go, picture kept ${Date.now() - warmT0.current}ms`);
+    }, WARM_PINS_MAX_MS);
     return () => clearTimeout(t);
   }, []);
+  // A move asked of the map while its picture is up (a search, a pin or a face in the list, Recentre, a new fix): the picture
+  // is of where the map was, so it goes first. Only a page that opened on a picture has this (fixed for its life).
+  const warmCanvas = useRef((h: MapCanvasHandle | null) => {
+    canvas.current = h && {
+      ...h,
+      flyTo: (...a: Parameters<MapCanvasHandle['flyTo']>) => { warmGoNow.current('moved'); h.flyTo(...a); },
+      jump: (...a: Parameters<MapCanvasHandle['jump']>) => { warmGoNow.current('moved'); h.jump(...a); },
+      swoop: (...a: Parameters<MapCanvasHandle['swoop']>) => { warmGoNow.current('swoop'); h.swoop(...a); },
+    };
+  }).current;
+  // The simulator's proof only ("mapslow ms=6000"): the full map's own map starts that much later, as a slow phone's might.
+  const [slowGate, setSlowGate] = useState(() => !SIM_DRIVER || !expanded || !mapWarmSimSlow());
+  useEffect(() => {
+    if (slowGate) return undefined;
+    const t = setTimeout(() => { simLog('[warm] slow map starts'); setSlowGate(true); }, mapWarmSimSlow());
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (swoop.busy) warmGo('swoop'); }, [swoop.busy]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (mapStatus === 'failed') warmGo('failed'); }, [mapStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   const warmTheme = useRef(theme);
@@ -701,7 +731,7 @@ export function NearbyMap(props: NearbyMapProps) {
     // Opened on a tagged court or a hit, or looking at a place searched for, the map stays there; the still card stays on your city.
     // Up to hit finding you with the zoom on: the swoop is the move (one move, never this one first).
     if (expanded && model.homeKnown && !swoop.busy && !focusCourt && !focusHit && !focusSpot && !model.place && !model.selected) {
-      // mapWarm: the picture is of where the map was, not where it is going.
+      // mapWarm: the picture is of where the map was, not where it is going (warmCanvas: flyTo takes it away).
       warmGoNow.current('moved');
       canvas.current?.flyTo(home, CITY_ZOOM, 600);
     }
@@ -980,16 +1010,18 @@ export function NearbyMap(props: NearbyMapProps) {
   const warmRun = useRef(0);
   const warmCut = useRef(0);
   const warmKill = useRef<(() => void) | null>(null);
-  // While the card is on show: once all of warmOk has held for WARM_SETTLE_MS (and no tap has stopped a copy in that time),
-  // the copy starts. A copy that was stopped or failed is tried again the same way; a picture kept, and the asking stops.
+  // While the card is on show: once all of warmOk has held for WARM_SETTLE_MS (and no tap has stopped a copy in that time, and no
+  // finger has been on the screen in that time), the copy starts. A copy that was stopped or failed is tried again the same way; a picture kept, and the asking stops.
   useEffect(() => {
     if (!warmShown) { warmRun.current = 0; warmLive.current = false; return undefined; }
     let since = 0;
     const tick = setInterval(() => {
       if (warmLive.current) { since = 0; return; }
-      if (!wantMapWarm(warmFor)) { if (!mapWarmResting()) clearInterval(tick); since = 0; return; }
+      // None wanted: kept, or failed too often (the asking stops); resting, or one being read in (it may still fail): wait.
+      if (!wantMapWarm(warmFor)) { if (!mapWarmResting() && !mapWarmKeeping(warmFor)) clearInterval(tick); since = 0; return; }
       const now = Date.now();
-      if (!warmOkNow.current() || now - warmCut.current < WARM_SETTLE_MS) { since = 0; return; }
+      // Only after a pause with no finger anywhere on the screen (fingers): it never starts under a touch or what it begins.
+      if (!warmOkNow.current() || now - warmCut.current < WARM_SETTLE_MS || fingersQuietMs() < WARM_SETTLE_MS) { since = 0; return; }
       if (!since) { since = now; return; }
       if (now - since < WARM_SETTLE_MS) return;
       since = 0;
@@ -1158,7 +1190,7 @@ export function NearbyMap(props: NearbyMapProps) {
 
   const mapView = (
     <MapCanvas
-      ref={canvas}
+      ref={warmWrap ? warmCanvas : canvas}
       active={onScreen && props.visible !== false}
       center={view.center}
       zoom={view.zoom}
@@ -1185,7 +1217,7 @@ export function NearbyMap(props: NearbyMapProps) {
       onLost={expanded ? undefined : () => { if (cardUp) coverAgainRef.current(true); }}
       // Given up on: the opening curtain stops waiting for it, and the card (or the full map's pill) says so.
       onStatus={(status) => { setMapStatus(status); if (!expanded && status === 'failed') painted?.(); }}
-      holdPins={expanded && (holdPins || !!warmPic) && !growFrom}
+      holdPins={expanded && (holdPins || (!!warmPic && warmPins)) && !growFrom}
       // Zooming to fit a "+N": the top's two rows (and a face's reach) kept clear, as in a browser (PIN_FIT_TOP).
       pad={{ top: insets.top + PIN_FIT_TOP, bottom: 250, left: 50, right: 50 }}
       onTap={(id) => {
@@ -1363,9 +1395,9 @@ export function NearbyMap(props: NearbyMapProps) {
           </Reanimated.View>
         </Reanimated.View>
       ) : null}
-      {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{mapView}</View> : mapView}
+      {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{slowGate ? mapView : null}</View> : slowGate ? mapView : null}
       {/* mapWarm: the picture of exactly what this map is about to draw, over it until it has (then gone in one frame). */}
-      {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} uri={warmPic} w={windowW} h={windowH} onGone={() => { warmGo('gone'); dropMapWarm('not in memory'); }} /> : null}
+      {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} picture={warmPic} w={windowW} h={windowH} onGone={() => { warmGo('gone'); dropMapWarm('would not show'); }} /> : null}
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
         {/* Two rows (Oct 11, owner: "Two rows weather in search"): Back, the search and Location, the city and its weather in the bar itself; then the filter chips. */}
         <MapTopBar onBack={onBack} query={model.query} onQuery={model.setQuery} checkIn={onToggleLocation ? (fz && chromeControl ? chromeControl : checkIn) : undefined} results={model.courtResults} onPickCourt={model.pickCourt} places={model.placeSearch} onPickPlace={model.pickPlace} players={model.query.trim() ? model.tray.length : 0} cityName={fz ? (fz.homeKnown ? fz.cityName : '') : model.homeKnown ? cityName : ''} weather={fz ? (fz.homeKnown ? fz.weather : null) : model.homeKnown ? weather : null} copy={!!fz} />

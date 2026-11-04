@@ -59,6 +59,7 @@ import { v7Bar } from '@/features/players/zoomV7';
 import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
 import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
+import { fingerTouches } from '@/lib/fingers';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -89,14 +90,15 @@ const BAR_IN_PLACE = { transform: [{ translateY: 0 }] };
 /** If a slide back into place never reports that it has finished, the bar is put in place this long after anyway. */
 const BAR_SETTLE_MAX_MS = 1500;
 /**
- * The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): every finger in the app,
- * heard by the frame before any button, as it lands and lifts. Nothing at all anywhere else.
+ * Every finger in the app, heard by the frame before any button, as it lands and lifts: on the iPhone, when one is down
+ * (fingers: the hidden map copy waits for a pause and stops as one lands; nothing is drawn from it); and the simulator's
+ * tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only). Nothing at all on the website or Android.
  */
 const TAP_TOUCHES = TAP_TIMING ? {
-  onTouchStartCapture: tapDown,
-  onTouchEndCapture: (e: GestureResponderEvent) => tapUp(e),
-  onTouchCancelCapture: (e: GestureResponderEvent) => tapUp(e, true),
-} : {};
+  onTouchStartCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchStartCapture(e); tapDown(e); },
+  onTouchEndCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchEndCapture(e); tapUp(e); },
+  onTouchCancelCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchCancelCapture(e); tapUp(e, true); },
+} : fingerTouches ?? {};
 // An emailed link that has expired or was used already (or a Google sign-in that failed) comes
 // back with error_description on the address. Kept for the sign-in page to say, whatever page the
 // link lands on: a new password's link lands on /account, and the sign-in detour below replaced

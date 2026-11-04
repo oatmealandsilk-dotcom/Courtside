@@ -1,14 +1,15 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { Image as PhotoImage } from 'expo-image';
+import { Image as PhotoImage, type ImageRef } from 'expo-image';
 
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import type { Look } from '@/components/map/look';
 import type { ClusterTemplates } from '@/components/map/pinEngine';
-import { failedMapWarm, keepMapWarm, startMapWarm } from '@/features/players/mapWarm';
+import { failedMapWarm, keepMapWarm, showMapWarm, startMapWarm } from '@/features/players/mapWarm';
 import type { LatLng } from '@/features/players/positions';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { simLog } from '@/lib/simDriver';
+import { onFingerDown } from '@/lib/fingers';
 
 /** No pins in the picture: the full map's own come in as their wave once its map has taken over. */
 const NONE: CanvasMarker[] = [];
@@ -22,10 +23,11 @@ const ALIVE_MS = 200;
  * the Community card, see-through and untouchable. Once it has drawn, its page hands back a picture of its streets
  * (MapCanvas shoot), kept for the full map's next opening; then it lets itself go (`onOver`).
  *
- * It stops at once, itself (nothing else on the card redraws), the moment anything else happens: a page opening over the
- * tabs (a thread, a player, the full map: the tab's own "on show", not the later one the card waits for), another tab,
- * or `alive()` turning false (Discussions on show, Up to hit or its zoom, the app put away), or `stop` from a tap on the card.
- * So its work never lands on a page opening or a zoom.
+ * It stops at once, itself (nothing else on the card redraws), the moment anything else happens: any finger landing
+ * anywhere in the app (fingers: before the tap it starts has even lifted, v3), a page opening over the tabs (a thread, a
+ * player, the full map: the tab's own "on show", not the later one the card waits for), another tab, or `alive()` turning
+ * false (Discussions on show, Up to hit or its zoom, the app put away), or `stop` from a tap on the card. So its work never
+ * lands on a page opening, a zoom or a touch.
  */
 export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, stop, onOver }: {
   warmKey: string; center: LatLng; zoom: number; look: Look; tpl: ClusterTemplates; w: number; h: number;
@@ -43,20 +45,21 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
   // Covered or another tab: gone in this same draw (and for good: a new copy starts once the card has settled again).
   if (!shown && !over) setOver(true);
   const endedRef = useRef(false);
-  const end = useRef((why: 'shot' | 'failed' | 'cut') => {
+  const end = useRef((why: 'shot' | 'failed' | 'cut', by = '') => {
     if (endedRef.current) return;
     endedRef.current = true;
-    simLog(`[warm] copy ${why} ${Date.now() - t0.current}ms`);
+    simLog(`[warm] copy ${why}${by ? ` ${by}` : ''} ${Date.now() - t0.current}ms`);
     setOver(true);
     overNow.current();
   }).current;
   useEffect(() => {
     startGen.current = startMapWarm();
     simLog('[warm] copy start');
-    stop.current = () => end('cut');
+    stop.current = () => end('cut', 'tap');
     const giveUp = setTimeout(() => { failedMapWarm(warmKey); end('failed'); }, GIVE_UP_MS);
-    const check = setInterval(() => { if (!aliveNow.current()) end('cut'); }, ALIVE_MS);
-    return () => { clearTimeout(giveUp); clearInterval(check); if (stop.current) stop.current = null; end('cut'); };
+    const check = setInterval(() => { if (!aliveNow.current()) end('cut', 'busy'); }, ALIVE_MS);
+    const offFinger = onFingerDown(() => end('cut', 'finger'));
+    return () => { clearTimeout(giveUp); clearInterval(check); offFinger(); if (stop.current) stop.current = null; end('cut'); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (over) end('cut'); }, [over]); // eslint-disable-line react-hooks/exhaustive-deps
   if (over) return null;
@@ -90,16 +93,19 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
  * redraws nothing else on the page (the hand-over is one frame). Held in a scroll view as the map's own page is, so the phone
  * draws the same soft edge under the status bar over both. In the page's first draw: brought in a frame later instead (Nov 4
  * review), it came 0.12-0.47 s after the slide began (the app's own thread is busy building the page then), against
- * 0.04-0.12 s, and the slide did not start any sooner (32 opens taking turns). A picture that will not load (no longer in
- * memory: its file is gone by design) goes at once, `onGone`, and the map opens as it always did.
+ * 0.04-0.12 s, and the slide did not start any sooner (32 opens taking turns). The picture is the app's own (an ImageRef,
+ * held in mapWarm, v3), drawn as soon as the view is: nothing to load, so it is there after the app has been away too. It is
+ * held while shown (showMapWarm), so a picture replaced or dropped meanwhile is let go only once this has gone. One that
+ * will not show anyway goes at once, `onGone`, and the map opens as it always did.
  */
-export const MapWarmPicture = forwardRef<{ hide: () => void }, { uri: string; w: number; h: number; onGone: () => void }>(function MapWarmPicture({ uri, w, h, onGone }, ref) {
+export const MapWarmPicture = forwardRef<{ hide: () => void }, { picture: ImageRef; w: number; h: number; onGone: () => void }>(function MapWarmPicture({ picture, w, h, onGone }, ref) {
   const [on, setOn] = useState(true);
   useImperativeHandle(ref, () => ({ hide: () => setOn(false) }), []);
+  useLayoutEffect(() => showMapWarm(picture), [picture]);
   if (!on) return null;
   return (
     <ScrollView pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" scrollEnabled={false} bounces={false} contentInsetAdjustmentBehavior="never" showsVerticalScrollIndicator={false} style={StyleSheet.absoluteFill}>
-      <PhotoImage source={{ uri }} contentFit="fill" transition={0} cachePolicy="memory" onError={() => { setOn(false); onGone(); }} style={{ width: w, height: h }} />
+      <PhotoImage source={picture} contentFit="fill" transition={0} onError={() => { setOn(false); onGone(); }} style={{ width: w, height: h }} />
     </ScrollView>
   );
 });
