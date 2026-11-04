@@ -30,6 +30,7 @@ import { AppShell } from '@/components/AppShell';
 import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { EarlyThemesGate } from '@/theme/EarlyThemesGate';
 import { VisitorThemeGate } from '@/theme/VisitorThemeGate';
+import { LaunchLookGate } from '@/theme/LaunchLookGate';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
@@ -75,13 +76,13 @@ export default function RootLayout() {
   // Inter ships in the bundle, so on a phone this resolves before the splash
   // has gone; in a browser it is one small fetch, kept after that.
   const [fontsReady] = useFonts({ Inter_500Medium, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold, ...Ionicons.font });
-  useLaunchDark(!fontsReady);
+  const launchIsDark = useLaunchDark(!fontsReady);
   // While the fonts load, the launch look itself (splash C: the mark and line are drawn shapes, no
   // fonts needed), so the website's loader hands straight over to the same picture, not a blank screen.
   if (!fontsReady) {
     return (
-      <View style={[{ flex: 1, backgroundColor: lightColors.bg }, launchGround()]}>
-        {NEW_SPLASH ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} /> : null}
+      <View style={[{ flex: 1, backgroundColor: lightColors.bg }, launchGround(launchIsDark)]}>
+        {NEW_SPLASH ? <LaunchMark ink={lightColors.brand} faint={lightColors.launchLine} dark={launchIsDark} /> : null}
       </View>
     );
   }
@@ -94,6 +95,8 @@ export default function RootLayout() {
         <ThemedStatusBar/>
         <EarlyThemesGate />
         <VisitorThemeGate />
+        {/* The launch screen's look for the next open, saved as the theme changes (Nov 2, src/lib/launchLook.ts; admins first). */}
+        <LaunchLookGate />
         <AppShell><RootStack /></AppShell>
         <SignOutCurtainHost />
         {/* "Why turn on alerts" before the phone's own question (alertsWhy.ts; off until he picks it). Under "are you sure?". */}
