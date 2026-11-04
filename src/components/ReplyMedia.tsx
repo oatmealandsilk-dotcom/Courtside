@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { createContext, useContext, useRef, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
@@ -15,6 +15,14 @@ import { useLightStatusWhile } from '@/lib/statusBarStyle';
 import { SwipeArea } from '@/features/navigation/swipePress';
 
 export type ReplyAttachment = NonNullable<Answer['media']>;
+
+/**
+ * True while a page's first draw is going on (the thread page, with taps that answer sooner): a reply's photo, or a
+ * clip's still, shows its usual empty frame and the picture goes in a moment later. A picture the phone already had
+ * was shrunk to size on the phone's main thread as the page was built, about 50 ms a photo on the Simulator, and the
+ * slide in could not start until it was done (Nov 4). One it did not have yet always came in later, into this frame.
+ */
+export const MediaLaterContext = createContext(false);
 
 /**
  * Replying with a photo or a video, the way X does it: a small camera in the
@@ -67,6 +75,7 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
   const [home, setHome] = useState<HomeRect | undefined>(undefined);
   const frame = useRef<View>(null);
   const zoom = useRef<ZoomableMediaHandle>(null);
+  const later = useContext(MediaLaterContext);
   if (media.kind === 'photo') {
     const open = () => {
       const node = frame.current;
@@ -77,7 +86,7 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
     return (
       <>
         <Pressable ref={frame} accessibilityRole="imagebutton" accessibilityLabel="Photo in this reply. Tap to see it full screen." onPress={open} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
-          <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />
+          {later ? null : <ExpoImage source={{ uri: media.url }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />}
         </Pressable>
         <Modal visible={fullShown} transparent animationType="none" statusBarTranslucent onRequestClose={close}><SwipeArea on={false}>
           {/* Its own gesture root: on Android a Modal's pinch and swipe need one (see PostVideo). */}
@@ -97,7 +106,7 @@ export function ReplyMediaView({ media, onLongPress }: { media: ReplyAttachment;
     <Pressable accessibilityRole="button" accessibilityLabel={playing ? 'Pause the video' : 'Play the video'} onPress={() => setPlaying((p) => !p)} onLongPress={onLongPress} delayLongPress={350} style={styles.media}>
       {playing ? <ClipVideo uri={media.url} poster={media.thumb} active muted={false} fit="cover" /> : (
         <>
-          {media.thumb ? <ExpoImage source={{ uri: media.thumb }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" /> : <View style={[StyleSheet.absoluteFill, styles.blank]} />}
+          {media.thumb ? (later ? null : <ExpoImage source={{ uri: media.thumb }} style={StyleSheet.absoluteFill} contentFit="cover" cachePolicy="memory-disk" />) : <View style={[StyleSheet.absoluteFill, styles.blank]} />}
           <View style={styles.bigPlay}><Ionicons name="play" size={26} color="#FFFFFF" /></View>
         </>
       )}

@@ -20,6 +20,7 @@ import { colors, spacing, typography, radius } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { LESS_AI_DISCUSS, LESS_AI_ROUND2 } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { tapFastOn } from '@/features/navigation/pressV2';
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -75,8 +76,15 @@ function QuestionCardInner({
   const currentUserId = useMyId();
   const actions = useActions();
 
+  // Taps that answer sooner (pressV2's TAP_FAST, admins first): the card's press look goes to the screen on its own,
+  // then the thread is built. A quick tap (lifted before the look's wait was up) asked for both together, and the look
+  // only showed with the new page, a third of a second later on a long thread (Nov 4, owner: "Tapping a discussion
+  // thread is not instant response and open"). The thread is asked for straight after, as its own piece of work: asked
+  // for in the same piece (even as a microtask), the phone still put the look on screen only with the new page.
+  const open = () => { if (tapFastOn()) setTimeout(onPress, 0); else onPress(); };
+
   return (
-    <Card onPress={onPress} style={styles.card}>
+    <Card onPress={open} style={styles.card}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: LESS_AI_DISCUSS && !LESS_AI_ROUND2 ? 'nowrap' : 'wrap' }}>
         {author && <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={30} />}
         {/* Who wrote it, the way the feed says it: the name first, the handle
