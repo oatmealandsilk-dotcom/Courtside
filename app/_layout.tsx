@@ -6,6 +6,8 @@ import '@/lib/animatedValuesStay';
 // First, before any text is drawn: text follows the phone's size setting, with a ceiling.
 import '@/lib/textScale';
 import '@/lib/launchSplash';
+// Web-only design options (?var=page:letter); does nothing on a phone or without the address part.
+import '@/lib/designVariant';
 import React, { useEffect } from 'react';
 import { mapScreenOptions } from '@/features/players/mapGrow';
 import { usePauseWhenHidden } from '@/features/feed/pauseWhenHidden';
