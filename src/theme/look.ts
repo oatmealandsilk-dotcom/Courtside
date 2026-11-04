@@ -130,11 +130,15 @@ export const TOAST_LOOK_FOR: 'up-to-hit' | 'all' = 'up-to-hit';
  * but your own colour (the one everyone else sees you in) in Settings,
  * Account center, the comment box and your Discussions posts. One colour
  * everywhere your own picture is drawn; he has not said which yet:
+ *   'today'  exactly as now, until he picks: brand green on Profile (and its
+ *            loading placeholder), the Tennis profile card, your own page and
+ *            the sign-up card; Edit profile's picture keeps its fixed preview
+ *            colour; your own colour everywhere else (the default)
  *   'own'    the colour other people already see you in, everywhere
  *   'brand'  brand green, everywhere
  * Other people's pictures never change here. One exception: a filled player
  * card draws you in a deeper shade of the card (a disc of either colour would
  * vanish into it); no palette uses a filled card today.
  */
-export type SelfAvatarColor = 'own' | 'brand';
-export const SELF_AVATAR_COLOR: SelfAvatarColor = 'own';
+export type SelfAvatarColor = 'today' | 'own' | 'brand';
+export const SELF_AVATAR_COLOR: SelfAvatarColor = 'today';

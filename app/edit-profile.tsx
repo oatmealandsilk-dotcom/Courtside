@@ -5,6 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { goBack } from '@/lib/goBack';
 import { ProfilePhotoPicker } from '@/components/ProfilePhotoPicker';
+import { SELF_AVATAR_COLOR } from '@/theme/look';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Button, Field, Screen, SegmentedControl } from '@/components/ui';
 import { SCALES, ratingBand, roundRating } from '@/features/players/ratingScales';
@@ -24,6 +25,8 @@ import { isOfficial } from '@/features/players/official';
 export default function EditProfile() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, actions } = useApp();
+  // Your picture with no photo: 'today' keeps the picker's own fixed preview colour, as before SELF_AVATAR_COLOR; else your own seed.
+  const photoSeed = (SELF_AVATAR_COLOR as string) === 'today' ? undefined : currentUser?.avatarSeed;
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatarUrl);
   const [name, setName] = useState(currentUser?.name ?? '');
   const [bio, setBio] = useState(currentUser?.bio ?? '');
@@ -155,7 +158,7 @@ export default function EditProfile() {
         ) : (
           <View style={styles.page}>
             {/* A chosen photo saves at once (Instagram's way, Oct 4); everything below waits for Save. */}
-            <ProfilePhotoPicker name={name} seed={currentUser.avatarSeed} value={avatarUrl} label="Edit picture" accessibilityLabel="Change profile photo" onChange={(uri) => {
+            <ProfilePhotoPicker name={name} seed={photoSeed} value={avatarUrl} label="Edit picture" accessibilityLabel="Change profile photo" onChange={(uri) => {
               setAvatarUrl(uri);
               actions.updateIdentity({ avatarUrl: uri });
             }} />
@@ -225,7 +228,7 @@ export default function EditProfile() {
         <View style={{ gap: 20 }}>
           {/* Instagram's way (Oct 4, owner): a chosen photo saves at once, without Save changes.
               Only the photo: anything typed above still waits for Save changes. */}
-          <ProfilePhotoPicker name={name} seed={currentUser.avatarSeed} value={avatarUrl} onChange={(uri) => {
+          <ProfilePhotoPicker name={name} seed={photoSeed} value={avatarUrl} onChange={(uri) => {
             setAvatarUrl(uri);
             if (currentUser) actions.updateIdentity({ avatarUrl: uri });
           }} />

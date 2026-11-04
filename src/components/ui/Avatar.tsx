@@ -29,7 +29,8 @@ export function tintFor(seed: string): string {
  * Tennis profile card); every other Avatar of you picks it up on its own.
  */
 export function selfTint(seed: string): string {
-  return (SELF_AVATAR_COLOR as string) === 'brand' ? colors.brand : tintFor(seed);
+  // 'today' keeps these pages' brand disc, as before the switch.
+  return (SELF_AVATAR_COLOR as string) === 'own' ? tintFor(seed) : colors.brand;
 }
 
 /**
@@ -83,7 +84,8 @@ export const Avatar = React.memo(function Avatar({ uri, name, seed, size = 40, s
   // Your own face: the one colour SELF_AVATAR_COLOR says, wherever it is drawn.
   const myId = useMyId();
   const mySeed = myId ? users.find((user) => user.id === myId)?.avatarSeed : undefined;
-  const mine = !!myId && (seed === myId || seed === mySeed);
+  // 'today' leaves every other picture of you as it was: the colour of whatever seed the page passed.
+  const mine = (SELF_AVATAR_COLOR as string) !== 'today' && !!myId && (seed === myId || seed === mySeed);
   // Always by your avatarSeed, whichever of your id or seed the caller passed, so you are one colour.
   const tint = quiet ? quietTintFor(seed) : mine ? selfTint(mySeed ?? seed) : tintFor(seed);
   // The fill the initials actually sit on: a caller's own background (the profile's brand disc,
