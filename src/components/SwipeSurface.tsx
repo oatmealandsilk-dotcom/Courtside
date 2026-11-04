@@ -255,19 +255,30 @@ export function SwipeSurface({ children, onSwipe, onCommit, onDragTo, onProgress
   const previewStyle = useAnimatedStyle(() => ({ transform: [{ translateX: offset.value }] }));
   // Built ahead (warm): the same element in the same place, so a drag that way only moves it.
   const warmReady = useWarmPreview(warm !== undefined && enabled && !dragging);
-  const previewFor = dragging ? direction : warmReady ? warm : undefined;
-  const preview = previewFor !== undefined ? renderPreview?.(previewFor) : null;
+  // Once built, the warm side is always drawn, whichever way a drag goes (a drag the other way, even a
+  // rubber-band one with nothing there, never tears it down to be rebuilt at release). The other way's
+  // preview is drawn beside it only while dragged, as before.
+  const warmSide = warmReady && warm !== undefined ? warm : undefined;
+  const warmPreview = warmSide !== undefined ? renderPreview?.(warmSide) : null;
+  const dragSide = dragging && !(warmPreview && direction === warmSide) ? direction : undefined;
+  const dragPreview = dragSide !== undefined ? renderPreview?.(dragSide) : null;
+  const frame = (side: 1 | -1) => [{ position: 'absolute' as const, top: 0, bottom: 0, width: '100%' as const, left: `${side * 100}%` as const, marginLeft: side * gap }, previewStyle];
 
   return (
     <GestureDetector gesture={pan}>
       <View onLayout={(event) => { width.value = event.nativeEvent.layout.width; }} style={{ flex: fill ? 1 : undefined, overflow: 'hidden' }}>
         {/* A press on the page waits a beat before it shows, so a finger that is swiping never dips a card (swipePress). */}
         <Animated.View style={[{ flex: fill ? 1 : undefined }, pageStyle]}><SwipeArea on={enabled}>{children}</SwipeArea></Animated.View>
-        {preview && previewFor !== undefined ? (
-          <Animated.View key={previewFor} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={[{ position: 'absolute', top: 0, bottom: 0, width: '100%', left: `${previewFor * 100}%`, marginLeft: previewFor * gap }, previewStyle]}>
+        {warmPreview && warmSide !== undefined ? (
+          <Animated.View key={warmSide} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={frame(warmSide)}>
             {/* Built ahead: a picture of the page, never "on show" (its map and videos stay asleep, and it keeps up with the
                 app as background work), the same while dragged in, so the drag never redraws it. */}
-            {warmReady ? <TabOnShowContext.Provider value={false}><TabOnShowLaterContext.Provider value={false}>{preview}</TabOnShowLaterContext.Provider></TabOnShowContext.Provider> : preview}
+            <TabOnShowContext.Provider value={false}><TabOnShowLaterContext.Provider value={false}>{warmPreview}</TabOnShowLaterContext.Provider></TabOnShowContext.Provider>
+          </Animated.View>
+        ) : null}
+        {dragPreview && dragSide !== undefined ? (
+          <Animated.View key={dragSide} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={frame(dragSide)}>
+            {dragPreview}
           </Animated.View>
         ) : null}
       </View>

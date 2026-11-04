@@ -14,7 +14,7 @@ import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { slidePagesTo } from '@/features/navigation/pageSlide';
-import { pressV2On } from '@/features/navigation/pressV2';
+import { pressV2On, tapFastOn, useTapFast } from '@/features/navigation/pressV2';
 import { Platform, ScrollView, TextInput, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { TextBox } from '@/components/ui/TextBox';
 import { router } from 'expo-router';
@@ -133,6 +133,10 @@ const joinedLabel = (iso: string) => {
 
 function Discuss({ previewSection }: { previewSection?: string } = {}) {
   useSimTrace(previewSection ? 'DiscussPreview' : 'Discuss');
+  // A picture of the page (a thread's swipe back), with taps that answer sooner (admins first): it loads nothing and
+  // leaves out what is never in sight. The real tab under the thread already loaded it all (Nov 3 review).
+  const tapFast = useTapFast();
+  const pictureOnly = !!previewSection && tapFast;
   const styles = useThemedStyles(styleDefinitions);
   const { questions, users, currentUserId, currentUser, blockedIds, mutedIds, followingIds, saved, actions, detectedCoords, locationEnabled, hitRequests, lastSeen, lastSeenLoaded, onboardingComplete, mapLive, newOnCourtside, mapVisibility, teenMap, seeing, ageSaysAdult, isGuest, guestLoaded, pinnedQuestion, remoteLoaded } = useApp();
   // The section lives here, not in the address: listening to the address made
@@ -458,7 +462,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // migration 190), most recently active first, by their town only, never a spot or a distance. The server
   // says who (a teen never to a stranger). Not counted as anyone on the map: "You're early" still means no
   // friend checked in.
-  const townPlayers = useTownPlayers();
+  const townPlayers = useTownPlayers(!pictureOnly); // (a picture of the page leaves Find Players out: nothing to ask)
   const townNear = useMemo(() => {
     const listed = new Set(nearPlayers.map((p) => p.user.id));
     return townPlayers.filter((t) => !listed.has(t.user.id));
@@ -476,7 +480,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const [newOpen, setNewOpen] = useState(false);
   const { loadNewOnCourtside } = actions;
   const usersIn = users.length > 0;
-  useEffect(() => { if (currentUserId && usersIn) void loadNewOnCourtside(); }, [currentUserId, mapLive, usersIn, followingIds.length, loadNewOnCourtside]);
+  useEffect(() => { if (currentUserId && usersIn && !(previewSection && tapFastOn())) void loadNewOnCourtside(); }, [previewSection, currentUserId, mapLive, usersIn, followingIds.length, loadNewOnCourtside]);
   const newPlayers = useMemo(() => {
     const near = new Set([...nearPlayers, ...townNear].map((p) => p.user.id));
     // Your own town first (Oct 5): in Boise, the newest player in Raleigh is not who to follow first.
@@ -1099,8 +1103,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       {/* Find Players on the left, Discussions on the right, each its own page. Community is the
           strip's first tab, so a swipe right from Find Players only gives a little at the edge; a
           swipe left from Discussions goes on to Home. */}
-      {/* A picture of Discussions (previewSection: a thread's swipe back) leaves Find Players empty: it is never
-          in sight there, and its map was a second map started behind the thread (Nov 3). */}
+      {/* A picture of Discussions (previewSection: a thread's swipe back), with taps that answer sooner, leaves Find
+          Players empty: it is never in sight there, and its map was a second map started behind the thread (Nov 3). */}
       <SectionPager
         fill
         // Both stay built and drawn, in a browser too: Find Players' map is never torn down and
@@ -1108,7 +1112,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{previewSection && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
+          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
           <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}
