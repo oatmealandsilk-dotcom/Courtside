@@ -43,6 +43,14 @@ export const simCheckIn = {
   },
 };
 
+/**
+ * The live app's reply fetch when a thread opens (AppContext's loadThread), for the demo, which has no server: with
+ * "threadfetch ms=300" (or EXPO_PUBLIC_SIM_THREAD_MS) a thread opened in the demo gets its replies "back" that long after
+ * it asked, as fresh lists, so the whole app redraws then, as the live app does when the server answers. 0: never (the
+ * demo as it always was). Nothing at all outside the harness.
+ */
+export const simThreadFetch = { ms: SIM_DRIVER ? Number(process.env.EXPO_PUBLIC_SIM_THREAD_MS ?? '') || 0 : 0, wait: waitMs };
+
 const actions = new Map<string, (args: Record<string, string>) => void>();
 /** What a command does (`name`), while whoever registered it is up; the returned function unregisters it. */
 export function simAction(name: string, fn: (args: Record<string, string>) => void): () => void {
