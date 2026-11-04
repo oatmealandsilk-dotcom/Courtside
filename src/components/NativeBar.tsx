@@ -152,8 +152,8 @@ export const NativeBar = React.memo(function NativeBar({
 }) {
   const { theme } = useTheme();
   const { width } = useWindowDimensions();
-  // The words' size, each tab's title (with any invisible room either side) and the five places (tabBarLook's NATIVE_BUBBLE).
-  const setup = useMemo(() => nativeBarSetup(width, items.map((it) => it.label)), [width, items]);
+  // The words' size and the five places (tabBarLook's NATIVE_BUBBLE).
+  const setup = useMemo(() => nativeBarSetup(width), [width]);
   const placeX = (i: number) => setup.places[i];
   const c = themes[theme];
   const darkPage = inkOn(c.bg) === '#FFFFFF';
@@ -238,7 +238,7 @@ export const NativeBar = React.memo(function NativeBar({
       <Tabs.Screen
         key={item.route}
         screenKey={item.route}
-        title={setup.titles[index]}
+        title={item.label}
         badgeValue={item.route === 'profile' ? badge : undefined}
         tabBarItemAccessibilityLabel={item.label}
         specialEffects={noEffects}
