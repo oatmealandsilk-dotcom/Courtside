@@ -4,7 +4,10 @@ import Animated, { Easing, FadeOut, LayoutAnimationConfig, LinearTransition } fr
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { requestScrollToTop } from '@/features/navigation/scrollToTop';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
+// The navigation library's own focus hook, as the router's is underneath, minus the router's wait of one draw for the
+// navigation to load (for a redirect before it exists): a page always has its navigation, and the wait drew it twice as it opened.
+import { useFocusEffect } from 'expo-router/build/react-navigation/core/useFocusEffect';
 import { show as showToast } from '@/lib/toast';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { goToTab } from '@/features/navigation/startTab';

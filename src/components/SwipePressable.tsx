@@ -13,9 +13,9 @@ import { useSwipePressLook } from '@/features/navigation/swipePress';
  */
 export const SwipePressable = forwardRef<View, PressableProps>(function SwipePressable(props, ref) {
   const [look, setLook] = useState(false);
-  const { inSwipe, touchStart, pressMove, pressIn, pressOut, delay } = useSwipePressLook(setLook, { delayLongPress: props.delayLongPress ?? undefined });
+  const { inSwipe, touchStart, pressMove, pressIn, pressOut, wrapPress, delay } = useSwipePressLook(setLook, { delayLongPress: props.delayLongPress ?? undefined });
   if (!inSwipe) return <Pressable ref={ref} {...props} />;
-  const { style, children, onPressIn, onPressOut, onTouchStart, onPressMove } = props;
+  const { style, children, onPress, onPressIn, onPressOut, onTouchStart, onPressMove } = props;
   const withLook = (state: PressableStateCallbackType): PressableStateCallbackType => ({ ...state, pressed: look });
   return (
     <Pressable
@@ -26,6 +26,8 @@ export const SwipePressable = forwardRef<View, PressableProps>(function SwipePre
       onPressMove={(e: GestureResponderEvent) => { pressMove(e); onPressMove?.(e); }}
       onPressIn={(e: GestureResponderEvent) => { pressIn(); onPressIn?.(e); }}
       onPressOut={(e: GestureResponderEvent) => { pressOut(); onPressOut?.(e); }}
+      // The look is a redraw of its own here: put on screen before the action builds anything (wrapPress).
+      onPress={wrapPress(onPress, true)}
       style={typeof style === 'function' ? (state) => style(withLook(state)) : style}
     >
       {typeof children === 'function' ? (state) => children(withLook(state)) : children}

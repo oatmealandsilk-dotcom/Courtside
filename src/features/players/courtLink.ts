@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { router, useFocusEffect, type Href } from 'expo-router';
+import { router, type Href } from 'expo-router';
+// The navigation library's own focus hook, as the router's is underneath, minus the router's wait of one draw for the
+// navigation to load (for a redirect before it exists): a page always has its navigation, and the wait drew it twice as it opened.
+import { useFocusEffect } from 'expo-router/build/react-navigation/core/useFocusEffect';
 
 import type { ID, OpenCourtReview } from '@/data/types';
 import { sameCourt } from '@/features/places/court';

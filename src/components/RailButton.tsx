@@ -133,7 +133,8 @@ export function RailPressable({ motion, accessibilityLabel, onPress, onLongPress
   const press = useSwipePressLook(motion.look);
   return (
     <Pressable
-      onPress={onPress}
+      // A drifting finger's squeeze, still waiting as it lifts, shows at once (swipePress's wrapPress).
+      onPress={press.wrapPress(onPress)}
       onLongPress={onLongPress}
       {...press.delay}
       onTouchStart={press.touchStart}

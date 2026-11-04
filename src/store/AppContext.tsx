@@ -13,7 +13,7 @@ import React, {
 import { AppState as DeviceState, Platform } from 'react-native';
 import { randomUUID } from 'expo-crypto';
 import { router } from 'expo-router';
-import { setPressV2Admin } from '@/features/navigation/pressV2';
+import { setPressV2Admin, tapFastOn } from '@/features/navigation/pressV2';
 import { setQuickStartAdmin } from '@/features/feed/quickStart';
 import { computeStats, localDay, publicStreak, streakAtRisk } from '@/features/practice/stats';
 import { streakSeen } from '@/features/practice/streakFlame';
@@ -6970,7 +6970,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     loadedProfiles.current.add(userId);
     const got = await remote.fetchUserPosts(userId);
     if (!got) return;
-    setState((prev) => addSessionNames(addPosts(prev, got), got.posts));
+    // Taps answering sooner (pressV2's TAP_FAST: admins first): written as background work. The answer lands as the
+    // player's page slides in, and the whole app's redraw for it went ahead of any tap meanwhile (Nov 4, owner:
+    // "Tapping on someone's profile ... takes way too long to respond").
+    const write = () => setState((prev) => addSessionNames(addPosts(prev, got), got.posts));
+    if (tapFastOn()) startTransition(write); else write();
   }, []);
   /**
    * Search looking past the posts the app happens to hold (the newest page,
@@ -10790,10 +10794,21 @@ function applyVote<T extends { votes: number; votedBy: Record<ID, 1 | -1> }>(
  * moment it is on screen again it reads the live state, so what you see is
  * never behind. See asTabRoute.
  */
-export function AppStateLater({ hidden, children }: { hidden: boolean; children: ReactNode }) {
+export function AppStateLater({ hidden, hold = false, children }: {
+  hidden: boolean;
+  /**
+   * While hidden: keep what it showed as it was hidden, not even background work, until this turns false (then it
+   * catches up as background work). For a tab a page has just opened over, for that page's slide (tabFocus).
+   */
+  hold?: boolean;
+  children: ReactNode;
+}) {
   const live = useContext(AppContext);
   const later = useDeferredValue(live);
-  const shown = hidden ? later : live;
+  const holding = hold && hidden;
+  const kept = useRef(live);
+  if (!holding) kept.current = hidden ? later : live;
+  const shown = holding ? kept.current : hidden ? later : live;
   return <AppContext.Provider value={shown}><UsersContext.Provider value={shown?.users ?? NO_USERS}><ActionsContext.Provider value={shown?.actions ?? null}><MyIdContext.Provider value={shown?.currentUserId ?? null}>{children}</MyIdContext.Provider></ActionsContext.Provider></UsersContext.Provider></AppContext.Provider>;
 }
 

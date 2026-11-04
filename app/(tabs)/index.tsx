@@ -9,7 +9,11 @@ import React, { useCallback, useContext, useEffect, useLayoutEffect, useMemo, us
 import { AccessibilityInfo, Animated, AppState, Image, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
 import { cropLayer } from '@/lib/crop';
-import { router, useFocusEffect, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
+import { router, useIsFocused as useRouteFocused, useNavigation } from 'expo-router';
+// The navigation library's own focus hook, as the router's is underneath: the router's waits a draw for the
+// navigation to load (for a redirect before it exists), so every screen using it drew itself a second time as
+// it opened, before it could slide in. A screen always has its navigation.
+import { useFocusEffect } from 'expo-router/build/react-navigation/core/useFocusEffect';
 import { onOpenGroupFeed, tookGroupFeed } from '@/features/groups/openGroupFeed';
 import { GroupTile } from '@/features/groups/GroupTile';
 import { inGroupFeed } from '@/features/groups/groupFeed';
@@ -233,6 +237,34 @@ export type FeedScope =
   // A group's own feed (migrations 67 and 74): everything its members post, and what was shared to it only, newest first, under the Feed's top row.
   | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
 
+/**
+ * One person's posts (a profile's grid: own, clips, activity, tagged, your archive) or a court's (ids), in the grid's
+ * own order, and where the tapped one sits: the deal Home makes for such a feed (rerank, below), as a plain function so
+ * the feed can also start on it (Home's first draw). Not for a group's feed or Activities, which are dealt as they arrive.
+ */
+function dealScoped(data: { posts: Post[]; currentUserId: string | null }, scope: FeedScope): { order: string[]; active: number } {
+  const { ids, userId, set } = scope;
+  const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
+  const mine = ids && byId
+    ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived && !p.removed ? [p] : []; })
+    : data.posts
+      // Archived posts only ever in your own archive's set, opened from the Archive page.
+      .filter((p) => (set === 'archived'
+        ? p.archived && p.authorId === userId && userId === data.currentUserId
+        // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
+        : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId!) : p.authorId === userId && (set === 'clips' ? p.kind === 'clip' : set === 'activity' ? !!p.session && hasSessionStats(p.session) : !sessionOnly(p) || p.id === scope.start))))
+      // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
+      // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
+      .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  // One person's posts (a profile's grid, a court's) stay exactly in the grid's order: that is what makes it a push, not a take-down.
+  const order = mine.map((p) => `p:${p.id}`);
+  return { order, active: Math.max(0, scope.start ? order.indexOf(`p:${scope.start}`) : 0) };
+}
+
+/** What a deal was made from (Home's dealOnce): the same feed is not dealt twice. */
+const dealStamp = (ready: boolean, me: string | null, scope?: FeedScope) =>
+  `${ready}:${me}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}:${scope?.activities ? 'a' : ''}`;
+
 /** What the Feed's top row needs to know from the feed under it: whether a picture fills the top, and whether the chrome is put away. */
 export interface FeedChrome { picture: boolean; hidden: boolean; /** Pinched in: the words are put away (the comments stage fades the row by itself). */ pinched: boolean }
 
@@ -452,7 +484,13 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const currentUser = users.find((u) => u.id === currentUserId);
   // Everyone by id, so each page finds its author in one step rather than scanning every player.
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
-  const [active, setActive] = useState(0);
+  // Taps answering sooner (pressV2's TAP_FAST: admins first): one person's or a court's feed (a profile's grid
+  // tile, a post opened from anywhere) is dealt in its very first draw, so the page slides in already on the post
+  // tapped. Before, it was first drawn empty ("Nothing here yet") and dealt two draws later, once the router's
+  // focus hook had caught up: the whole feed drawn three times before the post showed (Nov 4, owner: "profile grid
+  // video ... EVERY FUCKING THING TAKES WAY TOO LONG TO RESPOND").
+  const [firstDeal] = useState(() => (scope && !scope.groupId && !scope.activities && ready && tapFastOn() ? dealScoped(app, scope) : null));
+  const [active, setActive] = useState(firstDeal?.active ?? 0);
   const orderRef = useRef<string[]>([]);
   // The words over a clip end 16pt above the floating tab bar on every phone:
   // the bar stands on the home-indicator inset, which differs phone to phone,
@@ -509,7 +547,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     if (immersion.value > 0) immersion.value = withTiming(0, { duration: 180, easing: Easing.out(Easing.quad) });
     punch.value = 1;
   }, [active, immersion, punch]);
-  const [visit, setVisit] = useState(0);
+  const [visit, setVisit] = useState(firstDeal ? 1 : 0);
   const focused = useIsFocused();
   // Also, however many you follow, while the "Connect your watch" card has something to offer (owner, Oct 6). The
   // watch tip never opens Activities on this page by itself (owner, Oct 29, "2-4" / "Ship", without that change):
@@ -613,7 +651,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const warming = Platform.OS === 'web' && !scope && !routeFocused && !shownOnce.current;
   const latest = useRef(app);
   latest.current = app;
-  const [order, setOrder] = useState<string[]>([]);
+  const [order, setOrder] = useState<string[]>(() => firstDeal?.order ?? []);
   orderRef.current = order;
   // Every page you have seen this session (on screen a moment, see GLANCE_MS); the next deal puts these at the very end.
   const seenNow = useRef(new Set<string>());
@@ -645,7 +683,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // Re-rank when the session itself changes, not every time this screen regains
   // focus — otherwise stepping into a thread and back would reshuffle the feed
   // and throw you to the top.
-  const rankedFor = useRef<string | null>(null);
+  const rankedFor = useRef<string | null>(firstDeal ? dealStamp(ready, currentUserId, scope) : null);
   // Which session posts Activities was last dealt from (ids, sorted), so a new one is noticed.
   const actsDealt = useRef<string | null>(null);
   // When the main feed was last dealt, so a pull knows what is new since.
@@ -661,7 +699,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       if (scope) {
         // One person's things, newest first, opened on the one that was tapped;
         // or a court's posts, in exactly the order its grid shows them.
-        const { ids, userId, set, groupId } = scope;
+        const { groupId } = scope;
         if (scope.activities) {
           const follows = new Set(data.followingIds);
           const acts = data.posts
@@ -674,27 +712,21 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           setVisit((v) => v + 1);
           return;
         }
-        const byId = ids ? new Map(data.posts.map((p) => [p.id, p])) : null;
-        const group = groupId ? data.feedGroups.find((g) => g.id === groupId) : undefined;
-        const mine = groupId
-          ? data.posts.filter((p) => inGroupFeed(p, groupId, group) && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
-          : ids && byId
-          ? ids.flatMap((id) => { const p = byId.get(id); return p && !p.archived && !p.removed ? [p] : []; })
-          : data.posts
-            // Archived posts only ever in your own archive's set, opened from the Archive page.
-            .filter((p) => (set === 'archived'
-              ? p.archived && p.authorId === userId && userId === data.currentUserId
-              // A group-only post is let in only when it is the one that was tapped (a notification, Saved, a link), so it opens in place.
-              : !p.archived && (!p.groupId || p.id === scope.start) && (set === 'tagged' ? isTaggedIn(p, userId) : p.authorId === userId && (set === 'clips' ? p.kind === 'clip' : set === 'activity' ? !!p.session && hasSessionStats(p.session) : !sessionOnly(p) || p.id === scope.start))))
-            // In the grid's own order: pinned first, then newest (the archive's set is newest first only),
-            // so a pinned post opens where its tile sits and a swipe goes on in the grid's order.
-            .sort((a, b) => (set === 'archived' ? 0 : Number(!!b.pinned) - Number(!!a.pinned)) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
-        // A group's feed: anything an admin pushed to the bottom goes after all of it. One person's posts
-        // (a profile's grid, a court's) stay exactly in the grid's order: that is what makes it a push, not a take-down.
-        const keys = mine.map((p) => `p:${p.id}`);
-        const dealt = groupId ? sinkDemoted(keys, demotedPosts()) : keys;
+        if (!groupId) {
+          // One person's posts or a court's (dealScoped, as the first draw deals them).
+          const one = dealScoped(data, scope);
+          setOrder(one.order);
+          setActive(one.active);
+          setVisit((v) => v + 1);
+          return;
+        }
+        const group = data.feedGroups.find((g) => g.id === groupId);
+        const mine = data.posts.filter((p) => inGroupFeed(p, groupId, group) && reachable(p)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+        // A group's feed: anything an admin pushed to the bottom goes after all of it.
+        const dealt = sinkDemoted(mine.map((p) => `p:${p.id}`), demotedPosts());
         setOrder(dealt);
-        setActive(Math.max(0, scope.start ? dealt.indexOf(`p:${scope.start}`) : 0));
+        // A group's feed opens on its newest (it has no tapped post to start on).
+        setActive(0);
         setVisit((v) => v + 1);
         return;
       }
@@ -777,7 +809,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // For you's first deal waits (briefly) to know what you have already seen: the "Loading" page meanwhile, not "quiet".
   const [awaitingSeen, setAwaitingSeen] = useState(false);
   const dealOnce = useCallback(() => {
-    const stamp = `${ready}:${currentUserId}:${scope?.userId ?? ''}:${scope?.set ?? ''}:${scope?.ids?.join(',') ?? ''}:${scope?.groupId ?? ''}:${scope?.activities ? 'a' : ''}`;
+    const stamp = dealStamp(ready, currentUserId, scope);
     if (rankedFor.current === stamp) return;
     rankedFor.current = stamp;
     // For you is dealt from what you have seen: this phone's own list (read

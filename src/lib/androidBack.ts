@@ -17,7 +17,7 @@ import { useFocusEffect } from 'expo-router';
  * `handle` is always the latest one, so it may read the page's current state.
  * An iPhone and a browser have no Back button, so this does nothing there.
  */
-export function useAndroidBack(handle: () => boolean, enabled = true) {
+function useAndroidBackHere(handle: () => boolean, enabled = true) {
   const latest = useRef(handle);
   latest.current = handle;
   useFocusEffect(useCallback(() => {
@@ -26,3 +26,12 @@ export function useAndroidBack(handle: () => boolean, enabled = true) {
     return () => sub.remove();
   }, [enabled]));
 }
+
+/**
+ * Nothing at all on an iPhone or in a browser (no Back button there), not even the router's focus hook: that hook
+ * waits a draw for the navigation to load, so every page and sheet using this drew itself a second time as it
+ * opened, before it could slide in (Nov 4, owner: "EVERY FUCKING THING TAKES WAY TOO LONG TO RESPOND"). The phone's
+ * kind never changes while the app runs, so which one is used never changes either.
+ */
+export const useAndroidBack: (handle: () => boolean, enabled?: boolean) => void =
+  Platform.OS === 'android' ? useAndroidBackHere : () => undefined;

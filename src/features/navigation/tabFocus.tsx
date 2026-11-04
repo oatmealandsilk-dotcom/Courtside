@@ -1,4 +1,4 @@
-import React, { createContext, startTransition, use, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { createContext, startTransition, use, useCallback, useContext, useDeferredValue, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 import { useIsFocused as useRouteFocused } from 'expo-router';
 // The router's own navigation hook, as useIsFocused (src/lib) reads it: asked on demand, it never redraws anything.
@@ -8,7 +8,9 @@ import { useGrowPageLive } from '@/features/players/mapGrow';
 import { TabOnShowContext, TabOnShowLaterContext, useIsFocused } from '@/lib/useIsFocused';
 import { ThemeSourceContext, liveTheme, makeThemeSource, type ThemeName } from '@/theme/ThemeProvider';
 import { landed, registerGate, unregisterGate, type GateEntry } from '@/theme/catchUp';
-import { usePressV2 } from '@/features/navigation/pressV2';
+import { usePressV2, useTapFast } from '@/features/navigation/pressV2';
+import { useJustNavigated } from '@/features/navigation/justNavigated';
+import { sheetOnTop } from '@/lib/goBack';
 
 /**
  * Whether the tab a component sits in is the one on screen.
@@ -40,7 +42,16 @@ export function TabFocus({ active, children }: { active: boolean; children: Reac
   const box = useRef({ active }).current;
   useLayoutEffect(() => { box.active = active; }, [box, active]);
   const quick = usePressV2();
-  const onShow = routeFocused && active;
+  // Taps answering sooner (pressV2's TAP_FAST: admins first): a page opening over the tabs tells the tab under it
+  // that it is covered as background work, just after the page is put on screen, not in the same go. The tab on show
+  // redraws whole for it (the Feed pausing its clip, Community its parts), and the phone puts the new page on screen
+  // only once that go is over: every page opened over the Feed or Community waited for that redraw before it could
+  // start to slide (Nov 4, owner: "Tapping on someone's profile ... Or noti. Or msg. Etc EVERY FUCKING THING TAKES WAY
+  // TOO LONG TO RESPOND"). Back on show (the page closed) is at once, as before.
+  // Not under a see-through sheet (the Create box, comments...): the tab still shows round it, and hears it at once, as before.
+  const tapFast = useTapFast();
+  const routeFocusedSoon = useDeferredValue(routeFocused);
+  const onShow = (routeFocused || (tapFast && routeFocusedSoon && !sheetOnTop())) && active;
   // The parts that only stand down when covered (the map, court pictures, tips: useIsFocusedLater) hear
   // "covered" once the page opened over the tab has slid in, not in the tap that opens it. Before, the
   // map card, the court cards and their hidden picture-taker all redrew (the last one taken down) in that
@@ -179,8 +190,19 @@ function OffScreenLater({ pane, children }: { pane: string; children: React.Reac
   // Outside the phone's tab row (a browser's tabs), "covered" for the parts that can wait comes from
   // here, the same way TabFocus gives it in the row: once a page opened over the tab has slid in.
   const inRow = use(TabOnShowLaterContext) !== undefined;
+  const shownLater = use(TabOnShowLaterContext);
   const later = useCoveredLater(onShow, usePressV2() && !inRow ? COVERED_AFTER_MS : 0);
-  const inner = <AppStateLater hidden={!onShow && !growing}>{children}</AppStateLater>;
+  // Taps answering sooner (pressV2's TAP_FAST: admins first), in the phone's tab row: a tab a page has just opened
+  // over keeps the app as it was for that page's slide (until the parts that can wait hear "covered", TabFocus's
+  // COVERED_AFTER_MS), then catches up as background work. The pages opened from a tab write to the app as they open
+  // (a chat or Notifications marked read, a player's posts, a court's answers), and each redrew the tab underneath
+  // (Community alone, 60 to 190 ms in the Simulator) while the page was sliding in (Nov 4, owner: "EVERY FUCKING
+  // THING TAKES WAY TOO LONG TO RESPOND"). Back on show, it is live at once, as before.
+  // Also while any page opens or closes over the tabs (a chat opened from Messages, say): justNavigated.
+  const navigating = useJustNavigated();
+  // Never under a see-through sheet, where the tab still shows round it.
+  const hold = useTapFast() && inRow && !onShow && (shownLater === true || navigating) && !sheetOnTop();
+  const inner = <AppStateLater hidden={!onShow && !growing} hold={hold}>{children}</AppStateLater>;
   // Whether this tab sits in the row never changes while it is mounted.
   return inRow ? inner : <TabOnShowLaterContext.Provider value={later}>{inner}</TabOnShowLaterContext.Provider>;
 }

@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { View } from 'react-native';
 import { Redirect, Tabs, usePathname } from 'expo-router';
 
-import { TabsPager } from '@/components/TabsPager';
+import { TAB_PATHS, TabsPager } from '@/components/TabsPager';
 import { useTheme } from '@/theme/ThemeProvider';
 import { useApp } from '@/store/AppContext';
 import { warmConnectOffer } from '@/features/activity/autoLog';
@@ -38,7 +38,14 @@ export default function TabsLayout() {
       </Tabs>
     </View>
   ), []);
-  const row = useMemo(() => <TabsPager pathname={pathname} />, [pathname]);
+  // The row hears only the four tabs' own addresses: a page opened over the tabs (a player, a chat, Settings) or
+  // closed again leaves it as it was, where it used to be drawn again (all four slots and their gestures) in the
+  // same go that puts the new page on screen, so every page waited for it before it could slide in (Nov 4, owner:
+  // "EVERY FUCKING THING TAKES WAY TOO LONG TO RESPOND"). The row only ever acts on a tab's address.
+  const lastTab = useRef<string>(pathname);
+  if ((TAB_PATHS as readonly string[]).includes(pathname)) lastTab.current = pathname;
+  const tabPath = lastTab.current;
+  const row = useMemo(() => <TabsPager pathname={tabPath} />, [tabPath]);
   if (ready && !currentUserId) return <Redirect href="/sign-in" />;
   return (
     <View style={{ flex: 1 }}>
