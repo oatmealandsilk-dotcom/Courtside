@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { ShadeGradient } from '@/components/ui/ShadeGradient';
 import Svg, { Defs, RadialGradient, Rect, Stop } from 'react-native-svg';
 import Animated, { FadeOut } from 'react-native-reanimated';
 import { router } from 'expo-router';
@@ -121,6 +122,9 @@ export function ReelCaption({ post, author, onAuthor, onOpenComments, onOpenStat
   return (
     <View style={styles.wrap}>
       {/* An opened caption gets a deeper shade behind it, reaching up past its top line, so long words read on any frame. */}
+      {/* expo's gradient, not ShadeGradient: iOS's own drew this one up to 5 shades in 255 apart from it (Nov 3, Simulator
+          look check, Clean and Night). It only shows with the caption opened in place, which the Feed does not do (a caption
+          tap opens the comments), so it costs nothing as a page opens. */}
       {open ? <LinearGradient pointerEvents="none" colors={['rgba(0, 0, 0, 0)', 'rgba(0, 0, 0, 0.42)', 'rgba(0, 0, 0, 0.42)']} locations={[0, 0.2, 1]} style={styles.openShade} /> : null}
       <Who author={author} onAuthor={onAuthor} newHere={isNewHere(post)} place={place} court={post.court} />
       {/* Admins only: pushed to the bottom of feeds (migration 152), on a line of its own under the name. Nothing at all for anyone else. */}
@@ -402,7 +406,7 @@ export function ReelScrim({ bottom }: { bottom: number }) {
     const locations = [...SHADE.map(([d]) => (SHADE[0][0] - d) / height), 1] as unknown as readonly [number, number, ...number[]];
     return { height, colors, locations };
   }, [bottom]);
-  return <LinearGradient pointerEvents="none" colors={shade.colors} locations={shade.locations} style={[styles.scrim, { height: shade.height }]} />;
+  return <ShadeGradient pointerEvents="none" colors={shade.colors} locations={shade.locations} style={[styles.scrim, { height: shade.height }]} />;
 }
 
 /**

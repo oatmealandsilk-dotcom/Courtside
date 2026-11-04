@@ -5,7 +5,7 @@ import { SwipePressable } from '@/components/SwipePressable';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
 import { BrandMark } from '@/components/BrandMark';
-import { Avatar } from '@/components/ui';
+import { Avatar, selfTint } from '@/components/ui';
 import { CardWash, boxLook, cardLook, quietBox, type CardLook } from '@/components/session/SessionCard';
 import { CountUp } from '@/components/session/CountUp';
 import type { SurfacePreference, User } from '@/data/types';
@@ -23,7 +23,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { SCALES } from '@/features/players/ratingScales';
 import { colors, font, inkOn, lift } from '@/theme';
 import { TextScale } from '@/theme/textScale';
-import { useUsers } from '@/store/AppContext';
+import { useMyId, useUsers } from '@/store/AppContext';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
 import { initials } from '@/lib/format';
 import { EaseSwatch, GlideText, RollRating, SoftSwap, SoftText } from './SetupMotion';
@@ -73,6 +73,7 @@ export interface SetupDraft { rated: boolean; years: number | null; game?: boole
 
 function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | 'banner'; onPress?: () => void }) {
   const { theme } = useTheme();
+  const myId = useMyId();
   // The banner on a profile, on Clean, is drawn like the stats sheet (Oct 25, "D all for less ai", item 1; his
   // Oct 24 rule "On clean, the color card should not be green"): boxLook, the session box's own in-app look.
   // On the other courts but Night both cards are the quiet box near the page (Oct 25, owner: "I meant the tennis
@@ -150,7 +151,7 @@ function ShownCard({ user, variant, onPress }: { user: User; variant: 'full' | '
       <View style={styles.identity}>
         {/* The brand disc their profile page gives them, so the same person wears one colour; on a filled card,
             a deeper shade of the card instead (a brand disc would vanish into it). */}
-        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : colors.brand }} />
+        <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} style={{ backgroundColor: filled ? mixHex(look.fill, colors.text, 0.35) : user.id === myId ? selfTint(user.avatarSeed) : colors.brand }} />
         <View style={styles.identityWords}>
           <View style={styles.nameLine}><Text numberOfLines={1} style={[styles.name, styles.shrink, { color: look.ink }]}>{user.name}</Text><OfficialCheck userId={user.id} size={17} /></View>
           <Text numberOfLines={1} style={[styles.small, { color: look.muted }]}>@{user.handle}{user.location ? ` · ${cityOf(user.location)}` : ''}{user.isCoach ? ' · Coach' : ''}</Text>
@@ -208,8 +209,8 @@ function SetupCard({ user, draft }: { user: User; draft: SetupDraft }) {
   const level = draft.rated ? (scale.bands.find((b) => p.rating <= b.upTo) ?? scale.bands[scale.bands.length - 1]).label : '';
   const years = draft.years === null ? '' : draft.years === 0 ? '<1 yr' : `${draft.years} ${draft.years === 1 ? 'yr' : 'yrs'}`;
   const filled = look.filled;
-  // The avatar's disc: a deeper shade of a filled card; else the brand once there is a name, the card's lines before.
-  const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? colors.brand : look.lines;
+  // The avatar's disc: a deeper shade of a filled card; else your own picture's colour (SELF_AVATAR_COLOR) once there is a name, the card's lines before.
+  const disc = filled ? mixHex(look.fill, colors.text, 0.35) : name ? selfTint(user.avatarSeed) : look.lines;
   const face = draft.roomy ? 52 : 44;
   // A photo covers the disc (Avatar's own lookup): then the initials are never drawn.
   const users = useUsers();
@@ -350,7 +351,8 @@ const styles = StyleSheet.create({
   bordered: { borderWidth: 1 },
   popEdge: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   popTop: { position: 'absolute', left: 0, right: 0, top: 0, height: 3 },
-  popLift: { borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.10)' },
+  // No colour here: this sheet is made once, in the colours the app opened in; each use sets the live border colour.
+  popLift: { borderWidth: StyleSheet.hairlineWidth, boxShadow: '0px 4px 16px rgba(42, 36, 24, 0.10)' },
   banner: { borderRadius: corner(16), paddingVertical: 14, paddingHorizontal: 16, overflow: 'hidden' },
   pressed: { transform: [{ scale: PRESS_SHRINK }] },
   headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

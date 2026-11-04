@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import { remapFor, themes, useThemedStyles } from '@/theme/ThemeProvider';
 import { FadeCopy, FadeSpot, FadeText, type FadeLayer, type FadeStore } from '@/theme/ThemeFade';
-import React, { startTransition, useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import React, { startTransition, useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Dimensions, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 import * as haptics from '@/lib/haptics';
 import { PullDisc, usePullDisc } from '@/components/PullDisc';
@@ -14,6 +14,7 @@ import { KEYBOARD_ROOM, useKeyboardRoom } from '@/lib/keyboardRoom';
 import { TAB_FOR_KEY, subscribeScrollToTop } from '@/features/navigation/scrollToTop';
 import { barCompact } from '@/features/navigation/barShrink';
 import { usePressV2 } from '@/features/navigation/pressV2';
+import { tapPage } from '@/features/navigation/tapTiming';
 import Reanimated, { type AnimatedRef, type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -181,6 +182,8 @@ const ScreenBody = React.memo(function ScreenBody({
   unconstrained = false,
   themeFade,
 }: Props & { routeKey: string }) {
+  // The simulator's tap timing (tapTiming): the page's first draw committed (its slide starts from here).
+  useLayoutEffect(() => { tapPage(routeKey); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // The floating tab bar covers this much of the bottom; a page's last line stays above it.
   const barInset = useBarInset();
   const styles = useThemedStyles(styleDefinitions);

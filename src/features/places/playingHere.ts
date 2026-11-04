@@ -60,7 +60,8 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess, name
   const seenBy = seenByOnMap(mapLive, currentUser, teenMap, mapVisibility);
   const can = !!courtId && canCheckIn(currentUser, access);
   const why = courtId ? playingHereWhy(currentUser, access, seenBy) : null;
-  const here = !!courtId && !!courtNow[courtId]?.youHere && locationEnabled;
+  // Read as the court page reads it: an "I'm playing here" rides on with Location off until its time runs out (migration 209).
+  const here = !!courtId && !!courtNow[courtId]?.youHere;
   const till = here && courtId ? tillWords(courtNow[courtId]?.youUntil) : null;
   const latest = useRef({ mapVisibility, locationEnabled });
   latest.current = { mapVisibility, locationEnabled };

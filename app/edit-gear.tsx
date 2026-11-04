@@ -30,7 +30,7 @@ export default function EditGear() {
     goBack('/profile-details');
   };
   return (
-    <Screen title="Gear bag" onBack={() => goBack('/profile-details')}>
+    <Screen title="Gear bag" compactTitle onBack={() => goBack('/profile-details')}>
       <View style={styles.body}>
         <Text style={styles.lead}>Shows on your Tennis profile. Fill in what you like; blanks stay hidden.</Text>
         <Field label="Racket" value={racket} onChangeText={setRacket} autoCapitalize="words" />

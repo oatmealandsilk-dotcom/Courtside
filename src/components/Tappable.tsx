@@ -3,6 +3,7 @@ import { Animated, Platform, Pressable, type StyleProp, type ViewStyle } from 'r
 
 import { pressV2On } from '@/features/navigation/pressV2';
 import { useSwipePressLook } from '@/features/navigation/swipePress';
+import { TAP_TIMING, tapMark } from '@/features/navigation/tapTiming';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 
 interface Props {
@@ -90,7 +91,8 @@ export function Tappable({
 
   return (
     <Pressable
-      onPress={disabled || immediate ? undefined : onPress}
+      // The simulator's tap timing (tapTiming) notes when the action ran; anywhere else it is onPress itself.
+      onPress={disabled || immediate ? undefined : TAP_TIMING && onPress ? () => { tapMark('press'); onPress(); } : onPress}
       onLongPress={disabled ? undefined : onLongPress}
       delayLongPress={delayLongPress}
       {...press.delay}

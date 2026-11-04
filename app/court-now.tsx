@@ -18,7 +18,7 @@ import { NOW_ICON, NOW_LABEL, nowStatus, playingLine } from '@/features/players/
 import { getPosition, recentPosition } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
-import { useThemedStyles } from '@/theme/ThemeProvider';
+import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 
@@ -43,8 +43,8 @@ const MISSED: Record<Missed, string> = {
  * answer). Under it, for adults, at any court but someone's home (a club's
  * too since Oct 29: "if your playing there your playing there"),
  * "I'm playing here": for as long as "How long are you here?" says (30
- * minutes to 4 hours, CourtTimeHost; the switch opens it), gone the moment
- * Location goes off; people
+ * minutes to 4 hours, CourtTimeHost; the switch opens it), riding on till
+ * its time runs out even with Location off (migration 209); people
  * who follow each other with you see your name, anyone else only a count,
  * and only once two or more are there. It needs a yes to "Who can see you on
  * the map?" (migration 191): with no answer yet, turning it on asks first,
@@ -67,6 +67,8 @@ const MISSED: Record<Missed, string> = {
  */
 export default function CourtNowSheet() {
   const styles = useThemedStyles(styleDefinitions);
+  // On Clean the white tiles all but vanished on the white sheet: a thin outline there only (Nov 3).
+  const edged = useTheme().theme === 'clean';
   const params = useLocalSearchParams<{ id?: string; name?: string; access?: string }>();
   const { actions, courtNow, courtFacts, users, currentUserId, locationEnabled } = useApp();
   const courtId = isMapCourtId(params.id) ? params.id : null;
@@ -177,7 +179,7 @@ export default function CourtNowSheet() {
           {CHOICES.map((c) => {
             const on = (asking ?? standing?.status) === c;
             return (
-              <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: on, disabled: busy }} accessibilityLabel={NOW_LABEL[c]} disabled={busy || !courtId} onPress={() => { void pick(c); }} style={({ pressed }) => [styles.choice, on && styles.choiceOn, pressed && { transform: [{ scale: 0.97 }] }]}>
+              <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: on, disabled: busy }} accessibilityLabel={NOW_LABEL[c]} disabled={busy || !courtId} onPress={() => { void pick(c); }} style={({ pressed }) => [styles.choice, edged && styles.choiceEdge, on && styles.choiceOn, pressed && { transform: [{ scale: 0.97 }] }]}>
                 {/* One quiet colour for all five: the shape and the word say which; no status colour reads the same in every theme. */}
                 <Ionicons name={NOW_ICON[c]} size={20} color={on ? colors.bg : colors.textMuted} />
                 <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{NOW_LABEL[c]}</Text>
@@ -232,7 +234,8 @@ const styleDefinitions = StyleSheet.create({
   choices: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   // Five lifted tiles, the sheet's own: the picked one filled with ink, the way its chips are.
   choice: { ...lift, flexGrow: 1, flexBasis: '30%', minWidth: 92, height: 64, borderRadius: corner(18), backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
-  choiceOn: { backgroundColor: colors.text },
+  choiceEdge: { borderWidth: 1, borderColor: colors.border },
+  choiceOn: { backgroundColor: colors.text, borderColor: colors.text },
   choiceText: { ...typography.smallStrong, color: colors.text },
   choiceTextOn: { color: colors.bg },
   // The answer's own small print, right under the tiles it is about.

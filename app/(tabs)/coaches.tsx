@@ -189,9 +189,9 @@ function Coaching() {
                 </View>
                 <View style={styles.coachFoot}>
                   {coach.ratingCount ? (
-                    <View style={styles.metaRow}>
+                    <View style={[styles.metaRow, styles.footRating]}>
                       <Ionicons name="star" size={12} color={colors.text} />
-                      <Text style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rating}>{coach.ratingAvg.toFixed(1)}</Text>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>· {coach.ratingCount}</Text>
                     </View>
                   ) : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>New</Text>}
@@ -336,8 +336,11 @@ const styleDefinitions = StyleSheet.create({
   coachCard: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), width: 176, gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
   coachWords: { gap: 3 },
   coachName: { ...typography.bodyStrong, color: colors.text },
-  coachFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, ...(LESS_AI ? { marginTop: 'auto' } : { paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }) },
-  priceTag: { paddingHorizontal: 9, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
+  // The stars and the price fit the card's 144 points (Nov 3 sweep: the pill ran 10 points past the line); with
+  // big text the price drops under the stars rather than being cut off at the card's edge.
+  coachFoot: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, rowGap: 6, ...(LESS_AI ? { marginTop: 'auto' } : { paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }) },
+  footRating: { gap: 4 },
+  priceTag: { paddingHorizontal: 7, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.brandDim },
   priceText: { ...typography.caption, color: colors.brand },
   name: { ...typography.body, ...font('500'), fontSize: 16, color: colors.text },
   rating: { ...typography.smallStrong, color: colors.text },

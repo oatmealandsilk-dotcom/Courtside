@@ -17,7 +17,7 @@ import { sessionPeople } from '@/features/activity/sessionTags';
 import { mixHex, postZones, zoneColors } from '@/features/activity/zones';
 import { distanceFigure } from '@/features/activity/workouts';
 import { useTheme, type ThemeName } from '@/theme/ThemeProvider';
-import { colors, font, pageIsDark, withAlpha, wordmarkFont } from '@/theme';
+import { colors, font, pageIsDark, sameInk, withAlpha, wordmarkFont } from '@/theme';
 import { LESS_AI } from '@/theme/look';
 import { Duration, Figure } from './Duration';
 import { Pop } from './Pop';
@@ -150,7 +150,7 @@ function quietLook(theme: ThemeName): CardLook {
     return { ...base, fill: colors.surface, lift: QUIET_GLOW_LIFT, calm: QUIET_CALM, figure, eyebrow: mixHex(base.eyebrow, colors.text, QUIET_CALM), touch: figure };
   }
   // The court's second colour, where its palette has one (cardTouch, London's purple; every other court's is its brand).
-  const touch = colors.cardTouch !== colors.brand ? colors.cardTouch : undefined;
+  const touch = sameInk(colors.cardTouch, colors.brand) ? undefined : colors.cardTouch;
   return {
     ...sheetLook(),
     wash: 'soft',

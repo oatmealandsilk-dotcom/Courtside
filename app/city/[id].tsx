@@ -19,6 +19,7 @@ import { PeekCardBody, peekFrame, useCourtPicturesGo } from '@/components/place/
 import { BoardHead, FillDivider, FilledFace, Medal, Movement, hasCoin } from '@/features/cityBoard/BoardBits';
 import { useCityFill } from '@/features/cityBoard/fill';
 import { MIN_PLAYERS, isFinal, monthName, morePlayersWords, nextTarget, ordinal, rankCities, rankRows, sessionsWords, viewsWords, visitsWords } from '@/features/cityBoard/board';
+import { isAllTime } from '@/features/cityBoard/flag';
 import { catalogCity, catalogSpot, cityLabel, type ZeroCity } from '@/features/cityBoard/catalog';
 import { useCityBoard, useCityPage } from '@/features/cityBoard/useCityBoard';
 import { useBarInset } from '@/features/navigation/barInset';
@@ -180,7 +181,7 @@ export default function CityPage() {
     // A board a few minutes old can call a city at 0 that has since been ranked: if its page then comes, it
     // takes this one's place as it stands, with nothing rising in (shownZero, read by Rise below).
     shownZero.current = true;
-    return <ZeroCityPage city={zero} />;
+    return <ZeroCityPage city={zero} month={boardNow.month} />;
   }
   if (status === 'off') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="podium-outline" title="City boards aren’t open yet" body="When they are, each city’s players and courts will show here." action={{ label: 'Back', onPress: () => goBack() }} /></Screen>;
   if (status === 'error') return <Screen title={name} compactTitle onBack={() => goBack()}><EmptyState icon="cloud-offline-outline" title={`Couldn’t load ${name}`} body="Check your connection and try again." action={{ label: 'Try again', onPress: retry }} /></Screen>;
@@ -277,7 +278,7 @@ export default function CityPage() {
         <View style={styles.head}>
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Most active courts</Text>
         </View>
-        {activeCourts.length ? <ActiveCourtsRow courts={activeCourts} /> : (
+        {activeCourts.length ? <ActiveCourtsRow courts={activeCourts} allTime={isAllTime(page.month)} /> : (
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.courtsEmpty}>Log a session at a court to put it here</Text>
         )}
       </View>
@@ -337,7 +338,7 @@ function seeOnMap(city: { id: string; name: string; region: string }) {
  * city's place is (its row's dash, said in words), what ranks a city, and
  * the way to its courts on the map. No players, no courts, no clip.
  */
-function ZeroCityPage({ city }: { city: ZeroCity }) {
+function ZeroCityPage({ city, month }: { city: ZeroCity; month: string }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
     <View style={styles.root}>
@@ -345,7 +346,7 @@ function ZeroCityPage({ city }: { city: ZeroCity }) {
         <View style={[styles.body, styles.bodyPlain]}>
           <View style={[styles.standing, styles.standingZero]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.sectionTitle}>Not ranked yet</Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zeroBody}>A city is ranked once {MIN_PLAYERS} players who call it home log sessions in the month.</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.zeroBody}>A city is ranked once {MIN_PLAYERS} players who call it home log sessions{isAllTime(month) ? '' : ' in the month'}.</Text>
           </View>
           <View style={styles.footer}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>Visiting {cityLabel(city)}?</Text>
@@ -369,7 +370,7 @@ function ZeroCityPage({ city }: { city: ZeroCity }) {
  * level counts share one; none for a city's only court, whose card is then
  * as tall as its own words). Swipe for more. A tap opens the court's page.
  */
-function ActiveCourtsRow({ courts }: { courts: ActiveCourt[] }) {
+function ActiveCourtsRow({ courts, allTime }: { courts: ActiveCourt[]; allTime: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = usePeekLook();
   const draw = useCourtMapsGo();
@@ -381,7 +382,7 @@ function ActiveCourtsRow({ courts }: { courts: ActiveCourt[] }) {
         // Its place only beside others: "#1" of one says nothing.
         const tag = alone ? null : `#${place}`;
         return (
-          <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place, alone)} onPress={() => openActiveCourt(c)}
+          <Pressable key={c.courtId} accessibilityRole="link" accessibilityLabel={courtSaid(c, place, alone, allTime)} onPress={() => openActiveCourt(c)}
             style={({ pressed }) => [styles.courtCard, look === 'N' ? peekFrame : nowFrame, pressed && styles.courtPressed]}>
             {look === 'N'
               ? <PeekCardBody name={c.name} lat={c.lat} lng={c.lng} meta={visitsWords(c.visits)} tag={tag} draw={draw} fit={alone} />
@@ -408,8 +409,8 @@ function useCourtMapsGo(): boolean {
 
 /** A court's place among the city's most active: 1 + how many have more visits (level counts share a place). */
 const placeAmong = (courts: ActiveCourt[], c: ActiveCourt) => 1 + courts.filter((k) => k.visits > c.visits).length;
-/** What VoiceOver hears for a court's card: its place too, as its tag shows it (none for a city's only court). */
-const courtSaid = (c: ActiveCourt, place: number, alone: boolean) => `${c.name}, ${visitsWords(c.visits)} this month${alone ? '' : `, number ${place}`}. Open court`;
+/** What VoiceOver hears for a court's card: its place too, as its tag shows it (none for a city's only court). All time (211): no "this month". */
+const courtSaid = (c: ActiveCourt, place: number, alone: boolean, allTime: boolean) => `${c.name}, ${visitsWords(c.visits)}${allTime ? '' : ' this month'}${alone ? '' : `, number ${place}`}. Open court`;
 const openActiveCourt = (c: ActiveCourt) => router.push(courtHref({ id: c.courtId, name: c.name, lat: c.lat, lng: c.lng }));
 
 /** Still coming: Up to hit's faces and Top players' rows as quiet shapes, so nothing jumps when they land. */
@@ -447,7 +448,7 @@ function Hero({ cityName, month, clip, post, author, height, top, playing }: { c
   return (
     <Pressable
       accessibilityRole="link"
-      accessibilityLabel={`Most watched clip in ${cityName} this month, by ${author.name}. Open clip`}
+      accessibilityLabel={`Most watched clip in ${cityName}${isAllTime(month) ? '' : ' this month'}, by ${author.name}. Open clip`}
       onPress={() => router.push(`/post/${clip.postId}`)}
       style={[styles.hero, { height }]}
     >
@@ -457,7 +458,7 @@ function Hero({ cityName, month, clip, post, author, height, top, playing }: { c
       <View pointerEvents="none" style={styles.heroWords}>
         <View style={styles.heroKicker}>
           <Ionicons name="play" size={11} color={colors.onMedia} />
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.heroKickerText}>Most watched in {monthName(month)}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.heroKickerText}>{isAllTime(month) ? 'Most watched' : `Most watched in ${monthName(month)}`}</Text>
         </View>
         {/* The name alone: its place is said once, as "3rd of 15" under Up to hit (round 2 review: no "3rd" twice on one screen). */}
         <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.heroName}>{cityName}</Text>

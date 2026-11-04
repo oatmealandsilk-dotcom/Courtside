@@ -4687,6 +4687,17 @@ export const remote = {
     return true;
   },
   /**
+   * One court's name and spot from the map's courts (public), for a link that knows only its id
+   * (a "Friend is playing at <court>" row). Null when unknown or not asked.
+   */
+  async fetchCourtSpot(courtId: string): Promise<{ id: string; name: string | null; lat: number; lng: number } | null> {
+    if (!isMapCourtId(courtId)) return null;
+    const { data, error } = await need().from('courts').select('id, name, lat, lng').eq('id', courtId).maybeSingle();
+    if (error || !data) return null;
+    const row = data as { id: string; name: string | null; lat: number; lng: number };
+    return Number.isFinite(row.lat) && Number.isFinite(row.lng) ? row : null;
+  },
+  /**
    * "What surface?" at one court (migration 186): your own answer (your row
    * of court_surface_votes; the table shows you only yours) and the surface
    * the court registered. Null when it could not be asked, or the database

@@ -21,7 +21,7 @@ import { useArrived } from '@/lib/useArrived';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { goBack, onPageChange, sheetOnTop } from '@/lib/goBack';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ShadeGradient } from '@/components/ui/ShadeGradient';
 import { StatusBar } from 'expo-status-bar';
 import { PinchZone } from '@/components/PinchZone';
 import Reanimated, { Easing, cancelAnimation, FadeOut, ReduceMotion, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withDelay, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -2262,7 +2262,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         </View>
                       </Pressable>
                       {/* The replies run on to the bottom and fade into the page: plainly more below, a tap away, without a line saying so. */}
-                      <LinearGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.threadFade} />
+                      <ShadeGradient pointerEvents="none" colors={[`${colors.bg}00`, colors.bg]} style={styles.threadFade} />
                     </View>
                   </View>
                 );

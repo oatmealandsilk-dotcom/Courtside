@@ -8,7 +8,7 @@ import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { GlassFill, liquidGlass } from '@/components/ui/Glass';
 import { useRestKey } from '@/components/ui/restMotion';
-import { LinearGradient } from 'expo-linear-gradient';
+import { ShadeGradient } from '@/components/ui/ShadeGradient';
 
 import { ClipVideo } from './ClipVideo';
 import { CourtSpinner } from './CourtSpinner';
@@ -267,7 +267,7 @@ function ClipPlaybackInner({ uri, poster, active: wanted, onDeck = false, preloa
         </View>
       )}
       {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}
-      {discInk && !bare ? <LinearGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
+      {discInk && !bare ? <ShadeGradient pointerEvents="none" colors={TOP_SHADE.colors} locations={TOP_SHADE.locations} style={[styles.topShade, { height: insets.top + TOP_SHADE.below }]} /> : null}
       {spin && !ready && active ? <View pointerEvents="none" style={styles.centre}><CourtSpinner ink={discInk ?? 'white'} /></View> : null}
       <View pointerEvents="none" style={[styles.fastWrap, { top: insets.top + drop + 24 }]}>
         <Pop on={fast}>

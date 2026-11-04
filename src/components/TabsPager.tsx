@@ -20,6 +20,7 @@ import { SwipeArea } from '@/features/navigation/swipePress';
 import { followRow } from '@/features/navigation/barShrink';
 import { setRowOnFeed } from '@/features/navigation/barOverMedia';
 import { lensFollow, lensRide, lensSettle } from '@/features/navigation/barLens';
+import { TAP_TIMING, tapMark } from '@/features/navigation/tapTiming';
 
 /**
  * The strip, left to right: Community (where the app opens, Find Players
@@ -77,13 +78,17 @@ export function TabsPager({ pathname }: { pathname: string }) {
   // positions; `to` is -1 when the row is not gliding to a tab. `id` tells a glide from the next.
   // The bar's tuck rides it frame by frame (barShrink's followRow), so it lands with the page.
   const glide = useSharedValue({ id: 0, from: 0, to: -1 });
+  // The simulator's tap timing (tapTiming): where the row was as a glide was set going, until it first moves (-1: none watched).
+  const glideWatch = useSharedValue(-1);
   useEffect(() => {
     if (target === activeRef.current) return;
     moveTo(target);
     setActive(target);
     const w = width || 1;
-    runOnUI((to: number, w: number) => {
+    runOnUI((to: number, w: number, timed: boolean) => {
       'worklet';
+      // The simulator's tap timing (tapTiming): when the animation thread set the glide going, and its first frame.
+      if (timed) { glideWatch.value = position.value; runOnJS(tapMark)('glide', undefined, Date.now()); }
       const id = glide.value.id + 1;
       // A far tab lifted for a glide this one cuts short goes back to its own slot.
       jumpTab.value = -1;
@@ -125,11 +130,13 @@ export function TabsPager({ pathname }: { pathname: string }) {
         followRow(finished ? 1 : -1);
         if (finished) runOnJS(atRest)();
       });
-    })(target, w);
+    })(target, w, TAP_TIMING);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [target, position, width, jumpTab, jumpOffset]);
   // The glide's progress, for the bar's tuck riding it (frame by frame, on the animation thread).
   useAnimatedReaction(() => position.value, (at) => {
+    // The simulator's tap timing (tapTiming): the first frame the row moves after a glide was set going.
+    if (TAP_TIMING && glideWatch.value >= 0 && at !== glideWatch.value) { glideWatch.value = -1; runOnJS(tapMark)('first', undefined, Date.now()); }
     const g = glide.value;
     if (g.to < 0) return;
     const span = g.to - g.from;

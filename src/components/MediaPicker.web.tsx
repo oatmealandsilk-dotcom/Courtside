@@ -763,5 +763,7 @@ const styleDefinitions = StyleSheet.create({
   coverUpload: { alignItems: 'center', justifyContent: 'center', gap: 3, borderColor: colors.border },
   coverUploadLabel: { ...typography.caption, color: colors.textMuted },
   textButton: { paddingVertical: 2 },
-  textButtonLabel: { ...typography.smallStrong, color: colors.info },
+  // The hard slot. This file loads at startup with the layouts, so its sheet is written against the CourtSide
+  // palette, where info and hard share a value: a city court has always shown hard here.
+  textButtonLabel: { ...typography.smallStrong, color: colors.hard },
 });

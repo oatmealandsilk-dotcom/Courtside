@@ -1686,7 +1686,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
   } else if (message.kind === 'court' && message.place) {
     // A court: a still map of the spot, its name and where it is; the whole card opens the court's page.
     const place = message.place;
-    const card = { place, width: Math.min(COURT_CARD_W, reach(gutter)), mine, tail: item.joinBelow, joinTop: gap === 'run', from: ctx.from, sentAt };
+    const card = { place, width: Math.min(item.besidePhoto ? PHOTO_W : COURT_CARD_W, reach(gutter)), mine, tail: item.joinBelow, joinTop: gap === 'run', from: ctx.from, sentAt };
     body = (
       <>
         {quoteAbove}
@@ -1811,7 +1811,7 @@ const MessageRow = memo(function MessageRow({ item, ctx, original, originalBlock
         rowProps={rowProps}
         joinBottom={item.joinBelow}
         ctx={ctx}
-        cardWidth={Math.min(LINK_CARD_W, reach(gutter))}
+        cardWidth={Math.min(item.besidePhoto ? PHOTO_W : LINK_CARD_W, reach(gutter))}
         held={held}
         quote={quote(false)}
         failedMark={failedMark}
