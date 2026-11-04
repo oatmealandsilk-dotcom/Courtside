@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
-import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, runOnUI, useAnimatedStyle, useFrameCallback, useSharedValue } from 'react-native-reanimated';
 
 import { simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '@/lib/simDriver';
 import { startJsGapWatch } from '@/lib/simTrace';
@@ -15,6 +15,7 @@ import { launchLookAtOpen, launchLookNow, launchLookStatus } from '@/lib/launchL
  * this only then): sign in to the demo, go to a page, go back, say yes to "Who can see you on the map?" ahead, so the
  * recording shows the move and nothing else, and set how slow Up to hit's check-in is (simCheckIn). The card's own "uth"
  * (a tap of Up to hit) is NearbyMap's. Nov 2: a court or Match phone picked, and the launch-look module's report.
+ * Nov 4: a marker square for lining a screen recording up with the app's clock ("mark").
  */
 export function SimDriverHost() {
   const { actions } = useApp();
@@ -57,6 +58,11 @@ export function SimDriverHost() {
   };
   const fwatchNow = useRef(fwatch);
   fwatchNow.current = fwatch;
+  // "mark": a small square at the very top of the screen, above the island, turns black or white from the animation
+  // thread, which notes its clock ([mark] N at T). Found in a screen recording, it lines the film up with the app's clock.
+  const markN = useSharedValue(0);
+  const markLook = useAnimatedStyle(() => ({ backgroundColor: markN.value % 2 ? '#000000' : '#ffffff' }));
+  const markNoted = (n: number, at: number) => simLog(`[mark] ${n} at ${at}`);
   const { setTheme } = useTheme();
   const pick = useRef(setTheme);
   pick.current = setTheme;
@@ -65,6 +71,7 @@ export function SimDriverHost() {
       simAction('signin', () => { void now.current.signIn('you').then(() => router.replace('/')); }),
       simAction('go', (q) => { if (q.to) router.navigate(q.to as never); }),
       simAction('fwatch', (q) => fwatchNow.current(Number(q.ms) || 3000)),
+      simAction('mark', () => { runOnUI(() => { 'worklet'; markN.value += 1; runOnJS(markNoted)(markN.value, Date.now()); })(); }),
       // How long the live app's reply fetch takes when a thread opens (simThreadFetch): ms=0 never, as the demo always was.
       simAction('threadfetch', (q) => { simThreadFetch.ms = Number(q.ms) || 0; simLog(`[sim] threadfetch ${simThreadFetch.ms}`); }),
       simAction('back', () => { if (router.canGoBack()) router.back(); }),
@@ -105,5 +112,5 @@ export function SimDriverHost() {
     startJsGapWatch();
     return () => off.forEach((f) => f());
   }, []);
-  return null;
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: 1, left: '50%', marginLeft: -4, width: 8, height: 8 }, markLook]} />;
 }
