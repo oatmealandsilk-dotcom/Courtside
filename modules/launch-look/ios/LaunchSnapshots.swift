@@ -53,6 +53,8 @@ final class LaunchSnapshots {
   private(set) var lastReport: [String: Any] = [:]
   private let queue = DispatchQueue(label: "co.courtside.launch-look", qos: .utility)
   private var running = false
+  /// Held while a look-over runs, so leaving the app never suspends it part-way (main thread only).
+  private var jobTask: UIBackgroundTaskIdentifier = .invalid
   private var again: (look: LaunchLookStyle?, mode: SnapshotMode, done: [() -> Void])?
 
   // MARK: Where things are
@@ -194,6 +196,10 @@ final class LaunchSnapshots {
       job = { Self.work(folder: folder, records: records, light: light, dark: dark, look: writeLook, mode: mode) }
     }
     running = true
+    // The whole look-over runs to its end even if the app is left meanwhile (never suspended part-way).
+    jobTask = UIApplication.shared.beginBackgroundTask(withName: "CourtSideLaunchLookPictures") { [weak self] in
+      self?.endJobTask()
+    }
     queue.async { [weak self] in
       let (kept, report) = job()
       DispatchQueue.main.async {
@@ -201,13 +207,23 @@ final class LaunchSnapshots {
         Self.saveRecords(kept)
         self.lastReport = report
         self.running = false
+        let finished = self.jobTask
+        self.jobTask = .invalid
         done?()
         if let next = self.again {
           self.again = nil
+          // Holds a task of its own, should it have work to do.
           self.sync(look: next.look, mode: next.mode) { next.done.forEach { $0() } }
         }
+        if finished != .invalid { UIApplication.shared.endBackgroundTask(finished) }
       }
     }
+  }
+
+  private func endJobTask() {
+    guard jobTask != .invalid else { return }
+    UIApplication.shared.endBackgroundTask(jobTask)
+    jobTask = .invalid
   }
 
   /// Every file iOS has there is known and unchanged, and every launch picture among them carries `look`.
@@ -227,9 +243,14 @@ final class LaunchSnapshots {
   private static func putAllBack(folder: URL, records: [String: Record]) -> ([String: Record], [String: Any]) {
     var kept: [String: Record] = [:]
     var problems: [String] = []
+    var left = records
     for file in files(in: folder) {
       guard let record = records[file.rel], record.ours != nil, same(record, file) else { continue }
-      if !putBack(file) {
+      if putBack(file) {
+        // Noted at once, should the app be stopped before the end.
+        left[file.rel] = nil
+        saveRecords(left)
+      } else {
         // Still ours: kept, to try again next time.
         problems.append("\(file.rel): could not be put back")
         kept[file.rel] = record
@@ -253,10 +274,24 @@ final class LaunchSnapshots {
     let lightGrid = Grid(light)
     let darkGrid = Grid(dark)
     let files = files(in: folder)
+    // What is known so far, noted before and after each picture is written, so a look-over stopped part-way
+    // (the app killed) leaves every picture written over still known as ours.
+    var noted = records
+    func note(_ rel: String, _ record: Record) {
+      noted[rel] = record
+      saveRecords(noted)
+    }
     for file in files {
       var record: Record
       if let known = records[file.rel], same(known, file) {
         record = known
+      } else if let before = records[file.rel], before.mode == "light" || before.mode == "dark",
+                let image = decode(file.url), case let found = classify(image, light: lightGrid, dark: darkGrid),
+                found != "other", found != before.mode {
+        // iOS only ever draws the picture here in the phone's mode it is for: one in the other look is ours,
+        // written by a look-over stopped before it was noted. The copy of iOS's own kept then stays the one
+        // to put back, never this.
+        record = Record(mode: before.mode, ours: found, size: file.size, mtime: file.mtime, width: image.width, height: image.height, type: before.type)
       } else {
         // iOS's own picture (new, or drawn again since we last looked): which look it is, and a copy kept.
         guard let image = decode(file.url), let type = typeOf(file.url) else {
@@ -273,23 +308,27 @@ final class LaunchSnapshots {
         record = Record(mode: found, ours: nil, size: file.size, mtime: file.mtime, width: image.width, height: image.height, type: type)
       }
       let wanted: LaunchLookStyle? = record.mode == "other" ? nil : look
+      var touched = false
       if let wanted, record.ours != wanted.rawValue {
+        note(file.rel, record)
         if write(wanted == .dark ? dark : light, over: file.url, width: record.width, height: record.height, type: record.type, mode: mode) {
           record.ours = wanted.rawValue
+          touched = true
         } else {
           problems.append("\(file.rel): the \(wanted.rawValue) look could not be written in \(record.type)")
           if record.ours != nil {
             // Ours in the other look and nothing new could go in: iOS's own back, rather than the wrong look.
-            if putBack(file) { record.ours = nil } else { problems.append("\(file.rel): could not be put back") }
+            if putBack(file) { record.ours = nil; touched = true } else { problems.append("\(file.rel): could not be put back") }
           }
         }
       } else if wanted == nil, record.ours != nil {
-        if putBack(file) { record.ours = nil } else { problems.append("\(file.rel): could not be put back") }
+        if putBack(file) { record.ours = nil; touched = true } else { problems.append("\(file.rel): could not be put back") }
       }
       if let now = attributes(file.url) {
         record.size = now.size
         record.mtime = now.mtime
       }
+      if touched { note(file.rel, record) }
       kept[file.rel] = record
       rows.append(["path": file.rel, "mode": record.mode, "ours": record.ours ?? NSNull(), "type": record.type, "width": record.width, "height": record.height])
     }

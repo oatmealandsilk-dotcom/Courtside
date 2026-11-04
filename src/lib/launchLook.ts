@@ -36,6 +36,12 @@ export type LaunchLookSetting = LaunchLook | 'phone';
  * carrying the module, and is to be proved in the simulator before anyone else gets it. For everyone
  * by setting this to true and shipping an over-the-air update (no database change; the native part
  * must already be in the store build).
+ *
+ * To roll it back: set this to false (and LAUNCH_SNAPSHOTS to 'off' if iOS's pictures are the trouble)
+ * by update, and keep LaunchLookGate: it puts every non-admin back on the phone's mode and iOS's own
+ * pictures back. Never undo the gate itself while store builds with the module are out: the module would
+ * keep the last look saved while the app's own copies follow the phone. (Should that happen anyway, the
+ * module drops a look its code has not confirmed for two opens in a row, so it heals by the third.)
  */
 export const LAUNCH_FOLLOWS_THEME_FOR_EVERYONE = false;
 
@@ -61,6 +67,7 @@ export const WEB_LAUNCH_KEY = 'courtside-launch-look';
 type Native = {
   applied(): string | null;
   setLook(look: string | null, snapshots: string, dissolveMs: number): void;
+  confirm?(): void;
   status(): Promise<Record<string, unknown>>;
   syncNow(): Promise<Record<string, unknown>>;
 };
@@ -119,6 +126,19 @@ export function saveLaunchLook(setting: LaunchLookSetting) {
     }
   } catch {
     // Not saved: the next open follows the phone, as before.
+  }
+}
+
+/**
+ * Tells the iPhone's module that this copy of the app's code keeps the launch look (LaunchLookGate, at
+ * every open, whoever is signed in). Two opens in a row without it (an update that took this code away),
+ * the module drops the look saved, so a launch never stays in a look the app's own copies no longer draw.
+ */
+export function confirmLaunchLook() {
+  try {
+    native?.confirm?.();
+  } catch {
+    // Nothing: a saved look is then dropped after two opens, and saved again by the next save.
   }
 }
 

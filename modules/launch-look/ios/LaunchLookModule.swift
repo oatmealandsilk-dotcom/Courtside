@@ -22,6 +22,12 @@ public class LaunchLookModule: Module {
       LaunchLook.shared.save(look: look, snapshots: snapshots, dissolveMs: dissolveMs)
     }
 
+    // The app's code that keeps the launch look is running (LaunchLookGate, at every open): the look saved
+    // stays. Two opens in a row without it (an update that took that code away), the next launch drops it.
+    Function("confirm") {
+      LaunchLook.shared.confirm()
+    }
+
     // What happened at this open and to iOS's pictures, for the simulator checks.
     AsyncFunction("status") { () -> [String: Any] in
       LaunchLook.shared.status()

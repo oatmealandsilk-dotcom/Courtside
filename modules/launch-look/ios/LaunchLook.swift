@@ -26,6 +26,11 @@ import UIKit
  *    iOS's own picture is in the look picked.
  * Nothing saved (everyone, until the app's code saves a look): nothing here does anything.
  *
+ * Only while the app's code still keeps the look (LaunchLookGate, which confirms it at every open):
+ * should two opens in a row pass without that (an update that took the code away, say, rolled back), the
+ * look saved is dropped at the next launch and iOS's own pictures put back, so a launch can never stay in
+ * a look the app's own copies no longer draw (the very change between looks this is here to end).
+ *
  * Native code: arrives with a new App Store build. The app's code that drives it arrives by update
  * and finds it missing on older builds (requireOptionalNativeModule).
  */
@@ -60,6 +65,10 @@ final class LaunchLook: NSObject {
   static let lookKey = "CourtSideLaunchLook"
   static let snapshotsKey = "CourtSideLaunchLookSnapshots"
   static let dissolveKey = "CourtSideLaunchLookDissolveMs"
+  /// Opens in a row (the app on screen) with a look saved that the app's code never confirmed (confirm()).
+  static let missesKey = "CourtSideLaunchLookUnconfirmedOpens"
+  /// At this many, the next launch drops the look saved (two, so one open quit before the app's code ran never does).
+  static let missesAllowed = 2
 
   /// The look saved for this open; nil: the phone's own, as before.
   private(set) var stored: LaunchLookStyle?
@@ -73,6 +82,16 @@ final class LaunchLook: NSObject {
   private(set) var current: LaunchLookStyle?
   private var prepared = false
   private var dissolved = false
+  /// Whether the look saved was dropped at this launch (unconfirmed opens, see missesKey).
+  private(set) var expired = false
+  /// Whether the app's code confirmed the look this run, and whether this run was counted as an open without it.
+  private var confirmedThisRun = false
+  private var countedThisRun = false
+  /// When this process prepared (wall clock, which runs on while the phone sleeps), and whether the open's first window has come since.
+  private var preparedAt: TimeInterval = 0
+  private var opened = false
+  /// iOS's pictures were due to be put right while the app was only in the background: done once it is opened.
+  private var syncOwed = false
   private weak var standIn: UIView?
   private weak var cover: UIView?
   private var syncTimer: Timer?
@@ -99,31 +118,65 @@ final class LaunchLook: NSObject {
     dispatchPrecondition(condition: .onQueue(.main))
     guard !prepared else { return }
     prepared = true
+    preparedAt = Date().timeIntervalSince1970
     mark("prepared")
-    stored = UserDefaults.standard.string(forKey: Self.lookKey).flatMap(LaunchLookStyle.init(rawValue:))
+    let defaults = UserDefaults.standard
+    stored = defaults.string(forKey: Self.lookKey).flatMap(LaunchLookStyle.init(rawValue:))
+    if stored != nil, defaults.integer(forKey: Self.missesKey) >= Self.missesAllowed {
+      // The app's code that keeps the look has not run in the last opens (an update took it away): the
+      // phone's own mode again, as before, and iOS's pictures put back a moment later (below).
+      for key in [Self.lookKey, Self.snapshotsKey, Self.dissolveKey, Self.missesKey] { defaults.removeObject(forKey: key) }
+      stored = nil
+      expired = true
+    }
     phoneAtOpen = LaunchLookStyle(UIScreen.main.traitCollection.userInterfaceStyle)
-    guard let stored else {
+    guard stored != nil else {
       // Nothing saved: everything as before. Only pictures of ours left from before are put back.
       if LaunchSnapshots.anyOurs { scheduleSync(after: 3) }
       return
     }
-    pictureWasOurs = LaunchSnapshots.pictureWasOurs(mode: phoneAtOpen, look: stored)
-    let start = (pictureWasOurs || phoneAtOpen == stored) ? stored : phoneAtOpen
-    startedIn = start
-    current = start
+    readOpen()
+    // Only the launch's own windows are looked at: up to 8 s after the open's first one (openBegins).
     NotificationCenter.default.addObserver(self, selector: #selector(windowBecameVisible(_:)), name: UIWindow.didBecomeVisibleNotification, object: nil)
-    // Only the launch's own windows are looked at.
-    DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
-      guard let self else { return }
-      NotificationCenter.default.removeObserver(self, name: UIWindow.didBecomeVisibleNotification, object: nil)
-    }
-    setStatusBar(start, animated: false)
     // iOS's pictures put right for the next open, once the app is up and settled.
     scheduleSync(after: 3)
   }
 
+  /// What iOS's own picture showed this open and the look the native copies start in, from the phone's mode now.
+  private func readOpen() {
+    guard let stored else { return }
+    phoneAtOpen = LaunchLookStyle(UIScreen.main.traitCollection.userInterfaceStyle)
+    pictureWasOurs = LaunchSnapshots.pictureWasOurs(mode: phoneAtOpen, look: stored)
+    let start = (pictureWasOurs || phoneAtOpen == stored) ? stored : phoneAtOpen
+    startedIn = start
+    current = start
+    setStatusBar(start, animated: false)
+  }
+
+  /**
+   * The open's first window or root view. On a tap on the icon it comes a moment after the launch, and
+   * nothing changes. Where the process was started earlier in the background (Apple Health may wake the
+   * app hours before it is opened, with no window), the phone's mode and iOS's picture are read again
+   * now, as this open's, and iOS's pictures are put right after it.
+   */
+  private func openBegins() {
+    guard !opened, stored != nil else { return }
+    opened = true
+    if abs(Date().timeIntervalSince1970 - preparedAt) > 2 {
+      mark("reread")
+      readOpen()
+      scheduleSync(after: 3)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [weak self] in
+      guard let self else { return }
+      NotificationCenter.default.removeObserver(self, name: UIWindow.didBecomeVisibleNotification, object: nil)
+    }
+  }
+
   @objc private func windowBecameVisible(_ note: Notification) {
-    guard let window = note.object as? UIWindow, let root = window.rootViewController?.view else { return }
+    guard let window = note.object as? UIWindow else { return }
+    openBegins()
+    guard let root = window.rootViewController?.view else { return }
     mark("visible")
     restyle(root)
     // Should the app never be told it is active (it always is, on a real open), the dissolve still comes.
@@ -134,6 +187,7 @@ final class LaunchLook: NSObject {
 
   /// React Native's root view, as it is made: its cover (expo-splash-screen's copy) gets the look.
   func rootViewMade(_ root: UIView) {
+    openBegins()
     guard current != nil else { return }
     restyle(root)
     // Made before expo-splash-screen put its cover in (an order of add-ons other than today's): a turn later, before anything is drawn.
@@ -215,7 +269,31 @@ final class LaunchLook: NSObject {
   func becameActive() {
     dispatchPrecondition(condition: .onQueue(.main))
     if prepared && stored != nil { mark("active") }
+    if stored != nil && !confirmedThisRun && !countedThisRun {
+      // An open with a look saved: counted until the app's code confirms it (confirm() takes it off again).
+      countedThisRun = true
+      let defaults = UserDefaults.standard
+      defaults.set(defaults.integer(forKey: Self.missesKey) + 1, forKey: Self.missesKey)
+    }
     dissolve(by: "active")
+    if syncOwed {
+      syncOwed = false
+      scheduleSync(after: 3)
+    }
+  }
+
+  /**
+   * The app's code that keeps the launch look is running (LaunchLookGate, at every open; any setLook
+   * too): the look saved stays. Without it two opens in a row, the next launch drops it (missesKey).
+   * From any thread.
+   */
+  func confirm() {
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.confirmedThisRun = true
+      let defaults = UserDefaults.standard
+      if defaults.object(forKey: Self.missesKey) != nil { defaults.removeObject(forKey: Self.missesKey) }
+    }
   }
 
   // MARK: Saving (from the app's code)
@@ -226,6 +304,7 @@ final class LaunchLook: NSObject {
    * on screen now; iOS's pictures are put right a moment later.
    */
   func save(look: String?, snapshots: String, dissolveMs: Double) {
+    confirm()
     let style = look.flatMap(LaunchLookStyle.init(rawValue:))
     let mode = SnapshotMode(rawValue: snapshots) ?? .off
     let defaults = UserDefaults.standard
@@ -241,7 +320,8 @@ final class LaunchLook: NSObject {
     let changed = was.0 != style?.rawValue || was.1 != (style == nil && mode == .off ? nil : mode.rawValue)
     // The same as already saved and nothing of ours to put back (everyone with the switch off): no work at all.
     if !changed && style == nil && !LaunchSnapshots.anyOurs { return }
-    DispatchQueue.main.async { [weak self] in self?.scheduleSync(after: changed ? 1 : 3) }
+    // A change half a second on, once the Theme page's fade (250 ms) is over, so the drawing never catches it.
+    DispatchQueue.main.async { [weak self] in self?.scheduleSync(after: changed ? 0.5 : 3) }
   }
 
   /// iOS's pictures brought in line with what is saved, after `seconds` (a later ask moves it on).
@@ -249,10 +329,14 @@ final class LaunchLook: NSObject {
     dispatchPrecondition(condition: .onQueue(.main))
     syncTimer?.invalidate()
     syncTimer = Timer.scheduledTimer(withTimeInterval: seconds, repeats: false) { [weak self] _ in
-      self?.syncTimer = nil
+      guard let self else { return }
+      self.syncTimer = nil
       // Never while the app is only woken in the background (Apple Health): the next open does it.
-      guard UIApplication.shared.applicationState != .background else { return }
-      self?.syncNow(done: nil)
+      guard UIApplication.shared.applicationState != .background else {
+        self.syncOwed = true
+        return
+      }
+      self.syncNow(done: nil)
     }
   }
 
@@ -263,8 +347,12 @@ final class LaunchLook: NSObject {
     LaunchSnapshots.shared.sync(look: look, mode: Self.snapshotMode, done: done)
   }
 
-  /// Leaving the app: a last chance to put iOS's pictures right for the next open, should the timer not have run.
-  func enteredBackground() {
+  /**
+   * Leaving the app (the app switcher, where it can be swiped away without ever going to the
+   * background, or the home screen): a last chance to put iOS's pictures right for the next open,
+   * should the timer not have run.
+   */
+  func leaving() {
     dispatchPrecondition(condition: .onQueue(.main))
     guard syncTimer != nil else { return }
     syncTimer?.invalidate()
@@ -297,6 +385,9 @@ final class LaunchLook: NSObject {
       "iOS": UIDevice.current.systemVersion,
       "dissolvedBy": dissolvedBy ?? NSNull(),
       "times": times,
+      "expired": expired,
+      "unconfirmedOpens": UserDefaults.standard.integer(forKey: Self.missesKey),
+      "confirmed": confirmedThisRun,
     ]
   }
 }
