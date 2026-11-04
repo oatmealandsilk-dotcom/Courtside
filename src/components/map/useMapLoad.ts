@@ -42,11 +42,14 @@ export function useMapLoad(where: string, active = true) {
   // live: the last moment its clocks were running (in front and on screen).
   const s = useRef({ tries: 0, since: Date.now(), live: Date.now(), began: Date.now(), heard: Date.now(), progress: Date.now(), up: false, painted: false, gaveUp: false, reported: false, retry: null as ReturnType<typeof setTimeout> | null }).current;
 
-  /** A new try, with its own clock: the page or map is made again. */
+  /**
+   * A new try, with its own clock: the page or map is made again. Not `live`: a retry or reboot can fire
+   * on the way back from a pause, before the resume, and must not hide the time away from it.
+   */
   const begin = () => {
     if (s.retry) { clearTimeout(s.retry); s.retry = null; }
     s.up = false;
-    s.began = s.heard = s.progress = s.live = Date.now();
+    s.began = s.heard = s.progress = Date.now();
     setAttempt((n) => n + 1);
   };
   /**
