@@ -38,11 +38,11 @@ import { tipWaiting } from '@/features/tips/tips';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { CHECKIN_ZOOM, lightUpZoom, setLightUpZoom, swoopShape, swoopTo, useCheckInZoom, useMapSwoop } from '@/features/players/checkInZoom';
 import { homeFor, homeIsKnown, wideView, type LatLng } from '@/features/players/positions';
-import { dropMapWarm, mapWarmKeeping, mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, mapWarmSimSlow, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
+import { dropMapWarm, mapWarmKeeping, mapWarmOn, mapWarmPictureShown, mapWarmResting, mapWarmSimHold, mapWarmSimSlow, mapWarmSweepSoon, takeMapWarm, useMapWarmVersion, wantMapWarm, warmKey } from '@/features/players/mapWarm';
 import { fingersQuietMs } from '@/lib/fingers';
 import { useOnShowNow } from '@/features/navigation/tabFocus';
 import { useMyCity } from '@/features/players/useMyCity';
-import { MapWarmCopy, MapWarmPicture } from '@/components/map/MapWarm';
+import { MapWarmCopy, MapWarmLeaving, MapWarmPicture } from '@/components/map/MapWarm';
 import { CHROME_AFTER_MS, CHROME_MS, COVER_MS, GROW_SWOOP_MS, GrowAwayContext, HANDOFF_MS, REVEAL_MAX_MS, REVEAL_MS, aimGrow, aimGrowAt, armGrow, armQuick, endGrow, growArmed, growCamera, growFollow, growHandOver, growHost, growPlan, growTAt, labelsOut, setGrowPlan, startGrow, startSlip, useGrowClear, useGrowPicture, type GrowPlan, type Rect } from '@/features/players/mapGrow';
 import { V7, V7_WARM_MID, coverU, metresApart, useV7ChromeControl, v7Arrival, v7Arrived, v7Away, v7ChromeNow, v7Drop, v7Flying, v7ForceHand, v7Geo, v7Held, v7Hold, v7Later, v7Layer, v7Lock, v7Move, v7NextLock, v7Offer, v7OffHand, v7OnHand, v7OnLanded, v7Pushed, v7Reset, v7SetChrome, v7SetChromeControl, v7SetHanded, v7SetOverlay, v7SetPushed, v7SetRouteUp, v7SetTarget, v7Target, v7Ui, type V7Chrome, type V7Params } from '@/features/players/zoomV7';
 import { zoomGo, zoomHanded, zoomMark, zoomNote as zoomWord, zoomPath, zoomTap, type ZoomReason } from '@/features/players/zoomTiming';
@@ -78,11 +78,17 @@ const WARM_POLL_MS = 250;
  * drawn by this, only its pins are let go (under the picture: nothing on screen changes); the streets stay.
  */
 const WARM_PINS_MAX_MS = 15_000;
-/** mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge is the system's swipe back. */
+/**
+ * mapWarm: a finger that has moved this far on the map (points) is moving it; one that starts this near the left edge may be the
+ * system's swipe back. The same rule as the map's own page (MapCanvas USER_MOVE_JS, USER_EDGE_PX).
+ */
 const WARM_MOVE = 8;
-const WARM_EDGE = 24;
-/** mapWarm: from the left edge, past this the system's swipe back would have taken the touch already: the map is being moved. */
-const WARM_EDGE_MOVE = 40;
+const WARM_EDGE = 50;
+/**
+ * mapWarm: from the left edge, past this the system's swipe back would have taken the touch already: the map is being moved
+ * (Simulator, Nov 4: the swipes it took had moved the map up to 82 points first; USER_EDGE_MOVE_PX).
+ */
+const WARM_EDGE_MOVE = 100;
 
 export type { NearbyMapProps };
 
@@ -677,20 +683,33 @@ export function NearbyMap(props: NearbyMapProps) {
   // opened on a picture listens (fixed for its life).
   const [warmWrap] = useState(!!warmPic);
   const warmTouch = useRef<{ x: number; y: number } | null>(null);
+  // The page has started to leave (MapWarmLeaving: the swipe back, Back, a page pushed over it): no finger takes the picture then.
+  const warmLeaving = useRef(false);
   const warmMoved = (s: { x: number; y: number }, e: GestureResponderEvent) =>
     e.nativeEvent.touches.length > 1 || Math.hypot(e.nativeEvent.pageX - s.x, e.nativeEvent.pageY - s.y) >= (s.x < WARM_EDGE ? WARM_EDGE_MOVE : WARM_MOVE);
   const warmFinger = {
     onTouchStart: (e: GestureResponderEvent) => { warmTouch.current = { x: e.nativeEvent.pageX, y: e.nativeEvent.pageY }; },
     onTouchMove: (e: GestureResponderEvent) => {
       const s = warmTouch.current;
-      if (s && warmUp.current && warmMoved(s, e)) warmGo('pan');
+      if (s && warmUp.current && !warmLeaving.current && warmMoved(s, e)) warmGo('pan');
     },
     onTouchEnd: (e: GestureResponderEvent) => {
       const s = warmTouch.current;
       warmTouch.current = null;
-      if (s && warmUp.current && warmMoved(s, e)) warmGo('pan');
+      if (s && warmUp.current && !warmLeaving.current && warmMoved(s, e)) warmGo('pan');
     },
     onTouchCancel: () => { warmTouch.current = null; },
+  };
+  // The same heard from the map's own page (MapCanvas onUserMove: the map has moved under a finger): a drag the app never hears
+  // of, because the phone gave the touch to the map alone and told the app "cancelled" (an edge drag first offered to the
+  // system's swipe back, which the map then kept). Without it the picture stayed still over a map being dragged, then jumped (v3
+  // review). A swipe back the system takes moves the map too little to count there, and once the page has started to leave
+  // (MapWarmLeaving) nothing counts: the picture slides out with the page.
+  const warmUserMove = (x: number) => {
+    if (!warmUp.current) return;
+    if (SIM_DRIVER) simLog(`[warm] map moved by a finger from x ${Math.round(x)}${warmLeaving.current ? ' (page leaving: kept)' : ''}`);
+    if (warmLeaving.current) return;
+    warmGo(x >= 0 && x < WARM_EDGE ? 'pan from the edge' : 'pan');
   };
   useEffect(() => {
     if (!warmUp.current) return undefined;
@@ -985,21 +1004,24 @@ export function NearbyMap(props: NearbyMapProps) {
 
   // The full map ready before it opens (mapWarm: admins first, iPhone only). Its first view, worked out as the full map works
   // it out (mapModel: where you are now, else your last spot, else your city; your town at CITY_ZOOM), at the full map's size.
-  const warmVersion = useMapWarmVersion(growsHere);
-  const { town: myTown } = useMyCity(growsHere ? me : null);
+  // Only for whoever has it (admins first): nobody else's card listens, looks anything up or works anything out for it.
+  const warmHere = growsHere && mapWarmOn(me);
+  const warmVersion = useMapWarmVersion(warmHere || (growsHere && SIM_DRIVER));
+  const { town: myTown } = useMyCity(warmHere ? me : null);
+  useEffect(() => { if (warmHere) mapWarmSweepSoon(); }, [warmHere]);
   const mySpot = lastSeen[me.id];
   const warmWhere = at ?? (mySpot ? { lat: mySpot.lat, lng: mySpot.lng } : null);
   const warmView = useMemo(() => (homeIsKnown(me, warmWhere, myTown) ? { center: homeFor(me, warmWhere, myTown), zoom: CITY_ZOOM } : wideView()), [me, warmWhere?.lat, warmWhere?.lng, myTown?.lat, myTown?.lng]); // eslint-disable-line react-hooks/exhaustive-deps
   const fullLookSig = useMemo(() => hashText(JSON.stringify(fullLook) + STYLE), [fullLook]);
-  const warmFor = growsHere ? warmKey({ user: me.id, look: fullLookSig, center: warmView.center, zoom: warmView.zoom, w: windowW, h: windowH, scale: PixelRatio.get() }) : '';
+  const warmFor = warmHere ? warmKey({ user: me.id, look: fullLookSig, center: warmView.center, zoom: warmView.zoom, w: windowW, h: windowH, scale: PixelRatio.get() }) : '';
   // Never with Only me (nothing of where you are is kept); only once this card has drawn, while its tab is on show.
-  const warmShown = growsHere && !!warmFor && mapWarmOn(me) && !keepNone && cardUp && coverGone && onScreen && props.visible !== false;
+  const warmShown = warmHere && !!warmFor && !keepNone && cardUp && coverGone && onScreen && props.visible !== false;
   // Asked at the moment (never redrawing the card): the card in view (not Discussions, not scrolled away, the app in front),
   // nothing opened over its tab yet (the tab's own "on show", not the later one), and nothing else going on on the card: no
   // Up to hit being found, no zoom or grow under way, and the zoom's own hidden map (v7's layer) drawn and ready first, so
   // the two never boot together.
   const onShowNow = useOnShowNow();
-  const warmOk = () => onShowNow() && !checkInNow.current.busy && !v7Flying() && !growBusy.current
+  const warmOk = () => fingersQuietMs() > 0 && onShowNow() && !checkInNow.current.busy && !v7Flying() && !growBusy.current
     && !(v7Now.current && !v7Now.current.over && !v7Now.current.started) && !(v7Shown && !v7Layer()?.ready())
     && !mapWarmResting() && inViewNow();
   const warmOkNow = useRef(warmOk);
@@ -1191,6 +1213,7 @@ export function NearbyMap(props: NearbyMapProps) {
   const mapView = (
     <MapCanvas
       ref={warmWrap ? warmCanvas : canvas}
+      onUserMove={warmWrap ? warmUserMove : undefined}
       active={onScreen && props.visible !== false}
       center={view.center}
       zoom={view.zoom}
@@ -1395,7 +1418,7 @@ export function NearbyMap(props: NearbyMapProps) {
           </Reanimated.View>
         </Reanimated.View>
       ) : null}
-      {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{slowGate ? mapView : null}</View> : slowGate ? mapView : null}
+      {warmWrap ? <View style={StyleSheet.absoluteFill} {...warmFinger}>{slowGate ? mapView : null}<MapWarmLeaving leaving={warmLeaving} /></View> : slowGate ? mapView : null}
       {/* mapWarm: the picture of exactly what this map is about to draw, over it until it has (then gone in one frame). */}
       {warmPic && mapWarmPictureShown() ? <MapWarmPicture ref={warmPicture} picture={warmPic} w={windowW} h={windowH} onGone={() => { warmGo('gone'); dropMapWarm('would not show'); }} /> : null}
       <Reanimated.View pointerEvents="box-none" style={[styles.top, { paddingTop: insets.top + spacing.sm }, growFrom ? topSlide : null]}>
@@ -1411,7 +1434,8 @@ export function NearbyMap(props: NearbyMapProps) {
         {/* Slow to come, or didn't: a small pill under the chips, clear of the pins around you. */}
         {/* The check-in zoom on its way down: the map is up, its streets come as it lands, so no "Loading map…" meanwhile. */}
         {/* Its picture up (mapWarm): the streets are on show already, so no "Loading map…" over them. */}
-        <MapLoadPill status={fz || (swoop.busy && mapStatus === 'loading') || warmPic ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
+        {/* (A map that has still not drawn by WARM_PINS_MAX_MS says so again, over the picture, as it would have without one.) */}
+        <MapLoadPill status={fz || (swoop.busy && mapStatus === 'loading') || (warmPic && warmPins) ? 'painted' : mapStatus} onRetry={() => canvas.current?.retry()} />
         {/* Not checked in: one quiet ask, each time the map opens (Not now: gone for today). */}
         {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
       </Reanimated.View>

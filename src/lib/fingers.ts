@@ -9,10 +9,12 @@ import { Platform, type GestureResponderEvent } from 'react-native';
 
 /** Fingers on the screen now, as last heard. */
 let down = 0;
-/** When a finger last landed or lifted. */
+/**
+ * When a finger last landed or lifted. A finger down counts as down until its end or cancel comes, however long it is held
+ * (review: with a time limit, one held or dragging past it read as quiet). One whose end never came is put right by the next
+ * touch (land and lift count the fingers afresh); meanwhile nothing starts, which is only ever the safe side.
+ */
 let lastAt = 0;
-/** A finger "down" this long with no word at all is taken as lifted (an end that never came). */
-const STALE_MS = 8000;
 const landers = new Set<() => void>();
 
 /** The touches still on the screen after this event (whichever way the platform counts the one that just lifted). */
@@ -30,7 +32,7 @@ function lift(e: GestureResponderEvent) {
   lastAt = Date.now();
 }
 
-/** For AppShell's outermost view (capture: before anything inside it). Nothing on the website or Android. */
+/** For AppShell's outermost view (capture: before anything inside it), only for someone with mapWarm. Nothing on the website or Android. */
 export const fingerTouches = Platform.OS === 'ios'
   ? { onTouchStartCapture: land, onTouchEndCapture: lift, onTouchCancelCapture: lift }
   : null;
@@ -38,7 +40,7 @@ export const fingerTouches = Platform.OS === 'ios'
 /** How long the screen has been free of fingers (ms); 0 while one is down. Before any touch at all: a very long time. */
 export function fingersQuietMs(): number {
   const now = Date.now();
-  if (down > 0 && now - lastAt < STALE_MS) return 0;
+  if (down > 0) return 0;
   return now - lastAt;
 }
 

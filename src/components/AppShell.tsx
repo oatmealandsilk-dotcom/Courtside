@@ -60,6 +60,7 @@ import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
 import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
 import { fingerTouches } from '@/lib/fingers';
+import { mapWarmOn } from '@/features/players/mapWarm';
 
 /**
  * The four tabs in the strip's order, left to right: Community, Home,
@@ -90,15 +91,24 @@ const BAR_IN_PLACE = { transform: [{ translateY: 0 }] };
 /** If a slide back into place never reports that it has finished, the bar is put in place this long after anyway. */
 const BAR_SETTLE_MAX_MS = 1500;
 /**
- * Every finger in the app, heard by the frame before any button, as it lands and lifts: on the iPhone, when one is down
- * (fingers: the hidden map copy waits for a pause and stops as one lands; nothing is drawn from it); and the simulator's
- * tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only). Nothing at all on the website or Android.
+ * The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): every finger in the app,
+ * heard by the frame before any button, as it lands and lifts. Nothing at all anywhere else.
  */
 const TAP_TOUCHES = TAP_TIMING ? {
+  onTouchStartCapture: tapDown,
+  onTouchEndCapture: (e: GestureResponderEvent) => tapUp(e),
+  onTouchCancelCapture: (e: GestureResponderEvent) => tapUp(e, true),
+} : {};
+/**
+ * The same, and every finger noted as it lands and lifts for the full map ready ahead (fingers: the hidden map copy waits for
+ * a pause and stops as one lands; nothing is drawn from it): iPhone, and only for someone with it (mapWarmOn, admins first).
+ * Everyone else gets TAP_TOUCHES, exactly as before.
+ */
+const FINGER_TOUCHES = !fingerTouches ? TAP_TOUCHES : TAP_TIMING ? {
   onTouchStartCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchStartCapture(e); tapDown(e); },
   onTouchEndCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchEndCapture(e); tapUp(e); },
   onTouchCancelCapture: (e: GestureResponderEvent) => { fingerTouches?.onTouchCancelCapture(e); tapUp(e, true); },
-} : fingerTouches ?? {};
+} : fingerTouches;
 // An emailed link that has expired or was used already (or a Google sign-in that failed) comes
 // back with error_description on the address. Kept for the sign-in page to say, whatever page the
 // link lands on: a new password's link lands on /account, and the sign-in detour below replaced
@@ -550,7 +560,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     else router.navigate(destination);
   };
   const nav = <NavBar state={barState} feedUnder={barOver.current === paths.index} tabsUnder={TAB_ORDER.includes(barOver.current)} navigation={navigation} />;
-  return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }} {...TAP_TOUCHES}>
+  return <View style={{ flex: 1, minHeight: 0, backgroundColor: colors.bg, flexDirection: isPhone ? 'column' : 'row' }} {...(mapWarmOn(currentUser) ? FINGER_TOUCHES : TAP_TOUCHES)}>
     {showNav && !isPhone && nav}
     {/* While the tour is up, TalkBack reads only the tour, not the page under the dim. */}
     <Reanimated.View importantForAccessibility={tourOpen ? 'no-hide-descendants' : 'auto'} style={[{ flex: 1, minWidth: 0, minHeight: 0 }, settle]}>{isGuest && Platform.OS === 'web' && !hideEverywhere && !onSplash && !guestOwnPage ? <GetAppBar /> : null}<RouteTransition>{children}</RouteTransition>{/* The check-in zoom's layer (v7, iPhone admins): over the pages, under the toasts. */}{currentUserId ? <ZoomLayer /> : null}{liveBarOn && !isPhone ? <LiveBar phone={false} /> : null}<ToastLayer /><UploadLayer /></Reanimated.View>

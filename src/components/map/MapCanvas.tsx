@@ -131,6 +131,13 @@ interface Props {
   phaseLock?: boolean;
   /** The layer's page about its move (v7: 'v7landed' with its frames' numbers, 'v7err'). */
   onV7?: (msg: V7PageMsg) => void;
+  /**
+   * A finger has started moving the map (a drag or a pinch, never a move the app asked for: USER_MOVE_JS), with where on the page that
+   * finger first landed (x, in points; -1 if not known). Heard from the map itself, so also when the phone has taken the
+   * touch from the app (an edge drag the system offered to its swipe back first). Only a page made with it has it (read once,
+   * when the page is made): the full map opened on mapWarm's picture.
+   */
+  onUserMove?: (x: number) => void;
 }
 
 /**
@@ -149,6 +156,24 @@ const V7_CSS = '.cs-v7rest *,.cs-v7rest *::before,.cs-v7rest *::after{animation-
  * together. `__csRelock()` sets every running one again (the zoom layer, as its animations start again). Once per page.
  */
 const PHASE_LOCK_JS = "(function(){if(window.__csLocked)return;window.__csLocked=1;var seen=typeof WeakSet==='function'?new WeakSet():null;function lock(all){try{if(!seen||!document.getAnimations)return;var as=document.getAnimations(),w=Date.now()%3600000;for(var i=0;i<as.length;i++){var a=as[i],t=a.effect&&a.effect.getTiming?a.effect.getTiming():null;if(!t||t.iterations!==Infinity||a.playState!=='running'||(!all&&seen.has(a)))continue;seen.add(a);a.currentTime=w}}catch(e){}}window.__csRelock=function(){lock(true)};document.addEventListener('animationstart',function(){lock(false)},true);setInterval(function(){if(!document.documentElement.classList.contains('cs-v7rest'))lock(false)},250)})();";
+/**
+ * The full map opened on mapWarm's picture (onUserMove): the map itself has moved, since a finger last landed on it, by
+ * USER_MOVE_PX on the screen, or zoomed (a drag, a pinch, the glide after a drag). Its camera, not the finger. A finger that
+ * lands near the left edge (USER_EDGE_PX) may be the system's swipe back: on the Simulator (Nov 4, 14 swipes it took) the map
+ * still moved up to 82 points under the picture before the page went, so there it counts from USER_EDGE_MOVE_PX, and that
+ * picture slides out with the page. As NearbyMap's own warmFinger counts the touches the app hears; these are the ones the app
+ * never hears of (the phone gave them to the map alone, the app told "cancelled"). Once per touch; with where its finger landed.
+ */
+const USER_MOVE_PX = 12;
+const USER_EDGE_PX = 50;
+const USER_EDGE_MOVE_PX = 100;
+const USER_MOVE_JS = `var UX=-1,UC=null;box.addEventListener('touchstart',function(e){var t=e.touches&&e.touches[0];if(t&&e.touches.length===1){UX=t.clientX;UC={c:map.getCenter(),z:map.getZoom()}}},{passive:true,capture:true});
+map.on('move',function(){if(!UC)return;var p=map.project(UC.c),q=map.project(map.getCenter());if(Math.abs(map.getZoom()-UC.z)>0.02||Math.sqrt((p.x-q.x)*(p.x-q.x)+(p.y-q.y)*(p.y-q.y))>=(UX>=0&&UX<${USER_EDGE_PX}?${USER_EDGE_MOVE_PX}:${USER_MOVE_PX})){UC=null;post({type:'usermove',x:UX})}});`;
+/**
+ * The simulator's proof only: how far each touch the page had went before it ended or was taken away, and how far the map moved
+ * under it ("touch" in sim-log).
+ */
+const SIM_TOUCH_JS = "(function(){var x0=0,y0=0,m=0,n=0,c0=null,cm=0;box.addEventListener('touchstart',function(e){var t=e.touches[0];if(e.touches.length===1&&t){x0=t.clientX;y0=t.clientY;m=0;n=0;c0=map.getCenter();cm=0}},{passive:true,capture:true});box.addEventListener('touchmove',function(e){var t=e.touches[0];if(!t)return;n++;m=Math.max(m,Math.sqrt(Math.pow(t.clientX-x0,2)+Math.pow(t.clientY-y0,2)))},{passive:true,capture:true});map.on('move',function(){if(!c0)return;var p=map.project(c0),q=map.project(map.getCenter());cm=Math.max(cm,Math.sqrt(Math.pow(p.x-q.x,2)+Math.pow(p.y-q.y,2)))});function done(how){return function(){post({type:'touch',why:how+' from x '+Math.round(x0)+' finger '+Math.round(m)+' in '+n+' map '+Math.round(cm)})}}box.addEventListener('touchend',done('end'),{passive:true,capture:true});box.addEventListener('touchcancel',done('cancel'),{passive:true,capture:true})})();";
 /**
  * The place names the card takes off (look.ts cardLook): in the zoom layer's page they are placed from zoom 14.6 and fade in
  * by zoom to 15, so they come in softly with the houses rather than all in one frame (the full map has them at 15.25 too).
@@ -172,7 +197,7 @@ const NAMES_IN = 15;
  * Tap to try again (retry). If iOS or Android stops the web view to free
  * memory, it is started again by itself (Oct 5).
  */
-export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, veil = null, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, style, active = true, layer = false, phaseLock = false, onV7 }, ref) {
+export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({ center, zoom, look, interactive, markers, tpl, popIn = false, full = false, now = false, veil = null, holdPins = false, pad, onTap, onMapTap, onMove, onPainted, onShot, onLost, onStatus, farBelow, onFar, onSwooped, style, active = true, layer = false, phaseLock = false, onV7, onUserMove }, ref) {
   const styles = useThemedStyles(styleDefinitions);
   const web = useRef<WebView | null>(null);
   const ready = useRef(false);
@@ -181,8 +206,8 @@ export const MapCanvas = forwardRef<MapCanvasHandle, Props>(function MapCanvas({
   // Getting the page going, and again if it fails (useMapLoad): each try is a new web view.
   const load = useMapLoad(interactive ? 'full map' : 'map card', active);
   useEffect(() => { ready.current = false; styled.current = false; }, [load.attempt]);
-  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onV7 });
-  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onV7 };
+  const latest = useRef({ onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onV7, onUserMove });
+  latest.current = { onTap, onMapTap, onMove, onPainted, onShot, onLost, onFar, onStatus, onSwooped, onV7, onUserMove };
   // A fresh page (a retry, or one the phone stopped) starts where the map is meant to be now, not where it first was.
   const centerNow = useRef(center);
   centerNow.current = center;
@@ -323,7 +348,9 @@ map.on('idle',function(){if(LOOK!==APPLIED){APPLIED=LOOK;look(LOOK)}});
 map.on('load',function(){LOADED=true;look(LOOK);try{engine.set(INIT)}catch(e){}post({type:'ready'})});
 var box=document.getElementById('m');${interactive ? '' : "box.classList.add('cs-quiet');"}var FAR=null;function zoomClass(){var z=map.getZoom()+LZ;box.classList.toggle('cs-close',z>=${CLOSE_ZOOM_NAMES});box.classList.toggle('cs-far',z<${FAR_ZOOM});box.classList.toggle('cs-short',z<${SHORT_ZOOM});${farBelow === undefined ? '' : `var f=z<${farBelow};if(f!==FAR){FAR=f;post({type:'far',far:f})}`}}zoomClass();map.on('zoom',zoomClass);
 map.on('click',function(){post({type:'maptap'})});
-map.on('moveend',function(){if(VEIL)return;var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
+${interactive && latest.current.onUserMove ? `// The map moved by a finger (mapWarm's picture goes): USER_MOVE_JS.
+${USER_MOVE_JS}${SIM_DRIVER ? SIM_TOUCH_JS : ''}
+` : ''}map.on('moveend',function(){if(VEIL)return;var c=map.getCenter(),b=map.getBounds();post({type:'move',lat:c.lat,lng:c.lng,zoom:map.getZoom(),s:b.getSouth(),w:b.getWest(),n:b.getNorth(),e:b.getEast()})});
 // The pins: one engine with the browser's map (pinEngine), so both gather, split and cascade alike.
 var engine=(${PIN_ENGINE_JS})(map,maplibregl,{tap:function(id){post({type:'tap',id:id})},gathered:function(){post({type:'gathered'})},popIn:${popIn ? 'true' : 'false'},hold:${holdNow.current ? 'true' : 'false'},quiet:${interactive ? 'false' : 'true'},full:${full ? 'true' : 'false'},now:${now ? 'true' : 'false'},box:${JSON.stringify(interactive || full ? FULL_MAP_BOX : CARD_BOX)},pad:${JSON.stringify(pad ?? null)}});
 // The check-in zoom's push-in, on the card (v5): its pins keep their size on the screen as the page grows round them, on this page's own clock.
@@ -400,7 +427,7 @@ ${ENGINE_JS}
         onContentProcessDidTerminate={lost}
         onRenderProcessGone={lost}
         onMessage={(e) => {
-          let msg: { type: string; ok?: boolean; sw?: number; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string };
+          let msg: { type: string; ok?: boolean; sw?: number; data?: string; blank?: boolean; id?: string; lat?: number; lng?: number; zoom?: number; s?: number; w?: number; n?: number; e?: number; far?: boolean; stage?: string; detail?: string; why?: string; x?: number };
           try { msg = JSON.parse(e.nativeEvent.data); } catch { return; }
           // The simulator's proof only: how each map's page is getting on (its kind, what it said), into sim-log.txt.
           if (SIM_DRIVER && msg.type !== 'move' && msg.type !== 'v7landed' && msg.type !== 'shot' && msg.type !== 'tap' && msg.type !== 'maptap') simLog(`[page ${layer ? 'layer' : interactive ? 'full' : 'card'}] ${msg.type}${msg.why ? ` ${msg.why}` : ''}${msg.stage ? ` ${msg.stage}` : ''}${msg.detail ? ` ${msg.detail}` : ''}`);
@@ -440,6 +467,7 @@ ${ENGINE_JS}
           else if (msg.type === 'maptap') latest.current.onMapTap?.();
           else if (msg.type === 'v7landed' || msg.type === 'v7err' || msg.type === 'v7tick') latest.current.onV7?.(msg as V7PageMsg);
           else if (msg.type === 'far') latest.current.onFar?.(!!msg.far);
+          else if (msg.type === 'usermove') latest.current.onUserMove?.(typeof msg.x === 'number' ? msg.x : -1);
           else if (msg.type === 'move' && msg.lat !== undefined && msg.lng !== undefined && msg.zoom !== undefined) {
             latest.current.onMove?.({ lat: msg.lat, lng: msg.lng }, msg.zoom, { minLat: msg.s ?? msg.lat, minLng: msg.w ?? msg.lng, maxLat: msg.n ?? msg.lat, maxLng: msg.e ?? msg.lng });
           }

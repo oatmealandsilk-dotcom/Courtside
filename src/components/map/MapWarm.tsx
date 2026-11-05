@@ -1,15 +1,16 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type MutableRefObject } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { Image as PhotoImage, type ImageRef } from 'expo-image';
+import { useNavigation } from 'expo-router';
 
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle } from '@/components/map/MapCanvas';
 import type { Look } from '@/components/map/look';
 import type { ClusterTemplates } from '@/components/map/pinEngine';
-import { failedMapWarm, keepMapWarm, showMapWarm, startMapWarm } from '@/features/players/mapWarm';
+import { failedMapWarm, keepMapWarm, onMapWarmStop, showMapWarm, startMapWarm } from '@/features/players/mapWarm';
 import type { LatLng } from '@/features/players/positions';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { simLog } from '@/lib/simDriver';
-import { onFingerDown } from '@/lib/fingers';
+import { fingersQuietMs, onFingerDown } from '@/lib/fingers';
 
 /** No pins in the picture: the full map's own come in as their wave once its map has taken over. */
 const NONE: CanvasMarker[] = [];
@@ -17,6 +18,8 @@ const NONE: CanvasMarker[] = [];
 const GIVE_UP_MS = 7000;
 /** How often a copy drawing asks whether it may carry on (the card still in view, nothing else started there). */
 const ALIVE_MS = 200;
+/** A copy starts only after this long with no finger on the screen (as the card asks before picking one: NearbyMap WARM_SETTLE_MS). */
+const QUIET_MS = 1500;
 
 /**
  * The hidden copy of the full map's first view (mapWarm): drawn at the full map's own size, centre, zoom and look, inside
@@ -41,7 +44,8 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
   const t0 = useRef(Date.now());
   const startGen = useRef(0);
   const shown = useIsFocused();
-  const [over, setOver] = useState(false);
+  // A finger landed between the card picking this copy and its first draw (before it could hear one): it never starts at all.
+  const [over, setOver] = useState(() => fingersQuietMs() < QUIET_MS);
   // Covered or another tab: gone in this same draw (and for good: a new copy starts once the card has settled again).
   if (!shown && !over) setOver(true);
   const endedRef = useRef(false);
@@ -63,7 +67,8 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
     const giveUp = setTimeout(() => { if (endedRef.current) return; failedMapWarm(warmKey); end('failed'); }, GIVE_UP_MS);
     const check = setInterval(() => { if (!aliveNow.current()) end('cut', 'busy'); }, ALIVE_MS);
     const offFinger = onFingerDown(() => end('cut', 'finger'));
-    stopAll.current = () => { clearTimeout(giveUp); clearInterval(check); offFinger(); };
+    const offStop = onMapWarmStop(() => end('cut', 'memory'));
+    stopAll.current = () => { clearTimeout(giveUp); clearInterval(check); offFinger(); offStop(); };
     return () => { stopAll.current(); if (stop.current) stop.current = null; end('cut'); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (over) end('cut'); }, [over]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -91,6 +96,23 @@ export function MapWarmCopy({ warmKey, center, zoom, look, tpl, w, h, alive, sto
       />
     </View>
   );
+}
+
+/**
+ * The full map opened on its picture (mapWarm): whether its page has started to leave (`leaving`: the system's swipe back or
+ * Back), so a late move of the map under a swipe back the system took (the Simulator hands the page a swipe's touches all at
+ * once, sometimes just as the page goes) leaves the picture to slide out with the page (NearbyMap warmUserMove). A page pushed
+ * over it counts as leaving until it is on show again; a swipe back let go part way, not leaving. Nothing is drawn.
+ */
+export function MapWarmLeaving({ leaving }: { leaving: MutableRefObject<boolean> }) {
+  const navigation = useNavigation();
+  useEffect(() => {
+    const events = navigation as unknown as { addListener?: (name: string, fn: (e?: { data?: { closing?: boolean } }) => void) => () => void };
+    const offStart = events.addListener?.('transitionStart', (e) => { leaving.current = !!e?.data?.closing; simLog(`[warm] page ${leaving.current ? 'leaving' : 'on show'}`); });
+    const offCancel = events.addListener?.('gestureCancel', () => { leaving.current = false; simLog('[warm] page stays'); });
+    return () => { offStart?.(); offCancel?.(); };
+  }, [navigation, leaving]);
+  return null;
 }
 
 /**

@@ -54,7 +54,8 @@ export function warmKey(o: { user: string; look: string; center: LatLng; zoom: n
   return `${o.user}|${o.look}|${o.center.lat.toFixed(6)},${o.center.lng.toFixed(6)}|${o.zoom.toFixed(3)}|${Math.round(o.w)}x${Math.round(o.h)}@${o.scale}`;
 }
 
-interface Warm { key: string; picture: ImageRef; at: number }
+/** `t0`: when its keep began (a slower, older keep finishing last never replaces a newer picture). */
+interface Warm { key: string; picture: ImageRef; at: number; t0: number }
 let warm: Warm | null = null;
 /** Views whose picture is being read in right now: no second copy is made for one meanwhile (v3: a slow keep let 6 pile up). */
 const keeping = new Set<string>();
@@ -103,8 +104,16 @@ function sweep() {
 function remove(uri: string) {
   try { const f = new File(uri); if (f.exists) f.delete(); } catch { /* gone already */ }
 }
-// A file an earlier run left behind goes soon after the app starts (before any new one, keepMapWarm, whichever comes first).
-if (Platform.OS === 'ios') setTimeout(() => { if (!swept) sweep(); }, 8000);
+let sweepArmed = false;
+/**
+ * A file an earlier run left behind goes soon after the Community card first shows for someone who has this (before any
+ * new one, keepMapWarm, whichever comes first). Nobody else's phone looks.
+ */
+export function mapWarmSweepSoon() {
+  if (sweepArmed || Platform.OS !== 'ios') return;
+  sweepArmed = true;
+  setTimeout(() => { if (!swept) sweep(); }, 8000);
+}
 
 /** The picture for exactly this view, if there is one ready (decoded in memory, so it shows from the page's first frame). */
 export function takeMapWarm(key: string): ImageRef | null {
@@ -180,8 +189,8 @@ export async function keepMapWarm(key: string, dataUrl: string, startGen: number
       new Promise<null>((resolve) => { timer = setTimeout(() => { late = true; resolve(null); }, KEEP_MAX_MS); }),
     ]).catch(() => null);
     clearTimeout(timer);
-    // One that comes after all, once given up on: let go of it at once.
-    if (late) void read.then((p) => { try { p.release(); } catch { /* gone */ } }, () => undefined);
+    // One that comes after all, once given up on: let go of it at once, and of the picture loader's copy on storage it made.
+    if (late) void read.then((p) => { try { p.release(); } catch { /* gone */ } unstore(cacheKey); }, () => undefined);
     remove(uri);
     unstore(cacheKey);
     if (startGen !== gen || Date.now() < restUntil) { if (picture) retire(picture); return false; }
@@ -196,9 +205,11 @@ export async function keepMapWarm(key: string, dataUrl: string, startGen: number
     keeping.delete(key);
   }
   fails.delete(key);
+  // A newer picture (a keep that began after this one, for a newer view) is kept already: this older one is let go instead.
+  if (warm && warm.t0 > t0) { retire(picture); simLog('[warm] older keep let go'); return false; }
   // No redraw for this (the card's copy says it is over itself; the full map reads the picture as it opens).
   if (warm) retire(warm.picture);
-  warm = { key, picture, at: Date.now() };
+  warm = { key, picture, at: Date.now(), t0 };
   simLog(`[warm] kept ${key.split('|').slice(2).join(' ')} ${Date.now() - t0}ms ${picture.width}x${picture.height}@${picture.scale}`);
   return true;
 }
@@ -217,11 +228,23 @@ export function dropMapWarm(why: string) {
   simLog(`[warm] dropped ${why}`);
 }
 
-/** Short of memory: the picture goes, any copy drawing one stops (the Community card's), and none is made for two minutes. */
+/** Copies drawing now (MapWarmCopy): each stops itself when told to (a memory warning), nothing else redrawn. */
+const copies = new Set<() => void>();
+/** A copy drawing: told to stop on a memory warning (until it has ended). */
+export function onMapWarmStop(stop: () => void): () => void {
+  copies.add(stop);
+  return () => { copies.delete(stop); };
+}
+
+/**
+ * Short of memory: the picture goes, any copy drawing one stops (the Community card's), and none is made for two minutes.
+ * Nothing redraws unless a picture was there to go (dropMapWarm): on a phone without this, it only notes the time.
+ */
 function memoryWarning() {
   restUntil = Date.now() + 120_000;
-  dropMapWarm('memory');
-  tell();
+  // A picture being read in meanwhile is thrown away (keepMapWarm checks the count).
+  if (warm) dropMapWarm('memory'); else gen += 1;
+  [...copies].forEach((stop) => stop());
 }
 if (Platform.OS === 'ios') AppState.addEventListener('memoryWarning', memoryWarning);
 
