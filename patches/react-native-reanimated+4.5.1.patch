@@ -1,0 +1,310 @@
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp b/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
+index cf531e8..03f66b2 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.cpp
+@@ -87,7 +87,11 @@ std::pair<UpdatesBatch, UpdatesBatch> partitionUpdates(
+   static const std::unordered_set<std::string> synchronousPropNames = {
+       "opacity",
+       "elevation",
++#ifdef ANDROID
++      // CourtSide patch: iOS orders siblings by zIndex only when a commit is mounted (updateProps never reads it),
++      // so an update that changes zIndex keeps the commit path and lands in the same frame as before.
+       "zIndex",
++#endif // ANDROID
+       "shadowColor",
+ #if __APPLE__
+       "shadowOffset",
+@@ -690,6 +694,17 @@ bool ReanimatedModuleProxy::handleRawEvent(const RawEvent &rawEvent, double curr
+     return false;
+   }
+ 
++#ifdef __APPLE__
++  if constexpr (shouldUseSynchronousUpdatesInPerformOperations()) {
++    // CourtSide patch: a finger is down. Pressable measures its press area from the shadow tree as JS handles this
++    // touch, so anything the synchronous path has moved is committed first (handled on the UI thread, before the
++    // event is queued for JS).
++    if (rawEvent.type == "topTouchStart") {
++      commitLaggingSynchronousViews();
++    }
++  }
++#endif // __APPLE__
++
+   int tag = eventTarget->getTag();
+   auto eventType = rawEvent.type;
+   if (eventType.rfind("top", 0) == 0) {
+@@ -1018,11 +1033,116 @@ void ReanimatedModuleProxy::applySynchronousUpdates(UpdatesBatch &updatesBatch,
+   for (const auto &[shadowNodeFamily, props] : synchronousUpdatesBatch) {
+     synchronouslyUpdateUIPropsFunction_(shadowNodeFamily->getTag(), props);
+   }
++  trackSynchronousUpdates(synchronousUpdatesBatch, shadowTreeUpdatesBatch);
+ #endif // __APPLE__
+ 
+   updatesBatch = std::move(shadowTreeUpdatesBatch);
+ }
+ 
++#ifdef __APPLE__
++// CourtSide patch. A view moved by the synchronous path is behind in the shadow tree (React Native's record of where
++// views are, which `measure` and Pressable's press area read) until something commits it. Once it has not moved for a
++// few frames, its registry values (the ones a React commit would apply, ReanimatedCommitHook) go into this frame's
++// commit, so the record is current soon after it stops; a finger coming down commits them at once (handleRawEvent).
++// Those values are already on screen, so nothing looks different.
++void ReanimatedModuleProxy::trackSynchronousUpdates(
++    const UpdatesBatch &synchronousUpdatesBatch,
++    UpdatesBatch &shadowTreeUpdatesBatch) {
++  constexpr double kSettledAfterMs = 64;
++  const double now = getAnimationTimestamp_();
++
++  for (const auto &[shadowNodeFamily, props] : synchronousUpdatesBatch) {
++    laggingSynchronousViews_[shadowNodeFamily->getTag()] = {shadowNodeFamily, now};
++  }
++
++  if (laggingSynchronousViews_.empty()) {
++    return;
++  }
++
++  // While a React commit is on its way Reanimated does not commit; views stay listed until it has been mounted.
++  const bool canCommit = !updatesRegistryManager_->shouldReanimatedSkipCommit();
++  std::vector<ShadowNodeFamily::Shared> settled;
++  for (auto it = laggingSynchronousViews_.begin(); it != laggingSynchronousViews_.end();) {
++    if (canCommit && now - it->second.lastUpdate >= kSettledAfterMs) {
++      settled.push_back(std::move(it->second.family));
++      it = laggingSynchronousViews_.erase(it);
++    } else {
++      ++it;
++    }
++  }
++  if (!settled.empty()) {
++    auto lock = updatesRegistryManager_->lock();
++    for (const auto &family : settled) {
++      appendRegistryProps(family, shadowTreeUpdatesBatch);
++    }
++  }
++
++  // Keep frames coming until every view listed has settled and been committed.
++  if (!laggingSynchronousViews_.empty() && !laggingSynchronousFrameRequested_) {
++    laggingSynchronousFrameRequested_ = true;
++    requestRender_([weakThis = weak_from_this()](const double) {
++      if (auto strongThis = weakThis.lock()) {
++        strongThis->laggingSynchronousFrameRequested_ = false;
++      }
++    });
++  }
++}
++
++// The view's current values from every registry, lowest priority first (as UpdatesRegistryManager::collectProps
++// orders them). A view no registry holds any more is left as it is. Call with the registry lock held.
++void ReanimatedModuleProxy::appendRegistryProps(const ShadowNodeFamily::Shared &family, UpdatesBatch &updatesBatch) {
++  const auto tag = family->getTag();
++  folly::dynamic props = folly::dynamic::object();
++  for (const auto &value : {cssTransitionsRegistry_->get(tag), animatedPropsRegistry_->get(tag), cssAnimationsRegistry_->get(tag)}) {
++    if (value.isObject()) {
++      props.update(value);
++    }
++  }
++  if (!props.empty()) {
++    updatesBatch.emplace_back(family, std::move(props));
++  }
++}
++
++void ReanimatedModuleProxy::commitLaggingSynchronousViews() {
++  if (laggingSynchronousViews_.empty() || updatesRegistryManager_->shouldReanimatedSkipCommit()) {
++    // Nothing behind, or a React commit is on its way, which carries every registry value (ReanimatedCommitHook).
++    return;
++  }
++  UpdatesBatch updatesBatch;
++  {
++    auto lock = updatesRegistryManager_->lock();
++    for (const auto &[tag, view] : laggingSynchronousViews_) {
++      appendRegistryProps(view.family, updatesBatch);
++    }
++  }
++  laggingSynchronousViews_.clear();
++  if (!updatesBatch.empty()) {
++    commitUpdates(getJSIRuntimeFromWorkletRuntime(uiRuntime_), updatesBatch);
++  }
++}
++
++// Called on the UI thread right after a mount, before it is drawn (REANodesManager). A React commit carries each
++// animated view's registry values from the moment it was made; while it was laid out and sent over, the synchronous
++// path kept drawing newer ones, and the mount would write the older values back for a frame (a step back). The views
++// still listed get their newest values again here. Reanimated's own commits are skipped: they carry the newest values.
++void ReanimatedModuleProxy::reapplyLaggingSynchronousViews() {
++  if (isCommittingUpdates_ || laggingSynchronousViews_.empty()) {
++    return;
++  }
++  UpdatesBatch updatesBatch;
++  {
++    auto lock = updatesRegistryManager_->lock();
++    for (const auto &[tag, view] : laggingSynchronousViews_) {
++      appendRegistryProps(view.family, updatesBatch);
++    }
++  }
++  const auto synchronousUpdatesBatch = partitionUpdates(updatesBatch, true).first;
++  for (const auto &[shadowNodeFamily, props] : synchronousUpdatesBatch) {
++    synchronouslyUpdateUIPropsFunction_(shadowNodeFamily->getTag(), props);
++  }
++}
++#endif // __APPLE__
++
+ void ReanimatedModuleProxy::requestFlushRegistry() {
+   if constexpr (StaticFeatureFlags::getFlag("USE_ANIMATION_BACKEND")) {
+     shouldFlushRegistry_ = true;
+@@ -1070,6 +1190,10 @@ void ReanimatedModuleProxy::commitUpdates(jsi::Runtime &rt, const UpdatesBatch &
+     }
+   }
+ 
++#ifdef __APPLE__
++  // CourtSide patch: these commits mount at once, on this thread; reapplyLaggingSynchronousViews skips them.
++  isCommittingUpdates_ = true;
++#endif // __APPLE__
+   for (auto const &[surfaceId, propsMap] : propsMapBySurface) {
+     shadowTreeRegistry.visit(surfaceId, [&](ShadowTree const &shadowTree) {
+       const auto status = shadowTree.commit(
+@@ -1102,6 +1226,9 @@ void ReanimatedModuleProxy::commitUpdates(jsi::Runtime &rt, const UpdatesBatch &
+ #endif
+     });
+   }
++#ifdef __APPLE__
++  isCommittingUpdates_ = false;
++#endif // __APPLE__
+ }
+ 
+ void ReanimatedModuleProxy::dispatchCommand(
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.h b/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.h
+index 9c8df82..d71689d 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.h
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/NativeModules/ReanimatedModuleProxy.h
+@@ -41,6 +41,7 @@
+ #include <mutex>
+ #include <set>
+ #include <string>
++#include <unordered_map>
+ #include <utility>
+ #include <vector>
+ 
+@@ -259,6 +260,24 @@ class ReanimatedModuleProxy : public std::enable_shared_from_this<ReanimatedModu
+   std::vector<double> synchronousPropsDoubleBuffer_;
+ #endif // ANDROID
+ 
++#ifdef __APPLE__
++  // CourtSide patch (IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS): a value written straight to the UIView is not in the
++  // shadow tree, which `measure` and Pressable's press area read. Views moved that way are listed here until their
++  // registry values are committed: once a view has stopped moving, or at once when a finger comes down.
++  // Access only on the UI thread.
++  struct LaggingSynchronousView {
++    ShadowNodeFamily::Shared family;
++    double lastUpdate;
++  };
++  std::unordered_map<Tag, LaggingSynchronousView> laggingSynchronousViews_;
++  bool laggingSynchronousFrameRequested_{false};
++  void trackSynchronousUpdates(const UpdatesBatch &synchronousUpdatesBatch, UpdatesBatch &shadowTreeUpdatesBatch);
++  void appendRegistryProps(const ShadowNodeFamily::Shared &family, UpdatesBatch &updatesBatch);
++  void commitLaggingSynchronousViews();
++  bool isCommittingUpdates_{false};
++  void reapplyLaggingSynchronousViews();
++#endif // __APPLE__
++
+   std::shared_ptr<UIManager> uiManager_;
+   std::shared_ptr<LayoutAnimationsProxyCommon> layoutAnimationsProxy_;
+   std::shared_ptr<ReanimatedCommitHook> commitHook_;
+diff --git a/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.h b/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.h
+index 4646e12..10ede58 100644
+--- a/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.h
++++ b/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.h
+@@ -20,6 +20,8 @@ typedef void (^REAPerformOperations)();
+ - (void)dispatchEvent:(id<RCTEvent>)event;
+ - (void)synchronouslyUpdateUIProps:(ReactTag)viewTag props:(const folly::dynamic &)props;
+ - (void)registerPerformOperations:(REAPerformOperations)performOperations;
++// CourtSide patch: called on the UI thread right after each mount, before it is drawn.
++- (void)registerAfterMount:(REAPerformOperations)afterMount;
+ - (void)maybeFlushUIUpdatesQueue;
+ 
+ @end
+diff --git a/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.mm b/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.mm
+index b89253d..75de126 100644
+--- a/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.mm
++++ b/node_modules/react-native-reanimated/apple/reanimated/apple/REANodesManager.mm
+@@ -11,11 +11,15 @@
+ 
+ using namespace facebook::react;
+ 
++@interface REANodesManager () <RCTSurfacePresenterObserver>
++@end
++
+ @implementation REANodesManager {
+   READisplayLink *_displayLink;
+   NSMutableArray<REAOnAnimationCallback> *_onAnimationCallbacks;
+   REAEventHandler _eventHandler;
+   REAPerformOperations _performOperations;
++  REAPerformOperations _afterMount;
+ }
+ 
+ - (READisplayLink *)getDisplayLink
+@@ -67,6 +71,9 @@ - (void)invalidate
+   REAAssertTurboModuleManagerQueue();
+ 
+   _eventHandler = nil;
++  if (_afterMount != nil) {
++    [self.surfacePresenter removeObserver:self];
++  }
+   [self useDisplayLinkOnMainQueue:^(READisplayLink *displayLink) { [displayLink invalidate]; }];
+ }
+ 
+@@ -89,6 +96,29 @@ - (void)registerPerformOperations:(REAPerformOperations)performOperations
+   _performOperations = performOperations;
+ }
+ 
++- (void)registerAfterMount:(REAPerformOperations)afterMount
++{
++  REAAssertJavaScriptQueue();
++  _afterMount = afterMount;
++  __weak __typeof__(self) weakSelf = self;
++  RCTExecuteOnMainQueue(^{
++    __typeof__(self) strongSelf = weakSelf;
++    if (strongSelf != nil) {
++      [strongSelf.surfacePresenter addObserver:strongSelf];
++    }
++  });
++}
++
++// CourtSide patch: a mount can write a view's props as they were when its commit was made, older than what the
++// synchronous path has drawn since; this puts the newest back before the frame is drawn.
++- (void)didMountComponentsWithRootTag:(NSInteger)rootTag
++{
++  RCTAssertMainQueue();
++  if (_afterMount != nil) {
++    _afterMount();
++  }
++}
++
+ - (void)startUpdatingOnAnimationFrame
+ {
+   RCTAssertMainQueue();
+diff --git a/node_modules/react-native-reanimated/apple/reanimated/apple/native/NativeProxy.mm b/node_modules/react-native-reanimated/apple/reanimated/apple/native/NativeProxy.mm
+index 9c3c457..36a2e8f 100644
+--- a/node_modules/react-native-reanimated/apple/reanimated/apple/native/NativeProxy.mm
++++ b/node_modules/react-native-reanimated/apple/reanimated/apple/native/NativeProxy.mm
+@@ -1,3 +1,4 @@
++#import <reanimated/Tools/FeatureFlags.h>
+ #import <reanimated/Tools/PlatformDepMethodsHolder.h>
+ #import <reanimated/apple/REAAssertJavaScriptQueue.h>
+ #import <reanimated/apple/REAReducedMotion.h>
+@@ -37,6 +38,18 @@ - (void *)runtime;
+     }
+   }];
+ 
++  // CourtSide patch: see ReanimatedModuleProxy::reapplyLaggingSynchronousViews.
++  if constexpr (
++      StaticFeatureFlags::getFlag("IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS") &&
++      !StaticFeatureFlags::getFlag("ENABLE_SHARED_ELEMENT_TRANSITIONS") &&
++      !StaticFeatureFlags::getFlag("USE_ANIMATION_BACKEND")) {
++    [nodesManager registerAfterMount:^() {
++      if (auto reanimatedModuleProxy = weakReanimatedModuleProxy.lock()) {
++        reanimatedModuleProxy->reapplyLaggingSynchronousViews();
++      }
++    }];
++  }
++
+   return reanimatedModuleProxy;
+ }
+ 
