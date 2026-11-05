@@ -159,7 +159,7 @@ const PHASE_LOCK_JS = "(function(){if(window.__csLocked)return;window.__csLocked
 /**
  * The full map opened on mapWarm's picture (onUserMove): the map itself has moved, since a finger last landed on it, by
  * USER_MOVE_PX on the screen, or zoomed (a drag, a pinch, the glide after a drag). Its camera, not the finger. A finger that
- * lands near the left edge (USER_EDGE_PX) may be the system's swipe back: on the Simulator (Nov 4, 14 swipes it took) the map
+ * lands near the left edge (USER_EDGE_PX) may be the system's swipe back: on the Simulator (Nov 4, 9 swipes it took) the map
  * still moved up to 82 points under the picture before the page went, so there it counts from USER_EDGE_MOVE_PX, and that
  * picture slides out with the page. As NearbyMap's own warmFinger counts the touches the app hears; these are the ones the app
  * never hears of (the phone gave them to the map alone, the app told "cancelled"). Once per touch; with where its finger landed.
