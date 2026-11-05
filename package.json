@@ -86,5 +86,10 @@
     "babel-preset-expo": "~57.0.0",
     "patch-package": "^8.0.1",
     "typescript": "~6.0.3"
+  },
+  "reanimated": {
+    "staticFeatureFlags": {
+      "IOS_SYNCHRONOUSLY_UPDATE_UI_PROPS": true
+    }
   }
 }
