@@ -8,6 +8,7 @@ import { ageUnknown, notKnownAdult } from '@/features/players/age';
 import { canCheckIn, seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { askCourtTime, tillWords } from '@/features/places/courtTime';
 import { courtAt, lightUpCourtsOn } from '@/features/places/lightUp';
+import { getPermission } from '@/features/permissions/devicePermissions';
 import type { LatLng } from '@/features/players/positions';
 import { getPosition, locationAllowed, recentPosition } from '@/lib/geo';
 import { useApp } from '@/store/AppContext';
@@ -77,6 +78,13 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess, name
         // No one on the map: say so rather than nothing happening (the server would refuse it too, 'hidden').
         if (latest.current.mapVisibility === 'none') setError('You chose No one on the map. Change it in Settings → Privacy.');
         return false;
+      }
+      // An iPhone or iPad whose Location was never asked (Apple's 5.1.1(iv), build 22 review, Nov 12): Apple's location
+      // question straight after this tap (or the yes just given), never after a card that has Not now on it.
+      if (Platform.OS === 'ios' && !latest.current.locationEnabled && (await getPermission('location')) === 'undetermined') {
+        const problem = await actions.setLocationEnabled(true);
+        if (problem) { setError(`Location is off: ${problem}.`); return false; }
+        latest.current = { ...latest.current, locationEnabled: true };
       }
     } finally {
       setBusy(false);

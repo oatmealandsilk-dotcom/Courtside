@@ -19,6 +19,22 @@ export function canReadContacts(): boolean {
 }
 
 /**
+ * Only Apple's own Contacts question, nothing read (an iPhone or iPad, as Find friends opens: Apple's 5.1.1(iv),
+ * build 22 review, Nov 12, so no page of CourtSide's own comes before the question). Already answered: no question,
+ * just the answer.
+ */
+export async function askContacts(): Promise<'granted' | 'denied' | 'unavailable'> {
+  if (!canReadContacts()) return 'unavailable';
+  const Contacts = require('expo-contacts/legacy') as typeof import('expo-contacts/legacy');
+  try {
+    const permission = await Contacts.requestPermissionsAsync();
+    return permission.status === 'granted' ? 'granted' : 'denied';
+  } catch {
+    return 'denied';
+  }
+}
+
+/**
  * Asks once, then reads names, numbers and emails. Nothing else is read.
  * 'ask-again': refused, but the phone lets the app ask once more (Android
  * after a first "Don't allow"; an iPhone never does), so a Try again button

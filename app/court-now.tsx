@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -141,6 +141,15 @@ export default function CourtNowSheet() {
     const allowed = await getPermission('location');
     // Refused on this phone (or none): saved, and it says how to light it.
     if (allowed === 'denied' || allowed === 'unavailable') { await send(status, undefined, 'off'); return; }
+    // Never asked, on an iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12): no card with Just save before
+    // Apple's location question. The tap on Busy or Full is the ask: Apple's question at once, then the answer saved
+    // with where you are (or without, if it was a no), as Turn on Location does.
+    if (Platform.OS === 'ios' && allowed === 'undetermined') {
+      const problem = await actions.setLocationEnabled(true);
+      const at = problem ? null : await recentPosition(60_000);
+      await send(status, at ?? undefined, problem ? 'off' : 'lost');
+      return;
+    }
     // Never asked, or Location off in the app: the line first, and the phone's own prompt only on Turn on Location.
     if (allowed !== 'granted' || !locationEnabled) { setBusy(false); setAsking(status); return; }
     // On and allowed: read quietly (never a prompt).

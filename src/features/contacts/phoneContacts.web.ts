@@ -10,3 +10,7 @@ export function canReadContacts(): boolean {
 export async function readContacts(): Promise<PhoneContact[] | 'denied' | 'unavailable'> {
   return 'unavailable';
 }
+
+export async function askContacts(): Promise<'granted' | 'denied' | 'unavailable'> {
+  return 'unavailable';
+}

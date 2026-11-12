@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { router } from 'expo-router';
 
 import { show as showToast, type ToastMessage } from '@/lib/toast';
@@ -45,7 +46,9 @@ export function setConnectCardOnShow(on: boolean) {
 export function useAfterLogConnectWatch() {
   const auto = useAutoLog();
   const { currentUserId } = useApp();
-  const on = auto.ready && !auto.connected && connectChoices(auto).length > 0;
+  // Never on an iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12): a note that can be swiped away, nudging
+  // toward Apple's Health sheet. There, "Logged" is followed by what follows it when nothing can be connected.
+  const on = Platform.OS !== 'ios' && auto.ready && !auto.connected && connectChoices(auto).length > 0;
   useEffect(() => {
     offerFor = currentUserId && auto.ready ? { userId: currentUserId, on } : null;
   }, [currentUserId, auto.ready, on]);

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import Animated, { Easing, FadeInDown } from 'react-native-reanimated';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -83,6 +83,11 @@ export default function AutoLog() {
   useEffect(() => { const t = setTimeout(() => setGaveUp(true), WAIT_MS); return () => clearTimeout(t); }, []);
 
   const onward = () => router.replace('/first-move');
+  // Apple's 5.1.1(iv) (build 22 review, Nov 12): on an iPhone or iPad offering Apple Health, this page comes right
+  // before Apple's Health sheet, so it may not let anyone close it or put the sheet off. Its one button, Continue,
+  // always goes on to Apple's sheet (where a no is given), and the page moves on whatever the answer: no Not now and
+  // no WHOOP beside it here (WHOOP stays on the Health page). Android, a browser and WHOOP alone are as they were.
+  const askFirst = Platform.OS === 'ios' && auto.apple;
   // Decided once: a card on screen stays (connecting from it must not bounce the page away mid-tap).
   const offering = auto.ready && !auto.connected && (auto.apple || auto.whoop);
   const [shown, setShown] = useState(false);
@@ -103,6 +108,8 @@ export default function AutoLog() {
       onward();
     } catch (err) {
       showToast({ title: 'Couldn’t connect', body: err instanceof Error ? err.message : 'Try again in a moment.', icon: 'alert-circle-outline' });
+      // With Continue the only way on, a failure still moves on (Apple Health can be connected later from the Health page).
+      if (askFirst) { onward(); return; }
       setBusy(null);
     }
   };
@@ -148,11 +155,13 @@ export default function AutoLog() {
         </ScrollView>
         <Animated.View entering={enter(3)}>
           <SetupFooter
-            primary={auto.apple || !auto.whoop
+            primary={askFirst
+              ? { label: busy === 'apple-health' ? 'Connecting…' : 'Continue', loading: busy === 'apple-health' || !ready, disabled: !!busy, onPress: () => { void connect('apple-health'); } }
+              : auto.apple || !auto.whoop
               ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || !ready, disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
               : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
-            secondary={auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
-            link={{ label: 'Not now', onPress: onward, disabled: !!busy }}
+            secondary={!askFirst && auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
+            link={askFirst ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
           />
         </Animated.View>
         <StatusShade wash={setupLook.wash} />
@@ -192,11 +201,13 @@ export default function AutoLog() {
       {/* Setup's bottom, the same on every setup page (Oct 20 sweep): the connect button full width, Not now as a word under it. */}
       <Animated.View entering={enter(3)}>
         <SetupFooter
-          primary={auto.apple || !auto.whoop
+          primary={askFirst
+            ? { label: busy === 'apple-health' ? 'Connecting…' : 'Continue', loading: busy === 'apple-health' || (!shown && !offering), disabled: !!busy, onPress: () => { void connect('apple-health'); } }
+            : auto.apple || !auto.whoop
             ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || (!shown && !offering), disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
             : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
-          secondary={auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
-          link={{ label: 'Not now', onPress: onward, disabled: !!busy }}
+          secondary={!askFirst && auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
+          link={askFirst ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
         />
       </Animated.View>
       <StatusShade wash={ONBOARDING_V2 ? undefined : { height: 420 }} />

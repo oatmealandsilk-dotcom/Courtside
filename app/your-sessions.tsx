@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -116,7 +116,9 @@ export default function YourSessions() {
     && (i.provider === 'whoop' ? flags.whoop : i.provider === 'fitbit' || i.provider === 'oura' || i.provider === 'polar' ? flags[i.provider] : false));
   const pastFrom = otherTrackers ? 'your trackers' : 'Apple Health';
   // Tennis sessions on from Apple Health, every workout not yet: offered here too (on this iPhone), never switched on for them.
-  const offerOn = flags.workoutsApple && !!apple?.connected && !!apple.readsWorkouts && !apple.readsAllWorkouts && appleHealthAvailable();
+  // Not on an iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12): the card has its own Not now and leads to
+  // Apple's Health sheet. Every workout is still turned on from the Health page's own row, straight to Apple's sheet.
+  const offerOn = Platform.OS !== 'ios' && flags.workoutsApple && !!apple?.connected && !!apple.readsWorkouts && !apple.readsAllWorkouts && appleHealthAvailable();
   // Opened from a tag's phone alert: its sheet opens over this page, once.
   const { tag: tagParam } = useLocalSearchParams<{ tag?: string }>();
   const opened = useRef<string | null>(null);

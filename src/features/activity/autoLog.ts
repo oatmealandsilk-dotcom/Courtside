@@ -227,7 +227,11 @@ export function useConnectRow(place: ConnectPlace = 'activities'): ConnectRow {
   const choices = connectChoices(auto);
   const source = choices[0] ?? null;
   const closedKnown = useSyncExternalStore(subscribeRows, () => !!currentUserId && closedRows.has(`${place}:${currentUserId}`), () => false);
-  return { auto, source, choices, offer: auto.ready && !auto.connected && !!source && !closed, close, known: auto.ready && closedKnown };
+  // Never on an iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12): a card with its own Not now whose tap
+  // brings up Apple's Health sheet is a message before that sheet that can be closed. There, Apple Health is connected
+  // from the Health page's own row (Settings → Health and nutrition). Android and the website are as they were.
+  const offer = Platform.OS !== 'ios' && auto.ready && !auto.connected && !!source && !closed;
+  return { auto, source, choices, offer, close, known: auto.ready && closedKnown };
 }
 
 /**

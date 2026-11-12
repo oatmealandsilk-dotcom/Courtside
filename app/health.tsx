@@ -191,7 +191,10 @@ export default function Health() {
 
   // Apple Health's own permission sheet comes next, so CourtSide says why first.
   // 'workouts': someone with tennis sessions on, saying yes to every workout as well.
-  const askApple = (next: 'toggle' | 'tennis' | 'workouts') => confirm(flags.workoutsApple ? {
+  // On an iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12) no card comes between the tap and Apple's sheet:
+  // a card with Cancel before it is a message that can be closed. The row's own words say what it reads, and Apple's
+  // sheet lists each kind of data. Elsewhere (the demo in a browser) the card is as it was.
+  const askApple = (next: 'toggle' | 'tennis' | 'workouts') => (Platform.OS === 'ios' ? void run('apple-health', next) : confirm(flags.workoutsApple ? {
     ...askWithSharing(WORKOUTS_ASK, sharingApple),
     confirmLabel: 'Continue',
     onConfirm: () => run('apple-health', next),
@@ -202,7 +205,7 @@ export default function Health() {
     }, sharingApple),
     confirmLabel: 'Continue',
     onConfirm: () => run('apple-health', next),
-  });
+  }));
 
   // WHOOP, with tennis sessions on, saying yes to every workout as well: its own yes, though WHOOP already shares them.
   const askWhoop = () => confirm({ ...askWithSharing(WHOOP_WORKOUTS_ASK, sharingWhoop), confirmLabel: 'Turn on', onConfirm: () => run('whoop', 'workouts', true) });

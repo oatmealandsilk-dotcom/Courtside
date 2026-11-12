@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { Avatar, Button, Screen } from '@/components/ui';
 import type { ContactMatch } from '@/data/types';
-import { canReadContacts, readContacts, type PhoneContact } from '@/features/contacts/phoneContacts';
+import { askContacts, canReadContacts, readContacts, type PhoneContact } from '@/features/contacts/phoneContacts';
 import { inviteLink } from '@/features/invite/referral';
 import { goBack } from '@/lib/goBack';
 import * as haptics from '@/lib/haptics';
@@ -20,7 +20,7 @@ import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
 
 type Found = { match: ContactMatch; contactName?: string };
-type Phase = 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
+type Phase = 'asking' | 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
 
 /**
  * A plain, up-front word, before the phone's own question, whenever contacts
@@ -45,7 +45,16 @@ const PAGE = 40;
 export default function FindContacts() {
   const styles = useThemedStyles(styleDefinitions);
   const { currentUser, followingIds, actions, prefs, users } = useApp();
-  const [phase, setPhase] = useState<Phase>(canReadContacts() ? 'start' : 'unavailable');
+  // An iPhone or iPad (Apple's 5.1.1(iv), build 22 review, Nov 12): opening this page is the ask, so Apple's Contacts
+  // question comes first, with nothing of CourtSide's own on the page before or behind it ('asking'). Allowed: the
+  // word about what goes to the server and the button, as before, so nothing leaves the phone until that tap.
+  const [phase, setPhase] = useState<Phase>(!canReadContacts() ? 'unavailable' : Platform.OS === 'ios' ? 'asking' : 'start');
+  useEffect(() => {
+    if (phase !== 'asking') return undefined;
+    let on = true;
+    void askContacts().then((got) => { if (on) setPhase(got === 'granted' ? 'start' : got); });
+    return () => { on = false; };
+  }, [phase]);
   const [found, setFound] = useState<Found[]>([]);
   const [others, setOthers] = useState<PhoneContact[]>([]);
   const [shown, setShown] = useState(PAGE);
@@ -98,7 +107,9 @@ export default function FindContacts() {
 
   return (
     <Screen title="Find friends" compactTitle onBack={() => goBack()}>
-      {phase === 'start' || phase === 'reading' ? (
+      {phase === 'asking' ? (
+        <View style={styles.intro}><CourtSpinner /></View>
+      ) : phase === 'start' || phase === 'reading' ? (
         <View style={styles.intro}>
           <View style={styles.badge}><Ionicons name="people" size={30} color={colors.brand} /></View>
           <Text style={styles.title}>See who you know on CourtSide</Text>

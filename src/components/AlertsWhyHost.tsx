@@ -141,11 +141,15 @@ export function AlertsWhyHost() {
   if (!request) return null;
   const words = alertsWhyWords(request.moment);
   const settings = request.ask === 'settings';
+  // Apple's 5.1.1(iv) (build 22 review, Nov 12): on an iPhone or iPad, a card before Apple's own alerts question may
+  // not be closed or put off. There, Turn on alerts is its one way out (no Not now, no tap outside, no escape), and
+  // Apple's question, where a no is given, always follows. "Open Settings" asks nothing, so it keeps its Not now.
+  const onlyOn = Platform.OS === 'ios' && !settings;
 
   const layer = (
     <View style={styles.layer}>
       <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
-      <View style={styles.box} accessibilityViewIsModal onAccessibilityEscape={() => leave()}>
+      <View style={styles.box} accessibilityViewIsModal onAccessibilityEscape={onlyOn ? undefined : () => leave()}>
         <Animated.View style={[styles.card, cardStyle]}>
           {/* Only scrolls if the phone's largest text would push the buttons off the screen. */}
           <ScrollView style={styles.cardScroll} contentContainerStyle={styles.cardWords} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
@@ -164,14 +168,17 @@ export function AlertsWhyHost() {
           <View style={styles.cardActions}>
             <Submit short radius={BUTTON_CORNER} label={settings ? 'Open Settings' : 'Turn on alerts'} onPress={turnOn} />
             {/* The decline stays plain to see and one tap: the same shape, in plain grey, never hidden. */}
-            <Pressable accessibilityRole="button" accessibilityLabel="Not now" onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && styles.pressed]}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
-            </Pressable>
+            {onlyOn ? null : (
+              <Pressable accessibilityRole="button" accessibilityLabel="Not now" onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && styles.pressed]}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
+              </Pressable>
+            )}
           </View>
         </Animated.View>
       </View>
       {/* A tap outside is Not now. Not a button for a screen reader: Not now on the card says it. */}
-      <Pressable accessible={false} focusable={false} importantForAccessibility="no" style={StyleSheet.absoluteFill} onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} />
+      {/* With Turn on alerts the only way out (onlyOn), a tap outside does nothing. */}
+      <Pressable accessible={false} focusable={false} importantForAccessibility="no" style={StyleSheet.absoluteFill} onPressIn={() => { touchAt.current = Date.now(); }} onPress={onlyOn ? undefined : notNow} />
     </View>
   );
 

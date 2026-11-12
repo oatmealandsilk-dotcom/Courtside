@@ -133,6 +133,10 @@ function Hit() {
   const retake = () => { setShot(null); setCount(null); };
 
   if (!permission) return <View style={styles.root} />;
+  // An iPhone or iPad, the camera never asked yet (Apple's 5.1.1(iv), build 22 review, Nov 12): Apple's own camera
+  // question is up at once (the effect above), with nothing of CourtSide's own (no Allow, no Not now) before or behind
+  // it. Only a refusal shows the page below, with Open Settings.
+  if (Platform.OS === 'ios' && !permission.granted && permission.canAskAgain) return <View style={styles.root} />;
 
   if (!permission.granted) {
     return (
