@@ -88,6 +88,8 @@ export default function AutoLog() {
   // always goes on to Apple's sheet (where a no is given), and the page moves on whatever the answer: no Not now and
   // no WHOOP beside it here (WHOOP stays on the Health page). Android, a browser and WHOOP alone are as they were.
   const askFirst = Platform.OS === 'ios' && auto.apple;
+  // Until the switches are known (auto.known), an iPhone shows no Not now either: Apple Health may yet be on offer,
+  // and a Not now there would skip Apple's sheet (5.1.1(iv)) or show and then vanish.
   // Decided once: a card on screen stays (connecting from it must not bounce the page away mid-tap).
   const offering = auto.ready && !auto.connected && (auto.apple || auto.whoop);
   const [shown, setShown] = useState(false);
@@ -161,7 +163,7 @@ export default function AutoLog() {
               ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || !ready, disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
               : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
             secondary={!askFirst && auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
-            link={askFirst ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
+            link={askFirst || (Platform.OS === 'ios' && !auto.known) ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
           />
         </Animated.View>
         <StatusShade wash={setupLook.wash} />
@@ -207,7 +209,7 @@ export default function AutoLog() {
             ? { label: busy === 'apple-health' ? 'Connecting…' : 'Connect Apple Health', loading: busy === 'apple-health' || (!shown && !offering), disabled: !!busy || !auto.apple, onPress: () => { void connect('apple-health'); } }
             : { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } }}
           secondary={!askFirst && auto.apple && auto.whoop ? { label: busy === 'whoop' ? 'Connecting…' : 'Connect WHOOP', loading: busy === 'whoop', disabled: !!busy, onPress: () => { void connect('whoop'); } } : undefined}
-          link={askFirst ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
+          link={askFirst || (Platform.OS === 'ios' && !auto.known) ? undefined : { label: 'Not now', onPress: onward, disabled: !!busy }}
         />
       </Animated.View>
       <StatusShade wash={ONBOARDING_V2 ? undefined : { height: 420 }} />

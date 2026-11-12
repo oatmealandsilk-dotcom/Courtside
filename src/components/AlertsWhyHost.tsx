@@ -142,8 +142,9 @@ export function AlertsWhyHost() {
   const words = alertsWhyWords(request.moment);
   const settings = request.ask === 'settings';
   // Apple's 5.1.1(iv) (build 22 review, Nov 12): on an iPhone or iPad, a card before Apple's own alerts question may
-  // not be closed or put off. There, Turn on alerts is its one way out (no Not now, no tap outside, no escape), and
+  // not be closed or put off. There, Continue is its one way out (no Not now, no tap outside, no escape), and
   // Apple's question, where a no is given, always follows. "Open Settings" asks nothing, so it keeps its Not now.
+  // Its button says Continue there, never words that read as the yes itself (Apple: "Continue" or "Next", not "Allow").
   const onlyOn = Platform.OS === 'ios' && !settings;
 
   const layer = (
@@ -166,7 +167,7 @@ export function AlertsWhyHost() {
             {settings ? <Text style={styles.cardLine}>Alerts are off for CourtSide in your phone’s Settings.</Text> : null}
           </ScrollView>
           <View style={styles.cardActions}>
-            <Submit short radius={BUTTON_CORNER} label={settings ? 'Open Settings' : 'Turn on alerts'} onPress={turnOn} />
+            <Submit short radius={BUTTON_CORNER} label={settings ? 'Open Settings' : onlyOn ? 'Continue' : 'Turn on alerts'} onPress={turnOn} />
             {/* The decline stays plain to see and one tap: the same shape, in plain grey, never hidden. */}
             {onlyOn ? null : (
               <Pressable accessibilityRole="button" accessibilityLabel="Not now" onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} style={({ pressed }) => [styles.notNow, pressed && styles.pressed]}>
@@ -177,7 +178,7 @@ export function AlertsWhyHost() {
         </Animated.View>
       </View>
       {/* A tap outside is Not now. Not a button for a screen reader: Not now on the card says it. */}
-      {/* With Turn on alerts the only way out (onlyOn), a tap outside does nothing. */}
+      {/* With Continue the only way out (onlyOn), a tap outside does nothing. */}
       <Pressable accessible={false} focusable={false} importantForAccessibility="no" style={StyleSheet.absoluteFill} onPressIn={() => { touchAt.current = Date.now(); }} onPress={onlyOn ? undefined : notNow} />
     </View>
   );
