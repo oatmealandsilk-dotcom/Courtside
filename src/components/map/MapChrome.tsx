@@ -1183,12 +1183,13 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
   // card leads only to that question, with no "Add my city" beside it (a city is still added in Edit profile).
   // Assumed so until the quiet read says otherwise, so the second button never shows and then goes.
   const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  // Read again once a tap's ask is over: after Don't Allow, "Add my city" comes back.
   useEffect(() => {
-    if (Platform.OS !== 'ios') return undefined;
+    if (Platform.OS !== 'ios' || locating) return undefined;
     let on = true;
     void appleWouldAsk().then((would) => { if (on) setAppleNext(would); });
     return () => { on = false; };
-  }, []);
+  }, [locating]);
   return (
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>

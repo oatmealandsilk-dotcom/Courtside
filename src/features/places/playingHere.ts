@@ -165,8 +165,8 @@ export function useAtCourtPrompt(active: boolean) {
     let gone = false;
     const look = async () => {
       // Up, but this phone would now ask Apple's location question again (an "Allow Once" run out, "Ask Next Time"):
-      // the card goes, so it never stands in front of that question (Apple 5.1.1(iv), Nov 12). Not marked closed:
-      // it may come back once Location is allowed.
+      // the card goes, so it never stands in front of that question (Apple 5.1.1(iv), Nov 12). That court was
+      // already offered today (markOffered), so it is not offered again until tomorrow.
       if (offered && (await appleWouldAsk())) {
         if (!gone) { offered = null; setCourt(null); }
         return;

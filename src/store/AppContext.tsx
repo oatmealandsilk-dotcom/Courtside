@@ -58,7 +58,7 @@ import { asHitMiles, endOfToday } from '@/features/players/openToHit';
 import { pickNutritionExport } from '@/features/health/cronometer';
 import { nearestPlace } from '@/data/locations';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getPosition, recentPosition } from '@/lib/geo';
+import { appleWouldAsk, getPosition, recentPosition } from '@/lib/geo';
 import { simCheckIn, simThreadFetch } from '@/lib/simDriver';
 import { checkInEnds } from '@/features/players/checkIn';
 import { shrinkPhoto } from '@/features/compose/shrinkPhoto';
@@ -8816,16 +8816,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!state.locationEnabled || state.detectedLocation) return;
     // On iPhone and iPad quietly (Apple 5.1.1(iv), Nov 12): an "Allow Once" that has run out is asked again on the next tap, never as the app opens.
-    getPosition({ quiet: Platform.OS === 'ios' }).then((result) => {
+    getPosition({ quiet: Platform.OS === 'ios' }).then(async (result) => {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
         // Turned off meanwhile (by hand, or another account signed in): the answer is dropped.
         setState((prev) => (!prev.locationEnabled ? prev : { ...prev, detectedLocation: place.name, detectedCoords: { lat: result.lat, lng: result.lng } }));
-      } else if (result.reason === 'denied') {
-        // Taken away in the device's settings since: the switch says so.
+      } else if (result.reason === 'denied' || (await appleWouldAsk())) {
+        // Taken away in the device's settings since, or an iPhone's "Allow Once" has run out (Apple would ask again):
+        // the switch says off, so every screen offers its own Turn on, which asks Apple straight from the tap,
+        // rather than "Finding you…" that never ends.
         setState((prev) => ({ ...prev, locationEnabled: false }));
       }
-    });
+    }).catch(() => undefined);
   }, [state.locationEnabled, state.detectedLocation]);
 
   // Back to the front with Location on, where you are now (Oct 5): a phone
