@@ -8815,7 +8815,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Someone who left Location on last time gets the city refreshed quietly.
   useEffect(() => {
     if (!state.locationEnabled || state.detectedLocation) return;
-    getPosition().then((result) => {
+    // On iPhone and iPad quietly (Apple 5.1.1(iv), Nov 12): an "Allow Once" that has run out is asked again on the next tap, never as the app opens.
+    getPosition({ quiet: Platform.OS === 'ios' }).then((result) => {
       if (result.ok) {
         const place = nearestPlace(result.lat, result.lng);
         // Turned off meanwhile (by hand, or another account signed in): the answer is dropped.

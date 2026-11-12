@@ -39,8 +39,10 @@ import { TextScale, buttonShape, colors, font, lift, radius, spacing, typography
  * title weight; and one short line: only friends who follow
  * you back, only when you tap, and it ends by itself (at 10pm, or in 2 hours
  * from 8pm). Two full-width buttons, the app's own shape a step less round than the card: "Turn on", the
- * solid green one, saves the yes; then Apple's own location prompt, then
- * Up to hit. "Not now", the plain grey one (or a tap outside, Escape, Android's Back), saves
+ * solid green one, saves the yes; then the phone's own location prompt, then
+ * Up to hit (on an iPhone or iPad never asked, Apple's prompt comes before
+ * this card instead, straight from the tap: Apple 5.1.1(iv), Nov 12, as no
+ * card with Not now may stand before it). "Not now", the plain grey one (or a tap outside, Escape, Android's Back), saves
  * nothing and shares nothing; it asks again the next time you tap Up to hit.
  * `from` says what asked (WhoSeesFrom): only Up to hit's ask names its time.
  * I'm playing here (`court`), Show friends, a teen's Open to hit and the

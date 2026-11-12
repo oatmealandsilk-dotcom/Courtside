@@ -13,10 +13,14 @@ import { notKnownAdult } from '@/features/players/age';
  * migration 189, after Apple's 5.1.2(i) review), and the one tip after it.
  *
  * The first time someone taps Check in without a yes, the question comes
- * first (the screen at app/map-visibility), then Apple's own location
+ * first (the screen at app/map-visibility), then the phone's own location
  * prompt, then the check-in and one tip by the Check in button: "Tap here
- * any time to check out." Said no (or closed it): nothing is shared. The
- * same screen opens later from Settings → Privacy and your own card.
+ * any time to check out." On an iPhone or iPad whose Location was never
+ * asked, Apple's own prompt comes before the question instead, straight
+ * from the tap (appleLocationFirst; Apple 5.1.1(iv), Nov 12: no card with
+ * Not now before Apple's prompt). Said no (or closed it): nothing is
+ * shared. The same screen opens later from Settings → Privacy and your own
+ * card.
  */
 
 /**
@@ -139,9 +143,11 @@ export type WhoSeesFrom = 'uth' | 'court' | 'live' | 'teenOpen' | 'reask';
 
 /**
  * Opens "Who can see you on the map?". `first`: before the first Check in,
- * a yes or Not now (then Apple's prompt, with the check-in); `from` says what
- * asked. `manage`: the same two answers, saved as they are tapped. Resolves
- * with the answer, or null if it was closed without one.
+ * a yes or Not now (then the phone's own prompt, with the check-in; on an
+ * iPhone or iPad never asked, Apple's prompt has already come, straight from
+ * the tap: Apple 5.1.1(iv), Nov 12); `from` says what asked. `manage`: the
+ * same two answers, saved as they are tapped. Resolves with the answer, or
+ * null if it was closed without one.
  */
 export function askWhoSeesYou(mode: 'first' | 'manage', from?: WhoSeesFrom): Promise<MapVisibility | null> {
   learnedTip('map-who-sees');
@@ -160,7 +166,9 @@ export function askWhoSeesYou(mode: 'first' | 'manage', from?: WhoSeesFrom): Pro
  * see you on the map?" first, every time, and nothing happens without a yes
  * (Apple 5.1.2(i): permission first, with a way to decline; migration 191
  * holds the same rule). Resolves whether to go on. No one: false, unasked
- * (the page already says it, and Settings changes it).
+ * (the page already says it, and Settings changes it). On an iPhone or iPad
+ * whose Location was never asked, the caller asks Apple's own location
+ * question before this (appleLocationFirst; Apple 5.1.1(iv), Nov 12).
  */
 export async function yesFirst(now: MapVisibility | null | undefined, from: WhoSeesFrom): Promise<boolean> {
   if (saidYes(now)) return true;

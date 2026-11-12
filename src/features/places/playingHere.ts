@@ -8,9 +8,8 @@ import { ageUnknown, notKnownAdult } from '@/features/players/age';
 import { canCheckIn, seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { askCourtTime, tillWords } from '@/features/places/courtTime';
 import { courtAt, lightUpCourtsOn } from '@/features/places/lightUp';
-import { getPermission } from '@/features/permissions/devicePermissions';
 import type { LatLng } from '@/features/players/positions';
-import { getPosition, locationAllowed, recentPosition } from '@/lib/geo';
+import { appleLocationFirst, appleWouldAsk, getPosition, locationAllowed, recentPosition } from '@/lib/geo';
 import { useApp } from '@/store/AppContext';
 
 /*
@@ -21,9 +20,12 @@ import { useApp } from '@/store/AppContext';
  *
  * One way in, used by every place that offers it (the map's court card, the
  * court sheet's "Playing here?" switch, the "You're at <court>? Light it up"
- * row on Find Players): a yes to "Who can see you on the map?" first when there
- * is none (nothing without a yes; No one cannot), then Location if it is off
- * (the phone's own prompt, only on Light it up), then the check-in itself,
+ * row on Find Players): on an iPhone or iPad whose Location was never asked,
+ * Apple's own location prompt first, straight from the tap (Apple 5.1.1(iv),
+ * Nov 12: no card with Not now before it); then a yes to "Who can see you on
+ * the map?" when there is none (nothing without a yes; No one cannot), then
+ * Location if it is off (the phone's own prompt, where it was never asked,
+ * only on Light it up), then the check-in itself,
  * for as long as the "How long are you here?" card says (courtTime: 30
  * minutes to 4 hours, 1h 30m to start or your last choice; friends who
  * follow each other with you see your name and until when, anyone else only
@@ -73,18 +75,19 @@ export function usePlayingHere(courtId: string | null, access: CourtAccess, name
     setError('');
     setBusy(true);
     try {
-      // No yes yet: "Who can see you on the map?" first, and nothing without a yes (Apple 5.1.2(i), migration 191).
+      // An iPhone or iPad whose Location was never asked (Apple 5.1.1(iv), Nov 12): Apple's location question straight
+      // after this tap, before "Who can see you on the map?" or "How long are you here?" (both have Not now), whether
+      // the app's own Location switch is on or not (an "Allow Once" run out reads as never asked). Refused: the line a
+      // refusal always gets. No one on the map: nothing to ask, only its own line below.
+      if (Platform.OS === 'ios' && latest.current.mapVisibility !== 'none' && (await appleLocationFirst()) === 'denied') {
+        setError('Location is off: Blocked in your phone’s Settings.');
+        return false;
+      }
+      // No yes yet: "Who can see you on the map?" next, and nothing without a yes (Apple 5.1.2(i), migration 191).
       if (!(await yesFirst(latest.current.mapVisibility, 'court'))) {
         // No one on the map: say so rather than nothing happening (the server would refuse it too, 'hidden').
         if (latest.current.mapVisibility === 'none') setError('You chose No one on the map. Change it in Settings → Privacy.');
         return false;
-      }
-      // An iPhone or iPad whose Location was never asked (Apple's 5.1.1(iv), build 22 review, Nov 12): Apple's location
-      // question straight after this tap (or the yes just given), never after a card that has Not now on it.
-      if (Platform.OS === 'ios' && !latest.current.locationEnabled && (await getPermission('location')) === 'undetermined') {
-        const problem = await actions.setLocationEnabled(true);
-        if (problem) { setError(`Location is off: ${problem}.`); return false; }
-        latest.current = { ...latest.current, locationEnabled: true };
       }
     } finally {
       setBusy(false);
@@ -161,6 +164,13 @@ export function useAtCourtPrompt(active: boolean) {
     if (!eligible) return undefined;
     let gone = false;
     const look = async () => {
+      // Up, but this phone would now ask Apple's location question again (an "Allow Once" run out, "Ask Next Time"):
+      // the card goes, so it never stands in front of that question (Apple 5.1.1(iv), Nov 12). Not marked closed:
+      // it may come back once Location is allowed.
+      if (offered && (await appleWouldAsk())) {
+        if (!gone) { offered = null; setCourt(null); }
+        return;
+      }
       if (offered || Date.now() - lookedAt.current < LOOK_EVERY_MS) return;
       lookedAt.current = Date.now();
       // Only a spot the phone gives without asking anything.

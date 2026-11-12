@@ -1,7 +1,7 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { brandBoxShadow } from '@/theme/fillMode';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useIsFocused } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -16,6 +16,7 @@ import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenShort, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
 import { seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { confirm } from '@/lib/confirm';
+import { appleLocationFirst } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -46,6 +47,8 @@ export default function LiveSessionPage() {
   const next = useRef<'log' | 'start' | null>(null);
   const [contentH, setContentH] = useState(0);
   const [asking, setAsking] = useState(false);
+  // While Apple's own location question is up (Show friends on an iPhone, never asked): a second tap starts nothing more.
+  const askingApple = useRef(false);
   const state = s ? liveState(s) : 'finished';
   const now = useLiveNow(!!s && state === 'running');
   // Whether you are checked in at its court right now, as the court's own card knows it.
@@ -101,7 +104,16 @@ export default function LiveSessionPage() {
   // checks in, Oct 27 audit #3). With no yes yet it asks "Who can see you on the map?" first ('ask-first').
   const canTry = state !== 'finished' && !here && (plan.checkIn || plan.why === 'location-off' || plan.why === 'ask-first');
   const tryCheckIn = async () => {
-    if (asking) return;
+    if (asking || askingApple.current) return;
+    // An iPhone or iPad whose Location was never asked (Apple 5.1.1(iv), Nov 12): Apple's location question straight
+    // after this tap, before "Let friends see where you are?" (it has Not now), whether the app's Location switch is on
+    // or not. Refused: the note a refusal always gets, nothing else. Allowed: on as before.
+    if (Platform.OS === 'ios' && mapVisibility !== 'none') {
+      askingApple.current = true;
+      let apple: 'granted' | 'denied' | null = null;
+      try { apple = await appleLocationFirst(); } finally { askingApple.current = false; }
+      if (apple === 'denied') { refusedNote('Blocked in your phone’s Settings'); return; }
+    }
     // A yes first, or nothing at all (Apple 5.1.2(i), migration 191).
     if (!(await yesFirst(mapVisibility, 'live'))) return;
     setAsking(true);

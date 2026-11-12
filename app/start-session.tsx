@@ -126,7 +126,8 @@ export default function StartSession() {
   useEffect(() => {
     if (!canSuggest) return undefined;
     let on = true;
-    void getPosition({ recentMs: 3 * 60_000 }).then((fix) => {
+    // On iPhone and iPad quietly: a page opening never brings Apple's question (an "Allow Once" that ran out waits for a tap).
+    void getPosition({ quiet: Platform.OS === 'ios', recentMs: 3 * 60_000 }).then((fix) => {
       if (!on || !fix.ok) return;
       const at = { lat: fix.lat, lng: fix.lng };
       setAt(at);

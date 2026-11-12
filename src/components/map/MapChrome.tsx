@@ -75,6 +75,7 @@ import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { isOfficial } from '@/features/players/official';
+import { appleWouldAsk } from '@/lib/geo';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1178,11 +1179,21 @@ function activeLabel(iso: string): string {
  */
 export function WhereCard({ locating, onLocation }: { locating?: boolean; onLocation?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  // An iPhone or iPad that would bring Apple's location question on "Use my location" (Apple 5.1.1(iv), Nov 12): this
+  // card leads only to that question, with no "Add my city" beside it (a city is still added in Edit profile).
+  // Assumed so until the quiet read says otherwise, so the second button never shows and then goes.
+  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  useEffect(() => {
+    if (Platform.OS !== 'ios') return undefined;
+    let on = true;
+    void appleWouldAsk().then((would) => { if (on) setAppleNext(would); });
+    return () => { on = false; };
+  }, []);
   return (
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>
       <View style={[styles.personWords, { paddingHorizontal: spacing.lg }]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>{appleNext ? 'Turn on location, and the map shows the courts near you, and your friends when they’re up to hit.' : 'Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.'}</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
@@ -1190,9 +1201,11 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
           <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
-          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
-        </Pressable>
+        {appleNext ? null : (
+          <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>
+            <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.secondaryText}>Add my city</Text>
+          </Pressable>
+        )}
       </View>
     </View>
   );

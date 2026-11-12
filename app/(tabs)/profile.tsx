@@ -105,7 +105,9 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  useEffect(() => {
   if (!user?.id) return undefined;
   const id = user.id;
-  const read = () => { void readSkipped(id).then(setSkipped); };
+  // On iPhone and iPad a skipped Permissions step is not offered again (Apple 5.1.1(iv), Nov 12): that old page has Skip
+  // beside rows that bring Apple's questions. Camera, photos and location are each asked when first used.
+  const read = () => { void readSkipped(id).then((s) => setSkipped(Platform.OS === 'ios' ? s.filter((k) => k !== 'permissions') : s)); };
   read();
   // Finishing setup from the card comes back to this same page: the card follows.
   return onSkippedSaved(read);

@@ -16,6 +16,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { appleWouldAsk } from '@/lib/geo';
 
 /** The quick picks for "Open until", "Pick a time" for any other, and "keep": the time your ring has now, when it is none of the others. */
 type Until = 'keep' | 'two-hours' | 'six' | 'nine' | 'midnight' | 'time';
@@ -126,11 +127,13 @@ export default function OpenToHitSheet() {
     haptics.commit();
     // Open, but not on the map: say so, with the one tap that fixes it (Check in, migration 189).
     if (!checkIn.on) {
+      // Its Up to hit button only when that tap would not bring Apple's location question (Apple 5.1.1(iv), Nov 12).
+      const leads = !(await appleWouldAsk());
       showToast({
         title: 'You’re open to hit',
         body: 'Friends see it on the map once you tap Up to hit.',
         icon: 'navigate-outline',
-        action: { label: 'Up to hit', onPress: checkIn.press },
+        ...(leads ? { action: { label: 'Up to hit', onPress: checkIn.press } } : {}),
       });
     }
     close();

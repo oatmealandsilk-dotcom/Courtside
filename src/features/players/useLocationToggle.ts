@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import type { MapVisibility } from '@/data/types';
 import * as haptics from '@/lib/haptics';
 import { useApp } from '@/store/AppContext';
@@ -13,7 +13,7 @@ import { useOpenClock } from '@/features/players/useOpenClock';
 import { learned } from '@/features/tips/tips';
 import { afterLanding, swoopAsks, swoopFinding, swoopFound } from '@/features/players/checkInZoom';
 import type { LatLng } from '@/features/players/positions';
-import { locationAllowed } from '@/lib/geo';
+import { appleLocationFirst, locationAllowed } from '@/lib/geo';
 
 /**
  * Location on this phone (Settings, "Use my location"): where you are, for
@@ -115,7 +115,10 @@ export interface CheckInZoomHooks {
  * friends who follow each other with you until 10pm (2 hours after 8pm);
  * then it goes by itself. Tapped again: Check out, gone at once. The first
  * time, "Who can see you on the map?" comes first (yes, or Not now: then
- * nothing happens), then Apple's own prompt. `where` says which button the
+ * nothing happens), then the phone's own prompt. On an iPhone or iPad whose
+ * Location was never asked, Apple's own prompt comes first instead, straight
+ * from the tap, and the question after it (Apple 5.1.1(iv), Nov 12: no card
+ * with Not now before Apple's prompt). `where` says which button the
  * one tip after the first check-in points at. In the full map ('map') the
  * button is the round arrow, which also reads as "find me": after the first
  * time a one-line question comes first (Oct 27 audit #11), so a tap meant to
@@ -143,6 +146,8 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
   // both yeses. Whether the phone already allows it is looked up quietly ahead of the tap (never a prompt).
   const [instantOn, setInstantOn] = useState(false);
   const allowed = useRef(false);
+  // While Apple's own location question is up (iPhone, never asked): a second tap starts nothing more.
+  const askingApple = useRef(false);
   const yes = saidYes(mapVisibility);
   useEffect(() => {
     if (!yes) { allowed.current = false; return undefined; }
@@ -156,12 +161,27 @@ export function useCheckIn(where: TipSpot = 'card', zoom?: CheckInZoomHooks): Ch
   }, [yes]);
 
   const pressNow = async () => {
-    if (busy) return;
+    if (busy || askingApple.current) return;
     const tap = ++turn.current;
     dismissHideTip();
     // Tapped once: Up to hit's tip (upToHitTip) has nothing left to tell them.
     learned('up-to-hit');
     if (until) { await actions.checkOutOfMap(); return; }
+    // An iPhone or iPad whose Location was never asked (Apple 5.1.1(iv), Nov 12): Apple's own location question straight
+    // after the tap, before "Who can see you on the map?" or "Up to hit?" (both have Not now). Allowed: on as before, that
+    // card next, and nothing is shared without its yes. Refused: the shake and the toast a refusal always gets, nothing
+    // else. Already allowed (looked up quietly ahead of the tap): nothing to ask, so the instant button keeps its speed.
+    if (Platform.OS === 'ios' && !allowed.current) {
+      askingApple.current = true;
+      let apple: 'granted' | 'denied' | null = null;
+      try { apple = await appleLocationFirst(); } finally { askingApple.current = false; }
+      if (apple === 'denied') {
+        setFailed((n) => n + 1);
+        haptics.reject();
+        setTimeout(() => { if (turn.current === tap) showToast({ title: 'Couldn’t put you up to hit', body: 'Location is blocked in your phone’s Settings.', icon: 'navigate-outline' }); }, FAIL_TOAST_AFTER_MS);
+        return;
+      }
+    }
     let first = false;
     if (!saidYes(mapVisibility)) {
       // Not now, or closed: nothing is shared, and it asks again next time.

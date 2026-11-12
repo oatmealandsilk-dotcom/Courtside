@@ -161,7 +161,8 @@ export function FoodSection({ userId }: { userId: string | null }) {
           <Tappable accessibilityRole="button" accessibilityLabel="Connect food through Apple Health" disabled={busy} scaleTo={0.97} onPress={() => { haptics.tap(); void connect(); }} style={styles.primary}>
             <BrandWash radius={buttonShape.radius} curve />
             {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="heart-outline" size={16} color={colors.brandInk} />}
-            <Text style={styles.primaryText}>{busy ? 'Opening Apple Health…' : 'Allow in Apple Health'}</Text>
+            <Text style={styles.primaryText}>{/* "Continue" on iPhone and iPad (Apple 5.1.1(iv), Nov 12): the button before Apple's Health sheet never says Allow. */}
+            {busy ? 'Opening Apple Health…' : Platform.OS === 'ios' ? 'Continue' : 'Allow in Apple Health'}</Text>
           </Tappable>
           <Text style={styles.how}>First, in Cronometer or MyFitnessPal, turn on sharing with Apple Health.</Text>
         </View>

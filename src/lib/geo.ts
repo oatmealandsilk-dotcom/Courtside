@@ -106,6 +106,44 @@ export async function locationAllowed(): Promise<boolean> {
 }
 
 /**
+ * Whether a tap would bring Apple's own location question on this iPhone or iPad (never asked, an "Allow Once" run
+ * out, or "Ask Next Time"). Read quietly, never asking. Always false off iOS. Apple 5.1.1(iv), Nov 12: while it would,
+ * no note or card of ours with a way out may carry a button that leads to that question.
+ */
+export async function appleWouldAsk(): Promise<boolean> {
+  if (Platform.OS !== 'ios') return false;
+  try { return (await Location.getForegroundPermissionsAsync()).status === Location.PermissionStatus.UNDETERMINED; } catch { return false; }
+}
+
+/** The one question asked by appleLocationFirst while it is up, so two quick taps share it. */
+let appleAsking: Promise<'granted' | 'denied' | null> | null = null;
+
+/**
+ * Apple's own location question first, on an iPhone or iPad that has never been asked (or whose "Allow Once" has run
+ * out, or that is set to "Ask Next Time"): Apple 5.1.1(iv), Nov 12. No card of ours with a way out on it ("Who can
+ * see you on the map?", "Up to hit?", "How long are you here?", all with Not now) may stand in front of Apple's
+ * question, so the tap on Up to hit, I'm playing here or Show friends asks Apple straight away, and the card follows
+ * Apple's answer (which Apple allows). It shares nothing: it only asks whether the phone may know where it is.
+ * 'granted' or 'denied': Apple asked, and that was the answer. null: nothing was asked (Android, the website, or a
+ * phone that already answered), so the flow goes on exactly as before; anything going wrong is null too, never a crash.
+ */
+export function appleLocationFirst(): Promise<'granted' | 'denied' | null> {
+  if (Platform.OS !== 'ios') return Promise.resolve(null);
+  if (appleAsking) return appleAsking;
+  const ask = (async (): Promise<'granted' | 'denied' | null> => {
+    try {
+      if ((await Location.getForegroundPermissionsAsync()).status !== Location.PermissionStatus.UNDETERMINED) return null;
+      return (await Location.requestForegroundPermissionsAsync()).granted ? 'granted' : 'denied';
+    } catch {
+      return null;
+    }
+  })();
+  appleAsking = ask;
+  void ask.then(() => { if (appleAsking === ask) appleAsking = null; });
+  return ask;
+}
+
+/**
  * Where the device last said it was, if that is at most `maxMs` old: this session's own last answer, else (on a
  * phone) the one the phone itself keeps. Never asks anything and never waits for a new reading; null otherwise.
  */

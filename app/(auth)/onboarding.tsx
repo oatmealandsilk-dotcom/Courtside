@@ -179,7 +179,7 @@ function OnboardingSteps() {
   const ratingOnly = editing && params.only === 'rating';
   const forCoach = params.from === 'coach';
   // Finishing a skipped step from the profile's reminder card: the old full list, so that step is reachable.
-  const order = ratingOnly ? [0] : editing ? EDIT_STEPS : forCoach ? COACH_STEPS : params.from === 'profile' ? STEPS.map((_, i) => i) : JOIN_STEPS;
+  const order = ratingOnly ? [0] : editing ? EDIT_STEPS : forCoach ? COACH_STEPS : params.from === 'profile' ? STEPS.map((_, i) => i).filter((i) => !(Platform.OS === 'ios' && i === 2)) : JOIN_STEPS;
   const startAt = Math.min(STEPS.length - 1, Math.max(0, Number(params.step) || 0));
   const [step, setStep] = useState(order.includes(startAt) ? startAt : order[0]);
   const position = Math.max(0, order.indexOf(step));

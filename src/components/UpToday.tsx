@@ -12,6 +12,7 @@ import type { ID, LastSeen, User } from '@/data/types';
 import { FillDivider, FilledFace } from '@/features/cityBoard/BoardBits';
 import type { FillFace } from '@/features/cityBoard/fill';
 import { formatSpotMiles, milesBetween, spotMilesKey } from '@/features/players/geo';
+import { appleWouldAsk } from '@/lib/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isOpenToHit, laterUntil, tillLabel } from '@/features/players/openToHit';
 import { isRoughSpot, type LatLng } from '@/features/players/positions';
@@ -137,13 +138,16 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
     // Up, but not on the map (not checked in, migration 189): say so, with the one tap that fixes it. Only once the ring is really on.
     const noting = next && !checkedIn;
     if (!noting) setTapped(true);
-    void onToggle(next).then((on) => {
+    void onToggle(next).then(async (on) => {
       if (on && noting) {
+        // Its Up to hit button only when that tap would not bring Apple's location question (Apple 5.1.1(iv), Nov 12):
+        // a note that slides away may not lead to it. Up to hit itself still asks Apple first.
+        const leads = !!onCheckIn && !(await appleWouldAsk());
         showToast({
           title: 'You’re open to hit',
           body: 'Friends see it on the map once you tap Up to hit.',
           icon: 'navigate-outline',
-          ...(onCheckIn ? { action: { label: 'Up to hit', onPress: onCheckIn } } : {}),
+          ...(leads && onCheckIn ? { action: { label: 'Up to hit', onPress: onCheckIn } } : {}),
         });
       }
     });

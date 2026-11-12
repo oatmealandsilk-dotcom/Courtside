@@ -457,7 +457,8 @@ function Compose() {
   useEffect(() => {
     if (!canSuggest) { setHere(null); return undefined; }
     let on = true;
-    getPosition({ recentMs: 3 * 60_000 }).then((r) => { if (on) setHere(r.ok ? { lat: r.lat, lng: r.lng } : null); }).catch(() => undefined);
+    // On iPhone and iPad quietly: compose opening never brings Apple's question (an "Allow Once" that ran out waits for a tap).
+    getPosition({ quiet: Platform.OS === 'ios', recentMs: 3 * 60_000 }).then((r) => { if (on) setHere(r.ok ? { lat: r.lat, lng: r.lng } : null); }).catch(() => undefined);
     return () => { on = false; };
   }, [canSuggest]);
   const hereLat = here?.lat;
