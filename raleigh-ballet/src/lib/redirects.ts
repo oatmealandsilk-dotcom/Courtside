@@ -1,0 +1,38 @@
+/**
+ * Old WordPress addresses → new addresses, so links and Google results keep working.
+ * [old path, new path]. Checked against the live site's menu before launch (see README, "Launch").
+ */
+export const legacyRedirects: [string, string][] = [
+  ["/about-us", "/about"],
+  ["/about-us/history", "/about/history"],
+  ["/about-us/programs", "/about/programs"],
+  ["/about-us/faculty", "/about/faculty"],
+  ["/about-us/facility", "/about/facility"],
+  ["/about-us/directions", "/about/directions"],
+  ["/history", "/about/history"],
+  ["/faculty", "/about/faculty"],
+  ["/facility", "/about/facility"],
+  ["/directions", "/about/directions"],
+  ["/childrens-program", "/children"],
+  ["/childrens-program/academic-year", "/children/academic-year"],
+  ["/childrens-program/summer", "/children/summer"],
+  ["/childrens-program/class-schedule", "/schedule?audience=youth"],
+  ["/childrens-program/calendar", "/children/calendar"],
+  ["/childrens-program/dress-code", "/children/dress-code"],
+  ["/childrens-program/school-rules", "/children/school-rules"],
+  ["/childrens-program/performance", "/children/performance"],
+  ["/childrens-program/parent-information", "/children/parent-information"],
+  ["/dress-code", "/children/dress-code"],
+  ["/adult-classes", "/adults"],
+  ["/adult-classes/in-studio-classes", "/adults/in-studio-classes"],
+  ["/adult-classes/summer-classes", "/adults/summer"],
+  ["/adult-classes/studio-protocol", "/adults/studio-protocol"],
+  ["/adult-program", "/adults"],
+  ["/class-schedule", "/schedule"],
+  ["/calendar", "/schedule"],
+  ["/contact-us", "/contact"],
+  ["/category/news", "/news"],
+  ["/wp-login.php", "/login"],
+  ["/wp-admin", "/login"],
+  ["/feed", "/news"],
+];
