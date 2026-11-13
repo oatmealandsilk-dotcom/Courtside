@@ -18,6 +18,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, lightColors, spacing, typography, font, wordmarkFont } from '@/theme';
 import { Button } from '@/components/ui';
 import { leaveGently } from '@/components/SignOutCurtain';
+import { dropWebLoader } from '@/lib/webLoader';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
 const HOLD_MS = 450;
@@ -136,7 +137,8 @@ export default function Index() {
   useEffect(() => {
     // A link's error on the address (error_description) is kept for the sign-in page by AppShell, on any page it lands on.
     Animated.spring(rise, { toValue: 1, useNativeDriver: true, speed: 6, bounciness: 4 }).start();
-    const timer = setTimeout(() => setHeld(true), HOLD_MS);
+    // The website: no beat on the mark (Nov 12, Instagram-style load): its loader stays over the page until that page is whole.
+    const timer = setTimeout(() => setHeld(true), Platform.OS === 'web' ? 0 : HOLD_MS);
     return () => clearTimeout(timer);
   }, [rise]);
 
@@ -162,6 +164,9 @@ export default function Index() {
     // a blank beat in between, then the page all at once. (Over the app
     // already running, the page is already there: no curtain.)
     if (currentUserId && onboardingComplete) { if (!overTabs) raiseCurtain(); setGone(true); return; }
+    // The website cuts straight on (Nov 12): the loader in public/index.html covers the page until it has drawn
+    // (webLoader.web.ts), so a fade here only ever showed a blank white beat before the page.
+    if (Platform.OS === 'web') { setGone(true); return; }
     Animated.timing(opacity, { toValue: 0, duration: FADE_MS, useNativeDriver: true }).start(({ finished }) => {
       if (finished) setGone(true);
     });
@@ -170,6 +175,9 @@ export default function Index() {
   // On its way back to the app underneath: a plain page for the moment it takes, no logo.
   // Nothing to draw over (back into a running app, or already on the way in): let the phone's picture go.
   useEffect(() => { if (backToApp || gone) hideLaunch(); }, [backToApp, gone]);
+  // A page that stays on this address (could not load the account) takes the website's loader away itself.
+  const failed = !!(gone && currentUserId && isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error);
+  useEffect(() => { if (failed) dropWebLoader(); }, [failed]);
   if (backToApp) return <View style={styles.splash} />;
 
   // Signed in, but the account never came down even after retries: the app

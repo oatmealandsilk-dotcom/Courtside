@@ -305,8 +305,8 @@ def main():
         f'#cs-launch{{background:{hexc(GROUND)}}}#cs-launch .cs-mark{{fill:{hexc(GREEN)}}}#cs-launch .cs-line{{fill:{hexc(LINE_INK)}}}'
         f'@media (prefers-color-scheme: dark){{#cs-launch{{background:{hexc(DARK_GROUND)}}}#cs-launch .cs-mark{{fill:{hexc(DARK_GREEN)}}}#cs-launch .cs-line{{fill:{hexc(DARK_LINE_INK)}}}}}')
     block = (
-        '<!-- launch:start (written by scripts/make-splash-c.py; the app\'s first screen replaces it) -->\n'
-        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;--u:{u}">\n'
+        '<!-- launch:start (written by scripts/make-splash-c.py; src/lib/webLoader.web.ts takes it away) -->\n'
+        f'      <div id="cs-launch" role="img" aria-label="CourtSide" style="position:fixed;inset:0;z-index:2147483000;--u:{u}">\n'
         f'        <style>{looks}</style>\n'
         f'        <svg viewBox="{vb(mark_view)}" style="position:absolute;left:50%;top:50%;width:calc(var(--u) * {mark_view[2]:g});height:calc(var(--u) * {mark_view[3]:g});transform:translate(-50%,-50%)">'
         f'<path class="cs-mark" fill-rule="evenodd" d="{mark_d}"/></svg>\n'

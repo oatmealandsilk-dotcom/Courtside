@@ -58,6 +58,7 @@ import { ZoomLayer } from '@/components/map/ZoomLayer';
 import { v7Bar } from '@/features/players/zoomV7';
 import { SimDriverHost } from '@/components/SimDriverHost';
 import { SIM_DRIVER } from '@/lib/simDriver';
+import { useDropWebLoader } from '@/lib/webLoader';
 import { TAP_TIMING, listenToRouter, tapDown, tapUp } from '@/features/navigation/tapTiming';
 
 /**
@@ -331,6 +332,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // them apart. The bar waits until the splash has handed over to the app.
   const segments = useSegments() as string[];
   const onSplash = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
+  // The website's loader goes once the first page is whole under it (Nov 12, Instagram-style load; webLoader.web.ts).
+  useDropWebLoader(onSplash);
   // On the comments stage the phone's bar does not pop away: it stays, out of
   // reach of touches, and fades out with the first of the opening (and back
   // in with the last of the closing), following the sheet (see commentStage).
