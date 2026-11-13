@@ -189,7 +189,7 @@ function Profile({ previewSection }: { previewSection?: string } = {}) {
  const grids = useMemo(() => TABS.map((t) => content(t)), [posts, user?.id, styles, tileW, hasMoved]);
  // A guest (guest mode, Oct 17): your profile is what an account is for.
  if (!user && isGuest) {
-   return <Screen memoryKey="profile" title="Profile" wash right={<GuestSignIn />}><View style={{ paddingTop: spacing.lg }}><GuestJoinCard title="Your tennis, in one place" body="Make a free account to post your clips, log your sessions and find people to hit with." /></View></Screen>;
+   return <Screen memoryKey="profile" title="Profile" wash right={<GuestSignIn />}><View style={{ paddingTop: spacing.lg }}><GuestJoinCard profile title="Your tennis, in one place" body="Make a free account to post your clips, log your sessions and find people to hit with." /></View></Screen>;
  }
  if (!user) {
    const remembered = savedAccounts.find((a) => a.id === currentUserId);

@@ -19,6 +19,7 @@ import { getPosition } from '@/lib/geo';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { GUEST_PEEK_LIMIT, GuestCourtsMap } from './GuestCourtsMap';
 import { openJoinSheet } from './joinAsk';
+import { Moment } from '@/features/welcome/Moments';
 import { TextScale } from '@/theme/textScale';
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
@@ -178,19 +179,68 @@ export function GuestFindPlayers() {
   );
 }
 
+/** Design preview only (branch design/guest-join): ?guestlook=a|b on the website picks a look; anything else is today's. */
+function previewLook(): 'now' | 'a' | 'b' {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'now';
+  const v = new URLSearchParams(window.location.search).get('guestlook');
+  return v === 'a' || v === 'b' ? v : 'now';
+}
+
+const toCreate = () => router.push({ pathname: '/sign-in', params: { mode: 'create' } });
+const toSignIn = () => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } });
+
 /**
  * The Profile tab for a guest, and Coaching when nobody is listed for guests
  * yet: one calm card with the way in, never a pop-up.
  */
-export function GuestJoinCard({ title, body }: { title: string; body: string }) {
+export function GuestJoinCard({ title, body, profile = false }: { title: string; body: string; profile?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  const look = previewLook();
+  if (look === 'a' && profile) {
+    // A: your profile, still empty: the page you will have, with the way in where your name will be.
+    return (
+      <View style={styles.ghost}>
+        <View style={styles.ghostTop}>
+          <View style={styles.ghostAvatar}><Ionicons name="person" size={36} color={colors.textFaint} /></View>
+          <View style={{ flex: 1, gap: 6 }}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ghostName}>Your name</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ghostMeta}>Your level · your courts</Text>
+          </View>
+        </View>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
+        <Button label="Create a free account" full onPress={toCreate} />
+        <View style={styles.ghostTabs}>
+          {['Posts', 'Activity', 'Clips', 'Tagged'].map((t, i) => (
+            <Text key={t} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.ghostTab, i === 0 && styles.ghostTabOn]}>{t}</Text>
+          ))}
+        </View>
+        <View style={styles.ghostGrid}>
+          {Array.from({ length: 6 }, (_, i) => <View key={i} style={styles.ghostTile} />)}
+        </View>
+      </View>
+    );
+  }
+  if (look === 'a' || look === 'b') {
+    // B: no box and no icon bubble: the welcome screen's own session card, then the words and one button.
+    return (
+      <View style={styles.plain}>
+        {profile ? <View style={styles.plainCard}><View style={styles.plainCardScale}><Moment index={1} /></View></View> : null}
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
+        <Button label="Create a free account" full onPress={toCreate} />
+        <Pressable accessibilityRole="link" onPress={toSignIn} hitSlop={8} style={({ pressed }) => [styles.plainLink, pressed && styles.pressed]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainLinkText}>I already have an account</Text>
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <View style={[styles.card, styles.empty]}>
       <View style={styles.emptyIcon}><Ionicons name="person-outline" size={22} color={colors.brand} /></View>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyTitle}>{title}</Text>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyBody}>{body}</Text>
-      <Button label="Create a free account" full onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
-      <Button label="I already have an account" variant="secondary" full onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } })} />
+      <Button label="Create a free account" full onPress={toCreate} />
+      <Button label="I already have an account" variant="secondary" full onPress={toSignIn} />
     </View>
   );
 }
@@ -226,6 +276,23 @@ const styleDefinitions = StyleSheet.create({
   emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
   emptyBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 300 },
+  plain: { gap: spacing.md },
+  plainCard: { alignItems: 'center', height: 300, marginBottom: spacing.sm },
+  plainCardScale: { transform: [{ scale: 0.8 }], transformOrigin: 'top' },
+  plainTitle: { ...typography.title, color: colors.text },
+  plainBody: { ...typography.body, color: colors.textMuted },
+  plainLink: { alignSelf: 'center', paddingVertical: spacing.sm },
+  plainLinkText: { ...typography.bodyStrong, color: colors.brand },
+  ghost: { gap: spacing.lg },
+  ghostTop: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  ghostAvatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center' },
+  ghostName: { ...typography.title, color: colors.textFaint },
+  ghostMeta: { ...typography.small, color: colors.textFaint },
+  ghostTabs: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border, marginTop: spacing.sm },
+  ghostTab: { ...typography.smallStrong, color: colors.textFaint, paddingBottom: spacing.sm, flex: 1, textAlign: 'center' },
+  ghostTabOn: { color: colors.textMuted, borderBottomWidth: 2, borderColor: colors.textMuted },
+  ghostGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: -spacing.md + 3 },
+  ghostTile: { width: '32.6%', aspectRatio: 0.8, backgroundColor: colors.surfaceAlt, borderRadius: 4 },
   court: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   courtTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   courtName: { ...typography.bodyStrong, color: colors.text },
