@@ -15,11 +15,13 @@ if (!env.EXPO_PUBLIC_SUPABASE_URL || !env.EXPO_PUBLIC_SUPABASE_KEY) {
   process.exit(1);
 }
 const message = process.argv.slice(2).join(' ').trim() || 'Fixes';
+// --clear-cache (Nov 12): Metro's cache is shared by every worktree (one node_modules), and expo-router's
+// cached page list can point at another worktree's app/ folder; a fresh bundle always uses this one's.
 // Both platforms (Oct 5). Publishing Android before any Android build exists does
 // no harm: no phone is asking for it yet. Publish from main, the branch the
 // Android build is made from, or an update would take its Android fixes away
 // (both platforms share runtime 1.0.0; see app.config.js).
-const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--environment', 'production', '--platform', 'all', '--message', message, '--non-interactive'], {
+const run = spawnSync('npx', ['eas-cli@latest', 'update', '--channel', channel, '--environment', 'production', '--platform', 'all', '--message', message, '--non-interactive', '--clear-cache'], {
   stdio: 'inherit',
   env: { ...process.env, ...env, EXPO_BASE_URL: '' },
 });

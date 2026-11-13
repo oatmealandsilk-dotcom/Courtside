@@ -19,7 +19,6 @@ import { getPosition } from '@/lib/geo';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { GUEST_PEEK_LIMIT, GuestCourtsMap } from './GuestCourtsMap';
 import { openJoinSheet } from './joinAsk';
-import { Moment } from '@/features/welcome/Moments';
 import { TextScale } from '@/theme/textScale';
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
@@ -179,28 +178,22 @@ export function GuestFindPlayers() {
   );
 }
 
-/** Design preview only (branch design/guest-join): ?guestlook=a|b on the website picks a look; anything else is today's. */
-function previewLook(): 'now' | 'a' | 'b' {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return 'now';
-  const v = new URLSearchParams(window.location.search).get('guestlook');
-  return v === 'a' || v === 'b' ? v : 'now';
-}
-
 const toCreate = () => router.push({ pathname: '/sign-in', params: { mode: 'create' } });
 const toSignIn = () => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } });
 
 /**
- * The Profile tab for a guest, and Coaching when nobody is listed for guests
- * yet: one calm card with the way in, never a pop-up.
+ * The way in for a guest (Nov 12, owner: the old card "looks crazy ai", then "A is the best"): no box and no icon
+ * bubble. On Profile (`profile`) it is the page you will have, still empty: a blank photo and name, the words, one
+ * button (Sign in stays at the top of the page), then the page's own tabs and tiles, drawn faintly and hidden from
+ * screen readers. On Coaching, when nobody is listed for guests yet: the words, the button, and "I already have an
+ * account" as a plain link.
  */
 export function GuestJoinCard({ title, body, profile = false }: { title: string; body: string; profile?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
-  const look = previewLook();
-  if (look === 'a' && profile) {
-    // A: your profile, still empty: the page you will have, with the way in where your name will be.
+  if (profile) {
     return (
       <View style={styles.ghost}>
-        <View style={styles.ghostTop}>
+        <View style={styles.ghostTop} aria-hidden>
           <View style={styles.ghostAvatar}><Ionicons name="person" size={36} color={colors.textFaint} /></View>
           <View style={{ flex: 1, gap: 6 }}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.ghostName}>Your name</Text>
@@ -209,38 +202,27 @@ export function GuestJoinCard({ title, body, profile = false }: { title: string;
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
         <Button label="Create a free account" full onPress={toCreate} />
-        <View style={styles.ghostTabs}>
-          {['Posts', 'Activity', 'Clips', 'Tagged'].map((t, i) => (
-            <Text key={t} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.ghostTab, i === 0 && styles.ghostTabOn]}>{t}</Text>
-          ))}
+        <View aria-hidden>
+          <View style={styles.ghostTabs}>
+            {['Posts', 'Activity', 'Clips', 'Tagged'].map((t, i) => (
+              <Text key={t} maxFontSizeMultiplier={TextScale.CHROME} style={[styles.ghostTab, i === 0 && styles.ghostTabOn]}>{t}</Text>
+            ))}
+          </View>
+          <View style={styles.ghostGrid}>
+            {Array.from({ length: 6 }, (_, i) => <View key={i} style={styles.ghostTile} />)}
+          </View>
         </View>
-        <View style={styles.ghostGrid}>
-          {Array.from({ length: 6 }, (_, i) => <View key={i} style={styles.ghostTile} />)}
-        </View>
-      </View>
-    );
-  }
-  if (look === 'a' || look === 'b') {
-    // B: no box and no icon bubble: the welcome screen's own session card, then the words and one button.
-    return (
-      <View style={styles.plain}>
-        {profile ? <View style={styles.plainCard}><View style={styles.plainCardScale}><Moment index={1} /></View></View> : null}
-        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text>
-        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
-        <Button label="Create a free account" full onPress={toCreate} />
-        <Pressable accessibilityRole="link" onPress={toSignIn} hitSlop={8} style={({ pressed }) => [styles.plainLink, pressed && styles.pressed]}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainLinkText}>I already have an account</Text>
-        </Pressable>
       </View>
     );
   }
   return (
-    <View style={[styles.card, styles.empty]}>
-      <View style={styles.emptyIcon}><Ionicons name="person-outline" size={22} color={colors.brand} /></View>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyTitle}>{title}</Text>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyBody}>{body}</Text>
+    <View style={styles.plain}>
+      <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text>
+      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
       <Button label="Create a free account" full onPress={toCreate} />
-      <Button label="I already have an account" variant="secondary" full onPress={toSignIn} />
+      <Pressable accessibilityRole="link" accessibilityLabel="I already have an account" onPress={toSignIn} hitSlop={8} style={({ pressed }) => [styles.plainLink, pressed && styles.pressed]}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainLinkText}>I already have an account</Text>
+      </Pressable>
     </View>
   );
 }
@@ -276,9 +258,7 @@ const styleDefinitions = StyleSheet.create({
   emptyIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyTitle: { ...typography.title, color: colors.text, textAlign: 'center' },
   emptyBody: { ...typography.body, color: colors.textMuted, textAlign: 'center', maxWidth: 300 },
-  plain: { gap: spacing.md },
-  plainCard: { alignItems: 'center', height: 300, marginBottom: spacing.sm },
-  plainCardScale: { transform: [{ scale: 0.8 }], transformOrigin: 'top' },
+  plain: { gap: spacing.md, paddingTop: spacing.lg },
   plainTitle: { ...typography.title, color: colors.text },
   plainBody: { ...typography.body, color: colors.textMuted },
   plainLink: { alignSelf: 'center', paddingVertical: spacing.sm },
@@ -291,7 +271,7 @@ const styleDefinitions = StyleSheet.create({
   ghostTabs: { flexDirection: 'row', justifyContent: 'space-between', borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border, marginTop: spacing.sm },
   ghostTab: { ...typography.smallStrong, color: colors.textFaint, paddingBottom: spacing.sm, flex: 1, textAlign: 'center' },
   ghostTabOn: { color: colors.textMuted, borderBottomWidth: 2, borderColor: colors.textMuted },
-  ghostGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: -spacing.md + 3 },
+  ghostGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 3 },
   ghostTile: { width: '32.6%', aspectRatio: 0.8, backgroundColor: colors.surfaceAlt, borderRadius: 4 },
   court: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm },
   courtTile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

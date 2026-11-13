@@ -1046,10 +1046,10 @@ const STEPS = [
   },
   {
     name: 'guest-profile',
-    title: 'Guest mode: Profile asks to join; the app bar closes',
+    title: 'Guest mode: Profile shows the empty profile with the way in; the app bar closes',
     async run(page) {
       await page.tap({ label: 'Profile' });
-      await page.waitFor({ text: 'Your tennis, in one place' });
+      await page.waitFor({ text: /^Make a free account to post your clips/ });
       await page.tap({ label: 'Close the app banner' });
       await page.gone({ label: 'CourtSide for iPhone' });
     },
