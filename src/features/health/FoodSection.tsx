@@ -158,7 +158,7 @@ export function FoodSection({ userId }: { userId: string | null }) {
               <Text style={styles.line}>Reads the daily food totals they save to Apple Health.</Text>
             </View>
           </View>
-          <Tappable accessibilityRole="button" accessibilityLabel="Connect food through Apple Health" disabled={busy} scaleTo={0.97} onPress={() => { haptics.tap(); void connect(); }} style={styles.primary}>
+          <Tappable accessibilityRole="button" accessibilityLabel={Platform.OS === 'ios' ? 'Continue' : 'Connect food through Apple Health'} disabled={busy} scaleTo={0.97} onPress={() => { haptics.tap(); void connect(); }} style={styles.primary}>
             <BrandWash radius={buttonShape.radius} curve />
             {busy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="heart-outline" size={16} color={colors.brandInk} />}
             <Text style={styles.primaryText}>{/* "Continue" on iPhone and iPad (Apple 5.1.1(iv), Nov 12): the button before Apple's Health sheet never says Allow. */}

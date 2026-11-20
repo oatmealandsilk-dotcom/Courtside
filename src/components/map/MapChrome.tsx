@@ -2,7 +2,7 @@ import { brandShadow } from '@/theme/fillMode';
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, AppState, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Gesture, GestureDetector, ScrollView as GestureScrollView } from 'react-native-gesture-handler';
 import { useGrowAway, useGrowLabels } from '@/features/players/mapGrow';
@@ -75,7 +75,7 @@ import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { isOfficial } from '@/features/players/official';
-import { appleWouldAsk } from '@/lib/geo';
+import { appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1182,14 +1182,17 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
   // An iPhone or iPad that would bring Apple's location question on "Use my location" (Apple 5.1.1(iv), Nov 12): this
   // card leads only to that question, with no "Add my city" beside it (a city is still added in Edit profile).
   // Assumed so until the quiet read says otherwise, so the second button never shows and then goes.
-  // Its button says "Continue" then, never "Use my location" (Apple 5.1.1(iv), Nov 20).
-  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
-  // Read again once a tap's ask is over: after Don't Allow, "Add my city" comes back.
+  // Its button says "Continue" then, never "Use my location" (Apple 5.1.1(iv), Nov 20). Starts on the last read, so a
+  // phone that already answered Apple never shows "Continue" for a moment.
+  const [appleNext, setAppleNext] = useState(appleWouldAskLast);
+  // Read again once a tap's ask is over, and when the app comes back: after Don't Allow, "Add my city" comes back.
   useEffect(() => {
     if (Platform.OS !== 'ios' || locating) return undefined;
     let on = true;
-    void appleWouldAsk().then((would) => { if (on) setAppleNext(would); });
-    return () => { on = false; };
+    const look = () => { void appleWouldAsk().then((would) => { if (on) setAppleNext(would); }); };
+    look();
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') look(); });
+    return () => { on = false; sub.remove(); };
   }, [locating]);
   return (
     <View style={[styles.sheet, { paddingTop: spacing.lg }]}>

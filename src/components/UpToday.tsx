@@ -12,7 +12,7 @@ import type { ID, LastSeen, User } from '@/data/types';
 import { FillDivider, FilledFace } from '@/features/cityBoard/BoardBits';
 import type { FillFace } from '@/features/cityBoard/fill';
 import { formatSpotMiles, milesBetween, spotMilesKey } from '@/features/players/geo';
-import { appleWouldAsk } from '@/lib/geo';
+import { appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
 import { IN_TOWN_MILES } from '@/features/players/mapModel';
 import { isOpenToHit, laterUntil, tillLabel } from '@/features/players/openToHit';
 import { isRoughSpot, type LatLng } from '@/features/players/positions';
@@ -123,7 +123,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  */
 export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle }: { me: User; people: Up[];
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
-  /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
+  /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -134,7 +134,8 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   const holdTip = useTip('hold-to-edit', tapped);
   // An iPhone or iPad where the Location link brings Apple's own question next (Apple 5.1.1(iv), Nov 20): the link says
   // "Continue", never "Turn on Location". Read again when the app comes back (Apple's question closing does that).
-  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  // Starts on the last read, so a phone that already answered Apple never shows "Continue" for a moment.
+  const [appleNext, setAppleNext] = useState(appleWouldAskLast);
   const offering = !!onLocation;
   useEffect(() => {
     if (Platform.OS !== 'ios' || !offering) return undefined;
@@ -144,6 +145,11 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
     const sub = AppState.addEventListener('change', (st) => { if (st === 'active') look(); });
     return () => { on = false; sub.remove(); };
   }, [offering]);
+  // The link's tap, then a fresh read once it is over: after Don't Allow the link never stays on "Continue".
+  const askLocation = () => {
+    if (!onLocation) return;
+    void Promise.resolve(onLocation()).finally(() => { if (Platform.OS === 'ios') void appleWouldAsk().then(setAppleNext); });
+  };
   const flip = () => {
     const next = !up;
     haptics.tap();
@@ -228,7 +234,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         {!people.length && !fill.length ? (
           <View style={styles.empty}>
             {onLocation ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. ${appleNext ? 'Continue' : 'Turn on Location'}`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. ${appleNext ? 'Continue' : 'Turn on Location'}`} onPress={askLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>{appleNext ? 'Continue' : 'Turn on Location'}</Text>
               </Pressable>

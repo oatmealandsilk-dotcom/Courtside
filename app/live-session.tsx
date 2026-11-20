@@ -16,7 +16,7 @@ import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenShort, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
 import { seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { confirm } from '@/lib/confirm';
-import { appleLocationFirst, appleWouldAsk } from '@/lib/geo';
+import { appleLocationFirst, appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -51,7 +51,8 @@ export default function LiveSessionPage() {
   const askingApple = useRef(false);
   // With Location off on an iPhone or iPad that Apple has not asked yet, the row's button leads straight to Apple's
   // question, so it says "Continue", never "Turn on" (Apple 5.1.1(iv), Nov 20). Read again when the app comes back.
-  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  // Starts on the last read, so a phone that already answered Apple never shows "Continue" for a moment.
+  const [appleNext, setAppleNext] = useState(appleWouldAskLast);
   useEffect(() => {
     if (Platform.OS !== 'ios' || locationEnabled) return undefined;
     let on = true;
@@ -123,6 +124,8 @@ export default function LiveSessionPage() {
       askingApple.current = true;
       let apple: 'granted' | 'denied' | null = null;
       try { apple = await appleLocationFirst(); } finally { askingApple.current = false; }
+      // Read again straight away: after Don't Allow the button never stays on "Continue".
+      void appleWouldAsk().then(setAppleNext);
       if (apple === 'denied') { refusedNote('Blocked in your phone’s Settings'); return; }
     }
     // A yes first, or nothing at all (Apple 5.1.2(i), migration 191).

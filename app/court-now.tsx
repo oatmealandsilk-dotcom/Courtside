@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useIsFocused, useLocalSearchParams } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -86,6 +86,17 @@ export default function CourtNowSheet() {
   const [thanks, setThanks] = useState<CourtNow | null>(null);
   // Busy or Full waiting on "To light up this court, CourtSide checks you're here" (Location never asked, or off).
   const [asking, setAsking] = useState<CourtNow | null>(null);
+  // On an iPhone or iPad that line only ever shows while Location is allowed (never asked goes to Apple's question
+  // first, in pick). Back in the app with it no longer allowed (changed in Settings meanwhile), the line closes, so it
+  // never stands in front of Apple's question (Apple 5.1.1(iv), Nov 20).
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !asking) return undefined;
+    let on = true;
+    const sub = AppState.addEventListener('change', (st) => {
+      if (st === 'active') void getPermission('location').then((p) => { if (on && p !== 'granted') setAsking(null); });
+    });
+    return () => { on = false; sub.remove(); };
+  }, [asking]);
   // Saved, but not lit: why (MISSED).
   const [missed, setMissed] = useState<Missed | null>(null);
   // The server said the answer was given at the court, so it lights it up.

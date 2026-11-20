@@ -105,6 +105,9 @@ export async function locationAllowed(): Promise<boolean> {
   try { return (await Location.getForegroundPermissionsAsync()).granted; } catch { return false; }
 }
 
+/** appleWouldAsk's last answer this session (only in memory). Yes on an iPhone or iPad until its first read. */
+let appleWouldLast = Platform.OS === 'ios';
+
 /**
  * Whether a tap would bring Apple's own location question on this iPhone or iPad (never asked, an "Allow Once" run
  * out, or "Ask Next Time"). Read quietly, never asking. Always false off iOS. Apple 5.1.1(iv), Nov 12: while it would,
@@ -112,7 +115,18 @@ export async function locationAllowed(): Promise<boolean> {
  */
 export async function appleWouldAsk(): Promise<boolean> {
   if (Platform.OS !== 'ios') return false;
-  try { return (await Location.getForegroundPermissionsAsync()).status === Location.PermissionStatus.UNDETERMINED; } catch { return false; }
+  let would = false;
+  try { would = (await Location.getForegroundPermissionsAsync()).status === Location.PermissionStatus.UNDETERMINED; } catch { would = false; }
+  appleWouldLast = would;
+  return would;
+}
+
+/**
+ * What appleWouldAsk last read, at once and without asking: a label that says "Continue" while Apple would ask
+ * starts on it (Apple 5.1.1(iv), Nov 20), so a phone that already answered never shows "Continue" for a moment first.
+ */
+export function appleWouldAskLast(): boolean {
+  return appleWouldLast;
 }
 
 /** The one question asked by appleLocationFirst while it is up, so two quick taps share it. */

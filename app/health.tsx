@@ -253,6 +253,9 @@ export default function Health() {
     // Tennis sessions on, every workout not yet (they agreed to tennis only): offered, never switched on for them.
     const offer = tennisCard && !!i.readsWorkouts && workouts(i.provider) && !i.readsAllWorkouts && !blocked;
     const offerBusy = loading && step === 'workouts';
+    // On an iPhone or iPad, a button here that brings Apple's Health sheet next says "Continue" (Apple 5.1.1(iv), Nov 20),
+    // as the Food card's does: Connect on Apple Health (and on Cronometer or MyFitnessPal, read through it), and Turn on.
+    const appleSheet = Platform.OS === 'ios' && appleHealthAvailable() && (i.provider === 'apple-health' || i.provider === 'cronometer' || i.provider === 'myfitnesspal');
     return (
       // A row eases to its new height when its buttons or cards come and go (Oct 22 sweep).
       <Reanimated.View key={i.provider} layout={ROW_GLIDE} style={[styles.row, index > 0 && styles.rowLine]}>
@@ -355,10 +358,10 @@ export default function Health() {
                 {/* WHOOP's (and each tracker's) own sign-in says what it shares; Apple Health is explained here first.
                     The app's own filled pill (with its soft wash) dips under the finger; while it
                     works, the pill itself says so rather than the row going quiet. */}
-                <Tappable accessibilityRole="button" accessibilityLabel={`Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
+                <Tappable accessibilityRole="button" accessibilityLabel={appleSheet && i.provider === 'apple-health' ? 'Continue' : `Turn on ${what(i)} from ${i.label}`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'apple-health') askApple('tennis'); else run(i.provider, 'tennis'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
                   <BrandWash radius={buttonShape.smallRadius} curve />
                   {loading ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
-                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : `Turn on ${what(i)}`}</Text>
+                  <Text style={styles.turnOnText}>{loading ? 'Turning on…' : appleSheet && i.provider === 'apple-health' ? 'Continue' : `Turn on ${what(i)}`}</Text>
                 </Tappable>
               </Reanimated.View>
             )
@@ -382,8 +385,8 @@ export default function Health() {
           <View style={styles.badge}><Text style={styles.badgeText}>Via Apple Health</Text></View>
         ) : i.connected || loading ? null : (
           <Reanimated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(120)}>
-            <Pressable accessibilityRole="button" accessibilityLabel={`Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, LESS_AI && styles.connectSoft, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
-              <Text style={[styles.connectText, LESS_AI && styles.connectTextSoft, blocked && styles.connectTextOff]}>{(i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel={appleSheet ? 'Continue' : `Connect ${i.label}`} accessibilityState={{ disabled: blocked }} disabled={blocked} onPress={() => (tennis && i.provider === 'apple-health' ? askApple('toggle') : run(i.provider, 'toggle'))} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.connect, LESS_AI && styles.connectSoft, blocked && styles.connectOff, pressed && styles.pressedShrink]}>
+              <Text style={[styles.connectText, LESS_AI && styles.connectTextSoft, blocked && styles.connectTextOff]}>{appleSheet ? 'Continue' : (i.provider === 'cronometer' || i.provider === 'myfitnesspal') && !appleHealthAvailable() ? 'Import' : 'Connect'}</Text>
             </Pressable>
           </Reanimated.View>
         )}
