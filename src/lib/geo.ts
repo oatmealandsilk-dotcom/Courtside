@@ -120,6 +120,9 @@ export async function appleWouldAsk(): Promise<boolean> {
   appleWouldLast = would;
   return would;
 }
+// Read once as the app starts on an iPhone or iPad, so the first card after launch never shows "Continue" for a moment
+// on a phone that already answered Apple (review of the Nov 20 fix).
+if (Platform.OS === 'ios') void appleWouldAsk();
 
 /**
  * What appleWouldAsk last read, at once and without asking: a label that says "Continue" while Apple would ask

@@ -306,9 +306,9 @@ export default function Health() {
                   </Pressable>
                 ) : null}
                 {offer ? (
-                  <Pressable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} hitSlop={10} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={({ pressed }) => [styles.offerLink, pressed && styles.pressedDim]}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={appleSheet && i.provider === 'apple-health' ? 'Continue' : `Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} hitSlop={10} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} style={({ pressed }) => [styles.offerLink, pressed && styles.pressedDim]}>
                     {offerBusy ? <ActivityIndicator size="small" color={colors.brand} /> : null}
-                    <Text style={styles.offerLinkText}>{offerBusy ? 'Turning on…' : 'Add runs, rides and gym'}</Text>
+                    <Text style={styles.offerLinkText}>{offerBusy ? 'Turning on…' : appleSheet && i.provider === 'apple-health' ? 'Continue' : 'Add runs, rides and gym'}</Text>
                   </Pressable>
                 ) : null}
               </Reanimated.View>
@@ -344,10 +344,10 @@ export default function Health() {
                   // Every other workout too: their own yes, after the same explanation anyone new gets.
                   <Reanimated.View key="workouts-offer" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.offer}>
                     <Text style={styles.offerText}>Also pick up runs, rides and the gym?</Text>
-                    <Tappable accessibilityRole="button" accessibilityLabel={`Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
+                    <Tappable accessibilityRole="button" accessibilityLabel={appleSheet && i.provider === 'apple-health' ? 'Continue' : `Turn on every workout from ${i.label}: runs, rides, the gym and more`} disabled={loading} onPress={() => { haptics.tap(); if (i.provider === 'whoop') askWhoop(); else askApple('workouts'); }} hitSlop={buttonShape.smallSlop} style={styles.turnOn}>
                       <BrandWash radius={buttonShape.smallRadius} curve />
                       {offerBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : null}
-                      <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : 'Turn on'}</Text>
+                      <Text style={styles.turnOnText}>{offerBusy ? 'Turning on…' : appleSheet && i.provider === 'apple-health' ? 'Continue' : 'Turn on'}</Text>
                     </Tappable>
                   </Reanimated.View>
                 ) : null}
