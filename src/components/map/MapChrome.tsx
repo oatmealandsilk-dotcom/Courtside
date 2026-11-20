@@ -1182,6 +1182,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
   // An iPhone or iPad that would bring Apple's location question on "Use my location" (Apple 5.1.1(iv), Nov 12): this
   // card leads only to that question, with no "Add my city" beside it (a city is still added in Edit profile).
   // Assumed so until the quiet read says otherwise, so the second button never shows and then goes.
+  // Its button says "Continue" then, never "Use my location" (Apple 5.1.1(iv), Nov 20).
   const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
   // Read again once a tap's ask is over: after Don't Allow, "Add my city" comes back.
   useEffect(() => {
@@ -1197,10 +1198,10 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>{appleNext ? 'Turn on location, and the map shows the courts near you, and your friends when they’re up to hit.' : 'Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.'}</Text>
       </View>
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
-        <Pressable accessibilityRole="button" onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
+        <Pressable accessibilityRole="button" accessibilityLabel={appleNext ? 'Continue' : 'Use my location'} onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
           {locating ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Ionicons name="navigate" size={16} color={colors.brandInk} />}
-          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>Use my location</Text>
+          <Text {...oneLine(TextScale.TITLE, 0.8)} style={styles.primaryText}>{appleNext ? 'Continue' : 'Use my location'}</Text>
         </Pressable>
         {appleNext ? null : (
           <Pressable accessibilityRole="button" onPress={() => router.push('/edit-profile')} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.secondary, pressed && styles.glassPressed]}>

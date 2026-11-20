@@ -1,7 +1,7 @@
 import { PRESS_DIM, PRESS_SHRINK } from '@/theme/press';
 import { brandBoxShadow } from '@/theme/fillMode';
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router, useIsFocused } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -16,7 +16,7 @@ import { finishLive, openLiveLog } from '@/features/activity/finishLive';
 import { checkInPlan, clockText, elapsedMs, livePlace, liveState, seenShort, spokenClock, startClock, useLiveNow } from '@/features/activity/liveSession';
 import { seenByOnMap, yesFirst } from '@/features/players/mapPrivacy';
 import { confirm } from '@/lib/confirm';
-import { appleLocationFirst } from '@/lib/geo';
+import { appleLocationFirst, appleWouldAsk } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -49,6 +49,17 @@ export default function LiveSessionPage() {
   const [asking, setAsking] = useState(false);
   // While Apple's own location question is up (Show friends on an iPhone, never asked): a second tap starts nothing more.
   const askingApple = useRef(false);
+  // With Location off on an iPhone or iPad that Apple has not asked yet, the row's button leads straight to Apple's
+  // question, so it says "Continue", never "Turn on" (Apple 5.1.1(iv), Nov 20). Read again when the app comes back.
+  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || locationEnabled) return undefined;
+    let on = true;
+    const look = () => { void appleWouldAsk().then((would) => { if (on) setAppleNext(would); }); };
+    look();
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') look(); });
+    return () => { on = false; sub.remove(); };
+  }, [locationEnabled]);
   const state = s ? liveState(s) : 'finished';
   const now = useLiveNow(!!s && state === 'running');
   // Whether you are checked in at its court right now, as the court's own card knows it.
@@ -170,8 +181,8 @@ export default function LiveSessionPage() {
           </View>
           <Text style={[styles.seenLine, seen.shared && styles.seenShared]} numberOfLines={2}>{seen.line}</Text>
           {canTry ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={plan.why === 'location-off' ? 'Turn on Location and let friends see you’re here' : 'Let friends see you’re here'} disabled={asking} hitSlop={6} onPress={() => { void tryCheckIn(); }} style={({ pressed }) => [styles.tryPill, pressed && styles.pressed]}>
-              {asking ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.tryText} numberOfLines={1}>{plan.why === 'location-off' ? 'Turn on' : 'Show friends'}</Text>}
+            <Pressable accessibilityRole="button" accessibilityLabel={plan.why === 'location-off' ? (appleNext ? 'Continue' : 'Turn on Location and let friends see you’re here') : 'Let friends see you’re here'} disabled={asking} hitSlop={6} onPress={() => { void tryCheckIn(); }} style={({ pressed }) => [styles.tryPill, pressed && styles.pressed]}>
+              {asking ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.tryText} numberOfLines={1}>{plan.why === 'location-off' ? (appleNext ? 'Continue' : 'Turn on') : 'Show friends'}</Text>}
             </Pressable>
           ) : null}
         </View>

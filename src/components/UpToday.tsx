@@ -1,6 +1,6 @@
 import { PRESS_DIM } from '@/theme/press';
-import React, { memo, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { memo, useEffect, useMemo, useState } from 'react';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import Animated, { FadeIn, LinearTransition } from 'react-native-reanimated';
@@ -132,6 +132,18 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   // A tap on your own ring brings the tip (holding it is how you edit), unless the Location note is up then.
   const [tapped, setTapped] = useState(false);
   const holdTip = useTip('hold-to-edit', tapped);
+  // An iPhone or iPad where the Location link brings Apple's own question next (Apple 5.1.1(iv), Nov 20): the link says
+  // "Continue", never "Turn on Location". Read again when the app comes back (Apple's question closing does that).
+  const [appleNext, setAppleNext] = useState(Platform.OS === 'ios');
+  const offering = !!onLocation;
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || !offering) return undefined;
+    let on = true;
+    const look = () => { void appleWouldAsk().then((would) => { if (on) setAppleNext(would); }); };
+    look();
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') look(); });
+    return () => { on = false; sub.remove(); };
+  }, [offering]);
   const flip = () => {
     const next = !up;
     haptics.tap();
@@ -216,9 +228,9 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         {!people.length && !fill.length ? (
           <View style={styles.empty}>
             {onLocation ? (
-              <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. Turn on Location`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. ${appleNext ? 'Continue' : 'Turn on Location'}`} onPress={onLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>Turn on Location</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyLink}>{appleNext ? 'Continue' : 'Turn on Location'}</Text>
               </Pressable>
             ) : finding ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>Finding you…</Text>
               // Who is missing, in the section's own words, then (your ring off) what the "+" on your face is for.
