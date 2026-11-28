@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ShadeGradient } from '@/components/ui/ShadeGradient';
@@ -445,9 +445,12 @@ const HINT_OPENS = 3;
 /** Decided once per launch: whether this open still teaches the swipes, and whether it already has. */
 let hintThisLaunch: Promise<boolean> | null = null;
 let hintShown = false;
+/** A browser with a mouse (a computer): nothing there swipes, so the hint never shows (Nov 27). */
+const NO_SWIPES = Platform.OS === 'web' && typeof window !== 'undefined' && !window.matchMedia?.('(pointer: coarse)').matches;
 
 /**
- * "↑ Next moment · → Community" just above the first clip's words, for a few
+ * "Swipe up for the next clip" (Nov 27: one clear white line, from a faint
+ * "↑ Next moment · → Community") just above the first clip's words, for a few
  * seconds, on the first few opens of the app only: a nudge for someone new,
  * not a fixture an everyday player keeps seeing. Community sits to Home's left
  * now, so its arrow points right: the way the finger moves. It floats rather than taking
@@ -458,6 +461,7 @@ export function SwipeHint() {
   // The first-run tour teaches the same swipes; the hint keeps out of its way, and out from under it.
   const touring = useTourBusy();
   useEffect(() => {
+    if (NO_SWIPES) return undefined;
     let on = true;
     let t: ReturnType<typeof setTimeout> | undefined;
     hintThisLaunch ??= (async () => {
@@ -477,7 +481,7 @@ export function SwipeHint() {
     return () => { on = false; if (t) clearTimeout(t); };
   }, []);
   if (!shown || touring) return null;
-  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>↑ Next moment   ·   → Community</Animated.Text>;
+  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>Swipe up for the next clip</Animated.Text>;
 }
 
 const styles = StyleSheet.create({
@@ -527,7 +531,7 @@ const styles = StyleSheet.create({
   // The session's pill: 10 under the small line.
   pill: { marginTop: 10 },
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
-  hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
+  hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: '#fff', fontSize: 13.5, lineHeight: 17, ...font('600'), letterSpacing: -0.05, ...EDGE },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // From the rail's top, up past the heart and down past the bookmark, to the screen's right edge (the rail stands 12 in).
   railShade: { position: 'absolute', top: -115, right: -12, width: 112, height: 340 },
