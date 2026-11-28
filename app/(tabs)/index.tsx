@@ -2930,7 +2930,7 @@ function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: 'strava' | 
     return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);
   }, [look, posts, users, followingIds, blockedIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const nearCount = list.filter((p) => nearAuthors.has(p.authorId)).length;
-  return <ActivitiesList look={look} posts={list} showStart={showStart} nearCount={nearCount} paused={paused} row={row} />;
+  return <ActivitiesList look={look} posts={list} showStart={showStart} nearCount={nearCount} near={nearAuthors} paused={paused} row={row} />;
 }
 
 /** For the Feed's windows: where a feed not built yet would start (its newest post), for its card. */

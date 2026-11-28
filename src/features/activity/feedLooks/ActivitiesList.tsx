@@ -9,7 +9,9 @@ import { router, useFocusEffect } from 'expo-router';
 import type { Post, SessionDetail, User } from '@/data/types';
 import { Avatar } from '@/components/ui';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
-import { ActivitiesStart } from '@/components/ActivitiesStart';
+import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
+import { Heart } from '@/components/Heart';
+import { PushedDownTag } from '@/components/PushedDownTag';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
@@ -32,7 +34,7 @@ import type { ActivitiesLook } from './activitiesLook';
  * Activities shows (the Feed hands them over, already filtered and in order).
  */
 
-type CardProps = { post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User>; /** The classic look: a clip tapped opens the full-screen reel of the feed's clips (videos only). */ onOpenClip?: (postId: string) => void };
+type CardProps = { post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User>; /** The classic look: a clip tapped opens the full-screen reel of the feed's clips (videos only). */ onOpenClip?: (postId: string) => void; /** A "near you" player you don't follow yet: the "Near you" line with Follow under the handle, as Home's Activities. */ near?: boolean };
 
 /* ------------------------------------------------------------------ small shared pieces */
 
@@ -80,20 +82,67 @@ function clipLength(p: Post): string | null {
 }
 
 /** The post's picture, clip cover, or the demo's court card; `stand` names a stats-only session's card. */
-function Media({ post, aspect, stand, clipBadge = false }: { post: Post; aspect: number; stand?: string; /** A clip's small play mark and length on a quiet pill (the classic look), on its cover or court card alike. */ clipBadge?: boolean }) {
+/** A post's several photos, swiped sideways in the square as Instagram's (the classic look); `onPage` hears which one is on show. */
+function Photos({ urls, label, onPage }: { urls: string[]; label: string; onPage: (i: number) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [at, setAt] = useState(0);
+  const atRef = useRef(0);
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    if (!box.w) return;
+    const i = Math.max(0, Math.min(urls.length - 1, Math.round(e.nativeEvent.contentOffset.x / box.w)));
+    if (i !== atRef.current) { atRef.current = i; setAt(i); onPage(i); }
+  };
+  return (
+    <View style={StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
+      {box.w ? (
+        <FlatList
+          horizontal
+          pagingEnabled
+          data={urls}
+          keyExtractor={(u, i) => `${i}`}
+          renderItem={({ item, index }) => <ExpoImage source={{ uri: item }} contentFit="cover" style={{ width: box.w, height: box.h }} accessibilityLabel={`${label}, photo ${index + 1} of ${urls.length}`} />}
+          getItemLayout={(_, index) => ({ length: box.w, offset: box.w * index, index })}
+          onScroll={onScroll}
+          scrollEventThrottle={16}
+          showsHorizontalScrollIndicator={false}
+          nestedScrollEnabled
+          style={StyleSheet.absoluteFill}
+        />
+      ) : null}
+      <View pointerEvents="none" style={styles.countMark}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.countText}>{at + 1}/{urls.length}</Text></View>
+    </View>
+  );
+}
+
+/** Instagram's small dots under a carousel: which photo is on show. */
+function Dots({ n, at }: { n: number; at: number }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <View pointerEvents="none" style={styles.dots}>
+      {Array.from({ length: n }, (_, i) => <View key={i} style={[styles.dot, i === at && styles.dotOn]} />)}
+    </View>
+  );
+}
+
+function Media({ post, aspect, stand, clipBadge = false, onPage }: { post: Post; aspect: number; stand?: string; /** A clip's small play mark and length on a quiet pill (the classic look), on its cover; the demo's court card already carries its own play mark. */ clipBadge?: boolean; /** The classic look: several photos swipe sideways, this hears which is on show. */ onPage?: (i: number) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const uri = post.thumbnailUrl ?? post.imageUrl;
   const length = clipLength(post);
+  const many = !isClip(post) && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls : null;
+  if (many && onPage) {
+    return <View style={[styles.media, { aspectRatio: aspect }]}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} /></View>;
+  }
   return (
     <View style={[styles.media, { aspectRatio: aspect }]}>
       {uri ? <ExpoImage source={{ uri }} contentFit="cover" style={StyleSheet.absoluteFill} accessibilityLabel={post.mediaLabel ?? 'Photo'} />
         : <MediaPlaceholder fill label={post.mediaLabel ?? stand ?? 'Session'} seed={post.id} />}
-      {clipBadge && isClip(post) ? (
+      {clipBadge && isClip(post) ? (uri || !/·\s*\d+:\d+/.test(post.mediaLabel ?? stand ?? '') ? (
         <View style={styles.clipMark}>
           <Ionicons name="play" size={11} color={colors.onMedia} />
           {length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.clipMarkText}>{length}</Text> : null}
         </View>
-      ) : uri && isClip(post) ? <View style={styles.playMark}><Ionicons name="play" size={18} color={colors.onMedia} /></View> : null}
+      ) : null) : uri && isClip(post) ? <View style={styles.playMark}><Ionicons name="play" size={18} color={colors.onMedia} /></View> : null}
       {post.imageUrls && post.imageUrls.length > 1 ? <View style={styles.countMark}><Text style={styles.countText}>1/{post.imageUrls.length}</Text></View> : null}
     </View>
   );
@@ -316,7 +365,7 @@ function Bloom({ token }: { token: number }) {
   );
 }
 
-function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps) {
+const ClassicCard = React.memo(function ClassicCard({ post, author, me, hidden, users, onOpenClip, near = false }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const s = post.session;
@@ -331,6 +380,9 @@ function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps)
   const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
   const stats = s ? oneLine(s, hidden) : null;
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
+  // Several photos: swiped sideways in the square, dots under it show which (Instagram's carousel).
+  const photos = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0;
+  const [page, setPage] = useState(0);
 
   // A double tap on a picture likes it (never takes a like away), as Instagram's; a single tap does nothing.
   const [bloom, setBloom] = useState(0);
@@ -349,14 +401,20 @@ function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps)
   return (
     <View style={styles.cCard}>
       <View style={styles.cHead}>
-        <Pressable onPress={act.author} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={styles.who}>
+        <Pressable onPress={act.author} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={[styles.who, styles.flex]}>
           <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
           <View style={styles.whoWords}>
             <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cHandle}>{author.handle}</Text>
             {place ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cPlace}>{place}</Text> : null}
+            <PushedDownTag post={post} style={styles.cPushed} />
           </View>
         </Pressable>
+        {/* The post menu, as every card today: report, block, mute, save, edit or delete your own, an admin's take down. */}
+        <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={10} accessibilityRole="button" accessibilityLabel="More options" style={styles.cMore}>
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
+        </Pressable>
       </View>
+      {near ? <View style={styles.cNear}><NearYouTag user={author} /></View> : null}
       {wordsOnly ? (
         <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.cWords}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cWordsText}>{post.body}</Text>
@@ -367,14 +425,14 @@ function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps)
         </Pressable>
       ) : (
         <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? (s ? 'Session card' : 'Photo')} accessibilityHint="Double tap to like">
-          <Media post={post} aspect={1} stand={stand} />
+          <Media post={post} aspect={1} stand={stand} onPage={photos ? setPage : undefined} />
           <Bloom token={bloom} />
         </Pressable>
       )}
       <View style={styles.cBody}>
         <View style={styles.cIcons}>
           <Pressable onPress={act.like} hitSlop={8} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
-            <Ionicons name={act.liked ? 'heart' : 'heart-outline'} size={26} color={act.liked ? colors.danger : colors.text} />
+            <Heart liked={act.liked} size={26} ink={colors.text} pop={bloom} />
           </Pressable>
           <Pressable onPress={act.comments} hitSlop={8} accessibilityRole="button" accessibilityLabel="Comments">
             <Ionicons name="chatbubble-outline" size={23} color={colors.text} />
@@ -382,6 +440,7 @@ function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps)
           <Pressable onPress={() => sharePost(post, me)} hitSlop={8} accessibilityRole="button" accessibilityLabel={shareLabel(post, me, clip ? 'clip' : 'post')}>
             <Ionicons name="paper-plane-outline" size={23} color={colors.text} />
           </Pressable>
+          {photos ? <Dots n={photos} at={page} /> : null}
         </View>
         {liked ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cLiked}>{liked}</Text> : null}
         {post.body && !wordsOnly ? (
@@ -401,26 +460,28 @@ function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps)
       </View>
     </View>
   );
-}
+});
 
 /* ------------------------------------------------------------------ the list */
 
-const CARD: Record<Exclude<ActivitiesLook, 'now'>, (p: CardProps) => React.ReactElement> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard };
+const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard };
 
-export function ActivitiesList({ look, posts, showStart, nearCount, paused, row }: {
+export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
   look: Exclude<ActivitiesLook, 'now'>;
   /** Exactly the posts today's Activities shows, in its order. */
   posts: Post[];
   /** The "Follow more players" start (ActivitiesStart) at the list's head, at its own height. */
   showStart: boolean;
   nearCount: number;
+  /** "Near you" players (a new player's), whose posts carry the "Near you" line until followed. */
+  near?: Set<string>;
   /** Another feed is on show: this one leaves the top row alone. */
   paused: boolean;
   row?: SharedValue<number>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
-  const { users, currentUserId, blockedIds, actions } = app;
+  const { users, currentUserId, blockedIds, followingIds, actions } = app;
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
@@ -429,7 +490,14 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
   postsRef.current = posts;
+  // One push per tap: a quick double tap on a clip (Instagram habit) must not stack two reels.
+  const opening = useRef(false);
+  const openingReset = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openClip = useCallback((postId: string) => {
+    if (opening.current) return;
+    opening.current = true;
+    if (openingReset.current) clearTimeout(openingReset.current);
+    openingReset.current = setTimeout(() => { opening.current = false; }, 1000);
     const all = postsRef.current;
     const at = all.findIndex((p) => p.id === postId);
     const ids = (at < 0 ? [] : all.slice(at)).filter(isClip).slice(0, 30).map((p) => p.id);
@@ -448,6 +516,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
   const onShow = useRef(true);
   useFocusEffect(useCallback(() => {
     onShow.current = true;
+    opening.current = false;
     const y = keptY.current;
     if (y > 0 && Math.abs(lastY.current - y) > 1) {
       listRef.current?.scrollToOffset({ offset: y, animated: false });
@@ -456,7 +525,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
     return () => { onShow.current = false; };
   }, []));
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); if (openingReset.current) clearTimeout(openingReset.current); }, []);
   useEffect(() => { if (!paused) showRow(row); }, [paused, row]);
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
     const y = e.nativeEvent.contentOffset.y;
@@ -475,22 +544,42 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
   const [loading, setLoading] = useState(false);
   const [ended, setEnded] = useState(false);
   const asking = useRef(false);
-  const loadMore = useCallback(() => {
+  // The store pages the whole feed, so a page can bring nothing this list shows (posts from people you don't follow):
+  // the list doesn't grow and the list would never ask again. So: when a page lands and the list is no longer, ask
+  // again while the store has more, up to 5 pages per reach of the end.
+  const moreRef = useRef(app.feed.more);
+  moreRef.current = app.feed.more;
+  const lenRef = useRef(posts.length);
+  lenRef.current = posts.length;
+  const askedAt = useRef<number | null>(null);
+  const tries = useRef(0);
+  const [landed, setLanded] = useState(0);
+  const loadMore = useCallback((again = false) => {
     if (asking.current || ended) return;
+    if (!again) tries.current = 0;
     asking.current = true;
+    askedAt.current = lenRef.current;
     setLoading(true);
     const started = Date.now();
     void (async () => {
-      let added = 0;
-      try { added = (await actions.loadMorePosts()).length; } catch { added = 0; }
+      try { await actions.loadMorePosts(); } catch { /* the next reach of the end asks again */ }
       // Held a beat, so the row never flickers.
       const left = 700 - (Date.now() - started);
       if (left > 0) await new Promise((r) => setTimeout(r, left));
-      if (!added && !app.feed.more) setEnded(true);
       asking.current = false;
-      setLoading(false);
+      setLanded((n) => n + 1);
     })();
-  }, [actions, ended, app.feed.more]);
+  }, [actions, ended]);
+  // After a page lands (and the list has drawn with it): grew, done; didn't, and more is there, ask again.
+  useEffect(() => {
+    if (!landed || askedAt.current === null) return;
+    const before = askedAt.current;
+    askedAt.current = null;
+    if (posts.length > before) { setLoading(false); return; }
+    if (!moreRef.current) { setEnded(true); setLoading(false); return; }
+    if (tries.current < 4) { tries.current += 1; loadMore(true); return; }
+    setLoading(false);
+  }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [refreshing, setRefreshing] = useState(false);
   const refresh = useCallback(async () => {
@@ -498,6 +587,13 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
     showRow(liveRow);
     try { await actions.refresh(); } finally { setRefreshing(false); setEnded(false); }
   }, [actions, liveRow]);
+
+  const renderItem = useCallback(({ item }: { item: Post }) => {
+    const author = usersById.get(item.authorId);
+    if (!author || (!item.session && !classic)) return null;
+    const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !followingIds.includes(author.id);
+    return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} /></View>;
+  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, styles, Card]);
 
   const header = (
     <View style={{ paddingTop: top }}>
@@ -516,11 +612,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
         ref={listRef}
         data={posts}
         keyExtractor={(p) => p.id}
-        renderItem={({ item }) => {
-          const author = usersById.get(item.authorId);
-          if (!author || (!item.session && !classic)) return null;
-          return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} /></View>;
-        }}
+        renderItem={renderItem}
         ListHeaderComponent={header}
         ListEmptyComponent={showStart ? null : <Text style={[styles.endText, styles.empty]}>{classic ? 'No posts yet. Yours and the people you follow show up here.' : 'No sessions yet. Yours and the people you follow show up here.'}</Text>}
         ListFooterComponent={posts.length ? (
@@ -529,7 +621,10 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
               : ended ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
           </View>
         ) : <View style={{ height: barInset + spacing.xxl }} />}
-        onEndReached={loadMore}
+        onEndReached={() => loadMore()}
+        windowSize={7}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
         onEndReachedThreshold={1.5}
         onScroll={onScroll}
         scrollEventThrottle={16}
@@ -605,11 +700,17 @@ const styleDefinitions = StyleSheet.create({
 
   // C · classic Instagram
   cCard: { paddingBottom: spacing.lg, backgroundColor: colors.bg },
-  cHead: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, paddingVertical: 10 },
+  cHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingHorizontal: spacing.md, paddingVertical: 10 },
+  cMore: { paddingLeft: spacing.sm },
+  cPushed: { marginTop: 3 },
+  cNear: { paddingHorizontal: spacing.md, marginTop: -2 },
+  dots: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border },
+  dotOn: { backgroundColor: colors.brand },
   cHandle: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   cPlace: { ...typography.small, fontSize: 12, color: colors.text },
   cBody: { paddingHorizontal: spacing.md, gap: 4 },
-  cIcons: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: 10 },
+  cIcons: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: 10, position: 'relative' },
   cLiked: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   cCaption: { ...typography.small, fontSize: 14, color: colors.text, lineHeight: 19 },
   cStats: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
