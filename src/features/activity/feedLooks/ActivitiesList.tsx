@@ -69,8 +69,10 @@ export const GALLERY = {
   actions: 44,
   /** Your own photo-less session as a row: two lines inside 13pt of air above and below. */
   rowPad: 13,
-  /** The column on a computer: a phone's width, so a whole picture card, actions too, fits under the top row. */
+  /** The column on a computer: a phone's width, so a whole picture card, actions too, fits under the top row. On a
+   * phone (narrower than `phoneUnder`) the column is the screen, whatever its width, so pictures run edge to edge. */
   column: 390,
+  phoneUnder: 600,
 };
 
 /* ------------------------------------------------------------------ what a post is */
@@ -473,7 +475,7 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   // Anything from someone else on show (the empty note says friends' sessions need a picture when there is none).
   const fromOthers = useMemo(() => rows.some((r) => r.kind === 'post' && r.post.authorId !== currentUserId), [rows, currentUserId]);
   const { width: screenW } = useWindowDimensions();
-  const cardW = Math.min(screenW, GALLERY.column);
+  const cardW = screenW < GALLERY.phoneUnder ? screenW : GALLERY.column;
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
   // A clip tapped: the full-screen reel, that clip first, then the feed's clips below it, videos only.
@@ -615,23 +617,23 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   const renderItem = useCallback(({ item: r }: { item: Row }) => {
     if (r.kind === 'start') {
       return (
-        <View style={[styles.column, r === rows[0] ? null : styles.startInList]}>
+        <View style={[styles.column, { maxWidth: cardW }, r === rows[0] ? null : styles.startInList]}>
           <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop />
         </View>
       );
     }
-    if (r.kind === 'own') return <View style={styles.column}><OwnRow post={r.post} joined={r.joined} /></View>;
+    if (r.kind === 'own') return <View style={[styles.column, { maxWidth: cardW }]}><OwnRow post={r.post} joined={r.joined} /></View>;
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
-    return <View style={styles.column}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
+    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
   }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
   const settled = (ended || stalled) && !loading;
   const quiet = !fromOthers && settled && !showStart ? (
-    <View style={[styles.column, rows.length ? styles.emptyUnder : null]}>
+    <View style={[styles.column, { maxWidth: cardW }, rows.length ? styles.emptyUnder : null]}>
       <EmptyState
         icon="images-outline"
         title="No photos from friends yet"
@@ -686,7 +688,7 @@ const styleDefinitions = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
   band: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.bg },
-  column: { width: '100%', maxWidth: GALLERY.column, alignSelf: 'center' },
+  column: { width: '100%', alignSelf: 'center' },
   end: { alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xl, minHeight: 60 },
   endText: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   older: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: 'center' },

@@ -1321,10 +1321,12 @@ const STEPS = [
       await page.tap({ label: /^Sam's clip/ });
       await page.waitFor({ label: 'Go back' }, 20000);
       await page.tap({ label: 'Go back' });
-      await page.waitFor({ label: /^June's photo/ }, 20000);
+      // Back on the list where it was: the clip that was tapped is still in view (the list did not start over).
+      await page.waitFor({ label: /^Sam's clip/ }, 20000);
     },
-    expect: [{ label: /^June's photo/ }, { label: /^Sam's clip/ }, { label: 'Save this post', any: true }],
-    after: async (page) => { await page.tap({ label: 'For you' }); await page.waitFor({ label: 'Clip comments' }); },
+    expect: [{ label: /^Sam's clip/ }, { label: 'Save this post', any: true }],
+    // Scrolled back up the top row comes back in (it rides away with a scroll down), then For you again for the steps after.
+    after: async (page) => { await page.reveal({ label: /^June's photo/ }); await page.tap({ label: 'For you' }, 20000); await page.waitFor({ label: 'Clip comments' }); },
   },
   {
     name: 'coaching',
