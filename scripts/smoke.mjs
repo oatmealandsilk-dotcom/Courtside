@@ -1401,8 +1401,10 @@ const STEPS = [
   ...(ACTIVITIES_GALLERY ? [{
     // Nov 28 (owner: "1 gallery is better"): Activities is one continuous list. Other people's sessions show only
     // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list where it was.
+    // Later the same day (owner: "why are non activity stuff showing up on activity", "you should be able to tap into
+    // photos too which will show a full screen version"): sessions only, and a photo opens full screen on one tap.
     name: 'activities-gallery',
-    title: 'Activities: the gallery, a clip full screen and back to the same spot',
+    title: 'Activities: sessions only, a clip full screen and back to the same spot, a photo full screen',
     async run(page) {
       await page.tap({ label: 'Activities' });
       await page.waitFor({ label: /^June's photo/ }, 20000);
@@ -1430,8 +1432,43 @@ const STEPS = [
       // Back on the list exactly where it was (the list did not jump or start over).
       const after = await page.waitUntil(() => page.eval(`(() => { const list = ${scrollerOf}; return list ? String(Math.round(list.scrollTop)) : false; })()`), 10000, 'the Activities list after back').then(Number);
       if (Math.abs(after - top) > 4) throw new Error(`back from the reel the Activities list moved: scrollTop ${top} before the clip, ${after} after`);
+      // Sessions only: the whole list, top to bottom (it draws only what is near the screen, so it is read as it
+      // scrolls), never shows the demo's posts that are not sessions (Mira's highlights clip, Sam's drill clip, your
+      // own carousel of the park), and still shows the sessions with a picture.
+      await page.eval(`(() => { const list = ${scrollerOf}; if (list) list.scrollTop = 0; return true; })()`);
+      const seen = new Set();
+      for (let i = 0, last = -1; i < 80; i++) {
+        const at = JSON.parse(await page.eval(`(() => {
+          const list = ${scrollerOf};
+          if (!list) return JSON.stringify({ top: -1, labels: [] });
+          const labels = [...list.querySelectorAll('[aria-label]')].map((el) => el.getAttribute('aria-label')).filter((l) => /'s (clip|photo)/.test(l));
+          const top = Math.round(list.scrollTop);
+          list.scrollTop = top + Math.round(list.clientHeight * 0.7);
+          return JSON.stringify({ top, labels });
+        })()`));
+        at.labels.forEach((l) => seen.add(l));
+        if (at.top === last) break;
+        last = at.top;
+        await sleep(200);
+      }
+      const notSessions = [...seen].filter((l) => /Match highlights|Clip · 0:24|Saturday at the park/.test(l));
+      if (notSessions.length) throw new Error(`Activities shows posts that are not sessions: ${notSessions.join('; ')}`);
+      if (![...seen].some((l) => /^June's photo/.test(l)) || ![...seen].some((l) => /'s clip/.test(l))) throw new Error(`Activities lost its sessions with a picture (saw: ${[...seen].join('; ') || 'nothing'})`);
+      // A photo, tapped once: full screen (after the double-tap window), with who and when; × puts it back, and the
+      // list is where it was.
+      await page.reveal({ label: /^June's photo/ });
+      const listTop = () => page.eval(`(() => { const list = ${scrollerOf}; return list ? Math.round(list.scrollTop) : -1; })()`);
+      const beforePhoto = await listTop();
+      await page.tap({ label: /^June's photo/ });
+      // (The who-and-when line lets touches through to the photo under it: found by its words, not as the top element.)
+      await page.waitFor({ text: /^June · /, any: true }, 10000);
+      await page.waitFor({ label: 'Close' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: /^June · /, any: true }, 10000);
+      const afterPhoto = await listTop();
+      if (Math.abs(afterPhoto - beforePhoto) > 4) throw new Error(`closing the full-screen photo moved the Activities list: scrollTop ${beforePhoto} before, ${afterPhoto} after`);
     },
-    expect: [{ label: /'s clip/ }, { label: 'Save this post', any: true }],
+    expect: [{ label: /^June's photo/ }, { label: 'Save this post', any: true }],
     // Scrolled back up the top row comes back in (it rides away with a scroll down), then For you again for the steps after.
     after: async (page) => { await page.reveal({ label: /^June's photo/ }); await page.tap({ label: 'For you' }, 20000); await page.waitFor({ label: 'Clip comments' }); },
   }] : []),
@@ -1441,7 +1478,7 @@ const STEPS = [
   // which day each session falls on) change.
   ...(ACTIVITIES_LOOK === 'gallery-rollup' ? [{
     name: 'activities-friends-played',
-    title: 'Activities: the friends-played row opens in place and closes',
+    title: 'Activities: the friends-played row opens in place, a session in it opens its stats, the row closes',
     async run(page) {
       await page.tap({ label: 'Activities' });
       await page.waitFor({ label: /^June's photo/ }, 20000);
@@ -1459,6 +1496,13 @@ const STEPS = [
       if (!/\btrue\b/.test(state)) throw new Error(`the opened friends-played row is not marked expanded (aria-expanded: ${state || 'none'})`);
       await page.waitFor({ label: /^(Tomás|Nadia) .*, .+\. .+ on court/ });
       page.whoPlayed = m[1];
+      // A session in it opens its stats straight away (Nov 28, owner: "it will just open the stats instead of taking
+      // to nother screen"), not the post; closed, the row is still open where it was.
+      await page.tap({ label: /^(Tomás|Nadia) .*, .+\. .+ on court/ });
+      await page.waitFor({ text: /^PRACTICE\b/ }, 15000);
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: /^PRACTICE\b/ }, 15000);
+      await page.waitFor({ label: `${m[1]}, hide sessions` });
     },
     expect: [{ testId: 'who-item' }, { label: /played .+, hide sessions$/ }],
     // A second tap closes it again; then back to the top and For you for the steps after.
