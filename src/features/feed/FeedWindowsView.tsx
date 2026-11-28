@@ -19,7 +19,7 @@ import { markStripShown } from '@/components/MediaPostPage';
 import { postKindMeta } from '@/components/PostCard';
 import { shownStreak } from '@/features/practice/streakFlame';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
-import { BAR_METRICS } from '@/features/navigation/tabBarLook';
+import { barClearTop, phoneBarNow } from '@/features/navigation/phoneBar';
 import { lockPageSwipe } from '@/features/navigation/swipeLock';
 import { useTourOpen } from '@/features/tour/tourStore';
 import { learned, useTip } from '@/features/tips/tips';
@@ -422,7 +422,7 @@ export function FeedWindows({ feeds, current, onChoose, onPrepare, blocked, firs
       const origin = L.feeds.findIndex((f) => f.key === L.current);
       if (origin < 0 || L.feeds.length < 2) return;
       const { w: W, h: H } = L.size;
-      const barTop = H - (Math.max(L.insets.bottom, 12) + BAR_METRICS.height + 10);
+      const barTop = H - (barClearTop(phoneBarNow(), L.insets.bottom) + 10);
       // The names sit above the cards: names and cards, as one block, fit between the top and the
       // bar, the cards as large as they may be, the block centred in what is left.
       const top = L.insets.top + 8;

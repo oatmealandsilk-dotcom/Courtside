@@ -30,8 +30,10 @@ import { useInstantsOn, withoutInstantRows } from '@/features/stories/instantsSw
 import { TextScale, colors, pageIsDark, radius, spacing, typography, font, withAlpha, wordmarkFont } from '@/theme';
 import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
-import { useBarIg, useBarLens } from '@/features/navigation/barLens';
+import { useBarApple, useBarIg, useBarLens } from '@/features/navigation/barLens';
+import { setPhoneBar } from '@/features/navigation/phoneBar';
 import { LookBar } from './TabBarLooks';
+import { NativeBar, prepareNativeBarIcons, useNativeBarIcons } from './NativeBar';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -98,6 +100,15 @@ const ITEMS: NavItem[] = [
 ];
 
 /**
+ * AppShell, from the app's first moments: once it is known this person has Apple's bar (barLens's useBarApple; a saved
+ * account is known under the splash), its icons start being drawn (NativeBar), long before the bar first comes up.
+ */
+export function useNavBarPrepare() {
+  const apple = useBarApple();
+  useEffect(() => { if (apple) prepareNativeBarIcons(ITEMS); }, [apple]);
+}
+
+/**
  * Drawn again only when what it is handed changes (AppShell keeps those steady) or the counts and
  * the rest it reads from the app do: the shell redraws with every change anywhere in the app, and
  * the bar used to with it, adding to every tap's redraw (Oct 25 audit).
@@ -132,6 +143,10 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   // The website's bar (Nov 27, owner picked option C for the guest Community screen): the new capsule with its lens,
   // on calm frosted glass (TabBarLooks' WEB_BAR), for everyone on the website. The iPhone app keeps "Bar A".
   const webBar = Platform.OS === 'web';
+  // Apple's own bar (barLens's useBarApple, Nov 28: "Apples own bottom bar"; admins first, iPhones with Liquid Glass only),
+  // drawn once its icons are in (NativeBar: our own icons drawn into pictures, or Apple's symbols after ICON_WAIT_MS).
+  const apple = useBarApple() && isPhone;
+  const nativeIcons = useNativeBarIcons(apple, ITEMS);
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -190,7 +205,11 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   // Still in the way of the tabs while the box fades out, so a tap then does not open a tab under the closing box.
   const veilBlocks = boxUp || (pathname === '/compose' && createMenu === 'leaving');
   const curtainDown = useCurtainDown();
-  const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
+  // Apple's bar, its icons not in yet (at most NativeBar's ICON_WAIT_MS, usually long done under the splash): a bar that
+  // has not come up yet waits below the edge for them, as under the curtain, so it never shows without its icons, nor as
+  // today's bar first and Apple's a moment later. (One already up stays as it is until they are, then turns into A.)
+  const iconWait = apple && !nativeIcons && !barUp;
+  const behindCurtain = !barUp && ((!warm && !curtainDown && isStartTab(pathname)) || iconWait);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
   // Where the bar is on that first rise, and what holds it there (Oct 22, owner's iPhone: Community
   // with no tab bar at all, after an open that left the app busy):
@@ -239,6 +258,35 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onTab = useCallback((route: string) => navigation.navigate(route), [navigation]);
   const onTabPressIn = useCallback((route: string) => navigation.prepare?.(route), [navigation]);
   const outerStyle = useMemo(() => [lift === 'up' ? null : styles.held, lift === 'held' ? null : duck], [lift, styles.held, duck]);
+  // Apple's own bar (A), where this person has it: as soon as there is a bar, even while it waits below the edge for its
+  // icons (iconWait), so the phone builds it with the rest of the first screen rather than as the bar comes up.
+  const appleDrawn = apple && (!!nativeIcons || lift === 'held');
+  // Which bar this is, for the pages that run under it (barTop's useBarTop: the Community map).
+  const drawnBar = appleDrawn ? 'apple' : barIg || webBar ? 'new' : 'quiet';
+  useEffect(() => { if (isPhone) setPhoneBar(drawnBar); }, [isPhone, drawnBar]);
+  if (appleDrawn) {
+    return (
+      <NativeBar
+        items={ITEMS}
+        icons={nativeIcons}
+        activeRoute={activeRoute}
+        feedUnder={feedUnder}
+        tabsUnder={tabsUnder}
+        profileAlerts={profileAlerts}
+        onTab={onTab}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        inset={insets.bottom}
+        outerStyle={outerStyle}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={closeVeil}
+        onFeedHold={onFeedHold}
+      />
+    );
+  }
   // The quiet pill in place of the round one (tabBarLook, Oct 25): the same bar and the same glass, a new shape.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (

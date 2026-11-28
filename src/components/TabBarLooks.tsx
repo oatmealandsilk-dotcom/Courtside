@@ -1224,7 +1224,7 @@ function toward(hex: string, to: string, t: number): string {
  * `hex` (`#RRGGBB`) at least this light and this strong in its own hue, for a colour on dark glass
  * (Clean's green #2C7446 becomes about #5DBE80); anything else comes back as it was.
  */
-function lightened(hex: string, light = 0.6, strong = 0.42): string {
+export function lightened(hex: string, light = 0.6, strong = 0.42): string {
   const h6 = hex.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(h6)) return hex;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h6.slice(i, i + 2), 16) / 255);

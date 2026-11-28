@@ -4,6 +4,7 @@ import { Easing, ReduceMotion, cancelAnimation, makeMutable, withSpring, withTim
 import { useSyncExternalStore } from 'react';
 
 import { useApp } from '@/store/AppContext';
+import { liquidGlass } from '@/components/ui/Glass';
 
 /**
  * The simulator's proof only (simDriver's "barlook on=0|1|switch"): the admin bar look forced off or on
@@ -82,6 +83,29 @@ export function useBarIg(): boolean {
   const { currentUser } = useApp();
   const forced = useSyncExternalStore(subscribeBarForced, readBarForced, readBarForced);
   return forced ?? (BAR_IG_FOR_EVERYONE || !!currentUser?.isAdmin);
+}
+
+/**
+ * Apple's own iOS 26 tab bar, "Bar A" (components/NativeBar; Nov 28, owner, shown today's bar beside Apple's and four
+ * new ones: "Apples own bottom bar", the look he had picked on Nov 4 as "Apples glass with smaller words", tabBarLook's
+ * NATIVE_BUBBLE 'small'). The bar itself is the phone's: its Liquid Glass and its own tab-switch motion, drawn by iOS
+ * (react-native-screens' Tabs, a UITabBarController, in every App Store and TestFlight build since Sep 12, so this is
+ * an over-the-air update). Our solid round + sits on its middle place.
+ *
+ * Only on an iPhone with Liquid Glass (iOS 26 and later). Admins first, in place of the new bar above: their phones
+ * check it before anyone else sees it. Everyone else, Android, older iPhones and the website keep exactly the bar they
+ * have. Turned on for everyone by setting this to true and shipping an over-the-air update (no database change, no
+ * new native code). In the iPhone Simulator's demo build, EXPO_PUBLIC_SIM_ADMIN=1 makes the demo's player an admin
+ * (and "barlook on=0|1" forces the admin bar off or on), as for the new bar.
+ */
+export const BAR_APPLE_FOR_EVERYONE = false;
+
+/** Whether this person's bar is Apple's own (A). */
+export function useBarApple(): boolean {
+  const { currentUser } = useApp();
+  const forced = useSyncExternalStore(subscribeBarForced, readBarForced, readBarForced);
+  if (Platform.OS !== 'ios' || !liquidGlass) return false;
+  return forced ?? (BAR_APPLE_FOR_EVERYONE || !!currentUser?.isAdmin);
 }
 
 /**

@@ -4,7 +4,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { AppState, Platform, View, type GestureResponderEvent } from 'react-native';
 import { goBack, goHome, setRootNavigation } from '@/lib/goBack';
 import { router, useGlobalSearchParams, useNavigationContainerRef, usePathname, useSegments } from 'expo-router';
-import { NavBar } from './NavBar';
+import { NavBar, useNavBarPrepare } from './NavBar';
 import { setInstantExit } from '@/features/navigation/instantExit';
 import { UploadBar } from '@/components/UploadBar';
 import { LiveBar } from '@/components/session/LiveBar';
@@ -166,6 +166,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): the router's calls and page changes.
   useEffect(() => (TAP_TIMING ? listenToRouter(rootNavigation as unknown as Parameters<typeof listenToRouter>[0]) : undefined), [rootNavigation]);
   const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession, isGuest, guestLoaded } = useApp();
+  // Apple's bottom bar (A, admins first): its icons drawn from the first moment it is known this person has it (NavBar).
+  useNavBarPrepare();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in

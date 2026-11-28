@@ -11,8 +11,10 @@ import { BrandWash } from '@/components/ui';
 import { KIND_LABEL } from '@/features/activity/format';
 import { finishLive } from '@/features/activity/finishLive';
 import { clockText, elapsedMs, livePlace, liveState, spokenClock, useLiveNow } from '@/features/activity/liveSession';
-import { TAB_BAR_H, setLiveBarSpace } from '@/features/navigation/barInset';
+import { setLiveBarSpace } from '@/features/navigation/barInset';
 import { BAR_TUCK, barCompact } from '@/features/navigation/barShrink';
+import { barClearTop, usePhoneBar } from '@/features/navigation/phoneBar';
+import { NEW_BAR } from '@/features/navigation/tabBarLook';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark } from '@/theme';
@@ -41,8 +43,11 @@ export function LiveBar({ phone }: { phone: boolean }) {
     setLiveBarSpace(BAR_H + GAP);
     return () => setLiveBarSpace(0);
   }, [phone, !!s]); // eslint-disable-line react-hooks/exhaustive-deps
-  // It follows the tab bar down as the bar tucks in on a scroll, so the gap between them never changes.
-  const tuck = useAnimatedStyle(() => ({ transform: [{ translateY: phone ? interpolate(barCompact.value, [0, 1], [0, BAR_TUCK]) : 0 }] }));
+  // Over today's bar's place, or over Apple's own bar where that stands higher (an iPhone SE: phoneBar's barClearTop).
+  const bar = usePhoneBar();
+  const apple = bar === 'apple';
+  // It follows the tab bar down as the bar tucks in on a scroll, so the gap between them never changes (Apple's bar tucks 6).
+  const tuck = useAnimatedStyle(() => ({ transform: [{ translateY: phone ? interpolate(barCompact.value, [0, 1], [0, apple ? NEW_BAR.tuck : BAR_TUCK]) : 0 }] }));
   if (!s) return null;
 
   const ms = elapsedMs(s, now);
@@ -57,7 +62,7 @@ export function LiveBar({ phone }: { phone: boolean }) {
       pointerEvents="box-none"
       entering={FadeInDown.duration(280).easing(Easing.out(Easing.cubic))}
       exiting={FadeOutDown.duration(200)}
-      style={[phone ? [styles.phone, { bottom: Math.max(insets.bottom, 12) + TAB_BAR_H + GAP }] : styles.desk, tuck]}
+      style={[phone ? [styles.phone, { bottom: barClearTop(bar, insets.bottom) + GAP }] : styles.desk, tuck]}
     >
       <View style={[styles.bar, pageIsDark() ? styles.liftDark : styles.lift]}>
         <BrandWash radius={BAR_H / 2} />

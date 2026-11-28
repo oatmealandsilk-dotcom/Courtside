@@ -10,6 +10,7 @@ import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { launchLookAtOpen, launchLookNow, launchLookStatus } from '@/lib/launchLook';
 import { learned } from '@/features/tips/tips';
+import { lastTourRect, nextStep, replayTour, skipTour } from '@/features/tour/tourStore';
 
 /**
  * The simulator proof harness's app-wide commands (simDriver: demo builds with EXPO_PUBLIC_SIM_DRIVER only; AppShell mounts
@@ -98,6 +99,12 @@ export function SimDriverHost() {
       // saved pictures right first) into sim-log.txt.
       simAction('theme', (q) => { if (q.name && q.name in themes) pick.current(q.name as ThemeName); }),
       simAction('matchphone', (q) => { setAutoDark(q.on === '1'); }),
+      // The tutorial (Nov 28, Apple's bar's check): from the start, its next step, or put away; "tourrects" writes where the
+      // bar's targets were last measured into sim-log.txt.
+      simAction('tour', (q) => { if (q.do === 'next') nextStep(); else if (q.do === 'skip') skipTour(); else replayTour(); }),
+      simAction('tourrects', () => {
+        for (const id of ['tab-discuss', 'tab-home', 'tab-coaches', 'tab-profile', 'create'] as const) simLog(`[tour] ${id} ${JSON.stringify(lastTourRect(id))}`);
+      }),
       simAction('launchlook', (q) => {
         void launchLookStatus(q.sync === '1').then((status) => {
           simLog(`[sim] launchlook atOpen ${launchLookAtOpen() ?? 'phone'} now ${launchLookNow() ?? 'phone'} ${JSON.stringify(status)}`);

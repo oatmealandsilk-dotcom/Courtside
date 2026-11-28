@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { initialWindowMetrics, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useResponsive } from '@/lib/useResponsive';
+import { barClearTop, usePhoneBar } from './phoneBar';
 import { BAR_METRICS } from './tabBarLook';
 
 /** The floating tab bar: a pill this tall, this far above the bottom edge (each look's own: tabBarLook). */
@@ -33,10 +34,20 @@ export function setLiveBarSpace(points: number) {
   liveListeners.forEach((fn) => fn());
 }
 
-/** How much of the bottom the floating bar covers on this device, with the live session's bar over it — nothing on a computer, where the sidebar is the bar. */
+/** The live session's bar's room over the tab bar (its height and gap), 0 without it. */
+export function useLiveBarSpace(): number {
+  return useSyncExternalStore(subscribeLive, readLive, readLive);
+}
+
+/**
+ * How much of the bottom the floating bar covers on this device, with the live session's bar over it — nothing on a
+ * computer, where the sidebar is the bar. The bar's top is phoneBar's barClearTop: today's bar's, or Apple's own where
+ * that stands higher (an iPhone SE).
+ */
 export function useBarInset(): number {
   const { isPhone } = useResponsive();
   const insets = useSafeAreaInsets();
-  const live = useSyncExternalStore(subscribeLive, readLive, readLive);
-  return isPhone ? TAB_BAR_H + TAB_BAR_GAP + Math.max(insets.bottom, 12) + live : 0;
+  const live = useLiveBarSpace();
+  const bar = usePhoneBar();
+  return isPhone ? barClearTop(bar, insets.bottom) + TAB_BAR_GAP + live : 0;
 }
