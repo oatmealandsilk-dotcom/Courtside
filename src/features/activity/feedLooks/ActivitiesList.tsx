@@ -360,20 +360,27 @@ function GalleryActions({ post, me, pop, children }: { post: Post; me: string | 
  * Under another such row it sits on a hairline, not the band, so a run of auto-logs stays small. In 'gallery-rollup'
  * there is no note: the people who follow you see it in their "who played" row.
  */
-function OwnRow({ post, joined, note }: { post: Post; joined: boolean; /** "Not in friends' feeds" beside the title ('gallery'). */ note: boolean }) {
+function OwnRow({ post, joined, note, face }: { post: Post; joined: boolean; /** "Not in friends' feeds" beside the title ('gallery'). */ note: boolean;
+  /** Between friends' posts on another page (the iPhone's Community map, HOME_LOOK 'map-feed'): your small face and "You ·", so the row reads as yours. */ face?: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session!;
   const title = titleOf(post, s);
   const line = inlineWords(s);
   const stats = openStats(post);
+  const words = (
+    <>
+      <View style={styles.oTop}>
+        <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oTitle}>{title}</Text>
+        {note ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oNote}>{OWN_NOTE}</Text> : null}
+      </View>
+      <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oLine}>{face ? `You · ${line}` : line}</Text>
+    </>
+  );
   return (
     <View testID="acts-own" style={[styles.oRow, joined ? styles.oJoined : styles.oBand]}>
-      <Pressable onPress={stats ?? (() => router.push(`/post/${post.id}`))} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}${note ? `. ${OWN_NOTE}` : ''}`} accessibilityHint={stats ? 'Opens the session stats' : 'Opens the post'} style={styles.oPress}>
-        <View style={styles.oTop}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oTitle}>{title}</Text>
-          {note ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oNote}>{OWN_NOTE}</Text> : null}
-        </View>
-        <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oLine}>{line}</Text>
+      <Pressable onPress={stats ?? (() => router.push(`/post/${post.id}`))} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}${note ? `. ${OWN_NOTE}` : ''}`} accessibilityHint={stats ? 'Opens the session stats' : 'Opens the post'} style={[styles.oPress, face && styles.oPressFace]}>
+        {face ? <Avatar name={face.name} seed={face.avatarSeed} uri={face.avatarUrl} size={36} /> : null}
+        {face ? <View style={styles.oWords}>{words}</View> : words}
       </Pressable>
       <Pressable onPress={() => openMenu(post)} style={styles.oMore} accessibilityRole="button" accessibilityLabel="More options">
         <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
@@ -897,7 +904,7 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
         </View>
       );
     }
-    if (r.kind === 'own') return <View style={[styles.column, { maxWidth: cardW }]}><OwnRow post={r.post} joined={r.joined} note={!rollup} /></View>;
+    if (r.kind === 'own') return <View style={[styles.column, { maxWidth: cardW }]}><OwnRow post={r.post} joined={r.joined} note={!rollup} face={inPage ? usersById.get(r.post.authorId) : undefined} /></View>;
     if (r.kind === 'rollup') return <View style={[styles.column, { maxWidth: cardW }]}><WhoPlayed day={r.day} posts={r.posts} users={usersById} open={openDays.has(r.day)} onToggle={toggleDay} /></View>;
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
@@ -1257,6 +1264,9 @@ const styleDefinitions = StyleSheet.create({
   // The hairline starts at the words, as every row on a hairline does (DESIGN.md).
   oJoined: { marginLeft: spacing.lg, paddingLeft: 0, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   oPress: { flex: 1, minWidth: 0, paddingVertical: GALLERY.rowPad, gap: 2 },
+  // On another page (`face`): your face beside the two lines.
+  oPressFace: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  oWords: { flex: 1, minWidth: 0, gap: 2 },
   oTop: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   oTitle: { ...font('500'), fontSize: 15, lineHeight: 20, color: colors.text, flexShrink: 1 },
   oNote: { ...typography.small, fontSize: 12, color: colors.textMuted, flexShrink: 0 },
