@@ -20,13 +20,24 @@ import { Platform } from 'react-native';
  *
  * Nothing chooses one but a web address's `?look=` (or this browser's saved choice), so the app as everyone has
  * it is exactly 'now'.
+ *
+ * - 'gv1'..'gv4' (Nov 28, owner: "do different designs or variations of gallery too"): four gallery designs with the
+ *   gallery's rule (1 Instagram-pure, 2 Strava-photo, 3 Hevy-card, 4 a two-up grid); each '-rollup' adds the
+ *   "who played" row.
  */
-export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b' | 'mixed-a2' | 'gallery' | 'gallery-rollup';
+export type GalleryVariation = 'gv1' | 'gv2' | 'gv3' | 'gv4';
+export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b' | 'mixed-a2' | 'gallery' | 'gallery-rollup'
+  | GalleryVariation | `${GalleryVariation}-rollup`;
 
-export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b', 'mixed-a2', 'gallery', 'gallery-rollup'];
+export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b', 'mixed-a2', 'gallery', 'gallery-rollup',
+  'gv1', 'gv2', 'gv3', 'gv4', 'gv1-rollup', 'gv2-rollup', 'gv3-rollup', 'gv4-rollup'];
 
 /** The gallery looks: other people's sessions only with a photo or clip. */
-export const isGalleryLook = (l: ActivitiesLook) => l === 'gallery' || l === 'gallery-rollup';
+export const isGalleryLook = (l: ActivitiesLook) => l === 'gallery' || l === 'gallery-rollup' || l.startsWith('gv');
+/** Which gallery variation a look is ('gv3-rollup' → 'gv3'), or null. */
+export const galleryVariation = (l: ActivitiesLook): GalleryVariation | null => (l.startsWith('gv') ? (l.slice(0, 3) as GalleryVariation) : null);
+/** A gallery look with the "who played" row. */
+export const hasWhoPlayed = (l: ActivitiesLook) => l.endsWith('-rollup');
 const KEY = 'courtside.activitiesLook';
 const isLook = (v: unknown): v is ActivitiesLook => typeof v === 'string' && (ACTIVITIES_LOOKS as string[]).includes(v);
 

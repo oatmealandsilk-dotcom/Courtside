@@ -19,18 +19,18 @@ import { shownStreak } from '@/features/practice/streakFlame';
 import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, spacing, typography } from '@/theme';
+import { colors, font, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { useBarInset } from '@/features/navigation/barInset';
 import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { ROW_TRAVEL, showRow } from '@/features/feed/topRowScroll';
-import { agoInWords, duration } from '@/lib/format';
+import { agoInWords, duration, relativeTime } from '@/lib/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
 import { hasSessionStats, resultWord, scoreLine, sessionTitle, sourceLabel, whatWord } from '@/features/activity/format';
 import { sharePost, shareLabel } from '@/features/share/sharePost';
 import { localDay } from '@/features/practice/stats';
 import { matchTiebreakAt } from '@/features/activity/score';
-import { isGalleryLook, type ActivitiesLook } from './activitiesLook';
+import { galleryVariation, hasWhoPlayed, isGalleryLook, type ActivitiesLook, type GalleryVariation } from './activitiesLook';
 import { supabase } from '@/lib/supabase';
 
 /*
@@ -950,7 +950,7 @@ function GalleryStats({ post, inline = false }: { post: Post; inline?: boolean }
 }
 
 /** Like and comment with their counts on the left, save and ••• on the right; nothing else. */
-function GalleryActions({ post, me, children }: { post: Post; me: string | null; children?: React.ReactNode }) {
+function GalleryActions({ post, me, children, menu = true }: { post: Post; me: string | null; children?: React.ReactNode; /** ••• at the right (gv1 has it in the header instead). */ menu?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { saved: savedItems, actions } = useApp();
   const act = useCardActions(post, me);
@@ -971,9 +971,11 @@ function GalleryActions({ post, me, children }: { post: Post; me: string | null;
       <Pressable onPress={() => actions.toggleSavePost(post.id)} hitSlop={8} style={[styles.mAct, styles.mSave]} accessibilityRole="button" accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
         <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={colors.text} />
       </Pressable>
-      <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel="More options">
-        <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
-      </Pressable>
+      {menu ? (
+        <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel="More options">
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -983,13 +985,13 @@ function GalleryActions({ post, me, children }: { post: Post; me: string | null;
  * "1h 15m · 128 bpm" under it, the privacy words at the right ('gallery' only) and •••. No caption, no Save. A tap
  * opens the post. Under another such row it sits on a hairline, not the band, so a run of auto-logs stays small.
  */
-function OwnRow({ post, note, joined }: { post: Post; /** "Not in friends' feeds" ('gallery'); none in 'gallery-rollup', where friends see it in their row. */ note?: string; /** Under another own row: a hairline instead of the band. */ joined: boolean }) {
+function OwnRow({ post, note, joined, edge = 'band' }: { post: Post; /** "Not in friends' feeds" ('gallery'); none in 'gallery-rollup', where friends see it in their row. */ note?: string; /** Under another own row: a hairline instead of the band. */ joined: boolean; /** What parts it from the item above: the band, or (gv1, gv3, gv4) a hairline. */ edge?: Edge }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session!;
   const title = titleOf(post, s);
   const line = inlineWords(s);
   return (
-    <View testID="mixed-mini" style={[styles.oRow, joined ? styles.oJoined : styles.oBand]}>
+    <View testID="mixed-mini" style={[styles.oRow, joined || edge === 'hair' ? styles.oJoined : styles.oBand]}>
       <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}. ${line}${note ? `. ${note}` : ''}`} accessibilityHint="Opens the post" style={[styles.flex, styles.oPress]}>
         <View style={styles.flex}>
           {/* The privacy words share the title's line (titles are short), so the numbers under it get the full width. */}
@@ -1113,14 +1115,14 @@ const WHO_FIRST = 5;
  * same surface on hairlines (a face, "Tomás · Evening practice", "48 min · 126 bpm"); a tap on one opens its post,
  * where likes and comments live. The band comes back after the group.
  */
-function WhoPlayed({ day, posts, users, open, onToggle }: { day: string; posts: Post[]; users: Map<string, User>; open: boolean; onToggle: () => void }) {
+function WhoPlayed({ day, posts, users, open, onToggle, edge = 'band' }: { day: string; posts: Post[]; users: Map<string, User>; open: boolean; onToggle: () => void; edge?: Edge }) {
   const styles = useThemedStyles(styleDefinitions);
   const [all, setAll] = useState(false);
   const people = useMemo(() => [...new Set(posts.map((p) => p.authorId))].flatMap((id) => users.get(id) ?? []), [posts, users]);
   const words = whoPlayedWords(people.map(firstName), day);
   const shown = all ? posts : posts.slice(0, WHO_FIRST);
   return (
-    <View testID="who-group" style={styles.wGroup}>
+    <View testID="who-group" style={[styles.wGroup, edge === 'hair' && styles.wGroupHair]}>
       <Pressable testID="who-played" onPress={onToggle} accessibilityRole="button" accessibilityLabel={`${words.who}${words.rest}`} accessibilityState={{ expanded: open }} accessibilityHint={open ? 'Hides their sessions' : 'Shows their sessions'} style={styles.wRow}>
         <View style={styles.wFaces}>
           {people.slice(0, 3).map((u, i) => (
@@ -1159,12 +1161,325 @@ function WhoPlayed({ day, posts, users, open, onToggle }: { day: string; posts: 
   );
 }
 
+/* ------------------------------------------------------------------ gallery variations: gv1..gv4 */
+
+/*
+ * Nov 28, owner (after the gallery): "do different designs or variations of gallery too". Four complete gallery
+ * designs, all with the gallery's rule (other people's sessions only with a photo or clip; your own photo-less ones
+ * as one-line rows only you see; photo posts, clips and text posts as today) and the same behaviour (a clip opens
+ * the reel, back returns to the same spot, a double tap on a photo likes it, •••, Save, infinite load). Each also
+ * takes the "who played" row ('-rollup').
+ *   gv1 · Instagram-pure: the photo is the hero (4:5, full bleed); the numbers are one quiet line under the actions.
+ *   gv2 · Strava-photo: a sports log with a picture: title, three numbers, a wide 4:3 photo, a likes line, actions.
+ *   gv3 · Hevy-card: title, one line of numbers, then the photos as a calm inset strip (1–3 side by side).
+ *   gv4 · Two-up gallery: photos and clips as a two-column grid of square tiles; everything else full width between.
+ */
+
+/** What parts a full-width row from the item above it: the gallery's 6pt band, or a hairline. */
+type Edge = 'band' | 'hair';
+const EDGE: Record<GalleryVariation, Edge> = { gv1: 'hair', gv2: 'band', gv3: 'hair', gv4: 'hair' };
+
+/** A double tap on a picture likes it (never takes a like away), with the heart blooming; a single tap does nothing. */
+function useDoubleTapLike(post: Post, me: string | null) {
+  const { actions } = useApp();
+  const liked = !!me && post.likedBy.includes(me);
+  const [bloom, setBloom] = useState(0);
+  const lastTap = useRef(0);
+  const likedNow = useRef(liked);
+  likedNow.current = liked;
+  const tap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      if (!likedNow.current) actions.toggleLike(post.id, true);
+      setBloom((b) => b + 1);
+    } else lastTap.current = now;
+  }, [actions, post.id]);
+  return { bloom, tap };
+}
+
+/** A post's picture at a set size: a clip opens the reel, a photo (or several, swiped sideways) likes on a double tap. */
+function Picture({ post, w, h, onOpenClip, onPage, like }: { post: Post; w: number; h: number; onOpenClip?: (id: string) => void; onPage?: (i: number) => void; like: { bloom: number; tap: () => void } }) {
+  const s = post.session;
+  const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
+  if (isClip(post)) {
+    return (
+      <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen" style={{ width: w, height: h }}>
+        <Media post={post} aspect={w / h} stand={stand} clipBadge />
+      </Pressable>
+    );
+  }
+  return (
+    <Pressable onPress={like.tap} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Photo'} accessibilityHint="Double tap to like" style={{ width: w, height: h }}>
+      <Media post={post} aspect={w / h} stand={stand} onPage={onPage} count={false} />
+      <Bloom token={like.bloom} />
+    </Pressable>
+  );
+}
+
+function MoreButton({ post }: { post: Post }) {
+  const styles = useThemedStyles(styleDefinitions);
+  return (
+    <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.vMore} accessibilityRole="button" accessibilityLabel="More options">
+      <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
+    </Pressable>
+  );
+}
+
+const photoCount = (post: Post) => (!isClip(post) && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0);
+
+/* gv1 · Instagram-pure ------------------------------------------------ */
+
+const Gv1Card = React.memo(function Gv1Card({ post, author, me, onOpenClip, near = false, width = 390 }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const act = useCardActions(post, me);
+  const like = useDoubleTapLike(post, me);
+  const media = galleryMedia(post);
+  const s = post.session;
+  const photos = photoCount(post);
+  const [page, setPage] = useState(0);
+  const place = placeOf(post, author);
+  // The numbers and the place as one quiet line under the actions: "Won 6–3 7–5 · 1h 28m · Alder Park".
+  const line = s ? [inlineWords(s), place].filter(Boolean).join(' · ') : '';
+  const open = openStats(post);
+  const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+  return (
+    <View testID={media ? 'mixed-photo' : 'mixed-plain'} style={styles.i1Card}>
+      <View style={styles.i1Head}>
+        <Pressable onPress={act.author} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={[styles.who, styles.flex]}>
+          <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
+          <View style={[styles.flex, styles.mNameRow]}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.i1Name}>{author.name}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.i1When}>· {relativeTime(post.createdAt)}</Text>
+            <PushedDownTag post={post} />
+          </View>
+        </Pressable>
+        <MoreButton post={post} />
+      </View>
+      {near ? <View style={styles.i1Near}><NearYouTag user={author} /></View> : null}
+      {media ? (
+        <Picture post={post} w={width} h={Math.round(width * 5 / 4)} onOpenClip={onOpenClip} onPage={photos ? setPage : undefined} like={like} />
+      ) : (
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.i1Words}>
+          <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.i1WordsText}>{post.body}</Text>
+        </Pressable>
+      )}
+      <View style={styles.vPad}>
+        <GalleryActions post={post} me={me} menu={false}>{photos ? <Dots n={photos} at={page} /> : null}</GalleryActions>
+        {line ? (
+          <Pressable onPress={open} disabled={!open} accessibilityRole={open ? 'button' : undefined} accessibilityLabel={`${titleOf(post, s!)}. ${line}`} accessibilityHint={open ? 'Opens the session stats' : undefined}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.i1Line}>{line}</Text>
+          </Pressable>
+        ) : null}
+        {media && caption ? (
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${caption}. Open comments`}>
+            <Text numberOfLines={2} maxFontSizeMultiplier={1.1} style={styles.i1Caption}><Text style={styles.i1CaptionName}>{firstName(author)}</Text> {caption}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+});
+
+/* gv2 · Strava-photo -------------------------------------------------- */
+
+/** "3 likes · 1 comment", or Strava's nudge when there are none. */
+function countsLine(post: Post): string {
+  const l = post.likedBy.length;
+  const c = post.commentIds.length;
+  if (!l && !c) return 'Be the first to like this';
+  return [l ? `${l} ${l === 1 ? 'like' : 'likes'}` : '', c ? `${c} ${c === 1 ? 'comment' : 'comments'}` : ''].filter(Boolean).join(' · ');
+}
+
+const Gv2Card = React.memo(function Gv2Card({ post, author, me, onOpenClip, near = false, width = 390 }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { saved: savedItems, actions } = useApp();
+  const act = useCardActions(post, me);
+  const like = useDoubleTapLike(post, me);
+  const media = galleryMedia(post);
+  const s = post.session;
+  const photos = photoCount(post);
+  const [page, setPage] = useState(0);
+  const open = openStats(post);
+  const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+  const stats = s ? stravaStats(s) : [];
+  const saved = savedItems.postIds.includes(post.id);
+  const title = s ? titleOf(post, s) : '';
+  return (
+    <View testID={media ? 'mixed-photo' : 'mixed-plain'} style={styles.s2Card}>
+      <View style={styles.vPad}>
+        <GalleryHead post={post} author={author} right={<MoreButton post={post} />} />
+        {near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null}
+        {s ? (
+          <Pressable onPress={open} disabled={!open} accessibilityRole={open ? 'button' : undefined} accessibilityLabel={`${title}. ${stats.map((x) => `${x.label} ${x.value}${x.unit ? ` ${x.unit}` : ''}`).join(', ')}`} accessibilityHint={open ? 'Opens the session stats' : undefined}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2Title}>{title}</Text>
+            {caption ? <Text numberOfLines={2} maxFontSizeMultiplier={1.1} style={styles.s2Caption}>{caption}</Text> : null}
+            <View style={styles.s2Stats}>
+              {stats.map((st, i) => (
+                <View key={st.label} style={[styles.s2Stat, i > 0 && styles.s2StatRule]}>
+                  <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2Label}>{st.label}</Text>
+                  <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.1} style={styles.s2Value}>
+                    {i === 0 && scoreLine(s) ? st.value.replace(/ /g, ' ') : st.value}{st.unit ? <Text style={styles.s2Unit}> {st.unit}</Text> : null}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          </Pressable>
+        ) : caption ? (
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${caption}. Open comments`}>
+            <Text numberOfLines={media ? 2 : 4} maxFontSizeMultiplier={1.1} style={media ? styles.s2Body : styles.s2Words}>{caption}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {media ? (
+        <View style={styles.s2Photo}>
+          <Picture post={post} w={width} h={Math.round(width * 3 / 4)} onOpenClip={onOpenClip} onPage={photos ? setPage : undefined} like={like} />
+        </View>
+      ) : null}
+      <View style={styles.vPad}>
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${countsLine(post)}. Open comments`} style={styles.s2Counts}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2CountsText}>{countsLine(post)}</Text>
+          {photos ? <View style={styles.s2Dots}><Dots n={photos} at={page} /></View> : null}
+        </Pressable>
+      </View>
+      {/* Strava's foot: three even actions across the card on a hairline. */}
+      <View style={styles.s2Foot}>
+        <Pressable onPress={act.like} style={styles.s2Act} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
+          <Heart liked={act.liked} size={21} ink={colors.text} />
+        </Pressable>
+        <Pressable onPress={act.comments} style={styles.s2Act} accessibilityRole="button" accessibilityLabel="Comments">
+          <Ionicons name="chatbubble-outline" size={19} color={colors.text} />
+        </Pressable>
+        <Pressable onPress={() => actions.toggleSavePost(post.id)} style={styles.s2Act} accessibilityRole="button" accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+          <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={19} color={colors.text} />
+        </Pressable>
+      </View>
+    </View>
+  );
+});
+
+/* gv3 · Hevy-card ----------------------------------------------------- */
+
+/** The strip's one height, whatever it holds: one wide photo, two, or three side by side. */
+const STRIP_H = 220;
+const STRIP_GAP = 4;
+
+/** Hevy's photo row: up to three pictures side by side in the text column, small corners; a clip as one of them. */
+function PhotoStrip({ post, w, onOpenClip, like }: { post: Post; w: number; onOpenClip?: (id: string) => void; like: { bloom: number; tap: () => void } }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const urls = !isClip(post) && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.slice(0, 3) : null;
+  if (!urls) {
+    return <View style={styles.h3Strip}><View style={styles.h3Tile}><Picture post={post} w={w} h={STRIP_H} onOpenClip={onOpenClip} like={like} /></View></View>;
+  }
+  const tw = (w - STRIP_GAP * (urls.length - 1)) / urls.length;
+  return (
+    <Pressable onPress={like.tap} accessibilityRole="image" accessibilityLabel={`${post.mediaLabel ?? 'Photos'}, ${urls.length} photos`} accessibilityHint="Double tap to like" style={styles.h3Strip}>
+      {urls.map((u, i) => (
+        <View key={i} style={[styles.h3Tile, { width: tw, height: STRIP_H }]}>
+          <ExpoImage source={{ uri: u }} contentFit="cover" style={StyleSheet.absoluteFill} />
+        </View>
+      ))}
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}><Bloom token={like.bloom} /></View>
+    </Pressable>
+  );
+}
+
+const Gv3Card = React.memo(function Gv3Card({ post, author, me, onOpenClip, near = false, width = 390 }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const act = useCardActions(post, me);
+  const like = useDoubleTapLike(post, me);
+  const media = galleryMedia(post);
+  const s = post.session;
+  const open = openStats(post);
+  const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+  const inner = width - 2 * spacing.lg;
+  return (
+    <View testID={media ? 'mixed-photo' : 'mixed-plain'} style={styles.h3Card}>
+      <GalleryHead post={post} author={author} right={<MoreButton post={post} />} />
+      {near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null}
+      {s ? (
+        <Pressable onPress={open} disabled={!open} accessibilityRole={open ? 'button' : undefined} accessibilityLabel={`${titleOf(post, s)}. ${inlineWords(s)}`} accessibilityHint={open ? 'Opens the session stats' : undefined} style={styles.gBlock}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gTitle}>{titleOf(post, s)}</Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gInline}>
+            {inlineStats(s).map((x, i) => <Text key={i} style={x.figure ? styles.gInlineFigure : null}>{x.text}</Text>)}
+          </Text>
+        </Pressable>
+      ) : null}
+      {caption ? (
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${caption}. Open comments`} style={s ? styles.h3Caption : styles.gBlock}>
+          <Text numberOfLines={media ? 2 : 4} maxFontSizeMultiplier={1.1} style={media || s ? styles.gCaptionText : styles.gWords}>{caption}</Text>
+        </Pressable>
+      ) : null}
+      {media ? <PhotoStrip post={post} w={inner} onOpenClip={onOpenClip} like={like} /> : null}
+      <GalleryActions post={post} me={me} />
+    </View>
+  );
+});
+
+/* gv4 · Two-up gallery ------------------------------------------------ */
+
+const GRID_GUTTER = spacing.md;
+const GRID_GAP = spacing.sm;
+
+/** One square tile: the picture, then the name and the score/time (or the caption) in small text under it. A tap opens the post; a clip opens the reel. */
+function Tile({ post, author, size, onOpenClip }: { post: Post; author: User; size: number; onOpenClip?: (id: string) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const s = post.session;
+  const clip = isClip(post);
+  const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
+  const line = s ? inlineWords(s) : (post.body?.trim().replace(/\s+/g, ' ') || (clip ? 'Clip' : 'Photo'));
+  const many = photoCount(post);
+  const open = () => (clip ? onOpenClip?.(post.id) : router.push(`/post/${post.id}`));
+  return (
+    <Pressable testID="gv-tile" onPress={open} accessibilityRole="button" accessibilityLabel={`${author.name}. ${s ? titleOf(post, s) + '. ' : ''}${line}`} accessibilityHint={clip ? 'Plays the clip full screen' : 'Opens the post'} style={{ width: size }}>
+      <View style={[styles.t4Pic, { width: size, height: size }]}>
+        {/* Several photos: the first stands for them, with the stacked mark (Instagram's grid). */}
+        {many ? <ExpoImage source={{ uri: post.imageUrls![0] }} contentFit="cover" style={StyleSheet.absoluteFill} accessibilityLabel={post.mediaLabel ?? 'Photo'} />
+          : <Media post={post} aspect={1} stand={stand} clipBadge={clip} count={false} />}
+        {many ? <View style={styles.t4Mark}><Ionicons name="copy" size={14} color={colors.onMedia} /></View> : null}
+      </View>
+      <View style={styles.t4Words}>
+        <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.t4Name}>{author.name}</Text>
+        <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.t4Line}>{line}</Text>
+      </View>
+    </Pressable>
+  );
+}
+
+/** A text post between grid blocks: a small header, the words, like and comment. */
+const Gv4Text = React.memo(function Gv4Text({ post, author, me, near = false }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const act = useCardActions(post, me);
+  return (
+    <View testID="mixed-plain" style={styles.t4Text}>
+      <GalleryHead post={post} author={author} right={<MoreButton post={post} />} />
+      {near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null}
+      <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.gBlock}>
+        <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.gWords}>{post.body}</Text>
+      </Pressable>
+      <GalleryActions post={post} me={me} menu={false} />
+    </View>
+  );
+});
+
+/** Two tiles side by side (or one, the last of a block); `first` gives the block its top air. */
+function TilePair({ posts, users, width, onOpenClip, first }: { posts: Post[]; users: Map<string, User>; width: number; onOpenClip?: (id: string) => void; first: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const size = Math.floor((width - 2 * GRID_GUTTER - GRID_GAP) / 2);
+  return (
+    <View testID="mixed-photo" style={[styles.t4Pair, first && styles.t4First]}>
+      {posts.map((p) => { const a = users.get(p.authorId); return a ? <Tile key={p.id} post={p} author={a} size={size} onOpenClip={onOpenClip} /> : null; })}
+    </View>
+  );
+}
+
 const MixedA = (p: CardProps) => <MixedCard {...p} order="stats" />;
 const MixedB = (p: CardProps) => <MixedCard {...p} order="photo" />;
 
 /* ------------------------------------------------------------------ the list */
 
-const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB, 'mixed-a2': MixedCard2, gallery: GalleryCard, 'gallery-rollup': GalleryCard };
+const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB, 'mixed-a2': MixedCard2, gallery: GalleryCard, 'gallery-rollup': GalleryCard,
+  gv1: Gv1Card, gv2: Gv2Card, gv3: Gv3Card, gv4: Gv4Text, 'gv1-rollup': Gv1Card, 'gv2-rollup': Gv2Card, 'gv3-rollup': Gv3Card, 'gv4-rollup': Gv4Text };
 
 /**
  * What the list draws: a post's card; in the gallery looks also your own photo-less session as a one-line row
@@ -1175,7 +1490,9 @@ type Row =
   | { key: string; kind: 'post'; post: Post }
   | { key: string; kind: 'mini'; post: Post; note?: string; joined: boolean }
   | { key: string; kind: 'rollup'; day: string; posts: Post[] }
-  | { key: string; kind: 'start' };
+  | { key: string; kind: 'start' }
+  /** gv4: two tiles side by side (one at the end of a block); `first` opens a block. */
+  | { key: string; kind: 'pair'; posts: Post[]; first: boolean };
 /** The gallery looks: the head of the list (follow suggestions and the rest) goes after this many items, when there are more. */
 const START_AFTER = 2;
 
@@ -1201,7 +1518,10 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   const Card = CARD[look];
   // The mixed looks behave as the classic one (every kind of post, a clip opens the reel); only the cards differ.
   const gallery = isGalleryLook(look);
-  const rollup = look === 'gallery-rollup';
+  const rollup = hasWhoPlayed(look);
+  const variation = galleryVariation(look);
+  const grid = variation === 'gv4';
+  const edge: Edge = variation ? EDGE[variation] : 'band';
   const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' || gallery;
   // The gallery looks: other people's sessions only with a photo or clip; yours without one as a small card for you;
   // in 'gallery-rollup', other people's without one as a "who played" row per day, opened in place.
@@ -1230,8 +1550,23 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     // A gallery opens on pictures: the head of the list (follow suggestions…) comes after the first two items.
     if (showStart && out.length > START_AFTER) out.splice(START_AFTER, 0, { key: 'start', kind: 'start' });
     // Under another of your rows, a row sits on a hairline rather than the band.
-    return out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
-  }, [gallery, rollup, posts, currentUserId, showStart]);
+    const joinedRows = out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
+    if (!grid) return joinedRows;
+    // gv4: a run of photo and clip posts becomes pairs of tiles; anything else breaks the run and sits full width.
+    const paired: Row[] = [];
+    let run: Post[] = [];
+    const flush = () => {
+      for (let i = 0; i < run.length; i += 2) paired.push({ key: `pair:${run[i].id}`, kind: 'pair', posts: run.slice(i, i + 2), first: i === 0 });
+      run = [];
+    };
+    for (const r of joinedRows) {
+      if (r.kind === 'post' && galleryMedia(r.post)) { run.push(r.post); continue; }
+      flush();
+      paired.push(r);
+    }
+    flush();
+    return paired;
+  }, [gallery, rollup, grid, posts, currentUserId, showStart]);
   const { width: screenW } = useWindowDimensions();
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
@@ -1251,7 +1586,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   }, []);
   // The mixed looks' column on a computer: a photo card (4:5) still fits under the top row of an 800-tall window.
   // mixed-a2's photo runs edge to edge of the column, so the column is a phone's width: the whole card, actions too, fits.
-  const column = look === 'mixed-a2' || gallery ? 390 : look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
+  const column = grid ? 520 : look === 'mixed-a2' || gallery ? 390 : look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
   const cardW = Math.min(screenW, column);
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
@@ -1343,17 +1678,18 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
 
   const renderItem = useCallback(({ item: row }: { item: Row }) => {
     if (row.kind === 'rollup') {
-      return <View style={[styles.column, { maxWidth: column }]}><WhoPlayed day={row.day} posts={row.posts} users={usersById} open={openDays.has(row.day)} onToggle={() => toggleDay(row.day)} /></View>;
+      return <View style={[styles.column, { maxWidth: column }]}><WhoPlayed day={row.day} posts={row.posts} users={usersById} open={openDays.has(row.day)} onToggle={() => toggleDay(row.day)} edge={edge} /></View>;
     }
-    if (row.kind === 'start') return <View style={[styles.column, styles.startInList, { maxWidth: column }]}>{startBlock}</View>;
+    if (row.kind === 'start') return <View style={[styles.column, styles.startInList, edge === 'hair' && styles.startHair, { maxWidth: column }]}>{startBlock}</View>;
+    if (row.kind === 'pair') return <View style={[styles.column, { maxWidth: column }]}><TilePair posts={row.posts} users={usersById} width={cardW} onOpenClip={openClip} first={row.first} /></View>;
     const item = row.post;
     const author = usersById.get(item.authorId);
     if (!author || (!item.session && !classic)) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !followingIds.includes(author.id);
-    if (row.kind === 'mini') return <View style={[styles.column, { maxWidth: column }]}><OwnRow post={item} note={row.note} joined={row.joined} /></View>;
+    if (row.kind === 'mini') return <View style={[styles.column, { maxWidth: column }]}><OwnRow post={item} note={row.note} joined={row.joined} edge={edge} /></View>;
     return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- startBlock is rebuilt from the values listed after it
-  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay, showStart, nearCount, posts.length, paused]);
+  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay, showStart, nearCount, posts.length, paused, edge]);
 
   const header = (
     <View style={{ paddingTop: top }}>
@@ -1557,8 +1893,57 @@ const styleDefinitions = StyleSheet.create({
   oMore: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   // The head of the list (follow suggestions…) when it sits after the first items: the band above it.
   startInList: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: spacing.lg, backgroundColor: colors.bg },
+  startHair: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+
+  // gallery variations: shared
+  vPad: { paddingHorizontal: spacing.lg },
+  vMore: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
+  // gv1 · Instagram-pure: no band, no box; a hairline and air part two posts, the photo runs edge to edge at 4:5.
+  i1Card: { paddingBottom: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  i1Head: { height: 56, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
+  i1Name: { ...font('600'), fontSize: 14, lineHeight: 18, color: colors.text, flexShrink: 1 },
+  i1When: { ...typography.small, fontSize: 14, lineHeight: 18, color: colors.textMuted, flexShrink: 0 },
+  i1Near: { paddingHorizontal: spacing.lg, marginTop: -6, marginBottom: spacing.sm },
+  i1Words: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
+  i1WordsText: { ...typography.body, fontSize: 17, lineHeight: 24, letterSpacing: -0.2, color: colors.text },
+  i1Line: { ...typography.small, fontSize: 13, lineHeight: 18, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  i1Caption: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: spacing.xs },
+  i1CaptionName: { ...font('600') },
+  // gv2 · Strava-photo: the band between cards, a bold title, three numbers on hairline rules, a wide photo, an even foot.
+  s2Card: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: spacing.lg, backgroundColor: colors.bg },
+  s2Title: { ...font('700'), fontSize: 19, lineHeight: 24, letterSpacing: -0.3, color: colors.text, marginTop: spacing.md },
+  s2Caption: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 2 },
+  s2Body: { ...typography.body, fontSize: 15, lineHeight: 21, color: colors.text, marginTop: spacing.md },
+  s2Words: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.text, marginTop: spacing.md },
+  s2Stats: { flexDirection: 'row', marginTop: spacing.md },
+  s2Stat: { flexShrink: 1, paddingRight: spacing.lg },
+  s2StatRule: { paddingLeft: spacing.lg, borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.border },
+  s2Label: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted },
+  s2Value: { ...font('500'), fontSize: 20, lineHeight: 25, letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
+  s2Unit: { ...font('400'), fontSize: 13, letterSpacing: 0, color: colors.textMuted },
+  s2Photo: { marginTop: spacing.md, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  s2Counts: { minHeight: 40, flexDirection: 'row', alignItems: 'center' },
+  s2CountsText: { ...typography.small, color: colors.textMuted, flex: 1 },
+  s2Dots: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  s2Foot: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  s2Act: { flex: 1, height: 44, alignItems: 'center', justifyContent: 'center' },
+  // gv3 · Hevy-card: one column of words; the photos stay in it as a strip with small corners.
+  h3Card: { paddingTop: spacing.lg, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  h3Caption: { marginTop: spacing.sm },
+  h3Strip: { flexDirection: 'row', gap: STRIP_GAP, marginTop: spacing.md, height: STRIP_H },
+  h3Tile: { overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
+  // gv4 · two-up: square tiles with small corners, the name and the numbers under each.
+  t4Pair: { flexDirection: 'row', gap: GRID_GAP, paddingHorizontal: GRID_GUTTER, paddingBottom: spacing.lg, backgroundColor: colors.bg },
+  t4First: { paddingTop: spacing.md },
+  t4Pic: { overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
+  t4Mark: { position: 'absolute', top: spacing.sm, right: spacing.sm },
+  t4Words: { paddingTop: 6, paddingHorizontal: 2 },
+  t4Name: { ...font('500'), fontSize: 13, lineHeight: 17, color: colors.text },
+  t4Line: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  t4Text: { paddingTop: spacing.lg, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   // gallery-rollup's "who played": a band above, the row, then (opened) its sessions on hairlines in the same surface.
   wGroup: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, backgroundColor: colors.bg },
+  wGroupHair: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   wRow: { height: GALLERY.who, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   wFaces: { flexDirection: 'row', alignItems: 'center' },
   wFace: { borderRadius: 16, borderWidth: 2, borderColor: colors.bg },
