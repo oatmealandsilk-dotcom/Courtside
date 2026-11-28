@@ -53,6 +53,9 @@ const C_FACE = 42;
 const C_ITEM = 68;
 /** With a town under some names (the strip under the map, `towns`): wide enough that "Los Angeles" under one face never runs into the next one's. */
 const C_ITEM_TOWN = 78;
+/** The strip under the big map (homePreview '3', `snug`): a touch smaller, so your face and five more sit in one row on the screen, none cut at its edge. */
+const C_FACE_SNUG = 40;
+const C_ITEM_SNUG = 64;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -126,17 +129,19 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, towns = false }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, towns = false, snug = false, inTown }: { me: User; people: Up[];
   /** The app preview of option C, round 2 only (appCPreview): the row laid over the map's foot, small (a smaller title, smaller faces, first names only). */ compact?: boolean;
   /** With compact, the map-then-activity picture's strip under the map (homePreview '2'): a stranger free today in town shows their town under their first name; friends stay first names only. */ towns?: boolean;
+  /** With compact, the strip under the big map (homePreview '3'): a touch smaller faces and slots, one tidy row. */ snug?: boolean;
+  /** Your town ("Los Angeles"): the count says "5 free in Los Angeles", not "5 near you" (homePreview '3'; everyone listed is free in your town). */ inTown?: string;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Sizes: the page's own, or the small row over the map (compact).
-  const face = compact ? C_FACE : FACE;
+  const face = compact ? (snug ? C_FACE_SNUG : C_FACE) : FACE;
   // Your own held at a player's height: a ring and a name in the small row (and a town's line, when one shows).
   const townLine = compact && towns && people.some((p) => !!p.town);
-  const item = compact ? (townLine ? C_ITEM_TOWN : C_ITEM) : ITEM;
+  const item = compact ? (townLine ? C_ITEM_TOWN : snug ? C_ITEM_SNUG : C_ITEM) : ITEM;
   const itemW = compact ? { width: item } : null;
   const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + (townLine ? 3 + META_LINE : 0) + 2 } : null;
   // Your ring goes out by itself at the time you picked.
@@ -202,7 +207,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         {!people.length && fill.length && fillTitle
           ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, compact && styles.titleCompact, styles.titleFit]}>{fillTitle}</Text>
           : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.title, compact && styles.titleCompact]}>Open to hit</Text>}
-        {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
+        {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} {inTown ? `free in ${inTown}` : 'near you'}</Text> : null}
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>

@@ -46,7 +46,7 @@ import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barIn
 import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
-import { HOME_FEED_LOOK, HOME_MAP_FEED, HOME_STRIP_UNDER } from '@/features/community/homePreview';
+import { HOME_FEED_LOOK, HOME_MAP_FEED, HOME_STRIP_UNDER, HOME_UNDER_BIG_MAP } from '@/features/community/homePreview';
 import { useInlineFeed, type FeedSlot, type InlineRow } from '@/features/activity/feedLooks/ActivitiesList';
 import { useActivitiesFeed } from '@/features/activity/feedLooks/useActivitiesFeed';
 import { ActivitiesStart } from '@/components/ActivitiesStart';
@@ -747,10 +747,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The map-then-activity picture, '2' (homePreview, for Apple): Open to hit UNDER the map, never on it. The map ends
   // above it; the strip is the page's first row, edge to edge on the page's own solid ground, a hairline between it and
   // the map, the same small row, and a stranger's town under their first name. Its height (cStripH) comes off the map.
-  const cUnder = () => (currentUser && showUpToday ? (
-    <View style={styles.cUnder} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h !== cStripH) setCStripH(h); }}>
+  // '3' (big): the map keeps '1''s size; the strip under it is compact, the town in its header line for everyone
+  // ("5 free in Los Angeles"), then faces and first names only, a touch smaller, one tidy row.
+  const cUnder = (big = false) => (currentUser && showUpToday ? (
+    <View style={[styles.cUnder, big && styles.cUnderBig]} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h !== cStripH) setCStripH(h); }}>
       <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
-        <UpToday compact towns me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+        <UpToday compact towns={!big} snug={big} inTown={big ? homeCityName ?? ((currentUser.location ?? '').split(',')[0].trim() || undefined) : undefined} me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
     </View>
   ) : null);
@@ -929,6 +931,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             const map = (cardHeight?: number, cover?: number) => <NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} cardHeight={cardHeight} cardCover={cover} />;
             // The app preview of option C, rounds 2 and 3 only (demo builds with its switch): the tall map, measured in its own slot.
             // The map-then-activity picture (homePreview): round 2's map, as tall as leaves the first activity's top in sight above the bar.
+            if (HOME_UNDER_BIG_MAP) return <HomeMap peek={homePeek} render={(h) => <>{map(h, 0)}{cUnder(true)}</>} />;
             if (HOME_STRIP_UNDER) return <HomeMap peek={homePeek + cStripH} floor={HOME_MAP_MIN} render={(h) => <>{map(h, 0)}{cUnder()}</>} />;
             if (HOME_MAP_FEED) return <HomeMap peek={homePeek} render={(h) => <>{map(h, cStripH)}{cOverlay(0)}</>} />;
             return APP_C_BIG_MAP ? <CBigMap render={(h, bar) => <>{map(h, APP_C_OVERLAY ? cStripH : bar)}{cOverlay(bar)}</>} /> : map();
@@ -1405,6 +1408,8 @@ const styleDefinitions = StyleSheet.create({
   cOverlayFoot: { left: -spacing.lg, right: -spacing.lg, paddingHorizontal: spacing.lg, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   // '2' (homePreview, for Apple): the strip under the map, edge to edge as the map is, on the page's own solid ground, a hairline above.
   cUnder: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // '3': the same, tighter above and below (the big map leaves the first activity less room: its name and time clear the bar).
+  cUnderBig: { paddingTop: spacing.sm, paddingBottom: 2 },
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   // The map card's own height, so nothing jumps when the card takes its place.
   mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },

@@ -20,7 +20,7 @@ import { isSupabaseConfigured } from '@/lib/supabase';
  * were merged by mistake.
  */
 const LOOK = Platform.OS !== 'web' && !isSupabaseConfigured ? process.env.EXPO_PUBLIC_HOME_PREVIEW : undefined;
-export const HOME_MAP_FEED = LOOK === '1' || LOOK === '2';
+export const HOME_MAP_FEED = LOOK === '1' || LOOK === '2' || LOOK === '3';
 /**
  * '2' = '1' with Open to hit UNDER the map, not on it (Nov 28, for Apple: we told Apple the map never shows a stranger's
  * face or name). The map ends above the strip; the strip is the page's first row, on the page's own solid ground with a
@@ -28,5 +28,13 @@ export const HOME_MAP_FEED = LOOK === '1' || LOOK === '2';
  * The map gives up the strip's height so the first activity still peeks above the bar.
  */
 export const HOME_STRIP_UNDER = LOOK === '2';
+/**
+ * '3' = Open to hit under the map with the map kept big (Nov 28, owner: "The map should still be large though"): the
+ * map is exactly as tall as on '1' (never under the card's 406, taller on taller phones), Open to hit right under it on
+ * the page's own ground with a hairline between, compact: the town in the header line for everyone ("5 free in Los
+ * Angeles"), then faces and first names only, a touch smaller so the row is one tidy line. The first activity peeks
+ * as much as is left above the bar; the map's size wins.
+ */
+export const HOME_UNDER_BIG_MAP = LOOK === '3';
 /** The feed's look under the map: the one he picked for Activities (Nov 28, "Gallaty+ friends played"). */
 export const HOME_FEED_LOOK = 'gallery-rollup' as const;
