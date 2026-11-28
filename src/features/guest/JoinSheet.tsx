@@ -1,3 +1,4 @@
+import { useResponsive } from '@/lib/useResponsive';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useEffect } from 'react';
 import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -44,6 +45,9 @@ export function JoinSheet() {
   const insets = useSafeAreaInsets();
   const ask = useJoinSheet();
   const pathname = usePathname();
+  // On a computer the prompt is a centred card like the Open to hit sheet, not a slab across the window (Nov 27).
+  const { isPhone } = useResponsive();
+  const wide = !isPhone;
 
   useEffect(() => {
     if (!ask || Platform.OS !== 'web') return undefined;
@@ -67,7 +71,8 @@ export function JoinSheet() {
       <Animated.View entering={DIM_IN} exiting={DIM_OUT} style={[StyleSheet.absoluteFill, styles.dim]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Not now" style={StyleSheet.absoluteFill} onPress={closeJoinSheet} />
       </Animated.View>
-      <Animated.View entering={SHEET_IN} exiting={SHEET_OUT} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <View style={wide ? styles.centre : StyleSheet.absoluteFill} pointerEvents="box-none">
+      <Animated.View entering={wide ? DIM_IN : SHEET_IN} exiting={wide ? DIM_OUT : SHEET_OUT} accessibilityViewIsModal style={wide ? styles.card : [styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
         <View style={styles.inner}>
           <View style={styles.mark}><BrandMark size={30} /></View>
           <Text accessibilityRole="header" style={styles.title}>Join CourtSide to {ask.what}</Text>
@@ -91,6 +96,7 @@ export function JoinSheet() {
           </View>
         </View>
       </Animated.View>
+      </View>
     </View>
   );
 }
@@ -98,6 +104,8 @@ export function JoinSheet() {
 const styleDefinitions = StyleSheet.create({
   dim: { backgroundColor: colors.overlay },
   sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.md, paddingHorizontal: spacing.lg, ...lift },
+  centre: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  card: { width: '100%', maxWidth: 440, backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.xl, ...lift },
   inner: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md },
   mark: { width: 52, height: 52, borderRadius: corner(16), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   title: { ...typography.title, color: colors.text },
