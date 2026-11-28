@@ -1,7 +1,7 @@
 import { tapFastOn } from '@/features/navigation/pressV2';
 import { useSimTrace } from '@/lib/simTrace';
 import { asTabRoute } from '@/features/navigation/tabFocus';
-import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint } from '@/components/ReelCaption';
+import { COUNT_EDGE, FoldedWords, InstantMeta, RailShade, ReelCaption, ReelScrim, ReelWho, SwipeHint, swipedPastHint } from '@/components/ReelCaption';
 import { useSuggestedPlayers } from '@/features/people/suggestions';
 import { ThreadReplies } from '@/components/ThreadReplies';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
@@ -558,6 +558,8 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   }, [active, immersion, punch]);
   const [visit, setVisit] = useState(firstDeal ? 1 : 0);
   const focused = useIsFocused();
+  // A finger's own swipe to another clip: the first-clip hint goes for good (Nov 27), then the Feed's own note of it.
+  const onSwiped = useCallback(() => { swipedPastHint(); onSwipe?.(); }, [onSwipe]);
   // Also, however many you follow, while the "Connect your watch" card has something to offer (owner, Oct 6). The
   // watch tip never opens Activities on this page by itself (owner, Oct 29, "2-4" / "Ship", without that change):
   // it shows when you are on this page. Once there, it stays: following your tenth player, or connecting, from it never pulls it out from under you.
@@ -2159,7 +2161,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwipe} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
+          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwiped} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
             looks={followLive ? followLooks : undefined} startEarly={swipeFollow} onHead={swipeFollow ? headStore.set : undefined}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
