@@ -44,7 +44,7 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { MapGlass } from '@/components/map/MapGlass';
 import { HOME_FEED, MAP_OVERLAY } from '@/features/community/communityMapLook';
 import { useBarTop, useDiscoverMap, useHomeMap, useTallMap } from '@/features/community/tallMap';
-import { useBarInset } from '@/features/navigation/barInset';
+import { barCompact } from '@/features/navigation/barShrink';
 import { setHomeDiscover, useHomeDiscover } from '@/features/community/homeDiscover';
 import { DiscoverPosts } from '@/features/discover/DiscoverPosts';
 import { useGalleryInPage, type FeedSlot, type InPageRow } from '@/features/activity/feedLooks/ActivitiesList';
@@ -771,7 +771,8 @@ function Discuss({ previewSection, role }: { previewSection?: string; role?: 'di
   const discMap = useDiscoverMap(oneHome && !!currentUser ? homeLook : null, { peek: homeLook === 'a' ? PEEK_FIRST : headingH, strip: stripOn ? homeStripH : 0, stripKnown: (!stripOn || homeStripH > 0) && (homeLook !== 'c' || headingH > 0), under: homeUnder, short: mapShort, still: !!search, rest: sheetRest });
   const mapSize = oneHome ? discMap : homeMap;
   const sheetFull = oneHome && homeLook === 'b' ? discMap.full : 0;
-  const barInsetNow = useBarInset();
+  // The bar's own top (useBarTop): take B's sheet rests that far up, plus its own rest.
+  const barInsetNow = barTop;
   const behindSheet = useAnimatedStyle(() => ({ transform: [{ translateY: sheetFull > 0 ? Math.min(sheetFull, Math.max(0, playersY.value - pageTop)) : 0 }] }));
   // Discover's proof (design/home-discover): "dsection to=discussions" or "to=posts", as a tap on the row would.
   useEffect(() => (discover && !previewSection ? simAction('dsection', (q) => { comingSection.current = null; setLocalSection(q.to === 'discussions' ? 'discussions' : 'players'); }) : undefined), [discover, previewSection]);
@@ -781,10 +782,12 @@ function Discuss({ previewSection, role }: { previewSection?: string; role?: 'di
       simAction('homelook', (q) => setHomeDiscover(q.v)),
       // Take B's sheet: "sheet at=0" resting low, "at=0.5" half way, "at=1" fully up.
       simAction('sheet', (q) => { playersRef.current?.scrollTo({ y: pageTop + sheetFull * Math.max(0, Math.min(1, Number(q.at) || 0)), animated: q.animated === '1' }); }),
-      simAction('homeinfo', () => simLog(`[home] look ${homeLook} map ${mapSize.height} full ${sheetFull} rest ${sheetRest} strip ${homeStripH} heading ${headingH}`)),
+      simAction('homeinfo', () => simLog(`[home] look ${homeLook} map ${mapSize.height} full ${sheetFull} rest ${sheetRest} strip ${homeStripH} heading ${headingH} barTop ${barTop}`)),
+      // The bar back to its full size (a picture after a scroll made by code).
+      simAction('barshow', () => { barCompact.value = 0; }),
     ];
     return () => off.forEach((f) => f());
-  }, [oneHome, previewSection, pageTop, sheetFull, homeLook, mapSize.height, sheetRest, homeStripH, headingH]);
+  }, [oneHome, previewSection, pageTop, sheetFull, homeLook, mapSize.height, sheetRest, homeStripH, headingH, barTop]);
   // Under the map and Open to hit, in the head: "You're at <court>?" (when Open to hit is not there to carry it), "You're
   // early" or "Bring your friends". Gone (and not mid-search): nothing under.
   const homeUnderOn = HOME_FEED && !search && ((!!currentUser && !stripOn) || early || friendsEarly);

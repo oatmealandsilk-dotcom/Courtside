@@ -99,7 +99,8 @@ const HEADING_MAP_MIN = 360;
  * With `short` ("You're early" / "Bring your friends" up) all three keep useHomeMap's card-height rule.
  */
 export function useDiscoverMap(look: 'a' | 'b' | 'c' | null, { peek, strip, stripKnown, under, short, still, rest }: { peek: number; strip: number; stripKnown: boolean; under: number; short: boolean; still: boolean; rest: number }): { height: number | undefined; full: number; onSlotLayout: (e: LayoutChangeEvent) => void; onPaneHeight: (h: number) => void } {
-  const barInset = useBarInset();
+  // The bar's own top (useBarTop), so what peeks ends exactly there.
+  const barInset = useBarTop();
   const [slotY, setSlotY] = useState(0);
   const [paneH, setPaneH] = useState(0);
   const stillRef = useRef(still);
@@ -114,7 +115,7 @@ export function useDiscoverMap(look: 'a' | 'b' | 'c' | null, { peek, strip, stri
     : short ? Math.max(HOME_MAP_MIN, CARD_HEIGHT - strip)
       : look === 'b' ? room
         : Math.max(look === 'a' ? PEEK_MAP_MIN : HEADING_MAP_MIN, room - barInset - under - strip - peek);
-  // The sheet's top at rest sits `rest + barInset` above the screen's foot; fully up, at the page's top.
+  // The sheet's top at rest sits `rest` above the bar's top; fully up, at the page's top.
   const full = ready && look === 'b' && !short ? Math.max(0, paneH - barInset - rest) : 0;
   return { height, full, onSlotLayout, onPaneHeight: setPaneH };
 }

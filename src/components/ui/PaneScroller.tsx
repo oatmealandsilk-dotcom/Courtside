@@ -293,7 +293,10 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
       lastY.value = y;
       // Only the section on show, by a finger of its own, moves the bar.
       if (!live.value || sectionPan.value) return;
-      if (Math.abs(dy) > 0.3 && y >= strip + sheetFull) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+      // (Take B's sheet: only the feed's own scroll past the sheet's top, never the sheet rising, moves the bar.)
+      const from = strip + sheetFull;
+      const step = sheetFull > 0 && dy > 0 ? Math.min(dy, y - from) : dy;
+      if (Math.abs(dy) > 0.3 && y >= strip && (sheetFull === 0 || y > from || dy < 0)) barCompact.value = Math.max(0, Math.min(1, barCompact.value + step / 150));
     },
     onBeginDrag: () => {
       dragging.value = true;
