@@ -773,6 +773,8 @@ function Discuss({ previewSection, role }: { previewSection?: string; role?: 'di
   const sheetFull = oneHome && homeLook === 'b' ? discMap.full : 0;
   const barInsetNow = useBarInset();
   const behindSheet = useAnimatedStyle(() => ({ transform: [{ translateY: sheetFull > 0 ? Math.min(sheetFull, Math.max(0, playersY.value - pageTop)) : 0 }] }));
+  // Discover's proof (design/home-discover): "dsection to=discussions" or "to=posts", as a tap on the row would.
+  useEffect(() => (discover && !previewSection ? simAction('dsection', (q) => { comingSection.current = null; setLocalSection(q.to === 'discussions' ? 'discussions' : 'players'); }) : undefined), [discover, previewSection]);
   useEffect(() => {
     if (!SIM_DRIVER || !oneHome || previewSection) return undefined;
     const off = [
