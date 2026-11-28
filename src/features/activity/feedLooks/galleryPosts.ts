@@ -28,16 +28,17 @@ export const unfinishedClip = (p: Post, me: string | null | undefined) =>
   isSupabaseConfigured && p.kind === 'clip' && !p.videoUrl && !p.imageUrl && !p.imageUrls?.length && p.authorId !== me;
 
 /**
- * One for Activities as a gallery (Nov 28): every kind of post from the same people Activities draws from (you, who you
- * follow, and only the sessions of a new player's players near them), on the same rules (not archived, taken down or
- * group-only, media the internet can reach); a session by someone else only with a photo or clip.
- * Your own sessions without one stay (the list shows them to you alone, as a row). With `rollup` ('gallery-rollup') a
- * session without one by someone you follow stays too, exactly those the Activities pages take (its numbers), for the
- * day's "who played" row; a near player's (not followed) never does.
+ * One for Activities as a gallery (Nov 28): sessions only (Nov 28, owner: "why are non activity stuff showing up on
+ * activity"; Apple Health and WHOOP auto-logs are sessions), from the same people Activities draws from (you, who you
+ * follow, and a new player's players near them), on the same rules (not archived, taken down or group-only, media the
+ * internet can reach). A plain photo, video or text post is not one: it stays in For you, groups and profiles. A
+ * session by someone else shows only with a photo or clip; your own sessions without one stay (the list shows them to
+ * you alone, as a row). With `rollup` ('gallery-rollup') a session without one by someone you follow stays too, exactly
+ * those the Activities pages take (its numbers), for the day's "who played" row; a near player's (not followed) never does.
  */
-export const inActivitiesGallery = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>, rollup: boolean) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || (near.has(p.authorId) && !!p.session))
-  && (!p.session || p.authorId === me || hasPicture(p) || (rollup && follows.has(p.authorId) && hasSessionStats(p.session)));
+export const inActivitiesGallery = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>, rollup: boolean): boolean =>
+  !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId))
+  && (p.authorId === me || hasPicture(p) || (rollup && follows.has(p.authorId) && hasSessionStats(p.session)));
 
 /**
  * The gallery's posts and its start: the same people and rules as Home's Activities (blocked, whoever blocked you,

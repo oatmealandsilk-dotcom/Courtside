@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken } from 'react-native';
-import Reanimated, { useAnimatedStyle, useReducedMotion, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -27,6 +27,12 @@ import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
 import { markSeen } from '@/features/feed/seenPosts';
 import { useIsFocused } from '@/lib/useIsFocused';
 import { useTourOpen } from '@/features/tour/tourStore';
+import { useHoldTour } from '@/features/tour/tourHold';
+import { Fold } from '@/components/ui/Fold';
+import { useRestKey } from '@/components/ui/restMotion';
+import { useReducedMotion as useAppReducedMotion } from '@/lib/useReducedMotion';
+import { PhotoViewer, type TileRect } from '@/features/messages/ChatPhotoViews';
+import { photosOf } from '@/features/compose/carousel';
 
 /** On screen this long before a row counts as seen (Home's GLANCE_MS): one flown past mid-fling never does. */
 const GLANCE_MS = 300;
@@ -35,16 +41,22 @@ const GLANCE_MS = 300;
  * Activities as a gallery (Nov 28, owner: "1 gallery is better", then "Gallaty+ friends played"; the look is
  * ACTIVITIES_LOOK in ./activitiesLook, 'gallery' or 'gallery-rollup').
  * One continuous list, no snapping, that you flick through at any speed and that asks for older posts as you near
- * its end. The Feed hands over exactly the posts Activities may show (yours, the people you follow, and a new
- * player's "near you" players; blocked, muted, unfollowed private, taken down, group-only, archived and unfinished
- * ones already left out; an admin's pushed-down ones last). Here:
- *  - other people's sessions show as cards only with a photo or clip: a card with a square picture, Hevy's way;
+ * its end. The Feed hands over exactly the posts Activities may show: sessions only (Nov 28, owner: "why are non
+ * activity stuff showing up on activity"; Apple Health and WHOOP auto-logs are sessions too), yours, the people you
+ * follow's, and a new player's "near you" players'; blocked, muted, unfollowed private, taken down, group-only,
+ * archived and unfinished ones already left out; an admin's pushed-down ones last. A plain photo, video or text post
+ * stays in For you, groups and profiles. Here:
+ *  - other people's sessions show as cards only with a photo or clip: a card with a 4:5 portrait picture (Nov 28,
+ *    owner: "it should be portrait not square");
  *  - 'gallery-rollup': the sessions without one by people you follow, one day's together, as ONE quiet "who played"
- *    row in the feed's time order ("Tomás and Nadia played today"), opened in place with a tap;
+ *    row in the feed's time order ("Tomás and Nadia played today"), opened in place with a tap, its sessions folding
+ *    open under it (the app's Fold) as the chevron turns;
  *  - your own sessions without one show to you alone, as a thin row ('gallery': marked "Not in friends' feeds");
- *  - photo posts, clips and text posts show as cards;
- *  - only a clip opens the full-screen reel (the feed's clips from that one down, videos only); back lands here,
- *    where you were. A double tap on a picture likes it.
+ *  - a tap on a session in the "who played" row, on your own row, or on a card's title and numbers opens the
+ *    session's stats straight away (the post, when it has none to show);
+ *  - a clip opens the full-screen reel at once, already playing (the feed's clips from that one down, videos only);
+ *    back lands here, where you were. A photo opens full screen on a single tap (after the double-tap window, as
+ *    Instagram's); a double tap likes it.
  * The card says little: name, "when · where", one title line, at most two numbers, a caption, like + comment on the
  * left and save + ••• on the right. Spacing comes off the theme's 4pt ladder; a 6pt band of the page's second
  * ground parts two cards.
@@ -58,6 +70,8 @@ type CardProps = {
   width: number;
   /** A clip tapped: the full-screen reel of the feed's clips (videos only). */
   onOpenClip: (postId: string) => void;
+  /** A photo tapped once: full screen, on the photo on show, growing out of where the picture sits (`home`). */
+  onOpenPhoto: (post: Post, at: number, home: TileRect | undefined) => void;
   /** A "near you" player you don't follow yet: the "Near you" line with Follow under the name, as before. */
   near?: boolean;
 };
@@ -81,10 +95,24 @@ export const GALLERY = {
   /** 'gallery-rollup': the "who played" row, and each of its sessions opened under it (at least; larger text grows them). */
   who: 56,
   whoItem: 56,
-  /** The column on a computer: a phone's width, so a whole picture card, actions too, fits under the top row. On a
-   * phone (narrower than `phoneUnder`) the column is the screen, whatever its width, so pictures run edge to edge. */
+  /** The column on a computer: a phone's width, which also caps the picture there (390 wide, 488 tall), so a computer
+   * never shows a giant photo. On a phone (narrower than `phoneUnder`) the column is the screen, whatever its width,
+   * so pictures run edge to edge. */
   column: 390,
   phoneUnder: 600,
+  /** A picture's height for its width: 4:5 portrait, Instagram's (Nov 28, owner: "it should be portrait not square"). */
+  portrait: 5 / 4,
+  /** The double-tap window: a single tap on a photo waits this long before opening it full screen. */
+  doubleTap: 280,
+};
+
+/** A picture's frame for the column's width: 4:5, whole points. */
+export const pictureHeight = (width: number) => Math.round(width * GALLERY.portrait);
+
+/** The photos a post's picture shows (several, or one; a cover when that is all there is), for full screen. */
+const photoUrls = (p: Post): string[] => {
+  const list = photosOf(p);
+  return list.length ? list : p.thumbnailUrl ? [p.thumbnailUrl] : [];
 };
 
 /* ------------------------------------------------------------------ what a post is */
@@ -326,7 +354,9 @@ function GalleryActions({ post, me, pop, children }: { post: Post; me: string | 
 
 /**
  * Your own session with no photo, as one quiet row rather than a card (it is you, so no face or name): the title
- * ('gallery': with "Not in friends' feeds" beside it), "1h 15m · 128 bpm" under it, and •••. A tap opens the post.
+ * ('gallery': with "Not in friends' feeds" beside it), "1h 15m · 128 bpm" under it, and •••. A tap opens the
+ * session's stats straight away (Nov 28, owner: "it will just open the stats instead of taking to nother screen"),
+ * or the post when the session has none to show.
  * Under another such row it sits on a hairline, not the band, so a run of auto-logs stays small. In 'gallery-rollup'
  * there is no note: the people who follow you see it in their "who played" row.
  */
@@ -335,9 +365,10 @@ function OwnRow({ post, joined, note }: { post: Post; joined: boolean; /** "Not 
   const s = post.session!;
   const title = titleOf(post, s);
   const line = inlineWords(s);
+  const stats = openStats(post);
   return (
     <View testID="acts-own" style={[styles.oRow, joined ? styles.oJoined : styles.oBand]}>
-      <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}${note ? `. ${OWN_NOTE}` : ''}`} accessibilityHint="Opens the post" style={styles.oPress}>
+      <Pressable onPress={stats ?? (() => router.push(`/post/${post.id}`))} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}${note ? `. ${OWN_NOTE}` : ''}`} accessibilityHint={stats ? 'Opens the session stats' : 'Opens the post'} style={styles.oPress}>
         <View style={styles.oTop}>
           <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oTitle}>{title}</Text>
           {note ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oNote}>{OWN_NOTE}</Text> : null}
@@ -352,8 +383,8 @@ function OwnRow({ post, joined, note }: { post: Post; joined: boolean; /** "Not 
 }
 const OWN_NOTE = 'Not in friends’ feeds';
 
-/** One card: a session with a photo or clip, a photo post, a clip, a text post, or (rare: a near player's) a plain session. */
-const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, near = false, width }: CardProps) {
+/** One card: a session with a photo or clip (Activities holds sessions only; a plain one falls back to its numbers). */
+const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const liked = !!me && post.likedBy.includes(me);
@@ -363,19 +394,42 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
   const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
   const photos = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0;
   const [page, setPage] = useState(0);
-  // A double tap on a picture likes it (never takes a like away); a single tap does nothing.
+  const pageNow = useRef(0);
+  pageNow.current = page;
+  // A double tap on a picture likes it (never takes a like away); a single tap opens the photo full screen, once the
+  // double-tap window has passed with no second tap (Nov 28, owner: "you should be able to tap into photos too which
+  // will show a full screen version on activities"). The demo's drawn court cards have no photo to open.
+  const canOpen = !clip && photoUrls(post).length > 0;
   const [bloom, setBloom] = useState(0);
   const lastTap = useRef(0);
+  const pendingOpen = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const frameRef = useRef<View>(null);
   const likedNow = useRef(liked);
   likedNow.current = liked;
   const likeIt = useCallback(() => {
     if (!likedNow.current) actions.toggleLike(post.id, true);
     setBloom((b) => b + 1);
   }, [actions, post.id]);
+  const openPhoto = useCallback(() => {
+    const at = pageNow.current;
+    const node = frameRef.current;
+    if (!node) { onOpenPhoto(post, at, undefined); return; }
+    node.measureInWindow((x, y, w, h) => onOpenPhoto(post, at, w > 0 && h > 0 ? { x, y, w, h } : undefined));
+  }, [onOpenPhoto, post]);
   const tapPicture = () => {
     const now = Date.now();
-    if (now - lastTap.current < 280) { lastTap.current = 0; likeIt(); } else lastTap.current = now;
+    if (now - lastTap.current < GALLERY.doubleTap) {
+      lastTap.current = 0;
+      if (pendingOpen.current) { clearTimeout(pendingOpen.current); pendingOpen.current = null; }
+      likeIt();
+      return;
+    }
+    lastTap.current = now;
+    if (!canOpen) return;
+    if (pendingOpen.current) clearTimeout(pendingOpen.current);
+    pendingOpen.current = setTimeout(() => { pendingOpen.current = null; openPhoto(); }, GALLERY.doubleTap);
   };
+  useEffect(() => () => { if (pendingOpen.current) clearTimeout(pendingOpen.current); }, []);
   useEffect(() => {
     if (!SIM_DRIVER || !media || clip) return;
     simLikes.set(post.id, likeIt);
@@ -408,10 +462,10 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
     );
   }
 
-  // The picture: the column's full width, square cornered and square (Hevy's), so the whole post fits one screen.
+  // The picture: the column's full width, square cornered, 4:5 portrait (Instagram's), cover-cropped from the centre.
   const who = author.name?.trim().split(/\s+/)[0] || author.handle;
   const picture = (
-    <View style={[styles.photo, !s && styles.photoUnderHead, { width, height: width }]}>
+    <View ref={frameRef} collapsable={false} style={[styles.photo, !s && styles.photoUnderHead, { width, height: pictureHeight(width) }]}>
       {clip ? (
         <Pressable onPress={() => onOpenClip(post.id)} accessibilityRole="button" accessibilityLabel={`${who}'s clip${post.mediaLabel ? `, ${post.mediaLabel}` : ''}`} accessibilityHint="Plays it full screen" style={StyleSheet.absoluteFill}>
           <Media post={post} stand={stand} />
@@ -419,8 +473,9 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
       ) : (
         <Pressable
           onPress={tapPicture}
-          accessibilityRole="image"
+          accessibilityRole={canOpen ? 'imagebutton' : 'image'}
           accessibilityLabel={`${who}'s photo${post.mediaLabel ? `, ${post.mediaLabel}` : ''}${photos ? `, ${photos} photos` : ''}`}
+          accessibilityHint={canOpen ? 'Opens the photo full screen' : undefined}
           accessibilityActions={[{ name: 'like', label: 'Like' }]}
           onAccessibilityAction={onPictureAction}
           style={StyleSheet.absoluteFill}
@@ -468,12 +523,49 @@ const firstName = (u: User) => u.name?.trim().split(/\s+/)[0] || `@${u.handle}`;
 /** Opened, at most this many sessions show before "Show all N". */
 const WHO_FIRST = 5;
 
+/** How long the "who played" row takes to open (and, a little quicker, to close): the app's Fold, its default. */
+const WHO_OPEN_MS = 240;
+const WHO_CLOSE_MS = 190;
+/** The app's ease-out for things settling into place (Fold's, Collapse's, the folds' arrows). */
+const SETTLE = REasing.bezier(0.22, 0.61, 0.36, 1);
+
+/**
+ * The row's chevron: it turns half round as the row opens and back as it closes, in step with the fold under it,
+ * rather than swapping (the folds' arrows elsewhere turn the same way). Built afresh at each rest on a phone
+ * (useRestKey), so a settled turn an iPhone drops can never point it the old way. Reduce Motion as the app's own
+ * motion takes it (lib/useReducedMotion, the same answer Fold hears): with it, it simply points the new way.
+ */
+function TurningChevron({ open }: { open: boolean }) {
+  const still = useAppReducedMotion();
+  const turn = useSharedValue(open ? 1 : 0);
+  const [restKey, landed] = useRestKey();
+  const first = useRef(true);
+  useEffect(() => {
+    // First drawn: already pointing the right way, nothing to turn.
+    if (first.current) { first.current = false; return; }
+    if (still) { turn.value = open ? 1 : 0; landed(); return; }
+    turn.value = withTiming(open ? 1 : 0, { duration: open ? WHO_OPEN_MS : WHO_CLOSE_MS, easing: SETTLE }, (done) => { 'worklet'; if (done) runOnJS(landed)(); });
+  }, [open, turn, landed, still]);
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value * 180}deg` }] }));
+  return (
+    <Reanimated.View key={restKey} style={style}>
+      <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+    </Reanimated.View>
+  );
+}
+
 /**
  * 'gallery-rollup': the sessions without a photo by people you follow on one day, as ONE quiet row in the feed's
  * time order (their faces, then "Tomás and Nadia played today"). A tap opens their sessions in place, as small rows
  * inside the same surface on hairlines (a face, "Tomás · Evening practice", "48 min on court · 126 bpm"; never a
- * place); a tap on one opens its post, where likes and comments live. Another tap closes them. The band comes back
- * after the group.
+ * place); a tap on one opens that session's stats straight away (Nov 28, owner: "it will just open the stats instead
+ * of taking to nother screen"). Another tap closes them. The band comes back after the group.
+ * Opening and closing move the way the app's other in-place sections do (Nov 28, owner: "the animations when you
+ * tapped like ethan played on oct 15 needs to be alot better and maych our current stuff"): the sessions fold open
+ * under the row with a real height change and a fade (Fold, 240ms open, 190ms shut, the app's settle curve), so the
+ * cards below glide rather than jump, and the chevron turns with them. Reduce Motion as everywhere in the app
+ * (lib/useReducedMotion: since Oct 5 every phone gets the same motion, owner: "all animation should look like the one
+ * on my phone"); were it honoured again, Fold's plain way: the height at once and a short fade.
  */
 const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onToggle }: { day: string; posts: Post[]; users: Map<string, User>; open: boolean; onToggle: (day: string) => void }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -481,7 +573,24 @@ const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onTog
   const people = useMemo(() => [...new Set(posts.map((p) => p.authorId))].flatMap((id) => users.get(id) ?? []), [posts, users]);
   if (!people.length) return null;
   const words = whoPlayedWords(people.map(firstName), day);
-  const shown = all ? posts : posts.slice(0, WHO_FIRST);
+  const first = posts.slice(0, WHO_FIRST);
+  const rest = posts.slice(WHO_FIRST);
+  const item = (p: Post) => {
+    const u = users.get(p.authorId);
+    if (!u || !p.session) return null;
+    const title = titleOf(p, p.session);
+    const line = inlineWords(p.session);
+    const stats = openStats(p);
+    return (
+      <Pressable key={p.id} testID="who-item" onPress={stats ?? (() => router.push(`/post/${p.id}`))} accessibilityRole="button" accessibilityLabel={`${u.name}, ${title}. ${line}`} accessibilityHint={stats ? 'Opens the session stats' : 'Opens the post'} style={styles.wItem}>
+        <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
+        <View style={styles.wItemWords}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemTitle}><Text style={styles.wWho}>{firstName(u)}</Text> · {title}</Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemLine}>{line}</Text>
+        </View>
+      </Pressable>
+    );
+  };
   return (
     <View testID="who-group" style={styles.wGroup}>
       <Pressable
@@ -505,28 +614,22 @@ const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onTog
         <Text numberOfLines={2} maxFontSizeMultiplier={TextScale.CARD} style={styles.wText}>
           <Text style={styles.wWho}>{words.who}</Text>{words.rest}
         </Text>
-        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        <TurningChevron open={open} />
       </Pressable>
-      {open ? shown.map((p) => {
-        const u = users.get(p.authorId);
-        if (!u || !p.session) return null;
-        const title = titleOf(p, p.session);
-        const line = inlineWords(p.session);
-        return (
-          <Pressable key={p.id} testID="who-item" onPress={() => router.push(`/post/${p.id}`)} accessibilityRole="button" accessibilityLabel={`${u.name}, ${title}. ${line}`} accessibilityHint="Opens the post" style={styles.wItem}>
-            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
-            <View style={styles.wItemWords}>
-              <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemTitle}><Text style={styles.wWho}>{firstName(u)}</Text> · {title}</Text>
-              <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemLine}>{line}</Text>
-            </View>
-          </Pressable>
-        );
-      }) : null}
-      {open && !all && posts.length > WHO_FIRST ? (
-        <Pressable onPress={() => setAll(true)} accessibilityRole="button" accessibilityLabel={`Show all ${posts.length} sessions`} style={styles.wAll}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.wAllText}>Show all {posts.length}</Text>
-        </Pressable>
-      ) : null}
+      <Fold open={open} duration={WHO_OPEN_MS}>
+        {first.map(item)}
+        {rest.length ? (
+          <>
+            {/* "Show all N": the rest fold open under the first five as the button folds away. */}
+            <Fold open={all} duration={WHO_OPEN_MS}>{rest.map(item)}</Fold>
+            <Fold open={!all} duration={WHO_OPEN_MS}>
+              <Pressable onPress={() => setAll(true)} accessibilityRole="button" accessibilityLabel={`Show all ${posts.length} sessions`} style={styles.wAll}>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.wAllText}>Show all {posts.length}</Text>
+              </Pressable>
+            </Fold>
+          </>
+        ) : null}
+      </Fold>
     </View>
   );
 });
@@ -551,8 +654,9 @@ const START_AFTER = 2;
 const QUIET_PAGES = 8;
 
 /**
- * The rows: other people's sessions as cards only with a picture, yours without one as a row, the start block after
- * the first two. `rollup` ('gallery-rollup'): other people's without one, when you follow them and the session has
+ * The rows: sessions only (anything else that slips in is left out); other people's as cards only with a picture,
+ * yours without one as a row, the start block after the first two. `rollup` ('gallery-rollup'): other people's
+ * without one, when you follow them and the session has
  * its numbers (as today's Activities pages take them), go into their day's one "who played" row, placed where the
  * day's newest of them falls in the feed's time order; a later page bringing more of that day adds to the same row.
  * The day is the one it was PLAYED (the session's own day), never the day it was posted: Saturday's match logged on
@@ -564,7 +668,8 @@ export function galleryRows(posts: Post[], me: string | null | undefined, showSt
   const days = new Map<string, Extract<Row, { kind: 'rollup' }>>();
   const today = localDay(new Date());
   for (const post of posts) {
-    if (!post.session || hasPicture(post)) out.push({ key: post.id, kind: 'post', post });
+    if (!post.session) continue;
+    if (hasPicture(post)) out.push({ key: post.id, kind: 'post', post });
     else if (post.authorId === me) out.push({ key: post.id, kind: 'own', post, joined: false });
     else if (rollup && follows.has(post.authorId) && hasSessionStats(post.session)) {
       const played = post.session.day;
@@ -641,6 +746,35 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
   // Back on show (from the reel, or any page over it): a clip can be opened again at once.
   useFocusEffect(useCallback(() => { opening.current = false; }, []));
   useEffect(() => () => { if (openingReset.current) clearTimeout(openingReset.current); }, []);
+
+  // A photo tapped once: full screen over the list (the chats' viewer: black ground, the photo fitted, pinch to look
+  // closer, swipe sideways through a post's photos, swipe down or × to put it back), opened on the photo on show and
+  // growing out of where it sits. The list never moves under it, so closing lands exactly where you were. The viewer
+  // is its own full-screen layer (a Modal): whichever list holds the gallery draws `viewerNode` anywhere in its page.
+  const [viewer, setViewer] = useState<{ post: Post; at: number; home?: TileRect } | null>(null);
+  useHoldTour(!!viewer);
+  const openPhoto = useCallback((post: Post, at: number, home: TileRect | undefined) => {
+    if (photoUrls(post).length) setViewer({ post, at, home });
+  }, []);
+  const closePhoto = useCallback(() => setViewer(null), []);
+  const viewerNode = viewer ? (() => {
+    const urls = photoUrls(viewer.post);
+    const author = usersById.get(viewer.post.authorId);
+    const caption = viewer.post.body?.trim().replace(/\s+/g, ' ');
+    return (
+      <PhotoViewer
+        photos={urls.map((path) => ({ path, w: 4, h: 5 }))}
+        start={viewer.at}
+        // Every photo of a post sits in the same frame on the card, so each goes back into it.
+        homes={urls.map(() => viewer.home)}
+        homeRadius={0}
+        caption={caption || undefined}
+        who={author ? `${firstName(author)} · ${agoInWords(viewer.post.createdAt)}` : undefined}
+        share={false}
+        onClose={closePhoto}
+      />
+    );
+  })() : null;
 
   // Older posts as the end nears: the store's next page (AppContext loadMorePosts: 40 posts of the whole feed, by
   // time), with a quiet row while it is on its way. A page can bring nothing this list shows (posts from people you
@@ -768,8 +902,8 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
-    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
-  }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
+    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} /></View>;
+  }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
@@ -803,7 +937,7 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
         ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
     </View>
   );
-  return { rows, rowsRef, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more: app.feed.more, cardW };
+  return { rows, rowsRef, renderRow, openClip, openPhoto, toggleDay, viewerNode, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more: app.feed.more, cardW };
 }
 
 export function ActivitiesList({ posts, rollup = false, showStart, nearCount, near, paused, row }: {
@@ -824,7 +958,7 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
   const { actions } = useApp();
   const insets = useSafeAreaInsets();
   const barInset = useBarInset();
-  const { rows, rowsRef, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end } = useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused });
+  const { rows, rowsRef, renderRow, openClip, openPhoto, toggleDay, viewerNode, onEnd, reopen, onScreenNow, quiet, end } = useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused });
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
   // The top row follows the list the way Instagram's header does: forward takes it out with the scroll, back brings it in.
@@ -883,9 +1017,20 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
         if (id) simLikes.get(id)?.();
       }),
       simAction('actpos', () => simLog(`[acts] at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)} rows ${rowsRef.current.length}`)),
+      // "actwho" opens (or closes) the first "who played" row as its tap does; "actphoto" opens the first photo full screen.
+      simAction('actwho', () => {
+        const day = rowsRef.current.find((r): r is Extract<Row, { kind: 'rollup' }> => r.kind === 'rollup')?.day;
+        simLog(`[acts] who ${day ?? 'none'}`);
+        if (day) toggleDay(day);
+      }),
+      simAction('actphoto', () => {
+        const photo = firstBelow((p) => !isClip(p) && photoUrls(p).length > 0);
+        simLog(`[acts] photo ${photo?.id ?? 'none'}`);
+        if (photo) openPhoto(photo, 0, undefined);
+      }),
     ];
     return () => off.forEach((f) => f());
-  }, [openClip, rowsRef]);
+  }, [openClip, openPhoto, toggleDay, rowsRef]);
   useFocusEffect(useCallback(() => { if (SIM_DRIVER) simLog(`[acts] on show at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)}`); }, []));
 
   // FlatList takes one handler and one setting for the list's whole life.
@@ -934,6 +1079,7 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
         accessibilityLabel="Activities"
       />
       <Reanimated.View pointerEvents="none" style={[styles.band, { height: top }, band]} />
+      {viewerNode}
     </View>
   );
 }
@@ -995,7 +1141,7 @@ function firstPeek(row: Row | undefined): number {
  * page's own rows between the items (`slots`). The page's rows that would go past the items loaded so far wait until
  * no more pages are coming: shown at the end now, a page landing would push them up into the middle of the feed, under
  * the reader's thumb. Hand the result to PaneScroller's `list`; `peek` is how much of the first item should show above
- * the bar on the first screen; `reopen` after a pull.
+ * the bar on the first screen; `reopen` after a pull; `viewerNode` (a photo full screen, a Modal) anywhere in the page.
  */
 export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start, slots }: {
   posts: Post[];
@@ -1009,7 +1155,7 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start
   slots: FeedSlot[];
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
+  const { rows, renderRow, openClip, viewerNode, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
   const settled = ended || stalled || !more;
   const hasQuiet = !!quiet;
   const data = useMemo<InPageRow[]>(() => {
@@ -1052,7 +1198,7 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start
     });
   }, [paused, posts, openClip]);
   const peek = firstPeek(rows[0]);
-  return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, peek, reopen };
+  return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, peek, reopen, viewerNode };
 }
 
 const styleDefinitions = StyleSheet.create({

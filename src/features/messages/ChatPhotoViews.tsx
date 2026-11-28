@@ -236,16 +236,22 @@ async function sharePhoto(source: string) {
  * look closer (it snaps back). With several, they sit in a row, as in
  * Photos and iMessage: swipe sideways for the next, or tap one in the strip
  * along the bottom. Swipe down or tap × to put it back into its place. The
- * share button hands the photo on (see sharePhoto).
+ * share button hands the photo on (see sharePhoto). Also a post's photos
+ * full screen in Activities (Nov 28), there without the share button: their
+ * "paths" are the posts' own links, shown as they are.
  */
-export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
+export function PhotoViewer({ photos, start, homes, homeRadius = ROUND, caption, who, share: shareOn = true, onClose }: {
   photos: ChatPhoto[];
   start: number;
   /** Where each photo sits in the chat, by its place in the message: the tapped one grows out of its spot, and any of them goes back into its own. */
   homes?: (TileRect | undefined)[];
+  /** The rounding of the spots they grow out of (a chat bubble's; a post's square-cornered picture is 0). */
+  homeRadius?: number;
   caption?: string;
   /** Who sent it and when: "Mira · Today 9:41". */
   who?: string;
+  /** The share button (a chat's photos); false leaves it out (a post's, which its own ••• shares). */
+  share?: boolean;
   onClose: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -269,8 +275,8 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
   // Worked out once, so each page keeps the same spot to go back to however often the viewer re-draws.
   const homeRects = useMemo(() => photos.map((_, i): HomeRect | undefined => {
     const r = homes?.[i];
-    return r ? { x: r.x, y: r.y, width: r.w, height: r.h, radius: ROUND } : undefined;
-  }), [homes, photos]);
+    return r ? { x: r.x, y: r.y, width: r.w, height: r.h, radius: homeRadius } : undefined;
+  }), [homes, photos, homeRadius]);
   const goTo = (i: number, animated = true) => {
     const next = Math.max(0, Math.min(photos.length - 1, i));
     heading.current = next;
@@ -302,7 +308,7 @@ export function PhotoViewer({ photos, start, homes, caption, who, onClose }: {
   }, [onClose, photos.length, W]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!photo) return null;
   const homeOf = (i: number): HomeRect | undefined => homeRects[i];
-  const canShare = !!source && source !== 'unavailable' && !isDemoPhoto(photo.path);
+  const canShare = shareOn && !!source && source !== 'unavailable' && !isDemoPhoto(photo.path);
   const share = async () => {
     if (!source || !canShare) return;
     try {

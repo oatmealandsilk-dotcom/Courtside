@@ -121,8 +121,16 @@ import { inActivitiesGallery, reachable, unfinishedClip, useGalleryPosts } from 
 const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
-// inActivitiesGallery (one for Activities as a gallery) lives in feedLooks/galleryPosts, shared with the Community map's
-// activity (HOME_LOOK 'map-feed'): the same rules on both.
+// inActivitiesGallery (one for Activities as a gallery: sessions only, Nov 28) lives in feedLooks/galleryPosts, shared
+// with the Community map's activity (HOME_LOOK 'map-feed'): the same rules on both.
+
+/**
+ * In the clip reel a clip in Activities opens (app/reel.tsx), a video posted as a post rather than as a clip (compose's "New post" with a
+ * video, or a session's video: kind 'note' with a videoUrl) plays as a clip too: full screen and at once. As a post it would be a post's
+ * page, its video waiting behind a play button: a second screen and a second tap (Nov 28, owner: "it should not take me to another screen
+ * when then i have to tap again to watch the video"). For you, profiles and groups show it as a post, as before.
+ */
+const asReelClip = (p: Post): Post => (p.videoUrl && p.kind !== 'clip' ? { ...p, kind: 'clip' } : p);
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /**
@@ -236,12 +244,13 @@ function LikeBurst({ token, played }: { token: number; played: { current: number
  * in that order (a court's).
  */
 export type FeedScope =
-  | { userId: string; set: 'own' | 'clips' | 'activity' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined; activities?: undefined }
-  | { ids: string[]; start?: string; userId?: undefined; set?: undefined; groupId?: undefined; activities?: undefined }
+  | { userId: string; set: 'own' | 'clips' | 'activity' | 'tagged' | 'archived'; start?: string; ids?: undefined; groupId?: undefined; activities?: undefined; reel?: undefined }
+  // `reel`: the clip reel a clip in Activities opens (app/reel.tsx): every video in it plays as a clip (asReelClip).
+  | { ids: string[]; start?: string; reel?: boolean; userId?: undefined; set?: undefined; groupId?: undefined; activities?: undefined }
   // Activities (Oct 4): posts with a session's stats on them, yours and the people you follow, newest first, as Strava's feed.
-  | { activities: true; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; groupId?: undefined }
+  | { activities: true; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; groupId?: undefined; reel?: undefined }
   // A group's own feed (migrations 67 and 74): everything its members post, and what was shared to it only, newest first, under the Feed's top row.
-  | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined };
+  | { groupId: string; start?: undefined; ids?: undefined; userId?: undefined; set?: undefined; activities?: undefined; reel?: undefined };
 
 /**
  * One person's posts (a profile's grid: own, clips, activity, tagged, your archive) or a court's (ids), in the grid's
@@ -1254,7 +1263,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
         if (post?.removed && !scope?.userId) return [];
         // A clip still without its video: only its author sees it (or the one tapped open, so a link never lands on nothing).
         if (post && unfinishedClip(post, currentUserId) && post.id !== scope?.start) return [];
-        return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post }] : [];
+        return post && !away(post.authorId, post) && (!post.archived || scope?.set === 'archived') ? [{ type: 'post' as const, post: scope?.reel ? asReelClip(post) : post }] : [];
       }
       if (key.startsWith('h:')) {
         // A hit leaves the feed the moment it expires or is put away, and every one while Instants are hidden.
@@ -1265,7 +1274,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
       const question = questionById.get(id);
       return question && !away(question.authorId) && !question.removed ? [{ type: 'question' as const, question }] : [];
     });
-  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, keepMuted, instantsOn]);
+  }, [order, posts, questions, stories, blockedIds, mutedIds, users, currentUserId, followingIds, scope?.set, scope?.groupId, scope?.start, scope?.reel, keepMuted, instantsOn]);
   // This week's challenge, and its top clips so far. They are settled once
   // per visit: a like arriving mid-scroll must not reshuffle the pages.
   const challenge = useMemo(() => challengeFor(), []);

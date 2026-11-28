@@ -1352,7 +1352,8 @@ function HomePane({ feedOn, paused, follow, slots, onPeek, onRefresh, children, 
   const { reopen } = feed;
   const pull = useMemo(() => (onRefresh ? async () => { try { return await onRefresh(); } finally { reopen(); } } : undefined), [onRefresh, reopen]);
   const rows: PaneList<InPageRow> = { data: feedOn ? feed.data : NO_ROWS, renderItem: feed.renderItem, keyExtractor: feed.keyExtractor, onEndReached: feedOn ? feed.onEndReached : undefined, onViewableItemsChanged: feed.onViewableItemsChanged, viewabilityConfig: feed.viewabilityConfig };
-  return <PaneScroller {...pane} onRefresh={pull} list={rows}>{children}</PaneScroller>;
+  // A photo tapped full screen (the gallery's viewer, its own full-screen layer) beside the list, which never moves under it.
+  return <><PaneScroller {...pane} onRefresh={pull} list={rows}>{children}</PaneScroller>{feed.viewerNode}</>;
 }
 
 const styleDefinitions = StyleSheet.create({
