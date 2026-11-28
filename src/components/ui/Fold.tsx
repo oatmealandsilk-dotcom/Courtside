@@ -18,6 +18,12 @@ const NO_LIMIT = 100000;
  * Its contents are built only while open (and while closing), in the page's
  * own flow: at rest it is an ordinary box, so a reply box that grows as you
  * type, or a list that changes, simply grows. Only an open or a close moves.
+ * While it opens, its contents are lifted out of the flow (laid out at their
+ * own height on top of the box) and the box itself unfolds to that height, so
+ * they are measured whole and the box grows from its first frame (Nov 28: on an
+ * iPhone, contents built inside a box with no height were laid out at none, so
+ * an opening measured 0, stayed shut for its whole unfold and then jumped open).
+ * Once open they go back into the flow at the same height: nothing moves.
  * Already open when first drawn: simply there, no animation (a page opens
  * exactly as before). `appear` makes even the first showing unfold (a row
  * added after the page was drawn).
@@ -53,11 +59,18 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
   const opening = open && !mounted;
   // Clipped only while it moves: at rest, shadows on cards inside it (a hit card's lift) show whole.
   const [busy, setBusy] = useState(animateFirst);
+  // An opening's contents are out of the page's flow until it has unfolded (LIFTED): an iPhone lays out
+  // contents in the flow of a box with no height at no height, so they could not be measured; lifted,
+  // they keep their own height whatever the box's, and the box takes its height from the fold (`lift`).
+  const [lifted, setLifted] = useState(animateFirst);
+  const liftedNow = opening || lifted;
   // 1 while it opens or closes: its height follows the fold; 0 at rest: its own height.
   const moving = useSharedValue(animateFirst ? 1 : 0);
   const progress = useSharedValue(open && !animateFirst ? 1 : 0);
   // Its contents' own height; -1 until first measured.
   const height = useSharedValue(-1);
+  // 1 while its contents are lifted: the box is exactly as tall as the fold (they no longer give it height).
+  const lift = useSharedValue(animateFirst ? 1 : 0);
   // Opening, built but not yet measured: the unfold starts on the first measure.
   const waiting = useRef(animateFirst);
   const first = useRef(true);
@@ -65,11 +78,17 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
   closedRef.current = onClosed;
   const openRef = useRef(open);
   openRef.current = open;
+  // Whether a measure of the contents can be trusted (read in onLayout): lifted, or at rest. In the flow
+  // while it moves, the box squeezes them (to nothing at the end of a close), and that is not their height.
+  const measurable = useRef(true);
+  measurable.current = liftedNow || !busy;
 
   const settle = useCallback((opened: boolean) => {
     // A close that landed just as it was opened again: the open now under way settles it instead.
     if (!opened && openRef.current) return;
     setBusy(false);
+    // Open: its contents go back into the flow (the box keeps their height until they are: see `lift`).
+    setLifted(false);
     if (!opened) { setMounted(false); closedRef.current?.(); }
   }, []);
   const run = useCallback((to: 0 | 1) => {
@@ -90,11 +109,13 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
     if (open) {
       // Opened again as it folded shut: it unfolds from where it is (or still waits for its height).
       if (mounted) { if (!waiting.current) run(1); return; }
-      // Built now, at no height; the unfold starts once its height is known (onLayout).
+      // Built now, lifted, in a box at no height; the unfold starts once their height is known (onLayout).
       progress.value = 0;
       moving.value = 1;
+      lift.value = 1;
       waiting.current = true;
       setBusy(true);
+      setLifted(true);
       setMounted(true);
     } else if (mounted) {
       if (waiting.current) { waiting.current = false; settle(false); return; }
@@ -102,8 +123,15 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
     }
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Its contents back in the flow (drawn): only now does the box stop following the fold, so it never
+  // has a frame with neither their height nor the fold's.
+  useLayoutEffect(() => {
+    if (!lifted) lift.value = 0;
+  }, [lifted, lift]);
+
   const lastHeight = useRef(-1);
   const onLayout = useCallback((e: { nativeEvent: { layout: { height: number } } }) => {
+    if (!measurable.current) return;
     lastHeight.current = e.nativeEvent.layout.height;
     height.value = e.nativeEvent.layout.height;
     if (waiting.current) { waiting.current = false; run(1); }
@@ -113,10 +141,14 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
     const p = opening ? 0 : progress.value;
     // Shutting, it takes its gap with it; empty (nothing to show), it takes none at all.
     const top = (!gap ? 0 : height.value === 0 ? -gap : -gap * (1 - p)) - room * p;
+    const full = Math.max(0, height.value);
+    const lifting = lift.value === 1;
     const look = {
       opacity: p,
       // With Reduce Motion on, only the fade: the height changes at once.
-      maxHeight: (opening || moving.value) && !still ? Math.max(0, height.value) * p : NO_LIMIT,
+      maxHeight: (opening || moving.value || lifting) && !still ? full * p : NO_LIMIT,
+      // Its contents lifted, they give it no height: it is as tall as the fold says.
+      minHeight: lifting ? (still ? full : full * p) : 0,
       marginTop: top,
     };
     return room ? { ...look, marginBottom: -room * p } : look;
@@ -134,15 +166,18 @@ export function Fold({ open, children, appear = false, gap = 0, room = 0, durati
   const restTop = (gap && lastHeight.current === 0 ? -gap : 0) - room;
   return (
     <Animated.View
-      style={[(busy || opening) && { overflow: 'hidden' }, style, animated, resting && (room ? { opacity: 1, maxHeight: NO_LIMIT, marginTop: restTop, marginBottom: -room } : { opacity: 1, maxHeight: NO_LIMIT, marginTop: restTop })]}
+      style={[(busy || opening) && { overflow: 'hidden' }, style, animated, resting && (room ? { opacity: 1, maxHeight: NO_LIMIT, minHeight: 0, marginTop: restTop, marginBottom: -room } : { opacity: 1, maxHeight: NO_LIMIT, minHeight: 0, marginTop: restTop })]}
       pointerEvents={open ? 'box-none' : 'none'}
       accessibilityElementsHidden={!open}
       importantForAccessibility={open ? 'auto' : 'no-hide-descendants'}
     >
-      <View onLayout={onLayout} collapsable={false}>{open ? children : lastShown.current}</View>
+      <View onLayout={onLayout} collapsable={false} style={liftedNow ? LIFTED : undefined}>{open ? children : lastShown.current}</View>
     </Animated.View>
   );
 }
+
+/** An opening's contents, out of the flow at their own height and the box's width, on top of the box. */
+const LIFTED: ViewStyle = { position: 'absolute', top: 0, left: 0, right: 0 };
 
 /**
  * A list whose rows fold in when they are added and fold out when they go
