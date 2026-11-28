@@ -56,7 +56,7 @@ export function PlayingHereRow({ courtId, access, name }: { courtId: string; acc
  * standing at a court (useAtCourtPrompt), one tap opens "How long are you here?", exactly as the court card's
  * button does. Nothing is shared until Light it up on that card; the (x) puts it away.
  */
-export function AtCourtPrompt({ active }: { active: boolean }) {
+export function AtCourtPrompt({ active, onMap = false }: { active: boolean; /** On Open to hit's panel over the iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): at its top, the room under it rather than above. */ onMap?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { court, close } = useAtCourtPrompt(active);
   const p = usePlayingHere(court?.id ?? null, court?.access ?? 'unknown', court?.name);
@@ -79,7 +79,7 @@ export function AtCourtPrompt({ active }: { active: boolean }) {
   };
   goNow.current = () => { if (!p.busy) void go(); };
   return (
-    <View style={styles.prompt}>
+    <View style={[styles.prompt, onMap && styles.promptOnMap]}>
       <View style={styles.promptRow}>
         <View style={styles.promptDisc}><CourtGlyph size={14} color={colors.brand} /></View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.promptText} numberOfLines={2}>You’re at <Text style={styles.promptName}>{name}</Text>?</Text>
@@ -110,6 +110,8 @@ const styleDefinitions = StyleSheet.create({
   whyText: { ...typography.small, flex: 1, color: colors.textMuted },
   error: { ...typography.small, color: colors.danger },
   prompt: { marginTop: spacing.sm, gap: 4 },
+  // On the map's panel: as much room under it, above Open to hit's title, as the panel has above it.
+  promptOnMap: { marginTop: 0, marginBottom: spacing.md - 2 },
   promptRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 8, paddingLeft: 8, paddingRight: 6, borderRadius: radius.lg, ...buttonShape.curve, backgroundColor: colors.brandDim },
   promptDisc: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   promptText: { ...typography.small, ...font('500'), flex: 1, color: colors.text },

@@ -693,14 +693,18 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // the screen's foot, under the bottom bar, and Open to hit on its lower part just clear of the bar. While the card asks
   // for a city instead (no map), Open to hit stays in its usual place under it.
   const [mapCityless, setMapCityless] = useState(false);
-  const tallMap = useTallMap(MAP_OVERLAY && !!currentUser);
+  // "You're early" / "Bring your friends" sits right under the map so its button shows without scrolling, and the
+  // tutorial's first tip lights it (Oct 5): while it is up, the map keeps today's card height and stops above the bar.
+  const mapShort = early || friendsEarly;
+  const tallMap = useTallMap(MAP_OVERLAY && !!currentUser && !mapShort);
   const barTop = useBarTop();
   const stripOn = MAP_OVERLAY && showUpToday && !mapCityless;
-  // How tall Open to hit's own rows are on the map (its panel adds its padding and the bar's room under them).
+  // How tall what lies on the map's foot is (Open to hit's rows, with "You're at <court>? Light it up" above them while it
+  // is up); its panel adds its padding and, when the map runs under the bar, the bar's room under them.
   const [stripRows, setStripRows] = useState(0);
-  const stripFoot = barTop + spacing.sm;
-  // How much of the map's foot is covered: Open to hit and the bar, or the bar alone.
-  const mapCover = !MAP_OVERLAY ? 0 : stripOn && stripRows ? STRIP_TOP + stripRows + stripFoot : barTop;
+  const stripFoot = (mapShort ? 0 : barTop) + spacing.sm;
+  // How much of the map's foot is covered: Open to hit and the bar, or the bar alone (nothing while the map stops above it).
+  const mapCover = !MAP_OVERLAY ? 0 : stripOn && stripRows ? STRIP_TOP + stripRows + stripFoot : mapShort ? 0 : barTop;
   const listEnd = useRef<View>(null);
   const nearEndRef = useRef(() => {});
   nearEndRef.current = () => {
@@ -735,12 +739,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Open to hit on the iPhone's Community map (MAP_OVERLAY): the same row, small (UpToday compact: first names, no distances),
   // along the map's lower part on the map controls' one fixed see-through fill (MapGlass, dense for words: never live glass,
   // never faded), its top corners rounded as the pills are, down under the bar; no hairline, no shadow. A list over the map,
-  // never pins or places on it.
+  // never pins or places on it. "You're at <court>? Light it up" (AT_COURT_PROMPT) comes on the same panel, above the title,
+  // so it shows without scrolling as it did under the card.
   const mapStrip = stripOn && currentUser ? (
     <View style={[styles.mapStrip, { paddingBottom: stripFoot }]}>
       <MapGlass radius={0} dense style={styles.mapStripFill} />
-      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== stripRows) setStripRows(h); }}>
-        <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+      <View collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== stripRows) setStripRows(h); }}>
+        <AtCourtPrompt onMap active={!previewSection || section === 'players'} />
+        <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
+          <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+        </View>
       </View>
     </View>
   ) : null;
@@ -772,8 +780,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
-            only when the phone already knows you're standing at one; one tap, nothing shared before it. */}
-        {currentUser && pane === 'players' && !search ? <AtCourtPrompt active={!previewSection || section === 'players'} /> : null}
+            only when the phone already knows you're standing at one; one tap, nothing shared before it. With Open to hit on
+            the iPhone's map (stripOn), it is on that panel instead. */}
+        {currentUser && pane === 'players' && !search && !stripOn ? <AtCourtPrompt active={!previewSection || section === 'players'} /> : null}
         {/* Nobody sharing a spot within 30 miles: the way to fill the map,
             right under it, so its button shows without scrolling (Oct 5: it
             sat under the bar, below Open to hit). For a teen with no friend

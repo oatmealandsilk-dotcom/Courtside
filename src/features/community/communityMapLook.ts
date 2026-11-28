@@ -8,6 +8,9 @@ import { Platform } from 'react-native';
  *              top right; Open to hit (title, "N near you", a small row of faces with I'm free and first names, no
  *              distances) lies along the map's lower part on the map controls' one fixed see-through fill (MapGlass),
  *              just clear of the bar. Below the map the page goes on as before (People you may know, …).
+ *              "You're at <court>? Light it up" comes on Open to hit's panel, above its title; while "You're early" /
+ *              "Bring your friends" is up, the map keeps the card's height and stops above the bar, so that card and
+ *              its button show under it without scrolling.
  *   'now'      The map card as it was until Nov 28: a rounded card with the city's name in its middle and the weather,
  *              Open to hit under it.
  *
