@@ -31,6 +31,8 @@ import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, pageIsDark, radius, typography } from '@/theme';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /**
  * The first-run tutorial: the screen dims a little, a small card explains one
@@ -1152,7 +1154,8 @@ function TourLayer({ run, open, onGone }: { run: TourRun; open: boolean; onGone:
                 )}
                 <View ref={nextRef}>
                   {shownLast ? (
-                    <Button label={LAST_BUTTON} onPress={() => act.current.next()} style={styles.pill} />
+                    // No boxes (demo only): the last tip's button in ink, small, not a green pill.
+                    noBoxes() ? <InkButton small label={LAST_BUTTON} onPress={() => act.current.next()} /> : <Button label={LAST_BUTTON} onPress={() => act.current.next()} style={styles.pill} />
                   ) : (
                     <Pressable accessibilityRole="button" accessibilityLabel="Next tip" onPress={() => act.current.next()} style={styles.next}>
                       <Text selectable={false} style={styles.nextText}>Next</Text>

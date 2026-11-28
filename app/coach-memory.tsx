@@ -13,6 +13,8 @@ import { relativeTime } from '@/lib/format';
 import { confirm } from '@/lib/confirm';
 import { colors, radius, spacing, typography, lift } from '@/theme';
 import { corner } from '@/theme/look';
+import { TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /** Nothing is kept until the coach is switched on, so the screen says so. */
 export default function CoachMemoryRoute() {
@@ -98,14 +100,15 @@ function CoachMemoryScreen() {
               </View>
             ))}
           </View>
-          <Button label="Clear everything the coach remembers" variant="danger" loading={busy} onPress={clear} full />
+          {noBoxes() ? <TextAction label={busy ? 'Clearing…' : 'Clear everything the coach remembers'} tone="danger" disabled={busy} onPress={clear} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : <Button label="Clear everything the coach remembers" variant="danger" loading={busy} onPress={clear} full />}
         </>
       )}
       {/* Said whatever is above: a Stop that did not go through, with nothing remembered yet, said nothing before. */}
       {error ? <Text style={[styles.error, { paddingTop: spacing.md }]}>{error}</Text> : null}
       {consent.agreed ? (
         <View style={{ paddingTop: spacing.lg }}>
-          <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />
+          {/* No boxes (demo only): a quiet way out in words, not a full-width box. */}
+          {noBoxes() ? <TextAction label={stopping ? 'Stopping…' : 'Stop using the AI coach'} disabled={stopping} onPress={stop} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />}
         </View>
       ) : null}
     </Screen>

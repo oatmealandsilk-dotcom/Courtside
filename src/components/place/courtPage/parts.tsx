@@ -17,6 +17,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 
 import type { CourtView } from './view';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /*
  * The pieces a court's page (the place card, PlaceCard) is built from: one
@@ -111,6 +113,8 @@ export function sessionLook(state: CourtView['session']['state']): { label: stri
 export function PrimaryBar({ session, height = 50 }: { session: CourtView['session']; height?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const look = sessionLook(session.state);
+  // No boxes (demo only): ink, sized to its words, at the left, not a full-width green bar.
+  if (noBoxes()) return <View style={{ alignItems: 'flex-start' }}><InkButton label={look.label} accessibilityLabel={look.a11y} onPress={session.onPress} /></View>;
   return (
     <Tappable accessibilityLabel={look.a11y} onPress={session.onPress} hoverTo={1.02} style={[styles.primary, { height, borderRadius: buttonShape.radius }, pageIsDark() ? styles.liftDark : styles.lift]}>
       <BrandWash radius={buttonShape.radius} curve />

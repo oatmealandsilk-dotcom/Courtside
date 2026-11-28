@@ -20,6 +20,8 @@ import { PRESS_DIM } from '@/theme/press';
 
 import { ListRow, SectionHead, useCourtNow } from './parts';
 import type { CourtView } from './view';
+import { TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /*
  * The pieces of the court page (look.ts 'final'; owner, Oct 24: Follow should
@@ -153,7 +155,10 @@ export function PlayAndSquares({ view }: { view: CourtView }) {
   return (
     <View style={styles.second}>
       <View style={styles.playGrow}>
-        {!view.closed ? (
+        {!view.closed && noBoxes() ? (
+          // No boxes (demo only): words, not a tinted slab.
+          <TextAction label="Find someone to play" accessibilityLabel={`Find someone to play. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} />
+        ) : !view.closed ? (
           <Tappable accessibilityLabel={`Find someone to play. Post a hit at ${view.name}`} onPress={() => playHere(view.here)} hoverTo={1.02} style={styles.play}>
             <View style={styles.playInner}>
               <HitGlyph size={19} color={colors.brand} />

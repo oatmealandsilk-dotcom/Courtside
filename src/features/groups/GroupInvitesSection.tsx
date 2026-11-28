@@ -12,7 +12,12 @@ import { useApp } from '@/store/AppContext';
 import { MAX_GROUPS } from '@/store/feedGroups';
 import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { LESS_AI, corner } from '@/theme/look';
+import { LESS_AI as LESS_AI_LOOK, corner } from '@/theme/look';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the hand-made row (a small Join at its end, Not now in words), Join in ink. */
+const PLAIN = noBoxes();
+const LESS_AI = LESS_AI_LOOK || PLAIN;
 
 /*
  * Invites to groups waiting for your answer (migration 181), as one
@@ -103,9 +108,9 @@ export function GroupInvitesSection({ onOpen }: {
                   disabled={!!answering || full}
                   hitSlop={6}
                   onPress={() => { void answer(inv, true); }}
-                  style={({ pressed }) => [styles.joinSoft, full && styles.btnOff, (pressed || (!!answering && !(busyHere && answering?.accept))) && styles.btnDim]}
+                  style={({ pressed }) => [styles.joinSoft, PLAIN && styles.joinInk, full && styles.btnOff, (pressed || (!!answering && !(busyHere && answering?.accept))) && styles.btnDim]}
                 >
-                  {busyHere && answering?.accept ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={[styles.btnText, styles.joinSoftText]}>Join</Text>}
+                  {busyHere && answering?.accept ? <ActivityIndicator size="small" color={colors.brand} /> : <Text style={[styles.btnText, styles.joinSoftText, PLAIN && styles.joinInkText]}>Join</Text>}
                 </SwipePressable>
               ) : null}
               </View>
@@ -172,6 +177,8 @@ const styleDefinitions = StyleSheet.create({
   groupLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   joinSoft: { height: 32, minWidth: 64, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   joinSoftText: { color: colors.brand },
+  joinInk: { backgroundColor: colors.text },
+  joinInkText: { color: colors.bg },
   notNow: { alignSelf: 'flex-start', marginLeft: 44 + spacing.md, paddingVertical: 2 },
   notNowText: { ...typography.small, color: colors.textMuted },
   row: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg, gap: spacing.sm },

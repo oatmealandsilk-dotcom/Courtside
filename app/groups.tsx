@@ -13,6 +13,8 @@ import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { LESS_AI, corner } from '@/theme/look';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /*
  * Groups (migration 67): the ones you are in, the ones you asked to join,
@@ -109,12 +111,13 @@ export default function Groups() {
       ) : null}
 
       <View style={styles.start}>
-        <Button
+        {/* No boxes (demo only): ink, sized to its words, at the left, not a full-width green slab. */}
+        {noBoxes() ? <View style={{ alignItems: 'flex-start' }}><InkButton label="Start a group" onPress={() => router.push('/group-form')} disabled={full || off} /></View> : <Button
           label="Start a group"
           onPress={() => router.push('/group-form')}
           disabled={full || off}
           full
-        />
+        />}
         {full ? <Text style={styles.startWhy}>You’re in {MAX_GROUPS} groups, the most anyone can be in. Leave one to start another.</Text> : null}
       </View>
     </Screen>

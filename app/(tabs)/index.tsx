@@ -101,6 +101,11 @@ import { corner } from '@/theme/look';
 import { ACTIVITIES_LOOK, isGalleryLook } from '@/features/activity/feedLooks/activitiesLook';
 import { simAction } from '@/lib/simDriver';
 import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/ActivitiesList';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): For you's last pages and an empty group as plain words, no card, wash or tile. */
+const PLAIN = noBoxes();
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -2082,14 +2087,19 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
     const label = below.some((i) => i.type === 'post') ? 'Earlier posts' : 'More from the community';
     return (
       <View key={CAUGHT_UP} style={styles.endPage}>
-        <View style={styles.endCard}>
-          <Wash height={300} strength={0.65} fade={colors.surface} />
-          <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
+        <View style={PLAIN ? styles.plainEnd : styles.endCard}>
+          {PLAIN ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
+          {PLAIN ? null : <View style={styles.endTile}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>}
           <View style={styles.caughtWords}>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.endTitle}>You're all caught up</Text>
-            <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={[styles.endTitle, PLAIN && styles.plainEndTitle]}>You're all caught up</Text>
+            <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endBody, PLAIN && styles.plainEndBody]}>{`You've seen all new posts from ${pastDays(caughtUpDays)}.`}</Text>
           </View>
-          {last ? (
+          {last && PLAIN ? (
+            <PlainActions align="start" style={styles.plainEndActions}>
+              <InkButton label="Share something" onPress={() => router.push('/compose')} />
+              <TextAction label="↑ Back to the top" tone="muted" onPress={() => pager.current?.scrollToTop()} />
+            </PlainActions>
+          ) : last ? (
             <View style={styles.endActions}>
               <Button label="Share something" onPress={() => router.push('/compose')} full />
               <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
@@ -2112,12 +2122,18 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   const lineLast = !scope && feed.length > 0 && feed[feed.length - 1].type === 'caught-up';
   const endPage = (
     <View key="the-end" style={styles.endPage}>
-      <View style={styles.endCard}>
-        <Wash height={300} strength={0.65} fade={colors.surface} />
-        <View style={styles.endTile}><MarkDraw size={30} /></View>
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endTitle}>You found the bottom of CourtSide.</Text>
-        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.endBody}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
-        <View style={styles.endActions}>
+      <View style={PLAIN ? styles.plainEnd : styles.endCard}>
+        {PLAIN ? null : <Wash height={300} strength={0.65} fade={colors.surface} />}
+        {PLAIN ? null : <View style={styles.endTile}><MarkDraw size={30} /></View>}
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endTitle, PLAIN && styles.plainEndTitle]}>You found the bottom of CourtSide.</Text>
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.endBody, PLAIN && styles.plainEndBody]}>Almost nobody scrolls this far. You are one of the first people ever on here — remember this page, it will mean something later.</Text>
+        {PLAIN ? (
+          <PlainActions align="start" style={styles.plainEndActions}>
+            <InkButton label="Leave something here" onPress={() => router.push('/compose')} />
+            <TextAction label="↑ Back to the top" tone="muted" onPress={() => pager.current?.scrollToTop()} />
+          </PlainActions>
+        ) : null}
+        <View style={[styles.endActions, PLAIN && { display: 'none' }]}>
           <Button label="Leave something here" onPress={() => router.push('/compose')} full />
           <Pressable accessibilityRole="button" onPress={() => pager.current?.scrollToTop()} hitSlop={8} style={styles.endBackWrap}>
             <Text style={styles.endBack}>↑ Back to the top</Text>
@@ -2152,6 +2168,16 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {scope?.groupId && ready ? (
             // An empty group: its face, one line, and the two things to do about it.
             // Its feed is everything its members post, so more people is the way to fill it.
+            PLAIN ? (
+              <View style={styles.plainGroupEmpty}>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} accessibilityRole="header" style={styles.plainEndTitle}>When members post, it shows up here</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.plainEndBody}>{`${groupName ?? 'A group'}’s feed shows everything its members post.`}</Text>
+                <PlainActions align="start" style={styles.plainEndActions}>
+                  <InkButton label="Invite people" onPress={() => router.push({ pathname: '/group-invite', params: { id: scope.groupId } })} />
+                  <TextAction label="Post something" onPress={() => router.push('/compose')} />
+                </PlainActions>
+              </View>
+            ) : (
             <View style={styles.groupEmpty}>
               <GroupTile name={groupName ?? 'Group'} look={app.feedGroups.find((g) => g.id === scope.groupId)?.look} size={72} />
               <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.groupEmptyTitle}>When members post, it shows up here</Text>
@@ -2161,6 +2187,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                 <Button label="Post something" variant="secondary" onPress={() => router.push('/compose')} full />
               </View>
             </View>
+            )
           ) : (
             <EmptyState
               title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready && !awaitingSeen ? 'Your court is quiet' : 'Loading your clips'}
@@ -2784,6 +2811,11 @@ const styleDefinitions = StyleSheet.create({
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   // Centred in its page on every screen size (it sat to the left on a wide computer window).
   endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  plainEnd: { alignSelf: 'center', maxWidth: 520, width: '100%', paddingHorizontal: spacing.sm },
+  plainEndTitle: { ...plainText.titleLg },
+  plainEndBody: { ...plainText.bodyLg },
+  plainEndActions: { marginTop: spacing.xl },
+  plainGroupEmpty: { width: '100%', maxWidth: 520, paddingHorizontal: spacing.xl },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },

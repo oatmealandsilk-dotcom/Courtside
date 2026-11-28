@@ -23,6 +23,7 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, lift, buttonShape } from '@/theme';
 import { corner } from '@/theme/look';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 // New services are live lessons only: the one kind Apple lets the app take card payments for (see PAID_KINDS).
 // A service of another kind made before Oct 5 can still be opened and edited as it is.
@@ -130,8 +131,9 @@ export default function CoachStudio() {
       <Screen title="Coach studio" compactTitle onBack={() => goBack()} scrollRef={scrollRef}>
         {loading ? <View style={styles.wait}><CourtSpinner size={28} /></View> : (
           <>
-            <EmptyState icon="ribbon-outline" title="For approved coaches" body="Coaches on CourtSide are checked by hand. Apply, and once you are approved your studio opens here." />
-            {!currentUser?.isCoach ? <Button label="Apply to coach" onPress={() => router.push('/coach-apply')} full /> : null}
+            {/* No boxes (demo only): the way on under the words, ink and sized to its word, not a full-width slab at the foot. */}
+            <EmptyState icon="ribbon-outline" title="For approved coaches" body="Coaches on CourtSide are checked by hand. Apply, and once you are approved your studio opens here." action={noBoxes() && !currentUser?.isCoach ? { label: 'Apply to coach', onPress: () => router.push('/coach-apply') } : undefined} />
+            {!currentUser?.isCoach && !noBoxes() ? <Button label="Apply to coach" onPress={() => router.push('/coach-apply')} full /> : null}
           </>
         )}
       </Screen>
