@@ -6,6 +6,8 @@ import { simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '
 import { startJsGapWatch } from '@/lib/simTrace';
 import { forceBarLook } from '@/features/navigation/barLens';
 import { setBarPreview } from '@/features/navigation/barPreview';
+import { requestSection } from '@/features/navigation/swipeOrder';
+import { posts as demoPosts } from '@/data/mock/feed';
 import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -17,6 +19,29 @@ import { launchLookAtOpen, launchLookNow, launchLookStatus } from '@/lib/launchL
  * recording shows the move and nothing else, and set how slow Up to hit's check-in is (simCheckIn). The card's own "uth"
  * (a tap of Up to hit) is NearbyMap's. Nov 2: a court or Match phone picked, and the launch-look module's report.
  */
+/** A clip's picture for the bars' pictures (clippic): a hard court under floodlights at night, from the baseline. */
+const NIGHT_CLIP = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1600" viewBox="0 0 900 1600">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#05080B"/><stop offset="1" stop-color="#16222A"/></linearGradient>
+<radialGradient id="flA" cx="0.12" cy="0.1" r="0.55"><stop offset="0" stop-color="#FFF6DA" stop-opacity="0.55"/><stop offset="1" stop-color="#FFF6DA" stop-opacity="0"/></radialGradient>
+<radialGradient id="flB" cx="0.9" cy="0.08" r="0.5"><stop offset="0" stop-color="#FFF6DA" stop-opacity="0.45"/><stop offset="1" stop-color="#FFF6DA" stop-opacity="0"/></radialGradient>
+<linearGradient id="court" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2E4F6B"/><stop offset="1" stop-color="#16293A"/></linearGradient>
+<linearGradient id="apron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2D4A3A"/><stop offset="1" stop-color="#101C16"/></linearGradient>
+<radialGradient id="vig" cx="0.5" cy="0.45" r="0.75"><stop offset="0.55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></radialGradient>
+</defs>
+<rect width="900" height="1600" fill="url(#sky)"/>
+<rect x="0" y="560" width="900" height="1040" fill="url(#apron)"/>
+<g stroke="#2A3A33" stroke-width="3" opacity="0.7">${Array.from({ length: 31 }, (_, i) => `<line x1="${i * 30}" y1="430" x2="${i * 30}" y2="600"/>`).join('')}</g>
+<rect x="0" y="430" width="900" height="6" fill="#33463D"/>
+<path d="M300 600 L600 600 L880 1600 L20 1600 Z" fill="url(#court)"/>
+<g stroke="#E9EEF0" stroke-width="5" fill="none" opacity="0.85"><path d="M300 600 L600 600 L880 1600 L20 1600 Z"/><path d="M265 720 L635 720"/><path d="M450 720 L450 1100"/><path d="M160 1100 L740 1100"/><path d="M330 600 L130 1600"/><path d="M570 600 L770 1600"/></g>
+<rect x="240" y="676" width="420" height="44" fill="#0B1114" opacity="0.85"/><rect x="240" y="670" width="420" height="7" fill="#F2F4F2"/>
+<g fill="#0A0F12"><ellipse cx="520" cy="905" rx="34" ry="10" opacity="0.5"/><rect x="505" y="790" width="26" height="110" rx="12"/><circle cx="518" cy="772" r="17"/><rect x="528" y="800" width="60" height="9" rx="4" transform="rotate(-28 528 800)"/></g>
+<circle cx="610" cy="760" r="9" fill="#E3EF5A"/>
+<rect width="900" height="1600" fill="url(#flA)"/><rect width="900" height="1600" fill="url(#flB)"/>
+<rect width="900" height="1600" fill="url(#vig)"/>
+</svg>`)}`;
+
 export function SimDriverHost() {
   const { actions } = useApp();
   const now = useRef(actions);
@@ -64,7 +89,15 @@ export function SimDriverHost() {
   useEffect(() => {
     const off = [
       simAction('signin', () => { void now.current.signIn('you').then(() => router.replace('/')); }),
-      simAction('go', (q) => { if (q.to) router.navigate(q.to as never); }),
+      // "go to=/discuss&section=players": the section asked for first, as the bar asks for Find Players (askForCommunityMap).
+      simAction('go', (q) => { if (q.to) { if (q.section) requestSection(q.to, q.section); router.navigate(q.to as never); } }),
+      // The bottom bars' pictures (barPreview, Nov 28): the demo's clips have no picture (court cards on the page's own light
+      // ground), so the bar is never seen over a clip; this gives each one a dark night-court picture. Before "signin" only
+      // (the demo's posts are copied at sign-in).
+      simAction('clippic', () => {
+        for (const post of demoPosts) if (post.kind === 'clip' && !post.videoUrl && !post.thumbnailUrl && !post.imageUrl) post.thumbnailUrl = NIGHT_CLIP;
+        simLog('[sim] clippic');
+      }),
       simAction('fwatch', (q) => fwatchNow.current(Number(q.ms) || 3000)),
       // How long the live app's reply fetch takes when a thread opens (simThreadFetch): ms=0 never, as the demo always was.
       simAction('threadfetch', (q) => { simThreadFetch.ms = Number(q.ms) || 0; simLog(`[sim] threadfetch ${simThreadFetch.ms}`); }),
