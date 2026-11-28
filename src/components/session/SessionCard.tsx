@@ -361,7 +361,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0, compact = false }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0, compact = false, joined }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
@@ -381,6 +381,8 @@ export function SessionCard({ session, width, height, play = false, people, hidd
    * `height`. Only the Activities looks pass it.
    */
   compact?: boolean;
+  /** `compact` only: the box shares one frame with a picture on this edge (top or bottom), so that edge is square, unruled and without the hairline. */
+  joined?: 'top' | 'bottom';
   /**
    * The rest are for the pictures made to share (Share → Instagram): the
    * card's shape (9:16 for a whole story), its rounding (0 edge to edge),
@@ -492,6 +494,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
       result={result}
       score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden, people) } : null}
       stats={stats}
+      joined={joined}
     />
   ) : height != null ? (
     <Sideways
@@ -718,7 +721,7 @@ function Sideways({ session, look, width, height, play, wait, top, result, score
  * box is only about a hundred points tall. A match leads with its ScoreBoard and keeps the time as one of its two
  * numbers; anything else leads with the time.
  */
-function Compact({ session, look, width, height, play, wait, top, result, score, stats }: {
+function Compact({ session, look, width, height, play, wait, top, result, score, stats, joined }: {
   session: SessionDetail;
   look: CardLook;
   width: number;
@@ -729,16 +732,27 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
   result: string | null;
   score: { sets: SessionDetail['sets'] & {}; you: string; them: string } | null;
   stats: SidewaysStat[];
+  joined?: 'top' | 'bottom';
 }) {
   const round = 16;
+  // Joined to a picture: the shared edge is square and carries no border (the card draws one hairline there).
+  const corners = joined === 'bottom' ? { borderTopLeftRadius: round, borderTopRightRadius: round, borderBottomLeftRadius: 0, borderBottomRightRadius: 0 }
+    : joined === 'top' ? { borderTopLeftRadius: 0, borderTopRightRadius: 0, borderBottomLeftRadius: round, borderBottomRightRadius: round }
+    : { borderRadius: round };
+  const edge = look.dark ? (joined === 'bottom' ? { borderBottomWidth: 0 } : joined === 'top' ? { borderTopWidth: 0 } : null) : null;
   // The figures keep their sizes; only a narrow box (a small computer column never is) takes them down a touch.
   const k = Math.min(1, width / 358);
   const shown = (score ? stats.slice(0, 1) : stats.slice(0, 2));
   const label = { ...font('500'), fontSize: 10, lineHeight: 13, color: look.muted, marginTop: 1 } as const;
   return (
-    <View collapsable={false} style={[styles.card, { width, height, borderRadius: round, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
-      <CardWash look={look} radius={round} />
-      {look.plain || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+    <View collapsable={false} style={[styles.card, { width, height, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }, corners, edge]}>
+      {/* The wash, its rounded ends pushed past a joined edge so only the outer corners curve. No court lines: in a band
+          this short they would run through the labels and the ScoreBoard. */}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, corners, { overflow: 'hidden' }]}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: joined === 'top' ? -round : 0, bottom: joined === 'bottom' ? -round : 0 }}>
+          <CardWash look={look} radius={round} />
+        </View>
+      </View>
       <View style={[styles.top, { height: 20 }]}>
         <Text style={{ ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
         {result ? (
@@ -754,7 +768,7 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
           ) : (
             <>
               <Duration minutes={session.minutes} size={Math.round(38 * k)} color={look.figure} unitColor={look.muted} play={play} delay={wait + 120} duration={700} maxGrow={1} />
-              <Text style={label} numberOfLines={1} maxFontSizeMultiplier={1}>{onCourtWord(session)}</Text>
+              <Text style={[label, look.plain && styles.capsLabel]} numberOfLines={1} maxFontSizeMultiplier={1}>{onCourtWord(session)}</Text>
             </>
           )}
         </View>

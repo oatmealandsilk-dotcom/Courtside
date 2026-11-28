@@ -88,7 +88,7 @@ function clipLength(p: Post): string | null {
 
 /** The post's picture, clip cover, or the demo's court card; `stand` names a stats-only session's card. */
 /** A post's several photos, swiped sideways in the square as Instagram's (the classic look); `onPage` hears which one is on show. */
-function Photos({ urls, label, onPage }: { urls: string[]; label: string; onPage: (i: number) => void }) {
+function Photos({ urls, label, onPage, count = true }: { urls: string[]; label: string; onPage: (i: number) => void; /** The '2/3' pill on the photo (the mixed looks show only the dots). */ count?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [at, setAt] = useState(0);
@@ -115,7 +115,7 @@ function Photos({ urls, label, onPage }: { urls: string[]; label: string; onPage
           style={StyleSheet.absoluteFill}
         />
       ) : null}
-      <View pointerEvents="none" style={styles.countMark}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.countText}>{at + 1}/{urls.length}</Text></View>
+      {count ? <View pointerEvents="none" style={styles.countMark}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.countText}>{at + 1}/{urls.length}</Text></View> : null}
     </View>
   );
 }
@@ -130,13 +130,13 @@ function Dots({ n, at }: { n: number; at: number }) {
   );
 }
 
-function Media({ post, aspect, stand, clipBadge = false, onPage }: { post: Post; aspect: number; stand?: string; /** A clip's small play mark and length on a quiet pill (the classic look), on its cover; the demo's court card already carries its own play mark. */ clipBadge?: boolean; /** The classic look: several photos swipe sideways, this hears which is on show. */ onPage?: (i: number) => void }) {
+function Media({ post, aspect, stand, clipBadge = false, onPage, count = true }: { post: Post; aspect: number; stand?: string; /** The '1/3' pill on several photos (the mixed looks show only the dots). */ count?: boolean; /** A clip's small play mark and length on a quiet pill (the classic look), on its cover; the demo's court card already carries its own play mark. */ clipBadge?: boolean; /** The classic look: several photos swipe sideways, this hears which is on show. */ onPage?: (i: number) => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const uri = post.thumbnailUrl ?? post.imageUrl;
   const length = clipLength(post);
   const many = !isClip(post) && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls : null;
   if (many && onPage) {
-    return <View style={[styles.media, { aspectRatio: aspect }]}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} /></View>;
+    return <View style={[styles.media, { aspectRatio: aspect }]}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} count={count} /></View>;
   }
   return (
     <View style={[styles.media, { aspectRatio: aspect }]}>
@@ -148,7 +148,7 @@ function Media({ post, aspect, stand, clipBadge = false, onPage }: { post: Post;
           {length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.clipMarkText}>{length}</Text> : null}
         </View>
       ) : null) : uri && isClip(post) ? <View style={styles.playMark}><Ionicons name="play" size={18} color={colors.onMedia} /></View> : null}
-      {post.imageUrls && post.imageUrls.length > 1 ? <View style={styles.countMark}><Text style={styles.countText}>1/{post.imageUrls.length}</Text></View> : null}
+      {count && post.imageUrls && post.imageUrls.length > 1 ? <View style={styles.countMark}><Text style={styles.countText}>1/{post.imageUrls.length}</Text></View> : null}
     </View>
   );
 }
@@ -506,16 +506,18 @@ function MixedHead({ post, author, me }: { post: Post; author: User; me: string 
           <PushedDownTag post={post} />
         </View>
       </Pressable>
-      <LevelPill profile={author.profile} userId={author.id} small />
+      <LevelPill profile={author.profile} userId={author.id} small style={styles.mLevel} />
     </View>
   );
 }
 
 function MixedActions({ post, me, clip, children }: { post: Post; me: string | null; clip: boolean; children?: React.ReactNode }) {
   const styles = useThemedStyles(styleDefinitions);
+  const { saved: savedItems, actions } = useApp();
   const act = useCardActions(post, me);
   const likes = post.likedBy.length;
   const n = post.commentIds.length;
+  const saved = savedItems.postIds.includes(post.id);
   return (
     <View style={styles.mActions}>
       <Pressable onPress={act.like} hitSlop={6} style={styles.mAct} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
@@ -530,7 +532,11 @@ function MixedActions({ post, me, clip, children }: { post: Post; me: string | n
         <Ionicons name="arrow-redo-outline" size={21} color={colors.text} />
       </Pressable>
       {children}
-      <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={[styles.mAct, styles.mMore]} accessibilityRole="button" accessibilityLabel="More options">
+      {/* Save, as today's card: just before the menu, on the right. */}
+      <Pressable onPress={() => actions.toggleSavePost(post.id)} hitSlop={6} style={[styles.mAct, styles.mSave]} accessibilityRole="button" accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+        <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={colors.text} />
+      </Pressable>
+      <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel="More options">
         <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
       </Pressable>
     </View>
@@ -538,16 +544,16 @@ function MixedActions({ post, me, clip, children }: { post: Post; me: string | n
 }
 
 /** The session box, or a text post's words in its place: always MIXED.box tall. */
-function MixedBox({ post, author, width, hidden }: { post: Post; author: User; width: number; hidden: string[] }) {
+function MixedBox({ post, author, width, hidden, joined }: { post: Post; author: User; width: number; hidden: string[]; joined?: 'top' | 'bottom' }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session;
   const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
   if (s) {
-    return <SessionCard session={s} author={author.name} width={width} height={MIXED.box} compact hidden={hidden} onPress={hasSessionStats(s) ? openStats : undefined} />;
+    return <SessionCard session={s} author={author.name} width={width} height={MIXED.box} compact joined={joined} hidden={hidden} onPress={hasSessionStats(s) ? openStats : undefined} />;
   }
   return (
     <Pressable onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })} accessibilityRole="button" accessibilityLabel="Open comments" style={[styles.mWords, { width }]}>
-      <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.mWordsText}>{post.body}</Text>
+      <Text numberOfLines={3} maxFontSizeMultiplier={1.1} style={styles.mWordsText}>{post.body}</Text>
     </Pressable>
   );
 }
@@ -605,28 +611,51 @@ const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOp
     );
   }
 
+  // A photo card is one frame. With a session, the box and the picture share it (one outer radius, a hairline where
+  // they meet): box over picture in A, picture over box in B. Without a session there is no box: the picture alone,
+  // then the caption in two fixed lines, in both orders.
+  const s = post.session;
+  const joined = !!s;
   const picture = (
-    <View style={[styles.mPhoto, { width: inner, height: Math.round(inner / PHOTO_SHAPE) }]}>
+    <View style={[joined ? styles.mPhotoJoined : styles.mPhoto, { width: inner, height: Math.round(inner / PHOTO_SHAPE) }]}>
       {clip ? (
         <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen" style={StyleSheet.absoluteFill}>
           <Media post={post} aspect={PHOTO_SHAPE} stand={stand} clipBadge />
         </Pressable>
       ) : (
         <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Photo'} accessibilityHint="Double tap to like" style={StyleSheet.absoluteFill}>
-          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} onPage={photos ? setPage : undefined} />
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} onPage={photos ? setPage : undefined} count={false} />
           <Bloom token={bloom} />
         </Pressable>
       )}
     </View>
   );
-  const box = <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>;
+  const actionsRow = <MixedActions post={post} me={me} clip={clip}>{photos ? <Dots n={photos} at={page} /> : null}</MixedActions>;
+  if (!joined) {
+    const words = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+    return (
+      <View testID="mixed-photo" style={styles.mCard}>
+        <MixedHead post={post} author={author} me={me} />
+        {nearLine}
+        {picture}
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={words ? `${words}. Open comments` : 'Open comments'} style={styles.mCaption}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.1} style={styles.mLineText}>{words}</Text>
+        </Pressable>
+        {actionsRow}
+      </View>
+    );
+  }
+  const box = (o: 'top' | 'bottom') => <View style={styles.mBoxJoined}><MixedBox post={post} author={author} width={inner} hidden={hidden} joined={o} /></View>;
+  const seam = <View style={styles.mSeam} />;
   return (
     <View testID="mixed-photo" style={styles.mCard}>
       <MixedHead post={post} author={author} me={me} />
       {nearLine}
-      {order === 'stats' ? <>{box}{picture}</> : <>{picture}{box}</>}
+      <View style={[styles.mFrame, { width: inner }]}>
+        {order === 'stats' ? <>{box('bottom')}{seam}{picture}</> : <>{picture}{seam}{box('top')}</>}
+      </View>
       {lineView}
-      <MixedActions post={post} me={me} clip={clip}>{photos ? <Dots n={photos} at={page} /> : null}</MixedActions>
+      {actionsRow}
     </View>
   );
 });
@@ -905,14 +934,21 @@ const styleDefinitions = StyleSheet.create({
   mWhen: { ...typography.small, color: colors.textFaint, flexShrink: 0 },
   mNear: { height: 28, justifyContent: 'center', marginTop: 2 },
   mBoxSlot: { height: MIXED.box, marginTop: MIXED.gap },
-  mWords: { height: MIXED.box, justifyContent: 'flex-start', paddingTop: 6 },
-  mWordsText: { ...typography.body, fontSize: 17, lineHeight: 24, color: colors.text },
+  // A text post's words framed as the session box is: same band, same radius, so a run of plain cards keeps one shape.
+  mWords: { height: MIXED.box, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  mWordsText: { ...typography.body, fontSize: 15, lineHeight: 21, color: colors.text },
   mPhoto: { marginTop: MIXED.gap, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  mPhotoJoined: { overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  mFrame: { marginTop: MIXED.gap, borderRadius: 16, overflow: 'hidden' },
+  mBoxJoined: { height: MIXED.box },
+  mSeam: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border },
+  mCaption: { height: 38, marginTop: MIXED.gap, justifyContent: 'flex-start' },
+  mLevel: { alignSelf: 'center' },
   mLine: { height: MIXED.line, marginTop: MIXED.gap, justifyContent: 'center' },
   mLineText: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.text },
   mLineQuiet: { ...typography.small, fontSize: 13, lineHeight: 18, color: colors.textMuted },
   mActions: { height: MIXED.actions, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, position: 'relative' },
   mAct: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 },
-  mMore: { marginLeft: 'auto' },
+  mSave: { marginLeft: 'auto' },
   mCount: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
 });
