@@ -88,6 +88,8 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 6),
     body: 'Lost this one, but look at that lob.',
     mediaLabel: 'Match point · 0:18',
+    // A drawn cover, so the demo's clip shows a court scene like the photo posts (Nov 28 gallery examples; demo only).
+    thumbnailUrl: BALLS_BY_THE_NET,
     session: {
       // Doubles (the ScoreBoard's "Sam / June" over "Mira / Dev", Oct 22), a second-set tiebreak.
       focus: 'Match · Lost', minutes: 65, drills: [], activityId: 'act-sam-1', source: 'whoop', kind: 'match', won: false, day: dayAgo(0), sets: [[4, 6], [6, 7, 4]],
@@ -371,6 +373,8 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 5),
     body: 'Inside-out forehand drill on court 2. The lights here stay on till 10.',
     mediaLabel: 'Clip · 0:24',
+    // A drawn cover (demo only), as above.
+    thumbnailUrl: COURT_FROM_ABOVE,
     likedBy: ['u-marcus', CURRENT_USER_ID],
     commentIds: [],
     tags: ['forehand'],
