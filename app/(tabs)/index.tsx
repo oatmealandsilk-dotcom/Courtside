@@ -398,6 +398,28 @@ const STAGE_CHROME = (Platform.OS === 'web' ? { dataSet: { stageChrome: '1' } } 
  * and sound disc over it are (StageChromeContext): only the page on the
  * stage, and only this Home's, ever fades.
  */
+/**
+ * A tall clip's words and buttons on a computer (Nov 27): laid in a 9:16 column centred in the window, the
+ * clip's own box (clipPortrait), so they sit on the video, not at the window's far edges. Elsewhere, as they were.
+ */
+function ReelColumn({ on, children }: { on: boolean; children: React.ReactNode }) {
+  if (!on) return <>{children}</>;
+  return (
+    <View pointerEvents="box-none" style={COLUMN.wrap}>
+      <View pointerEvents="box-none" style={COLUMN.column}>{children}</View>
+    </View>
+  );
+}
+/** A clip's still or stand-in on a computer: the same 9:16 box in the middle a playing clip gets (clipPortrait). */
+function ClipBox({ on, styles, children }: { on: boolean; styles: { clipFrame: StyleProp<ViewStyle>; clipPortrait: StyleProp<ViewStyle> }; children: React.ReactNode }) {
+  if (!on) return <>{children}</>;
+  return <View style={styles.clipFrame}><View style={styles.clipPortrait}>{children}</View></View>;
+}
+const COLUMN = StyleSheet.create({
+  wrap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center' },
+  column: { height: '100%', aspectRatio: 9 / 16, maxWidth: '100%' },
+});
+
 function StagePage({ owner, stageKey, staged, onNode, children }: { owner: string; stageKey: string; staged: boolean; onNode: (key: string, node: unknown) => void; children: React.ReactNode }) {
   const motion = useStageMotion('page', { owner, stageKey });
   const black = useStageMotion('black', { owner, stageKey });
@@ -2398,6 +2420,10 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               }
 
               const liked = !!currentUserId && post.likedBy.includes(currentUserId);
+              // A tall clip on a computer: its words and buttons in its own column (ReelColumn); a wide one keeps the whole black page.
+              const columned = !phone && post.orientation !== 'landscape';
+              const railInk = columned ? colors.text : 'white';
+              const railLabel = columned ? [styles.actionLabel, styles.actionLabelBeside] : styles.actionLabel;
               // A landscape clip shrinks as its wide band; anything else, the whole page.
               const openClipComments = (from?: unknown) => openComments('post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait', from);
               return (
@@ -2437,6 +2463,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       </View>
                     </View>
                   ) : post.thumbnailUrl ? (
+                    <ClipBox on={columned} styles={styles}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Double tap to like"
@@ -2450,7 +2477,9 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         contentFit="cover" cachePolicy="memory-disk"
                       />
                     </Pressable>
+                    </ClipBox>
                   ) : (
+                    <ClipBox on={columned} styles={styles}>
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Double tap to like"
@@ -2467,43 +2496,47 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         This clip didn’t finish uploading
                       </Text>
                     </Pressable>
+                    </ClipBox>
                   )}
 
                   {burst.id === post.id ? <LikeBurst token={burst.n} played={burstPlayed} /> : null}
 
                   <ChromeLayer immersion={immersion} style={StyleSheet.absoluteFill} pointerEvents={immersive ? 'none' : 'box-none'}>
 
+                  {/* On a computer a tall clip is a 9:16 column in the window: its words sit on it and its buttons
+                      beside it, in the page's ink, instead of at the window's far edges under a haze (Nov 27). */}
+                  <ReelColumn on={columned}>
                   <ReelScrim bottom={wordsBottom} />
 
-                  <Reanimated.View style={[styles.caption, { bottom: wordsBottom }, tuckStyle]}>
+                  <Reanimated.View style={[styles.caption, columned && styles.captionColumned, { bottom: wordsBottom }, tuckStyle]}>
                     <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} onOpenStats={() => openStage('/session-stats', 'post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait')} active={active === index && focused} />
                     {/* Only while Home is on show (see the Instant's hint above). */}
                     {index === 0 && !scope && focused ? <SwipeHint /> : null}
                   </Reanimated.View>
 
                   {/* The rail stands on the words' bottom line, as on TikTok and Reels, so it rises only as high as it must. */}
-                  <Reanimated.View style={[styles.actions, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
-                    <RailShade />
-                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} style={styles.action} glyphBox={styles.glyphBox} labelStyle={styles.actionLabel} />
+                  <Reanimated.View style={[styles.actions, columned && styles.actionsBeside, { bottom: wordsBottom + RAIL_DROP }, tuckStyle]}>
+                    {columned ? null : <RailShade />}
+                    <LikeButton ledgerKey={`p:${post.id}`} liked={liked} count={post.likedBy.length} onToggle={() => actions.toggleLike(post.id)} likesRoute={{ pathname: '/likes', params: { id: post.id } }} pop={burst.id === post.id ? burst.n : 0} what="clip" size={RAIL_ICONS[0][1]} ink={railInk} style={styles.action} glyphBox={styles.glyphBox} labelStyle={railLabel} />
                     <RailTap
                       accessibilityLabel="Clip comments"
                       onPress={() => openClipComments()}
-                      glyph={<RailGlyph name="bubble" size={RAIL_ICONS[1][1]} />}
+                      glyph={<RailGlyph name="bubble" size={RAIL_ICONS[1][1]} color={railInk} edge={!columned} />}
                       count={post.commentIds.length}
                       style={styles.action}
                       glyphBox={styles.glyphBox}
-                      labelStyle={styles.actionLabel}
+                      labelStyle={railLabel}
                     />
                     {/* Taken down, nobody else could open it: nothing to send. */}
                     {post.removed ? null : (
                       <RailTap
                         accessibilityLabel={shareLabel(post, currentUserId, 'clip')}
                         onPress={() => share('post', post.id)}
-                        glyph={<RailGlyph name="share" size={RAIL_ICONS[2][1]} />}
+                        glyph={<RailGlyph name="share" size={RAIL_ICONS[2][1]} color={railInk} edge={!columned} />}
                         count={post.shares ?? 0}
                         style={styles.action}
                         glyphBox={styles.glyphBox}
-                        labelStyle={styles.actionLabel}
+                        labelStyle={railLabel}
                       />
                     )}
                     <RailSave
@@ -2512,18 +2545,20 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       count={post.savedBy?.length ?? 0}
                       onToggle={() => actions.toggleSavePost(post.id)}
                       size={RAIL_ICONS[3][1]}
+                      ink={columned ? railInk : undefined}
                       style={styles.action}
                       glyphBox={styles.glyphBox}
-                      labelStyle={styles.actionLabel}
+                      labelStyle={railLabel}
                     />
                     <RailTap
                       accessibilityLabel="More options"
                       onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })}
-                      glyph={<RailGlyph name="dots" size={RAIL_ICONS[4][1]} />}
+                      glyph={<RailGlyph name="dots" size={RAIL_ICONS[4][1]} color={railInk} edge={!columned} />}
                       style={styles.action}
                       glyphBox={styles.glyphBox}
                     />
                   </Reanimated.View>
+                  </ReelColumn>
                   </ChromeLayer>
                  </Reanimated.View></PinchZone>
                   {post.videoUrl ? cover(post.id, skeletonClip, post.thumbnailUrl) : null}
@@ -2580,6 +2615,18 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
               );
             }), ...(scope?.activities ? [caughtUp] : scope || lineLast ? [] : [endPage])]}
           </VerticalPager>
+
+          {/* A computer: nothing swipes, so two small arrows at the window's right edge step clip to clip (Nov 27). */}
+          {!phone && !scope?.activities ? (
+            <View pointerEvents="box-none" style={styles.pageArrows}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Previous clip" disabled={active === 0} onPress={() => pager.current?.step?.(-1)} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.pageArrow, (hovered || pressed) && styles.pageArrowOn, active === 0 && styles.pageArrowOff]}>
+                <Ionicons name="chevron-up" size={20} color={colors.text} />
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Next clip" onPress={() => pager.current?.step?.(1)} style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => [styles.pageArrow, (hovered || pressed) && styles.pageArrowOn]}>
+                <Ionicons name="chevron-down" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+          ) : null}
 
           {showingNear ? (
             <View pointerEvents="box-none" style={[styles.nearLayer, { top: insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 10 }]}>
@@ -2714,6 +2761,14 @@ const styleDefinitions = StyleSheet.create({
   // The rail: 12 from the edge, one item every 64pt (TikTok's and Reels' rhythm). `bottom` is set per phone.
   // A number only where there is one, but every item the same slot (RAIL_SLOT), so the icons are evenly spaced.
   actions: { position: 'absolute', right: 12, gap: 14 },
+  // A computer's tall clip (ReelColumn): the words run to the column's edge, the rail stands 16 outside it.
+  captionColumned: { paddingRight: 16 },
+  actionsBeside: { right: undefined, left: '100%', marginLeft: 16 },
+  actionLabelBeside: { color: colors.textMuted, textShadowColor: 'transparent' },
+  pageArrows: { position: 'absolute', right: 24, top: 0, bottom: 0, justifyContent: 'center', gap: spacing.sm },
+  pageArrow: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  pageArrowOn: { backgroundColor: colors.surfaceAlt },
+  pageArrowOff: { opacity: 0.4 },
   action: { alignItems: 'center', justifyContent: 'flex-start', gap: 2, minWidth: 48, height: RAIL_SLOT },
   // Each glyph centred in the same box, whatever its size (RAIL_ICONS are matched by eye).
   glyphBox: { height: RAIL_GLYPH, justifyContent: 'center', alignItems: 'center' },

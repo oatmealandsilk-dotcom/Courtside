@@ -259,7 +259,7 @@ export function RailTap({ accessibilityLabel, onPress, glyph, count, style, glyp
  * The bookmark: it fills on the tap itself and pops as it does (the store
  * follows, as with the heart); unsaving is quiet. The count is how many saved it.
  */
-export function RailSave({ ledgerKey, saved, count, onToggle, size, style, glyphBox, labelStyle }: SlotProps & { ledgerKey: string; saved: boolean; count: number; onToggle: () => void; size: number }) {
+export function RailSave({ ledgerKey, saved, count, onToggle, size, ink, style, glyphBox, labelStyle }: SlotProps & { ledgerKey: string; saved: boolean; count: number; onToggle: () => void; size: number; /** Off a clip (a computer's rail beside it): the page's ink, no dark edge. Left out: white over the picture. */ ink?: string }) {
   const save = useOptimisticToggle(ledgerKey, saved, onToggle);
   const motion = useRailMotion();
   const isGuest = useIsGuest();
@@ -276,7 +276,7 @@ export function RailSave({ ledgerKey, saved, count, onToggle, size, style, glyph
       onPress={press}
       style={style}
       glyphBox={glyphBox}
-      glyph={<RailGlyph name="bookmark" size={size} filled={save.on} />}
+      glyph={<RailGlyph name="bookmark" size={size} filled={save.on} color={ink} edge={!ink} />}
     >
       <RailCount value={count + save.delta} style={labelStyle} maxFontSizeMultiplier={MAX_GROW} />
     </RailPressable>

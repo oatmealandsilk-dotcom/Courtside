@@ -14,7 +14,7 @@ import { AT_REST, NO_DRAG, dragFrom, followRow, offPage, settleRow, showRow, typ
 import { PageKeyContext, PageLeavingContext, makePageLeaving } from '@/features/feed/pageLeaving';
 import { endFollow, followHeld, followPage } from '@/features/feed/swipeFollow';
 
-export interface VerticalPagerHandle { scrollToTop: () => void }
+export interface VerticalPagerHandle { scrollToTop: () => void; /** One page down (1) or up (-1): the computer's arrows beside a clip (Nov 27). */ step?: (dir: 1 | -1) => void }
 
 /** A page's own key when it has one, otherwise its place. */
 function pageKey(child: React.ReactNode, index: number) {
@@ -103,7 +103,11 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   const userMoved = useRef(false);
   // A move made in code (back to the top) is never followed (features/feed/swipeFollow), even begun while
   // someone's own swipe still glides: the bar and the top row go back to the Feed's own look as it begins.
-  useImperativeHandle(ref, () => ({ scrollToTop: () => { userMoved.current = false; if (looksRef.current) endFollow(); if (pager.current) settle(pager.current, 0); } }), []);
+  useImperativeHandle(ref, () => ({
+    scrollToTop: () => { userMoved.current = false; if (looksRef.current) endFollow(); if (pager.current) settle(pager.current, 0); },
+    // An arrow is a move of the person's own, as the wheel or a key is: it lands as a swipe.
+    step: (dir) => { const el = pager.current; if (!el || !el.clientHeight) return; userMoved.current = true; settle(el, (Math.round(el.scrollTop / el.clientHeight) + dir) * el.clientHeight); },
+  }), []);
   const drag = useRef<{y:number;x:number;top:number;active:boolean;target:HTMLElement;scroll?:HTMLElement;scrollTop?:number;lastY:number;lastTime:number;velocity:number} | null>(null);
   const suppressClick = useRef(false);
   const animation = useRef(0);

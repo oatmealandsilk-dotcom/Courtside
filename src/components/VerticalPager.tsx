@@ -31,7 +31,7 @@ import { endFollow, followHeld, followPage } from '@/features/feed/swipeFollow';
  * the swipe heads for starts in that same moment and plays as it slides in,
  * and the Feed's bar and top row follow the page's position as it moves.
  */
-export interface VerticalPagerHandle { scrollToTop: () => void }
+export interface VerticalPagerHandle { scrollToTop: () => void; /** One page down (1) or up (-1): the computer's arrows beside a clip (web only). */ step?: (dir: 1 | -1) => void }
 
 // The bar ducking changes the room here by a few points. Pages keep their
 // size through that: rebuilding every page and re-snapping mid-swipe made the
