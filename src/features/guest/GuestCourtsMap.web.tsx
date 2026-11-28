@@ -6,14 +6,12 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { CardCredit } from '@/components/map/MapChrome';
 import { MapCardLoading } from '@/components/map/MapLoadState';
-import { Button } from '@/components/ui';
 import type { PeekHit } from '@/data/types';
 import { hitShort } from '@/features/hits/format';
 import { fetchCourts, isClosedCourt, type Court } from '@/features/players/courts';
 import { milesBetween } from '@/features/players/geo';
 import { placeFor, type LatLng } from '@/features/players/positions';
 import type { GuestCourtPin, GuestCourtsCanvasProps } from '@/features/guest/GuestCourtsCanvas';
-import { locationHelpFor } from '@/features/guest/locationHelp';
 import { colors, radius, spacing, typography, withAlpha } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -48,7 +46,7 @@ export interface GuestCourtsMapProps {
   /** The open hits the list below shows (the peek's): undefined while loading, null when they could not load. */
   hits: PeekHit[] | null | undefined;
   locating: boolean;
-  /** The browser said no (or could not find them): the how-to replaces the button. */
+  /** The browser said no (or could not find them): the chip says so, quietly. */
   failed: 'denied' | 'unavailable' | null;
   onLocate: () => void;
 }
@@ -98,10 +96,11 @@ const pinsFor = (courts: Court[], hits: PeekHit[] | null | undefined): GuestCour
  *
  * Before the visitor says where they are, the map shows the town most of the
  * open hits are in, crisp, with what is true there on a chip ("Raleigh · 4
- * open hits") and one row under it that asks the browser for their location
- * (option C, Nov 27). Yes: the map flies to them, their courts and the open
- * hits at them. No (or the browser can't tell): the row says Location is
- * off, with the steps for this browser.
+ * open hits") and one small round locate button in its corner, as Apple Maps
+ * has, that asks the browser for their location (Nov 28, owner, of the row
+ * that did this under the map: "the show courts near me just looks ai").
+ * Yes: the map flies to them, their courts and the open hits at them. No (or
+ * the browser can't tell): the chip says so in a few words, nothing more.
  * Nothing is asked when the page opens; a browser that already allows it is
  * simply found (GuestFindPlayers).
  */
@@ -172,15 +171,12 @@ function useCardData({ near, hits: listed, locating, failed }: Pick<GuestCourtsM
     const t = setTimeout(() => setEngine(true), 400);
     return () => clearTimeout(t);
   }, []);
-  const [helpOpen, setHelpOpen] = useState(true);
-  useEffect(() => { if (failed) setHelpOpen(true); }, [failed]);
-  const help = useMemo(() => locationHelpFor(typeof navigator !== 'undefined' ? navigator.userAgent : ''), []);
   const openCourt = (c: Court) => router.push({ pathname: '/court/[id]', params: { id: c.id, name: c.name, lat: String(c.lat), lng: String(c.lng) } });
 
   const townName = town ? town.name.split(',')[0] : '';
   const townCourtCount = townCourts ? townCourts.reduce((n, c) => n + Math.max(1, c.count || 1), 0) : 0;
   const nearHits = found ? (hits ?? []).filter((h) => h.km !== undefined && h.km <= NEAR_KM).length : 0;
-  return { hits, town, townCourts, nearCourts, found, finding, center, fit, pins, drawn, setDrawn, engine, helpOpen, setHelpOpen, help, openCourt, townName, townMore, townCourtCount, nearHits };
+  return { hits, town, townCourts, nearCourts, found, finding, center, fit, pins, drawn, setDrawn, engine, openCourt, townName, townMore, townCourtCount, nearHits };
 }
 
 /** The map's height: a phone's width of map, edge to edge. */
@@ -191,13 +187,13 @@ const PHONE_WIDE = 640;
 /**
  * The card (Nov 27, owner, of three options for this screen: "c is the best"): the map drawn crisp, never
  * blurred, veiled or haloed, out to the screen's edges on a phone, with one small chip on it saying what is
- * true there. Under it, an iPhone Settings-style row is the one action, so the words are there at once,
- * before the map engine arrives, and never wait on it. No pulse, no weather, no town pill.
+ * true there, and one small round locate button opposite it (Nov 28: the row under the map is gone). Both
+ * are drawn with the card, before the map engine arrives, and never wait on it. No pulse, no weather, no town pill.
  */
 function MapCard({ near, hits: listed, locating, failed, onLocate }: GuestCourtsMapProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { width } = useWindowDimensions();
-  const { town, townMore, nearCourts, found, finding, center, fit, pins, drawn, setDrawn, engine, helpOpen, setHelpOpen, help, openCourt, townName, townCourtCount, nearHits } = useCardData({ near, hits: listed, locating, failed });
+  const { town, townMore, nearCourts, found, finding, center, fit, pins, drawn, setDrawn, engine, openCourt, townName, townCourtCount, nearHits } = useCardData({ near, hits: listed, locating, failed });
   const edge = width < PHONE_WIDE;
   const nearCount = nearCourts?.length ?? 0;
   const hitsWord = (n: number, more = false) => `${n}${more ? '+' : ''} open ${n === 1 ? 'hit' : 'hits'}`;
@@ -215,64 +211,37 @@ function MapCard({ near, hits: listed, locating, failed, onLocate }: GuestCourts
           ) : null}
         </View>
       ) : null}
-      {town || found ? (
+      {town || found || failed ? (
         // Its see-through ground follows the court (a withAlpha in the sheet would keep the light court's colour).
         <View pointerEvents="none" style={[styles.chip, { backgroundColor: withAlpha(colors.surface, 0.9) }]}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.chipText}>
-            {found
+            {failed && !found && !finding
+              ? failed === 'denied' ? 'Location is off in your browser' : 'Couldn’t find where you are'
+              : found
               ? `Near you · ${nearHits > 0 ? hitsWord(nearHits) : `${nearCount} courts`}`
               : town && town.hits > 0 ? `${townName} · ${hitsWord(town.hits, townMore)}` : `${townName}${townCourtCount > 0 ? ` · ${townCourtCount} courts` : ''}`}
           </Text>
         </View>
       ) : null}
+      {/* Courts near me: one small round button, the chip's own see-through look (Nov 28). Found, it stays lit. */}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={found ? 'Showing courts near you' : finding ? 'Finding you' : 'Show courts near me'}
+        accessibilityState={{ disabled: finding || found, busy: finding, selected: found }}
+        disabled={finding || found}
+        onPress={onLocate}
+        hitSlop={6}
+        style={({ pressed }) => [styles.locate, { backgroundColor: withAlpha(colors.surface, 0.9) }, pressed && styles.locatePressed]}
+      >
+        {finding ? <CourtSpinner size={16} /> : <Ionicons name={found ? 'navigate' : 'navigate-outline'} size={17} color={colors.brand} />}
+      </Pressable>
       <CardCredit />
     </View>
   );
 
-  // The how-to once the browser says no: the steps for this browser, under the row.
-  const steps = helpOpen ? (
-    <View style={styles.steps}>
-      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepsWhere}>{help.where}</Text>
-      {help.steps.map((step, i) => (
-        <View key={i} style={styles.step}>
-          <View style={styles.stepNum}><Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.stepNumText}>{i + 1}</Text></View>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepText}>{step}</Text>
-        </View>
-      ))}
-      {help.fallback ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.stepsFallback}>{help.fallback}</Text> : null}
-      <Button label={locating ? 'Finding you…' : 'Try again'} size="sm" loading={locating} disabled={locating} onPress={onLocate} />
-    </View>
-  ) : null;
-
   return (
     <View accessibilityLabel="Map of courts near you" style={[styles.wrap, edge && styles.wrapEdge]}>
       {map}
-      {found ? null : (
-        <View style={[styles.group, edge && styles.groupEdge]}>
-          {failed ? (
-            <>
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: helpOpen }} onPress={() => setHelpOpen((o) => !o)} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-                <View style={styles.tile}><Ionicons name="location-outline" size={16} color={colors.brand} /></View>
-                <View style={styles.rowWords}>
-                  <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rowTitle}>Location is off</Text>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub}>Here’s how to turn it on</Text>
-                </View>
-                <Ionicons name={helpOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textFaint} />
-              </Pressable>
-              {steps}
-            </>
-          ) : (
-            <Pressable accessibilityRole="button" onPress={onLocate} disabled={finding} style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}>
-              <View style={styles.tile}><Ionicons name="navigate" size={16} color={colors.brand} /></View>
-              <View style={styles.rowWords}>
-                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.rowTitle}>{finding ? 'Finding you…' : 'Show courts near me'}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowSub}>Nobody sees where you are</Text>
-              </View>
-              {finding ? <CourtSpinner size={16} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
-            </Pressable>
-          )}
-        </View>
-      )}
     </View>
   );
 }
@@ -288,20 +257,7 @@ const styleDefinitions = StyleSheet.create({
   wrapEdge: { marginHorizontal: -spacing.lg },
   chip: { position: 'absolute', left: 12, top: 12, maxWidth: '80%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   chipText: { ...typography.smallStrong, color: colors.text },
-  group: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  groupEdge: { marginHorizontal: spacing.lg },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
-  rowPressed: { backgroundColor: colors.surfaceAlt },
-  tile: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  rowWords: { flex: 1, minWidth: 0, gap: 1 },
-  rowTitle: { ...typography.bodyStrong, color: colors.text },
-  rowSub: { ...typography.small, color: colors.textMuted },
-  // The how-to, under the row in the same group.
-  steps: { gap: 10, padding: spacing.md, paddingHorizontal: spacing.lg, backgroundColor: colors.bgElevated, borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
-  stepsWhere: { ...typography.smallStrong, color: colors.textMuted },
-  stepsFallback: { ...typography.small, color: colors.textMuted },
-  step: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  stepNum: { width: 22, height: 22, borderRadius: 11, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
-  stepNumText: { ...typography.smallStrong, color: colors.brand },
-  stepText: { ...typography.body, color: colors.text, flex: 1 },
+  // Opposite the chip, the same see-through ground and hairline; a thumb's reach with its hitSlop.
+  locate: { position: 'absolute', right: 12, top: 12, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  locatePressed: { transform: [{ scale: 0.94 }] },
 });

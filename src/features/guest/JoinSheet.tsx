@@ -1,18 +1,17 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import React, { useEffect } from 'react';
-import { Linking, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Linking, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { Easing, FadeIn, FadeOut, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { router, usePathname } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BrandMark } from '@/components/BrandMark';
 import { Button } from '@/components/ui';
 import { rememberShareTarget } from '@/features/invite/referral';
-import { colors, lift, radius, spacing, typography } from '@/theme';
+import { colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
 import { noteAppTap } from './campaign';
-import { corner } from '@/theme/look';
+import { joinCopy } from './joinCopy';
 
 /**
  * The one sign-up ask in guest mode (Oct 17, owner: "it's just when you
@@ -20,7 +19,7 @@ import { corner } from '@/theme/look';
  * up, that way we can provide value and make ppl want to sign up and know our
  * brand rather than a automatic straight up promotion"). It opens only when
  * a guest tries something that needs a profile, never on its own, and "Not
- * now" (or a tap outside, or Escape) puts them straight back to reading.
+ * now" (the ×, or a tap outside, or Escape) puts them straight back to reading.
  *
  * Either account button remembers the page they were on, and the app opens
  * there again once they are in (useShareLanding). Reporting stays possible
@@ -28,6 +27,14 @@ import { corner } from '@/theme/look';
  *
  * It slides up on its own layer, over the tab bar, never fading anything
  * the bar's glass sits in (Oct 17: a fading parent left the glass see-through).
+ *
+ * The look (Nov 28, owner: "for tapping a like. do what instagram facebook or
+ * strava or any big companies like this would do"): X's signed-out prompt.
+ * It is about the action and the person: the action's icon in the brand
+ * colour, a headline about the action, one line naming who it was for, then
+ * "Create account" and "Log in" (joinCopy.ts has the words). On a computer it
+ * is a small dialog in the middle over a dim of the page; on a phone the
+ * same content is a bottom sheet with a grab handle. Flat, no logo tile.
  */
 // The same rise and fall as every other sheet on the website (DragSheet.web): in over 380 ms on its
 // curve, away over 220 ms, with the dim following the sheet on the same timing.
@@ -38,19 +45,65 @@ export const DIM_IN = FadeIn.duration(380).easing(RISE);
 export const DIM_OUT = FadeOut.duration(220).easing(FALL);
 export const SHEET_IN = SlideInDown.duration(380).easing(RISE);
 export const SHEET_OUT = SlideOutDown.duration(220).easing(FALL);
+// The computer's dialog only fades in and out, quickly, on its own layer (nothing under it holds glass).
+const DIALOG_IN = FadeIn.duration(160).easing(RISE);
+const DIALOG_OUT = FadeOut.duration(120).easing(FALL);
+/** From this width the prompt is a dialog in the middle (a computer, a tablet across); below, a bottom sheet. */
+const DIALOG_FROM = 640;
+const TITLE_ID = 'join-prompt-title';
+const LINE_ID = 'join-prompt-line';
+
+/** The browser's focusable things inside the prompt, for keeping Tab within it. */
+function focusables(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>('[tabindex]:not([tabindex="-1"]), a[href], button:not([disabled]), [role="button"], [role="link"]'))
+    .filter((el) => el.getAttribute('tabindex') !== '-1' && el.offsetParent !== null);
+}
 
 export function JoinSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const ask = useJoinSheet();
   const pathname = usePathname();
+  const box = useRef<View>(null);
+  const open = !!ask;
+  const at = ask?.at;
 
+  // Escape closes it; Tab stays inside it; the focus goes in on open and back to what was tapped (the heart) on close.
   useEffect(() => {
-    if (!ask || Platform.OS !== 'web') return undefined;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { e.preventDefault(); closeJoinSheet(); } };
+    if (!open || Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
+    const before = document.activeElement as HTMLElement | null;
+    const root = () => box.current as unknown as HTMLElement | null;
+    // The entering animation keeps the box hidden for its first frames, and focus() on a hidden box does
+    // nothing, so it keeps trying each frame (up to ~600ms) until the focus is inside.
+    let frame = 0;
+    const giveUp = Date.now() + 600;
+    const focusIn = () => {
+      const el = root();
+      if (el && el.contains(document.activeElement)) return;
+      el?.focus?.({ preventScroll: true });
+      if (el && el.contains(document.activeElement)) return;
+      if (Date.now() < giveUp) frame = requestAnimationFrame(focusIn);
+    };
+    frame = requestAnimationFrame(focusIn);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeJoinSheet(); return; }
+      if (e.key !== 'Tab') return;
+      const el = root(); if (!el) return;
+      const list = focusables(el); if (!list.length) return;
+      const first = list[0]; const last = list[list.length - 1];
+      const now = document.activeElement as HTMLElement | null;
+      const inside = !!now && el.contains(now);
+      if (e.shiftKey && (!inside || now === first || now === el)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && (!inside || now === last)) { e.preventDefault(); first.focus(); }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [ask]);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', onKey);
+      if (before && before.isConnected && typeof before.focus === 'function') before.focus({ preventScroll: true });
+    };
+  }, [open, at]);
 
   if (!ask) return null;
   const go = async (create: boolean) => {
@@ -62,48 +115,73 @@ export function JoinSheet() {
     router.push({ pathname: '/sign-in', params: { mode: create ? 'create' : 'sign-in' } });
   };
   const report = ask.report;
+  const copy = joinCopy(ask);
+  const dialog = width >= DIALOG_FROM;
+  const web = Platform.OS === 'web';
+  const a11y = web ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID, 'aria-describedby': LINE_ID, tabIndex: -1 as const } : {};
+
+  const content = (
+    <View ref={box} accessibilityViewIsModal onAccessibilityEscape={closeJoinSheet} style={styles.inner} {...a11y}>
+      {dialog ? null : <View style={styles.handle} />}
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={closeJoinSheet} style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
+        <Ionicons name="close" size={22} color={colors.textMuted} />
+      </Pressable>
+      <View style={styles.words}>
+        <Ionicons name={copy.icon} size={34} color={colors.brand} style={styles.icon} />
+        <Text nativeID={TITLE_ID} accessibilityRole="header" style={styles.title}>{copy.headline}</Text>
+        <Text nativeID={LINE_ID} style={styles.line}>{copy.line}</Text>
+      </View>
+      <View style={styles.buttons}>
+        <Button label="Create account" full onPress={() => { void go(true); }} />
+        <Button label="Log in" variant="secondary" full style={styles.outline} onPress={() => { void go(false); }} />
+      </View>
+      {report ? (
+        <Pressable accessibilityRole="link" hitSlop={6} onPress={() => { void Linking.openURL(`mailto:support@courtsidebase.com?subject=${encodeURIComponent(`Report ${report}`)}`); closeJoinSheet(); }} style={styles.quiet}>
+          <Ionicons name="flag-outline" size={14} color={colors.textMuted} />
+          <Text style={styles.quietText}>No account? <Text style={styles.quietLink}>Email us about it</Text></Text>
+        </Pressable>
+      ) : null}
+      <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={styles.quiet}>
+        <Ionicons name="logo-apple" size={14} color={colors.textMuted} />
+        <Text style={styles.quietText}>Get the iPhone app</Text>
+      </Pressable>
+    </View>
+  );
+
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      <Animated.View entering={DIM_IN} exiting={DIM_OUT} style={[StyleSheet.absoluteFill, styles.dim]}>
-        <Pressable accessibilityRole="button" accessibilityLabel="Not now" style={StyleSheet.absoluteFill} onPress={closeJoinSheet} />
+      <Animated.View entering={dialog ? DIALOG_IN : DIM_IN} exiting={dialog ? DIALOG_OUT : DIM_OUT} style={[StyleSheet.absoluteFill, styles.dim]}>
+        {/* A tap outside closes it; the × is the button for the keyboard and screen readers. */}
+        <Pressable accessible={false} focusable={false} tabIndex={-1} style={StyleSheet.absoluteFill} onPress={closeJoinSheet} />
       </Animated.View>
-      <Animated.View entering={SHEET_IN} exiting={SHEET_OUT} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
-        <View style={styles.inner}>
-          <View style={styles.mark}><BrandMark size={30} /></View>
-          <Text accessibilityRole="header" style={styles.title}>Join CourtSide to {ask.what}</Text>
-          <Text style={styles.body}>It’s free. Post your clips, find people to hit with, and ask real coaches about your game.</Text>
-          <Button label="Create a free account" full onPress={() => { void go(true); }} />
-          <Button label="I already have an account" variant="secondary" full onPress={() => { void go(false); }} />
-          {report ? (
-            <Pressable accessibilityRole="link" hitSlop={6} onPress={() => { void Linking.openURL(`mailto:support@courtsidebase.com?subject=${encodeURIComponent(`Report ${report}`)}`); closeJoinSheet(); }} style={styles.quiet}>
-              <Ionicons name="flag-outline" size={14} color={colors.textMuted} />
-              <Text style={styles.quietText}>No account? <Text style={styles.quietLink}>Email us about it</Text></Text>
-            </Pressable>
-          ) : null}
-          <View style={styles.foot}>
-            <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={styles.quiet}>
-              <Ionicons name="logo-apple" size={15} color={colors.textMuted} />
-              <Text style={styles.quietText}>Get the iPhone app</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" hitSlop={8} onPress={closeJoinSheet} style={styles.quiet}>
-              <Text style={styles.quietText}>Not now</Text>
-            </Pressable>
-          </View>
+      {dialog ? (
+        <View style={styles.center} pointerEvents="box-none">
+          <Animated.View entering={DIALOG_IN} exiting={DIALOG_OUT} style={styles.dialog}>{content}</Animated.View>
         </View>
-      </Animated.View>
+      ) : (
+        <Animated.View entering={SHEET_IN} exiting={SHEET_OUT} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.md }]}>{content}</Animated.View>
+      )}
     </View>
   );
 }
 
 const styleDefinitions = StyleSheet.create({
   dim: { backgroundColor: colors.overlay },
-  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, paddingTop: spacing.md, paddingHorizontal: spacing.lg, ...lift },
-  inner: { width: '100%', maxWidth: 480, alignSelf: 'center', gap: spacing.md },
-  mark: { width: 52, height: 52, borderRadius: corner(16), backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
-  title: { ...typography.title, color: colors.text },
-  body: { ...typography.body, color: colors.textMuted, lineHeight: 22, marginTop: -spacing.xs },
-  quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingVertical: spacing.xs },
+  // Overlays keep a neutral shadow (DESIGN.md, Shadow Vocabulary: Overlay); the page under it casts none.
+  sheet: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, paddingTop: spacing.sm, paddingHorizontal: spacing.lg, boxShadow: '0px -4px 16px rgba(0, 0, 0, 0.12)' },
+  center: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  dialog: { width: '100%', maxWidth: 400, backgroundColor: colors.surface, borderRadius: radius.lg, paddingTop: spacing.xl, paddingBottom: spacing.lg, paddingHorizontal: spacing.xl, boxShadow: '0px 6px 16px rgba(0, 0, 0, 0.18)' },
+  inner: { width: '100%', maxWidth: 400, alignSelf: 'center', outlineStyle: 'none' } as never,
+  handle: { alignSelf: 'center', width: 36, height: 4, borderRadius: 2, backgroundColor: colors.borderStrong, marginBottom: spacing.md },
+  close: { position: 'absolute', top: -spacing.sm, right: -spacing.sm, width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', zIndex: 1 },
+  pressed: { opacity: 0.6 },
+  words: { alignItems: 'center', paddingHorizontal: spacing.lg, paddingTop: spacing.sm },
+  icon: { marginBottom: spacing.md },
+  title: { ...typography.title, fontWeight: '700', color: colors.text, textAlign: 'center' },
+  line: { ...typography.body, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginTop: spacing.sm },
+  buttons: { gap: spacing.sm, marginTop: spacing.xl },
+  outline: { backgroundColor: 'transparent' },
+  quiet: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'center', paddingTop: spacing.md },
   quietText: { ...typography.small, color: colors.textMuted },
   quietLink: { ...typography.smallStrong, color: colors.brand },
-  foot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
 });

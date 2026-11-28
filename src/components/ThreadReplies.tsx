@@ -55,7 +55,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
   const post = () => {
     if (!canSend) return;
     // A guest keeps their words: join first (guest mode), nothing is cleared.
-    if (isGuest) { openJoinSheet('reply'); return; }
+    if (isGuest) { openJoinSheet('reply', { who: users.find(user => user.id === answer.authorId)?.name }); return; }
     const text = draft.trim();
     const attached = media;
     // Refused for its words (migration 117): the toast says why, and the reply
@@ -148,7 +148,7 @@ export function ThreadReply({ answer, thread, askerId, depth = 0, preview = fals
         {!preview && <View style={styles.replyActions}>
           <Pressable accessibilityRole="button" accessibilityLabel={`Collapse reply by ${name}`} onPress={()=>{ setCollapsed(true); setReplying(false); }} hitSlop={8} style={styles.collapse}>{children.length > 0 ? <View pointerEvents="none" style={styles.collapseMask}/> : null}<Ionicons name="remove-circle-outline" size={20} color={colors.textMuted}/></Pressable>
           <VoteControls item={answer} userId={currentUserId} onVote={direction => actions.voteAnswer(answer.id, direction)}/>
-          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
+          {answer.removed || closed ? null : <Pressable accessibilityRole="button" accessibilityLabel={`Reply to ${responder?.name ?? 'player'}`} onPress={() => { if (isGuest) { openJoinSheet('reply', { who: users.find(user => user.id === answer.authorId)?.name }); return; } setReplying(true); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.time}>Reply</Text>
           </Pressable>}
         </View>}

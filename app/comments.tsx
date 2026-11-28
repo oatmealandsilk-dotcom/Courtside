@@ -635,7 +635,7 @@ export default function CommentsSheet() {
             }}
           >
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
-            {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment')} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
+            {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment', { who: author?.name })} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
             {/* Docked on the box's top edge while replying, the × on the right. Plain, never a
                 height animation: an iPhone kept the animation's first frame (no height) and the
                 strip never showed (Oct 25 recording). */}

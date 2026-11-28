@@ -469,8 +469,8 @@ const PAGE_HELPERS = String.raw`
      * What is on screen right now: the topmost element at points spread over
      * the whole screen. A blank page (or a stuck curtain) hits only one or two
      * things; a real screen hits dozens. Rows every ~26 px (Nov 27): at every
-     * ~53 px, a settled sheet over a dimmed page (the guest's "Join CourtSide
-     * to like posts") put most of its rows in the gaps between its lines and
+     * ~53 px, a settled sheet over a dimmed page (the guest's "Like a post
+     * to cheer them on.") put most of its rows in the gaps between its lines and
      * read as blank, so the step passed only while the sheet was still rising.
      */
     health() {
@@ -989,20 +989,24 @@ const STEPS = [
     title: 'Guest mode: a like asks to join',
     async run(page) {
       await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
-      await page.waitFor({ text: 'Join CourtSide to like posts' });
+      // X's signed-out prompt (Nov 28): about the action, naming the clip's author.
+      await page.waitFor({ text: 'Like a post to cheer them on.' });
+      await page.waitFor({ text: /^Join CourtSide to let (?!the player).+ know you liked it\.$/ });
+      // The focus goes into the prompt when it opens (review, Nov 28: the entering animation used to swallow it).
+      await page.waitUntil(() => page.call(() => !!document.activeElement?.closest('[role=dialog]')), 3000, 'the focus to go into the join prompt');
     },
-    expect: [{ label: 'Create a free account' }, { label: 'I already have an account' }, { label: 'Get the iPhone app' }, { text: 'Not now' }],
+    expect: [{ label: 'Create account' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
     after: async (page) => {
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to like posts' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Like a post to cheer them on.' });
       // The heart never fills for a guest: the like did not count.
       if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
       // A post's ••• menu asks to join too, and (found in review, Oct 17) still offers the no-account report.
       await page.tap({ label: 'More options' });
-      await page.waitFor({ text: 'Join CourtSide to save or report this' });
+      await page.waitFor({ text: 'Save or report this post.' });
       await page.waitFor({ text: 'Email us about it' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to save or report this' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Save or report this post.' });
     },
   },
   {
@@ -1015,15 +1019,15 @@ const STEPS = [
       await page.waitFor({ text: /^I made the switch at 4\.0/ }, 30000);
       await guestShowsOnlyAdults(page);
       await page.tap({ label: 'Reply to this thread' });
-      await page.waitFor({ text: 'Join CourtSide to reply' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to reply' });
+      await page.waitFor({ text: 'Join the conversation.' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Join the conversation.' });
       // Share is the one icon at the top; Report is in the "⋯" menu (Oct 29, owner), and still asks a guest to join.
       await page.tap({ label: 'More options' });
       await page.tap({ label: 'Report this thread' });
-      await page.waitFor({ text: 'Join CourtSide to report this' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to report this' });
+      await page.waitFor({ text: 'Report this.' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Report this.' });
     },
     expect: [{ text: 'Replies' }, { label: 'Share this thread' }, { label: 'More options' }],
   },
@@ -1033,11 +1037,11 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: 'Go back' });
       await page.tap({ text: 'Find Players' });
-      // The courts-only map (Oct 29): its own label, and its row that asks for Location only on a tap (option C, Nov 27:
-      // one row under the map, no second 'Use my location' button by the list).
+      // The courts-only map (Oct 29): its own label, and one small round locate button on it that asks for Location
+      // only on a tap (Nov 28: the 'Show courts near me' row under the map is gone; no 'Use my location' button either).
       await page.waitFor({ label: 'Map of courts near you', any: true });
-      await page.waitFor({ text: 'Show courts near me' });
-      await page.waitFor({ text: 'Nobody sees where you are' });
+      await page.waitFor({ label: 'Show courts near me' });
+      if (await page.find({ text: 'Show courts near me' }) || await page.find({ text: 'Nobody sees where you are' })) throw new Error('the guest Community screen still shows the row under the map');
       await page.waitFor({ text: 'Open hits' });
       if (await page.find({ text: 'Use my location' })) throw new Error('the guest Community screen still shows a second Use my location button');
       if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
