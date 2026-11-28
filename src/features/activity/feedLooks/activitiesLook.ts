@@ -21,10 +21,10 @@ export type ActivitiesLook = 'now' | 'gallery' | 'gallery-rollup';
 export const ACTIVITIES_LOOK_WEB: ActivitiesLook = 'gallery-rollup';
 
 /**
- * The iPhone (and Android) app: today's full-screen pages until the owner says yes to the gallery on the phone.
- * Moving the phone over is this one line ('gallery-rollup'), shipped with an update.
+ * The iPhone (and Android) app: the same gallery + "friends played" (Nov 28, owner: "Switch phone activity to
+ * gallery too"). The way back is this one line ('now'), shipped with an update.
  */
-export const ACTIVITIES_LOOK_NATIVE: ActivitiesLook = 'now';
+export const ACTIVITIES_LOOK_NATIVE: ActivitiesLook = 'gallery-rollup';
 
 export const ACTIVITIES_LOOK: ActivitiesLook = Platform.OS === 'web' ? ACTIVITIES_LOOK_WEB : ACTIVITIES_LOOK_NATIVE;
 

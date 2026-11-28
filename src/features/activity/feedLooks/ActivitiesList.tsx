@@ -836,7 +836,7 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
         <EmptyState
           icon="images-outline"
           title="No sessions from friends yet"
-          body="Sessions from the players you follow show up here. Add a photo or a clip to yours and it shows as a picture."
+          body="Sessions from players you follow show up here. Add a photo or clip to your next session and friends see it as a picture."
         />
       ) : (
         <EmptyState
