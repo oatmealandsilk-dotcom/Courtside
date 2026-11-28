@@ -595,7 +595,7 @@ const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOp
 
   if (!media) {
     return (
-      <View style={[styles.mCard, { height: PLAIN_H + (near ? NEAR_H : 0) }]}>
+      <View testID="mixed-plain" style={[styles.mCard, { height: PLAIN_H + (near ? NEAR_H : 0) }]}>
         <MixedHead post={post} author={author} me={me} />
         {nearLine}
         <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>
@@ -621,7 +621,7 @@ const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOp
   );
   const box = <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>;
   return (
-    <View style={styles.mCard}>
+    <View testID="mixed-photo" style={styles.mCard}>
       <MixedHead post={post} author={author} me={me} />
       {nearLine}
       {order === 'stats' ? <>{box}{picture}</> : <>{picture}{box}</>}
@@ -904,7 +904,7 @@ const styleDefinitions = StyleSheet.create({
   mWhen: { ...typography.small, color: colors.textFaint, flexShrink: 0 },
   mNear: { height: 28, justifyContent: 'center', marginTop: 2 },
   mBoxSlot: { height: MIXED.box, marginTop: MIXED.gap },
-  mWords: { height: MIXED.box, justifyContent: 'center' },
+  mWords: { height: MIXED.box, justifyContent: 'flex-start', paddingTop: 6 },
   mWordsText: { ...typography.body, fontSize: 17, lineHeight: 24, color: colors.text },
   mPhoto: { marginTop: MIXED.gap, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   mLine: { height: MIXED.line, marginTop: MIXED.gap, justifyContent: 'center' },
