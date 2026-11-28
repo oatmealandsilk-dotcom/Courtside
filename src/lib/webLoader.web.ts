@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { holdFirstClipAtMost } from '@/features/feed/firstPlay';
 
 /**
  * The website loads like Instagram on a phone (Nov 12, owner: "Make a website load like Instagram on the
@@ -28,6 +29,7 @@ export function dropWebLoader() {
   if (dropped || typeof document === 'undefined') return;
   dropped = true;
   document.getElementById('cs-launch')?.remove();
+  holdFirstClipAtMost();
 }
 
 function iconFontReady(): Promise<unknown> {
