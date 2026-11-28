@@ -11,8 +11,8 @@ import { isSupabaseConfigured } from '@/lib/supabase';
  *   today  the live prompt (X's signed-out prompt): the default
  *   a      a small bubble by the button that was tapped (YouTube)
  *   b      a person-first sheet: their face and the post, the ask in ink
- *   c      no pop-up: a bar at the foot says it, then goes (Instagram web)
- *   d      a plain letter: words, a hairline, two quiet buttons
+ *   c      no pop-up: a slim bar at the foot says it, until the next swipe (Instagram web)
+ *   d      a plain letter: words, then two quiet buttons at the right
  * Add ?joinlook=a (b, c, d) to the demo website's address to choose; the
  * choice is kept for the rest of that visit. The live website (a build with
  * Supabase) and the phones always get today's.
