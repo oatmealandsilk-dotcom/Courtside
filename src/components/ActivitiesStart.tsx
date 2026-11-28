@@ -65,7 +65,7 @@ const GRACE_MS = 250;
  * already there follows what happens to it (Not now, Got it, the tip in the card's place once connected). `onTop`:
  * this page is the one on screen, so the note after logging by hand knows the card is saying it already.
  */
-export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0, shown = true, onTop = true }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number; shown?: boolean; onTop?: boolean }) {
+export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0, shown = true, onTop = true, inList = false }: { topInset: number; bottomInset: number; nearCount: number; sessions?: number; shown?: boolean; onTop?: boolean; /** At the head of a scrolling list (the Activities looks, activitiesLook): its own height, and no "Swipe up" line. */ inList?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, actions, sessions: log, posts, currentUserId, liveSession, currentUser, autoLogSharing } = useApp();
   // Anything in your own log, or a session of yours posted with its numbers.
@@ -117,7 +117,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
   };
 
   return (
-    <View style={[styles.page, { paddingTop: topInset, paddingBottom: bottomInset }]}>
+    <View style={[styles.page, inList && styles.inList, { paddingTop: topInset, paddingBottom: bottomInset }]}>
       <Wash height={300} strength={0.6} />
       <View style={styles.head}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{!logs ? 'Start logging' : few ? 'Follow more players' : 'Your activities'}</Text>
@@ -196,7 +196,7 @@ export function ActivitiesStart({ topInset, bottomInset, nearCount, sessions = 0
         </View>
       ) : null}
 
-      {LESS_AI && !nearCount && !sessions ? null : <View style={styles.more} accessible={LESS_AI} accessibilityLabel={LESS_AI ? (nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : undefined) : undefined}>
+      {inList || (LESS_AI && !nearCount && !sessions) ? null : <View style={styles.more} accessible={LESS_AI} accessibilityLabel={LESS_AI ? (nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : undefined) : undefined}>
         <Ionicons name="chevron-down" size={LESS_AI ? 20 : 16} color={colors.textFaint} />
         {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.moreText}>{nearCount ? 'Swipe up for sessions near you' : sessions ? 'Swipe up for the latest sessions' : 'Sessions you and they post show up here'}</Text>}
       </View>}
@@ -225,6 +225,7 @@ export function NearYouTag({ user, over = false, follow = true }: { user: User; 
 
 const styleDefinitions = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.lg, backgroundColor: colors.bg, maxWidth: 520, width: '100%', alignSelf: 'center' },
+  inList: { flex: 0, backgroundColor: 'transparent', maxWidth: undefined },
   head: { gap: 4, paddingHorizontal: spacing.xs },
   title: { ...typography.title, color: colors.text },
   lead: { ...typography.small, color: colors.textMuted },
