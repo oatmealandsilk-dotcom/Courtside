@@ -370,7 +370,9 @@ export const posts: Post[] = [
     id: 'p-court-1',
     authorId: 'u-sam',
     kind: 'clip',
-    createdAt: isoDaysAgo(0, 5),
+    // A day ago, not 5 hours (Nov 28, the map-then-activity picture): at 5 hours it sat right on Sam's 6-hour clip, two
+    // posts of his in a row, which made the demo's feed read thin.
+    createdAt: isoDaysAgo(1, 0),
     body: 'Inside-out forehand drill on court 2. The lights here stay on till 10.',
     mediaLabel: 'Clip · 0:24',
     // A drawn cover (demo only), as above.

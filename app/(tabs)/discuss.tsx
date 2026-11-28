@@ -8,7 +8,7 @@ import { Fold, FoldList, Pop } from '@/components/ui/Fold';
 import { useRestKey } from '@/components/ui/restMotion';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { PaneScroller } from '@/components/ui/PaneScroller';
+import { PaneScroller, type PaneList, type PaneScrollerProps } from '@/components/ui/PaneScroller';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -47,7 +47,7 @@ import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
 import { HOME_FEED_LOOK, HOME_MAP_FEED } from '@/features/community/homePreview';
-import { ActivitiesInline, type FeedSlot } from '@/features/activity/feedLooks/ActivitiesList';
+import { useInlineFeed, type FeedSlot, type InlineRow } from '@/features/activity/feedLooks/ActivitiesList';
 import { useActivitiesFeed } from '@/features/activity/feedLooks/useActivitiesFeed';
 import { ActivitiesStart } from '@/components/ActivitiesStart';
 import { simAction } from '@/lib/simDriver';
@@ -448,7 +448,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // opened anywhere, and asking here redrew this whole tab each time, before that page could slide
   // in (Oct 10, owner: "the buttons like the settings. msg notifications, etc respond too slow").
   const justPosted = useJustPosted();
-  const hitTip = hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
+  // (Not in the map-then-activity picture: there Open hits is a row deep in the feed, and a tip popping up there reads as noise.)
+  const hitTip = HOME_MAP_FEED ? null : hitTipCard(shownHits.map((x) => x.hit), currentUserId, justPosted, { teen: !!currentUser && notKnownAdult(currentUser), followingIds });
   // Never in the page's first moment after the app opens (OPEN_QUIET_MS): it arrives whole first.
   const openSettled = useOpenSettled();
   // Only once the page has rested a moment after any swipe (a section's or a tab's): a tip that
@@ -699,6 +700,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   useEffect(() => (previewSection ? undefined : simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); })), [pageTop, previewSection]);
   // Round 2: how tall Open to hit is over the map's foot (the bar's room under it included), so the city sits above it.
   const [cStripH, setCStripH] = useState(0);
+  // The map-then-activity picture: how much of the feed's first item shows above the bar (HomePane reports it).
+  const [homePeek, setHomePeek] = useState(HOME_PEEK);
   const listEnd = useRef<View>(null);
   const nearEndRef = useRef(() => {});
   nearEndRef.current = () => {
@@ -735,7 +738,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // on the map controls' one fixed see-through fill (MapGlass dense, for words: never live glass, never faded), its top
   // corners rounded as the pills are; no hairline, no shadow.
   const cOverlay = (bar: number) => (APP_C_OVERLAY && currentUser && showUpToday ? (
-    <MapGlass radius={0} dense style={[styles.cOverlay, { paddingBottom: bar + spacing.sm }]}>
+    <MapGlass radius={0} dense style={[styles.cOverlay, HOME_MAP_FEED && styles.cOverlayFoot, { paddingBottom: bar + spacing.sm }]}>
       <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height + styles.cOverlay.paddingTop + bar + spacing.sm); if (h !== cStripH) setCStripH(h); }}>
         <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
@@ -785,6 +788,32 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       ) : null}
     </View>
   );
+  // The map-then-activity picture (homePreview): Open hits as one row of the feed, read the way the feed's rows read: the
+  // first two hits on hairlines (not cards inside a section inside a feed), then one full-width row that opens the rest
+  // in place (the ones further away after them, under a small label). No "Looking for a hit?" box here: Up to hit on the
+  // map and the + button already post one. With no hit anywhere the row is left out.
+  const [homeHitsOpen, setHomeHitsOpen] = useState(false);
+  const homeHitsRow = () => {
+    const near = homeHitsOpen ? listedHits : listedHits.slice(0, HOME_HITS_SHOWN);
+    const far = homeHitsOpen || !listedHits.length ? listedFurther : NO_HITS;
+    const rest = listedHits.length - near.length + listedFurther.length - far.length;
+    const label = homeHitsOpen ? 'Show fewer' : listedHits.length > HOME_HITS_SHOWN ? `See all ${listedHits.length} open hits` : `See ${listedFurther.length} further away`;
+    const line = (i: number) => [styles.homeHit, i > 0 && styles.homeHitLine];
+    return (
+      <View>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.homeRowTitle}>Open hits</Text>
+        {near.map(({ hit, miles }, i) => <View key={hit.id} style={line(i)}><HitCard flat hit={hit} miles={miles} /></View>)}
+        {far.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.homeFurther, near.length > 0 && styles.homeHitLine]}>Further away</Text> : null}
+        {far.map(({ hit, miles }, i) => <View key={hit.id} style={line(i)}><HitCard flat hit={hit} miles={miles} /></View>)}
+        {rest > 0 || homeHitsOpen ? (
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: homeHitsOpen }} onPress={() => setHomeHitsOpen((o) => !o)} style={({ pressed }) => [styles.homeMore, pressed && styles.playerPressed]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.homeMoreText}>{label}</Text>
+            <Ionicons name={homeHitsOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+    );
+  };
   // Near you: friends checked in within 30 miles, then the players whose profile town is yours.
   const nearSection = () => (
     <View>
@@ -890,7 +919,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             const map = (cardHeight?: number, cover?: number) => <NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} cardHeight={cardHeight} cardCover={cover} />;
             // The app preview of option C, rounds 2 and 3 only (demo builds with its switch): the tall map, measured in its own slot.
             // The map-then-activity picture (homePreview): round 2's map, as tall as leaves the first activity's top in sight above the bar.
-            if (HOME_MAP_FEED) return <HomeMap render={(h) => <>{map(h, cStripH)}{cOverlay(0)}</>} />;
+            if (HOME_MAP_FEED) return <HomeMap peek={homePeek} render={(h) => <>{map(h, cStripH)}{cOverlay(0)}</>} />;
             return APP_C_BIG_MAP ? <CBigMap render={(h, bar) => <>{map(h, APP_C_OVERLAY ? cStripH : bar)}{cOverlay(bar)}</>} /> : map();
           })()}</View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
@@ -924,20 +953,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
         {HOME_MAP_FEED ? null : courtsAt(true)}
-        {/* The map-then-activity picture (homePreview): the friends' activity right under the map, one continuous
-            scroll; what sat under the map goes into it as rows of their own between the activities. */}
-        {HOME_MAP_FEED && currentUser && !search ? (
-          <HomeFeed active={!previewSection && section === 'players'} scrollY={playersY}
-            follow={pymk ? <View style={styles.homeFollow}><PeopleYouMayKnow model={pymk} /></View> : null}
-            slots={[
-              { key: 'hits', after: HOME_SLOT_AFTER.hits, node: hitsSection() },
-              { key: 'courts', after: HOME_SLOT_AFTER.courts, node: <View style={styles.courtsPair}>{yourCourts(0)}{courtsBlock(0)}</View> },
-              ...(boardShown ? [{ key: 'board', after: HOME_SLOT_AFTER.board, node: <CityBoardPreview /> }] : []),
-              ...(nearPlayers.length || townNear.length ? [{ key: 'near', after: HOME_SLOT_AFTER.near, node: nearSection() }] : []),
-              ...(newPlayers.length ? [{ key: 'new', after: HOME_SLOT_AFTER.new, node: <View>{newSection()}</View> }] : []),
-            ]}
-          />
-        ) : null}
+        {/* The map-then-activity picture (homePreview): the friends' activity right under the map is the section's own list
+            (HomePane, below), so only its rows near the screen are drawn. */}
         {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
         {!search && !HOME_MAP_FEED ? <FirstReveal order={openHits.length ? 1 : 3}>{hitsSection()}</FirstReveal> : null}
         {HOME_MAP_FEED ? null : courtsAt(false)}
@@ -1170,7 +1187,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
+          HOME_MAP_FEED ? (
+            // The map-then-activity picture (homePreview): one list, the search and the map its head, the friends' activity under it.
+            <HomePane key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}
+              feedOn={!!currentUser && !search && !(pictureOnly && previewSection !== 'players')} paused={!!previewSection || section !== 'players'} onPeek={setHomePeek}
+              follow={pymk ? <View style={styles.homeFollow}><PeopleYouMayKnow model={pymk} inFeed /></View> : null}
+              slots={[
+                ...(listedHits.length || listedFurther.length ? [{ key: 'hits', after: HOME_SLOT_AFTER.hits, node: homeHitsRow() }] : []),
+                { key: 'courts', after: HOME_SLOT_AFTER.courts, node: <View style={styles.courtsPair}>{yourCourts(0)}{courtsBlock(0)}</View> },
+                ...(boardShown ? [{ key: 'board', after: HOME_SLOT_AFTER.board, node: <CityBoardPreview /> }] : []),
+                ...(nearPlayers.length || townNear.length ? [{ key: 'near', after: HOME_SLOT_AFTER.near, node: nearSection() }] : []),
+                ...(newPlayers.length ? [{ key: 'new', after: HOME_SLOT_AFTER.new, node: <View>{newSection()}</View> }] : []),
+              ]}
+            >{pictureOnly && previewSection !== 'players' ? null : content('players')}</HomePane>
+          ) : <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
           <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}
@@ -1255,50 +1285,59 @@ function CBigMap({ render }: { render: (height: number | undefined, bar: number)
 }
 
 /**
- * The map-then-activity picture (homePreview): how much of the first activity shows above the bar on the first screen
- * (its header and title: the peek that says the page goes on).
+ * The map-then-activity picture (homePreview): how much of the first activity shows above the bar on the first screen,
+ * until the feed has said (useInlineFeed's peek: a photo card down through its numbers and the top of its photo, any
+ * other first item down to its last line and a little air, so the bar never cuts through words).
  */
-const HOME_PEEK = 96;
+const HOME_PEEK = 184;
 /** Where the rows that sat under the map go in the feed: after this many activities (past its end: at its end, in order). People you may know is the feed's follow block, after the second. */
 const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 };
+const NO_ROWS: InlineRow[] = [];
 
 /**
  * The map-then-activity picture (homePreview; demo builds with its switch only): the Community map from where it starts on
  * the page down to just above the bar, less the first activity's peek. Read from where the slot is drawn, and once more
  * after the tab's arrival has settled; `render` gets the map's height. Bar A's own room (useBarInset).
  */
-function HomeMap({ render }: { render: (height: number | undefined) => React.ReactNode }) {
+function HomeMap({ peek, render }: { peek: number; render: (height: number | undefined) => React.ReactNode }) {
   const { height: screenHeight } = useWindowDimensions();
   const barInset = useBarInset();
   const box = useRef<View>(null);
   const [top, setTop] = useState(0);
   const read = useCallback(() => box.current?.measureInWindow((_x, y) => { if (y > 0) setTop(Math.round(y)); }), []);
   useEffect(() => { const t = setTimeout(read, 900); return () => clearTimeout(t); }, [read]);
-  const height = top > 0 ? Math.max(CARD_HEIGHT, screenHeight - top - barInset - HOME_PEEK) : undefined;
+  const height = top > 0 ? Math.max(CARD_HEIGHT, screenHeight - top - barInset - peek) : undefined;
   return <View ref={box} collapsable={false} onLayout={top ? undefined : read}>{render(height)}</View>;
 }
 
 /**
- * The map-then-activity picture (homePreview): the friends' activity under the map, in the look he picked for Activities
- * ('gallery-rollup'), exactly the posts Activities shows. `follow`: People you may know, as the feed's follow block; with
- * nobody to suggest, a new player's own Activities start (ActivitiesStart) instead.
+ * The map-then-activity picture (homePreview): Find Players as ONE list. Its head is the section as it is (the search and
+ * the map, `children`); its rows are the friends' activity in the look he picked for Activities ('gallery-rollup'),
+ * exactly the posts Activities shows, with the page's own rows between them (`slots`). Only the rows near the screen are
+ * drawn, so a long scroll never keeps every clip player alive. `follow`: People you may know, as the feed's follow block;
+ * with nobody to suggest, a new player's own Activities start (ActivitiesStart) instead. `feedOn` false (a search, a
+ * guest, a picture of the other section): the head alone.
  */
-function HomeFeed({ active, scrollY, follow, slots }: { active: boolean; scrollY: SharedValue<number>; follow: React.ReactNode; slots: FeedSlot[] }) {
-  const styles = useThemedStyles(styleDefinitions);
+function HomePane({ feedOn, paused, follow, slots, onPeek, children, ...pane }: Omit<PaneScrollerProps, 'list'> & { feedOn: boolean; paused: boolean; follow: React.ReactNode; slots: FeedSlot[]; onPeek: (peek: number) => void }) {
   const { list, showStart, nearCount, nearAuthors } = useActivitiesFeed(HOME_FEED_LOOK);
-  const start = follow ?? (showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={list.length} shown={active} onTop /> : null);
-  return (
-    <View style={styles.homeFeed}>
-      <ActivitiesInline look={HOME_FEED_LOOK} posts={list} nearCount={nearCount} near={nearAuthors} paused={!active} start={start} slots={slots} scrollY={scrollY} />
-    </View>
-  );
+  const start = follow ?? (showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={list.length} shown={!paused} onTop /> : null);
+  const feed = useInlineFeed({ look: HOME_FEED_LOOK, posts: list, nearCount, near: nearAuthors, paused: paused || !feedOn, start, slots, ownFace: true });
+  useEffect(() => { onPeek(feed.peek); }, [feed.peek, onPeek]);
+  const rows: PaneList<InlineRow> = { data: feedOn ? feed.data : NO_ROWS, renderItem: feed.renderItem, keyExtractor: feed.keyExtractor, onEndReached: feedOn ? feed.onEndReached : undefined, footer: feedOn ? feed.footer : null };
+  return <PaneScroller {...pane} list={rows}>{children}</PaneScroller>;
 }
 
 const styleDefinitions = StyleSheet.create({
-  // The map-then-activity picture (homePreview): the feed edge to edge, right under the map (the page's gap taken back).
-  homeFeed: { marginHorizontal: -spacing.lg, marginTop: -12 },
   // People you may know as the feed's follow block: in the page's margins, its cards' row running to the edges.
   homeFollow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  // Open hits as a row of the feed (homeHitsRow): its title as People you may know's, the hits on hairlines running to
+  // the screen's edges, the words in the page's margins, and one full-width row that opens the rest.
+  homeRowTitle: { ...typography.heading, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.xs },
+  homeHit: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg },
+  homeHitLine: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  homeFurther: { ...typography.smallStrong, color: colors.textMuted, marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: 2 },
+  homeMore: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 52, marginHorizontal: -spacing.lg, marginBottom: -spacing.lg, paddingHorizontal: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  homeMoreText: { ...typography.bodyStrong, color: colors.text },
   // The page, as one view the check-in zoom can photograph (phone) or push in (browser).
   growHost: { flex: 1 },
   hits: { gap: spacing.md },
@@ -1348,6 +1387,9 @@ const styleDefinitions = StyleSheet.create({
   // place the page first opened on). There it stays put, laid over nothing, unseen and untouchable.
   // The app preview of option C, round 2 (appCPreview): Open to hit along the map's foot, edge to edge as the map is.
   cOverlay: { position: 'absolute', left: spacing.sm - spacing.lg, right: spacing.sm - spacing.lg, bottom: 0, paddingHorizontal: spacing.lg - spacing.sm, paddingTop: spacing.md - 2, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
+  // The map-then-activity picture (homePreview): the strip is the map's full-width foot, square, edge to edge as the map
+  // is, so map, strip, the feed's band and the first post stack as one page (no slivers of map down its sides).
+  cOverlayFoot: { left: -spacing.lg, right: -spacing.lg, paddingHorizontal: spacing.lg, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   // The map card's own height, so nothing jumps when the card takes its place.
   mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },

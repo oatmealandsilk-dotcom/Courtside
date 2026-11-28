@@ -1,6 +1,6 @@
 import { PaneShownContext } from '@/lib/loopShown';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { Animated, Keyboard, Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Animated, Keyboard, Platform, ScrollView, StyleSheet, Text, View, type FlatList, type ListRenderItem, type ViewStyle } from 'react-native';
 import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -50,7 +50,23 @@ export interface PaneScrollerProps {
   inStrip?: SharedValue<boolean>;
   /** On a computer: the width the section's content keeps to, centred in a scroller as wide as the window. */
   column?: number;
+  /**
+   * A long list under the section's own content (the map-then-activity picture, homePreview: the friends' activity under
+   * the map): the section becomes a list that draws only the rows near the screen, the content (children) its head.
+   */
+  list?: PaneList;
   children: ReactNode;
+}
+
+/** The rows of a PaneScroller's list (see `list`), under its content, edge to edge. */
+export interface PaneList<T = any> { // eslint-disable-line @typescript-eslint/no-explicit-any
+  data: readonly T[];
+  renderItem: ListRenderItem<T>;
+  keyExtractor: (item: T, index: number) => string;
+  /** The end is within a screen and a half: the next page. */
+  onEndReached?: () => void;
+  /** Under the last row (a loader, "You're all caught up"). */
+  footer?: ReactNode;
 }
 
 /**
@@ -72,7 +88,7 @@ export interface PaneScrollerProps {
  *  - a section not on show only obeys a jump to its top (the tab being left,
  *    or the bar bringing you to the map), never a glide meant for the other.
  */
-export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, children }: PaneScrollerProps) {
+export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, list: rows, children }: PaneScrollerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const barInset = useBarInset();
   const insets = useSafeAreaInsets();
@@ -346,44 +362,87 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
     scrollMemory.set(memoryKey, to);
   }), [memoryKey, strip, hush]);
 
+  // The scroller's own setup, the same for the plain scroller and the list form (`list`).
+  const scrollProps = {
+    style: styles.flex,
+    // The auto-tester finds each section's scroller by this (scripts/smoke.mjs, community-swipe-still).
+    testID: `pane-${memoryKey}`,
+    contentContainerStyle: [styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null],
+    onLayout: (e: { nativeEvent: { layout: { height: number } } }) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); },
+    scrollEnabled: !swiping,
+    // A tap on an iPhone's clock takes the section on show to its top; only one scroller may say yes.
+    scrollsToTop: active && tabActive,
+    directionalLockEnabled: true,
+    keyboardShouldPersistTaps: 'handled' as const,
+    automaticallyAdjustKeyboardInsets: IOS,
+    keyboardDismissMode: Platform.OS === 'android' ? ('on-drag' as const) : ('interactive' as const),
+    showsVerticalScrollIndicator: false,
+    scrollEventThrottle: 16,
+    snapToOffsets: strip > 0 && !keysUp ? [strip] : undefined,
+    snapToStart: false,
+    snapToEnd: false,
+    contentOffset: { x: 0, y: strip + initial.current },
+    onScroll: onScrollAnimated,
+    onContentSizeChange: (_width: number, height: number) => {
+      // Too short to rest below the strip until now: settles below it, quietly.
+      if (strip > 0 && !busy.current && !holding.value && !dragging.value && !gliding.value && scrollY.value < strip - 1 && viewH > 0 && height >= viewH + strip - 1) {
+        hush(strip);
+        scroller.current?.scrollTo({ y: strip, animated: false });
+      }
+      if (restored.current) return;
+      // Put back where it was left once the content is tall enough to hold that place.
+      if (height > initial.current) {
+        restored.current = true;
+        hush(strip + initial.current);
+        scroller.current?.scrollTo({ y: strip + initial.current, animated: false });
+      }
+    },
+  };
+
   return (
     <KeyboardScrollContext.Provider value={reveal}>
       <View style={styles.flex}>
+        {rows ? (
+          // The list form (`list`): the same scroller, strip and handlers; the content is its head, the rows under it are
+          // drawn only near the screen. Asked to scroll by `scrollTo` as the plain scroller is (an offset, here).
+          <PaneShownContext.Provider value={active}>
+            <Reanimated.FlatList
+              ref={(node: unknown) => {
+                list(node as never);
+                const flat = node as (FlatList & { getNode?: () => FlatList }) | null;
+                const target = flat && typeof flat.scrollToOffset !== 'function' ? flat.getNode?.() ?? null : flat;
+                const handle = target ? ({ scrollTo: ({ y = 0, animated = true }: { y?: number; animated?: boolean } = {}) => target.scrollToOffset({ offset: y, animated }) } as unknown as ScrollView) : null;
+                scroller.current = handle;
+                if (scrollRef) scrollRef.current = handle;
+              }}
+              {...scrollProps}
+              data={rows.data}
+              renderItem={rows.renderItem}
+              keyExtractor={rows.keyExtractor}
+              ListHeaderComponent={
+                <>
+                  {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
+                  <View style={[styles.body, column ? { width: '100%', maxWidth: column, alignSelf: 'center' } : null]}>{children}</View>
+                </>
+              }
+              ListFooterComponent={
+                <>
+                  {rows.footer}
+                  <View style={{ height: room + spacing.xxxl }} />
+                  {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
+                </>
+              }
+              onEndReached={rows.onEndReached}
+              onEndReachedThreshold={1.5}
+              initialNumToRender={4}
+              maxToRenderPerBatch={4}
+              windowSize={7}
+            />
+          </PaneShownContext.Provider>
+        ) : (
         <Reanimated.ScrollView
           ref={(node: unknown) => { list(node as never); scroller.current = node as unknown as ScrollView | null; if (scrollRef) scrollRef.current = node as unknown as ScrollView | null; }}
-          style={styles.flex}
-          // The auto-tester finds each section's scroller by this (scripts/smoke.mjs, community-swipe-still).
-          testID={`pane-${memoryKey}`}
-          contentContainerStyle={[styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
-          onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
-          scrollEnabled={!swiping}
-          // A tap on an iPhone's clock takes the section on show to its top; only one scroller may say yes.
-          scrollsToTop={active && tabActive}
-          directionalLockEnabled
-          keyboardShouldPersistTaps="handled"
-          automaticallyAdjustKeyboardInsets={IOS}
-          keyboardDismissMode={Platform.OS === 'android' ? 'on-drag' : 'interactive'}
-          showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
-          snapToOffsets={strip > 0 && !keysUp ? [strip] : undefined}
-          snapToStart={false}
-          snapToEnd={false}
-          contentOffset={{ x: 0, y: strip + initial.current }}
-          onScroll={onScrollAnimated}
-          onContentSizeChange={(_width, height) => {
-            // Too short to rest below the strip until now: settles below it, quietly.
-            if (strip > 0 && !busy.current && !holding.value && !dragging.value && !gliding.value && scrollY.value < strip - 1 && viewH > 0 && height >= viewH + strip - 1) {
-              hush(strip);
-              scroller.current?.scrollTo({ y: strip, animated: false });
-            }
-            if (restored.current) return;
-            // Put back where it was left once the content is tall enough to hold that place.
-            if (height > initial.current) {
-              restored.current = true;
-              hush(strip + initial.current);
-              scroller.current?.scrollTo({ y: strip + initial.current, animated: false });
-            }
-          }}
+          {...scrollProps}
         >
           {strip > 0 ? <View pointerEvents="none" style={{ height: strip }} /> : null}
           <View style={[styles.body, column ? { width: '100%', maxWidth: column, alignSelf: 'center' } : null, { paddingBottom: room + spacing.xxxl }]}>
@@ -392,6 +451,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
           </View>
           {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
         </Reanimated.ScrollView>
+        )}
         {strip > 0 ? (
           <Reanimated.View pointerEvents="none" style={[styles.pullRow, rowStyle]}>
             <PullDisc gap={gap} disc={disc} line={PULL_LINE} />

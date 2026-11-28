@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
-import Reanimated, { runOnJS, useAnimatedReaction, useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
+import Reanimated, { useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -987,14 +987,16 @@ function GalleryActions({ post, me, children, menu = true }: { post: Post; me: s
  * "1h 15m · 128 bpm" under it, the privacy words at the right ('gallery' only) and •••. No caption, no Save. A tap
  * opens the post. Under another such row it sits on a hairline, not the band, so a run of auto-logs stays small.
  */
-function OwnRow({ post, note, joined, edge = 'band' }: { post: Post; /** "Not in friends' feeds" ('gallery'); none in 'gallery-rollup', where friends see it in their row. */ note?: string; /** Under another own row: a hairline instead of the band. */ joined: boolean; /** What parts it from the item above: the band, or (gv1, gv3, gv4) a hairline. */ edge?: Edge }) {
+function OwnRow({ post, note, joined, edge = 'band', face }: { post: Post; /** "Not in friends' feeds" ('gallery'); none in 'gallery-rollup', where friends see it in their row. */ note?: string; /** Under another own row: a hairline instead of the band. */ joined: boolean; /** What parts it from the item above: the band, or (gv1, gv3, gv4) a hairline. */ edge?: Edge;
+  /** Between friends' posts on another page (the map-then-activity picture): your small face and "You ·", so the row reads as yours. */ face?: User }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session!;
   const title = titleOf(post, s);
-  const line = inlineWords(s);
+  const line = face ? `You · ${inlineWords(s)}` : inlineWords(s);
   return (
     <View testID="mixed-mini" style={[styles.oRow, joined || edge === 'hair' ? styles.oJoined : styles.oBand]}>
       <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}. ${line}${note ? `. ${note}` : ''}`} accessibilityHint="Opens the post" style={[styles.flex, styles.oPress]}>
+        {face ? <Avatar name={face.name} seed={face.avatarSeed} uri={face.avatarUrl} size={36} /> : null}
         <View style={styles.flex}>
           {/* The privacy words share the title's line (titles are short), so the numbers under it get the full width. */}
           <View style={styles.oTop}>
@@ -1533,15 +1535,17 @@ interface FeedRowsArgs {
   paused: boolean;
   /** The follow block itself, when not Activities' own start (ActivitiesStart): the map-then-activity picture's People you may know. */
   start?: React.ReactNode;
+  /** Your own photo-less rows carry your face and "You ·" (between friends' posts on another page). */
+  ownFace?: boolean;
 }
 
 /**
  * What an Activities look draws and how it behaves, whichever scroller holds it: its rows (the gallery's rule, the
  * "who played" rows opened in place, the follow block after the first items), each row drawn, a clip opening the reel
  * (once per tap), and older posts asked for as the end nears (the quiet-page guard). ActivitiesList puts the rows in a
- * list of its own; ActivitiesInline under something else on a page (the map-then-activity picture).
+ * list of its own; useInlineFeed hands them to a list on another page (the map-then-activity picture).
  */
-function useFeedRows({ look, posts, showStart, nearCount, near, paused, start }: FeedRowsArgs) {
+function useFeedRows({ look, posts, showStart, nearCount, near, paused, start, ownFace = false }: FeedRowsArgs) {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { users, currentUserId, blockedIds, followingIds, actions } = app;
@@ -1663,7 +1667,7 @@ function useFeedRows({ look, posts, showStart, nearCount, near, paused, start }:
   }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
   /** A refresh brought the newest again: the end may have more once more. */
   const reopen = useCallback(() => setEnded(false), []);
-  // The store has more again (a refresh from anywhere, such as the page holding ActivitiesInline): so may the end.
+  // The store has more again (a refresh from anywhere, such as the page holding useInlineFeed): so may the end.
   const storeMore = app.feed.more;
   useEffect(() => { if (storeMore) setEnded(false); }, [storeMore]);
 
@@ -1680,12 +1684,12 @@ function useFeedRows({ look, posts, showStart, nearCount, near, paused, start }:
     const author = usersById.get(item.authorId);
     if (!author || (!item.session && !classic)) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !followingIds.includes(author.id);
-    if (row.kind === 'mini') return <View style={[styles.column, { maxWidth: column }]}><OwnRow post={item} note={row.note} joined={row.joined} edge={edge} /></View>;
+    if (row.kind === 'mini') return <View style={[styles.column, { maxWidth: column }]}><OwnRow post={item} note={row.note} joined={row.joined} edge={edge} face={ownFace ? author : undefined} /></View>;
     return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- startBlock is rebuilt from the values listed after it
-  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay, showStart, nearCount, posts.length, paused, edge, start]);
+  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay, showStart, nearCount, posts.length, paused, edge, start, ownFace]);
 
-  return { rows, renderItem, loadMore, loading, ended, reopen, classic, gallery, column, startBlock, startInRows, openClip };
+  return { rows, renderItem, loadMore, loading, ended, reopen, classic, gallery, column, startBlock, startInRows, openClip, storeMore };
 }
 
 export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
@@ -1793,16 +1797,48 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
 }
 
 /** Something the page puts into the feed between its items (the map-then-activity picture: Open hits, courts, the city board…). */
-export interface FeedSlot { key: string; /** Goes after this many of the feed's items; past the end, at the end, in order. */ after: number; node: React.ReactNode }
+export interface FeedSlot { key: string; /** Goes after this many of the feed's items; past the end, at the end, in order, once no more pages are coming. */ after: number; node: React.ReactNode }
+
+/** One row of the feed in another page's list: a feed row, one of the page's own rows between them, the follow block at a short feed's end, or the empty line. */
+export type InlineRow =
+  | { key: string; kind: 'feed'; row: Row }
+  | { key: string; kind: 'slot'; node: React.ReactNode }
+  | { key: string; kind: 'start-end' }
+  | { key: string; kind: 'empty' };
+
+/** How much of a photo's top edge shows under the first item's words on the first screen: enough to pull a thumb down. */
+const PEEK_PHOTO = 56;
+/** Under a first item with no photo: its last line, and this much air. */
+const PEEK_AIR = 16;
 
 /**
- * An Activities look under something else on a page, in that page's own scroller (the map-then-activity picture,
- * homePreview: Community's Find Players, the map, then this): the same rows, cards and behaviour as ActivitiesList (a
- * clip opens the reel and back lands on the same spot, the page keeping its place; double tap likes; •••; Save; the
- * "who played" rows open in place), the follow block after the first two items, the page's own rows between the items
- * (`slots`), and older posts asked for as the end comes within two screens (read from the page's scroll, `scrollY`).
+ * How much of the feed's first item shows above the bar on the first screen (the map-then-activity picture's peek),
+ * read off the gallery's own measures (GALLERY): a photo card down through its numbers and the top of its photo, a card
+ * with no photo down to its last line and a little air, so the bar never cuts through words.
  */
-export function ActivitiesInline({ look, posts, nearCount, near, paused, start, slots, scrollY }: {
+function firstPeek(row: Row | undefined): number {
+  const head = GALLERY.band + GALLERY.padTop + GALLERY.head;
+  if (!row) return 64;
+  if (row.kind === 'mini') return GALLERY_ROW_H + PEEK_AIR;
+  if (row.kind === 'rollup') return GALLERY.band + GALLERY.who + PEEK_AIR;
+  if (row.kind !== 'post') return head + PEEK_AIR;
+  const p = row.post;
+  if (galleryMedia(p)) return head + (p.session ? GALLERY.gap + GALLERY.title + GALLERY.inlineGap + GALLERY.inline + GALLERY.photoGap : spacing.md) + PEEK_PHOTO;
+  if (p.session) return head + GALLERY.gap + GALLERY.title + GALLERY.statsGap + GALLERY.stats + PEEK_AIR;
+  // A text post: its words (three lines at most, about 38 letters to a line).
+  return head + GALLERY.gap + 23 * Math.min(3, Math.max(1, Math.ceil((p.body?.length ?? 0) / 38))) + PEEK_AIR;
+}
+
+/**
+ * An Activities look under something else on a page, as that page's own list rows (the map-then-activity picture,
+ * homePreview: Community's Find Players is one list, the search and the map its head, then these): the same rows, cards
+ * and behaviour as ActivitiesList (a clip opens the reel and back lands on the same spot, the page keeping its place;
+ * double tap likes; •••; Save; the "who played" rows open in place), the follow block after the first two items, the
+ * page's own rows between the items (`slots`), and older posts asked for as the list's end nears (`onEndReached`).
+ * Only the rows near the screen are drawn. Hand the result to PaneScroller's `list`; `peek` is how much of the first
+ * item should show above the bar on the first screen.
+ */
+export function useInlineFeed({ look, posts, nearCount, near, paused, start, slots, ownFace = false }: {
   look: Exclude<ActivitiesLook, 'now'>;
   /** Exactly the posts today's Activities shows, in its order. */
   posts: Post[];
@@ -1813,61 +1849,55 @@ export function ActivitiesInline({ look, posts, nearCount, near, paused, start, 
   /** The feed's follow block (null: none). */
   start: React.ReactNode;
   slots: FeedSlot[];
-  /** How far down the page is (its scroller's offset). */
-  scrollY: SharedValue<number>;
+  /** Your own photo-less rows carry your face and "You ·". */
+  ownFace?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows, renderItem, loadMore, loading, ended, classic, startBlock, startInRows, openClip } = useFeedRows({ look, posts, showStart: !!start, nearCount, near, paused, start });
+  const { rows, renderItem, loadMore, loading, ended, classic, startBlock, startInRows, openClip, storeMore } = useFeedRows({ look, posts, showStart: !!start, nearCount, near, paused, start, ownFace });
   // The simulator proof harness only (simDriver: demo builds bundled with EXPO_PUBLIC_SIM_DRIVER; nothing anywhere else):
   // "openclip" opens the feed's first clip as a tap on it would, for checking the reel and the way back.
   const firstClip = posts.find(isClip)?.id;
   useEffect(() => (paused || !firstClip ? undefined : simAction('openclip', () => openClip(firstClip))), [paused, firstClip, openClip]);
-  const { height: screenH } = useWindowDimensions();
-  // The end of the feed: once it is within two screens of the view, the next page.
-  const end = useRef<View>(null);
-  const check = useRef(() => {});
-  check.current = () => {
-    if (paused || ended) return;
-    end.current?.measureInWindow((_x, y) => { if (y > 0 && y < screenH * 2) loadMore(); });
-  };
-  const nearEnd = useCallback(() => check.current(), []);
-  useAnimatedReaction(() => Math.floor(scrollY.value / 200), (now, before) => { if (now !== before) runOnJS(nearEnd)(); });
-  // After a page lands (or the page comes on show), the feed may still end on screen: look again.
-  useEffect(() => {
-    const t = setTimeout(nearEnd, 400);
-    return () => clearTimeout(t);
-  }, [rows.length, paused, nearEnd]);
-
-  // The page's rows after so many feed items (the follow block is not counted).
-  const shownSlot = (slot: FeedSlot) => <View key={`slot:${slot.key}`} style={styles.slot}>{slot.node}</View>;
-  let items = 0;
-  const body: React.ReactNode[] = [];
-  for (const row of rows) {
-    body.push(<React.Fragment key={row.key}>{renderItem({ item: row })}</React.Fragment>);
-    if (row.kind === 'start') continue;
-    items += 1;
-    for (const slot of slots) if (slot.after === items) body.push(shownSlot(slot));
-  }
-  const tail = slots.filter((slot) => slot.after > items);
-  return (
-    <View style={styles.inline} accessibilityLabel="Activities">
-      {!posts.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.endText, styles.inlineEmpty]}>{classic ? 'No posts yet. Yours and the people you follow show up here.' : 'No sessions yet. Yours and the people you follow show up here.'}</Text> : null}
-      {body}
-      {/* A short feed: the follow block after it, rather than none. */}
-      {startBlock && !startInRows ? <View style={[styles.column, styles.startInList]}>{startBlock}</View> : null}
-      {tail.map(shownSlot)}
-      <View ref={end} collapsable={false} style={styles.inlineEnd}>
-        {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel={classic ? 'Loading older posts' : 'Loading older sessions'} />
-          : ended && posts.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
-      </View>
+  // The page's rows that go past the items loaded so far wait until no more pages are coming: shown at the end now, a
+  // page landing would push them up into the middle of the feed, under the reader's thumb.
+  const settled = ended || !storeMore;
+  const data = useMemo<InlineRow[]>(() => {
+    const out: InlineRow[] = [];
+    if (!posts.length) out.push({ key: 'inline:empty', kind: 'empty' });
+    // The page's rows after so many feed items (the follow block is not counted).
+    let items = 0;
+    for (const row of rows) {
+      out.push({ key: row.key, kind: 'feed', row });
+      if (row.kind === 'start') continue;
+      items += 1;
+      for (const slot of slots) if (slot.after === items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
+    }
+    // A short feed: the follow block after it, rather than none.
+    if (startBlock && !startInRows) out.push({ key: 'inline:start', kind: 'start-end' });
+    if (settled) for (const slot of slots) if (slot.after > items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
+    return out;
+  }, [rows, slots, posts.length, startBlock, startInRows, settled]);
+  const renderInline = useCallback(({ item }: { item: InlineRow }) => {
+    if (item.kind === 'feed') return renderItem({ item: item.row });
+    if (item.kind === 'slot') return <View style={styles.slot}>{item.node}</View>;
+    if (item.kind === 'start-end') return <View style={[styles.column, styles.startInList]}>{startBlock}</View>;
+    return <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.endText, styles.inlineEmpty]}>{classic ? 'No posts yet. Yours and the people you follow show up here.' : 'No sessions yet. Yours and the people you follow show up here.'}</Text>;
+  }, [renderItem, styles, startBlock, classic]);
+  const keyExtractor = useCallback((item: InlineRow) => item.key, []);
+  const onEndReached = useCallback(() => { if (!paused) loadMore(); }, [paused, loadMore]);
+  const footer = (
+    <View style={styles.inlineEnd}>
+      {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel={classic ? 'Loading older posts' : 'Loading older sessions'} />
+        : ended && posts.length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
     </View>
   );
+  const peek = firstPeek(rows[0]);
+  return { data, renderItem: renderInline, keyExtractor, onEndReached, footer, peek };
 }
 
 const styleDefinitions = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
-  // ActivitiesInline: the feed on another page, its rows edge to edge; the page's own rows on the band, in its margins.
-  inline: { backgroundColor: colors.bg },
+  // useInlineFeed: the feed on another page, its rows edge to edge; the page's own rows on the band, in its margins.
   inlineEmpty: { paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
   inlineEnd: { alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xl, minHeight: 60 },
   slot: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg, backgroundColor: colors.bg },
