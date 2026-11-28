@@ -36,6 +36,9 @@
       body { overflow: hidden; margin: 0; -webkit-tap-highlight-color: transparent; }
       #root { display: flex; height: 100%; flex: 1; }
     </style>
+    <!-- The app's data and pictures come from auth.courtsidebase.com: the connection is opened while the script downloads. -->
+    <link rel="preconnect" href="https://auth.courtsidebase.com" crossorigin />
+    <link rel="dns-prefetch" href="https://auth.courtsidebase.com" />
     <!-- The icon font, small and early. The ~300 icons the app uses are one 43 KB file (fonts/ionicons-used.woff2),
          fetched in parallel with the app's script instead of after it (the loader waits on it); any other icon falls
          back to the whole set (fonts/ionicons.woff2), fetched only if one is ever drawn. The id is expo-font's own:
