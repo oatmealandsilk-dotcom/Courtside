@@ -13,6 +13,10 @@ import { HOME_FEED } from './communityMapLook';
  *                 activity's header); dragged up it is the whole activity feed over the map, dragged down it rests again.
  *   'c'  Heading  the taller map, Open to hit under it, and just above the bar a plain "Friends' activity" heading.
  *
+ * Groups (owner: "maybe take out groups for now"): not in Discover's row. If they stay, the quiet place for them is a
+ * "Your groups" row at the top of Posts (one line of small group faces, Instagram's story row), or a Groups row under
+ * Profile; nothing built for it here.
+ *
  * Off (unset, the default) the app is exactly feat/home-map-feed's. The iPhone only (HOME_FEED), never the website.
  * In a simulator build (SIM_DRIVER) "homelook v=a|b|c" switches between the three without a new bundle.
  */
