@@ -124,13 +124,8 @@ const HOME_HITS_SHOWN = 2;
  * (useGalleryInPage).
  */
 const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 } as const;
-/**
- * The iPhone's first page (HOME_FEED): how much of the first activity the map leaves room for above the bar, a photo
- * card's band, header, title and numbers and the top of its photo (the gallery's own measures: 6 + 12 + 44, 30 + 36,
- * 56), as on the approved first screen. Fixed, never read off the posts, so the map never changes height after the
- * first draw whatever the newest item is; Open to hit under the map takes its room out of this (the map's size wins).
- */
-const HOME_PEEK = 184;
+/** The iPhone's first page (HOME_FEED): Open to hit's room under the map, above and below its rows (8 above, 2 below, as the approved big-map picture). */
+const HOME_STRIP_PAD = { top: spacing.sm, bottom: 2 } as const;
 /** Find Players' head column: the gap between its parts. */
 const HEAD_GAP = 12;
 const NO_SLOTS: FeedSlot[] = [];
@@ -735,15 +730,17 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The iPhone's first page (HOME_FEED): Open to hit is never over the map, but the page's first row right under it,
   // whatever the card shows (Apple 5.1.2(i): see communityMapLook).
   const stripOn = MAP_OVERLAY && showUpToday && (HOME_FEED || !mapCityless);
-  // The iPhone's first page (HOME_FEED): the map at least the card's own height (Nov 28, owner: "The map should still be
-  // large though"), taller where the phone leaves room for Open to hit under it and the top of the first activity
-  // above the bar (useHomeMap). Each part measured on its own: Open to hit's height, what else sits under it in the
-  // head ("You're early"…, with its gap), and the first activity's peek (HOME_PEEK). While "You're early"
-  // / "Bring your friends" is up, that card's button is what must show: the map and Open to hit then take the card's
-  // height together, as the map with Open to hit over its foot did, so the card sits where it did.
+  // The iPhone's first page (HOME_FEED): a tall map (Nov 28, owner: "that map should be larger, its more like a square"),
+  // from under the search box down to Open to hit, which sits just above the bar; the activity starts below the first
+  // screen (useHomeMap). Never under the card's own height ("The map should still be large though"). Each part
+  // measured on its own: Open to hit's rows (never "You're at <court>?" over them, which comes and goes: the map never
+  // changes height for it), the whole strip, and what else sits under it in the head ("You're early"…, with its gap).
+  // While "You're early" / "Bring your friends" is up, that card's button is what must show: the map and Open to hit
+  // then take the card's height together, as the map with Open to hit over its foot did, so the card sits where it did.
   const [homeStripH, setHomeStripH] = useState(0);
+  const [homeRowsH, setHomeRowsH] = useState(0);
   const [homeUnder, setHomeUnder] = useState(0);
-  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: HOME_PEEK, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
+  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { rows: stripOn ? homeRowsH + HOME_STRIP_PAD.top + HOME_STRIP_PAD.bottom : 0, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || (homeStripH > 0 && homeRowsH > 0), under: homeUnder, short: mapShort, still: !!search });
   // Under the map and Open to hit, in the head: "You're at <court>?" (when Open to hit is not there to carry it), "You're
   // early" or "Bring your friends". Gone (and not mid-search): nothing under.
   const homeUnderOn = HOME_FEED && !search && ((!!currentUser && !stripOn) || early || friendsEarly);
@@ -809,7 +806,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const homeStrip = HOME_FEED && stripOn && currentUser ? (
     <View collapsable={false} style={styles.homeStrip} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== homeStripH) setHomeStripH(h); }}>
       <AtCourtPrompt onMap active={!previewSection || section === 'players'} />
-      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
+      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== homeRowsH) setHomeRowsH(h); }}>
         <UpToday compact belowMap town={homeCityName ?? myCityName ?? undefined} me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
     </View>
@@ -1371,9 +1368,9 @@ function HomePane({ feedOn, paused, follow, slots, onRefresh, children, ...pane 
 
 const styleDefinitions = StyleSheet.create({
   // The iPhone's first page (HOME_FEED): Open to hit under the map, edge to edge on the page's own ground (the map's
-  // hairline above it), a little tighter above and below than over the map (the big map leaves the activity less
-  // room), as the approved big-map picture (design/home-map-feed '3': 8 above, 2 below); the activity's band follows it.
-  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 2, backgroundColor: colors.bg },
+  // hairline above it), a little tighter above and below than over the map, as the approved big-map picture
+  // (design/home-map-feed '3': HOME_STRIP_PAD); the activity's band follows it.
+  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: HOME_STRIP_PAD.top, paddingBottom: HOME_STRIP_PAD.bottom, backgroundColor: colors.bg },
   // What else sits under them in the head ("You're early"…), held together to be measured.
   homeUnder: { gap: HEAD_GAP },
   // People you may know as the activity's follow block: in the page's margins, its cards' row running to the edges.
