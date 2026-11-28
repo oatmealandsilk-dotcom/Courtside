@@ -9,7 +9,8 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDela
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { CardCredit, ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, ListCrown, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
+import { APP_C_PREVIEW } from '@/features/community/appCPreview';
+import { CardCredit, ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, NearMeRow, ListCrown, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
 import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus, type MapVeil } from '@/components/map/MapCanvas';
@@ -1098,7 +1099,9 @@ export function NearbyMap(props: NearbyMapProps) {
   }
   if (!expanded) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
-    return (
+    // The preview of the website's option C (appCPreview; demo builds with its switch only): the card edge to edge, and
+    // with Location off, an iPhone Settings-style row under it where the location ask is (NearMeRow).
+    const cardView = (
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
@@ -1106,7 +1109,7 @@ export function NearbyMap(props: NearbyMapProps) {
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
-        style={[styles.card, cardHeight ? { height: cardHeight } : null]}
+        style={[styles.card, cardHeight ? { height: cardHeight } : null, APP_C_PREVIEW && styles.cardEdge]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
@@ -1150,6 +1153,13 @@ export function NearbyMap(props: NearbyMapProps) {
           {failed || failShown ? <View style={[StyleSheet.absoluteFill, styles.cover]}><MapCardFailed /></View> : null}
         </Reanimated.View>
       </Pressable>
+    );
+    if (!APP_C_PREVIEW) return cardView;
+    return (
+      <View>
+        {cardView}
+        {!locationOn && onToggleLocation ? <NearMeRow locating={locating} onLocation={onToggleLocation} /> : null}
+      </View>
     );
   }
 
@@ -1380,6 +1390,8 @@ function tempPicture(dataUrl: string): string | null {
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
+  // The app preview of option C (appCPreview): out to the screen's edges (the page's side padding), a hairline above and below.
+  cardEdge: { marginHorizontal: -spacing.lg, borderRadius: 0, borderLeftWidth: 0, borderRightWidth: 0, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
   // The card's own colour, solid, over the map while it loads.
   cover: { backgroundColor: colors.bgElevated },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },

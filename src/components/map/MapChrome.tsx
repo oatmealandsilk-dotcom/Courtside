@@ -76,6 +76,7 @@ import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { isOfficial } from '@/features/players/official';
 import { appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
+import { APP_C_PREVIEW } from '@/features/community/appCPreview';
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1177,6 +1178,37 @@ function activeLabel(iso: string): string {
  * The map on a first visit, when it does not know where you are: rather
  * than guess a city and fill it with people who are not there, it asks.
  */
+/**
+ * The preview of the website's option C in the app (appCPreview; demo builds with its switch only): under the Community
+ * card, where the location ask is, one grouped row in the iPhone Settings style. While iOS would still ask for location it
+ * says "Continue" (Apple 5.1.1(iv): the button right before Apple's prompt), and "Show courts near me" once that is decided.
+ */
+export function NearMeRow({ locating, onLocation }: { locating?: boolean; onLocation?: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [appleNext, setAppleNext] = useState(appleWouldAskLast);
+  useEffect(() => {
+    if (Platform.OS !== 'ios' || locating) return undefined;
+    let on = true;
+    const look = () => { void appleWouldAsk().then((would) => { if (on) setAppleNext(would); }); };
+    look();
+    const sub = AppState.addEventListener('change', (st) => { if (st === 'active') look(); });
+    return () => { on = false; sub.remove(); };
+  }, [locating]);
+  const title = locating ? 'Finding you…' : appleNext ? 'Continue' : 'Show courts near me';
+  return (
+    <View style={styles.nearGroup}>
+      <Pressable accessibilityRole="button" accessibilityLabel={appleNext && !locating ? 'Continue' : undefined} accessibilityHint="Shows the courts near you. Nobody sees where you are" onPress={onLocation} disabled={locating} style={({ pressed }) => [styles.nearRow, pressed && styles.nearPressed]}>
+        <View style={styles.nearTile}><Ionicons name="navigate" size={16} color={colors.brand} /></View>
+        <View style={styles.nearWords}>
+          <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.nearTitle}>{title}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nearSub}>{appleNext ? 'Show courts near me · nobody sees where you are' : 'Nobody sees where you are'}</Text>
+        </View>
+        {locating ? <ActivityIndicator size="small" color={colors.textFaint} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
+      </Pressable>
+    </View>
+  );
+}
+
 export function WhereCard({ locating, onLocation }: { locating?: boolean; onLocation?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   // An iPhone or iPad that would bring Apple's location question on "Use my location" (Apple 5.1.1(iv), Nov 12): this
@@ -1815,8 +1847,19 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.weatherText} accessibilityLabel={`${weather.tempF} degrees, ${weather.label}`}>{weather.tempF}°</Text>
     </View>
   ) : null;
+  // The preview of the website's option C in the app (appCPreview; demo builds with its switch only): one small label
+  // in the top corner instead of the big city name, and no weather pill.
+  const cLook = APP_C_PREVIEW && !chip && !copy;
+  const cWords = hitCount ? `${hitCount} open ${hitCount === 1 ? 'hit' : 'hits'}`
+    : count ? `${count} ${count === 1 ? 'friend' : 'friends'} around`
+      : placeCount ? `${placeCount}${placeCount >= 30 ? '+' : ''} ${placeCount === 1 ? 'place' : 'places'} to play` : '';
   return (
     <>
+      {cLook ? (
+        <Animated.View pointerEvents="none" style={[styles.cLabel, { backgroundColor: withAlpha(themes[theme].surface, 0.9) }, labelsOut]}>
+          <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.cLabelText}>{cWords ? `${cityName} · ${cWords}` : cityName}</Text>
+        </Animated.View>
+      ) : null}
       {chip ? (
         <Animated.View pointerEvents="none" style={[styles.previewChips, weatherAway]}>
           {weatherChip}
@@ -1828,7 +1871,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           </View>
         </Animated.View>
       ) : null}
-      {chip ? null : <>
+      {chip || cLook ? null : <>
       {/* The city's name is the top layer, so a player's ring or a court never
           sits over the words however busy the middle of town gets. Each word
           wears a thin edge of the map's ground colour, the way a map's own
@@ -1860,7 +1903,7 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
           </>}
         </>
       ) : null}
-      {weatherChip && !chip ? (
+      {weatherChip && !chip && !cLook ? (
         <Animated.View pointerEvents="none" style={[styles.previewWeather, weatherAway]}>{weatherChip}</Animated.View>
       ) : null}
       {/* The one-tap Check in bar over the map is gone (Oct 27, owner: "I don't like how there's two check in things take out the one on bottom of map"): the Check in button is the one way in. */}
@@ -2299,6 +2342,17 @@ const styleDefinitions = StyleSheet.create({
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12 },
+  // The app preview of option C's row under the card (NearMeRow).
+  nearGroup: { marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  nearRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  nearPressed: { backgroundColor: colors.surfaceAlt },
+  nearTile: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
+  nearWords: { flex: 1, minWidth: 0, gap: 1 },
+  nearTitle: { ...typography.bodyStrong, color: colors.text },
+  nearSub: { ...typography.small, color: colors.textMuted },
+  // The app preview of option C (appCPreview): its one small label on the map, top left (Up to hit is top right).
+  cLabel: { position: 'absolute', left: 12, top: 12, maxWidth: '62%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, zIndex: 10 },
+  cLabelText: { ...typography.smallStrong, color: colors.text },
   previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   // The full-pins card: weather and the city chip side by side along the foot (the credit keeps the corner on the right).
   previewChips: { position: 'absolute', left: 12, right: 36, bottom: 12, flexDirection: 'row', alignItems: 'center', gap: 6 },
