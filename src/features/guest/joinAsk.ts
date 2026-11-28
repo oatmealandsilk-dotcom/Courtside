@@ -1,5 +1,7 @@
 import { useSyncExternalStore } from 'react';
 
+import type { Post } from '@/data/types';
+
 /**
  * The one "Join CourtSide to …" sheet a guest sees (Oct 17, owner: "it's
  * just when you want to actually do something that requires profile it will
@@ -17,6 +19,11 @@ export interface JoinAsk {
   who?: string;
   /** Where to land once they are in, when not the page they are on: an open hit's page, joined for them (as the peek does). */
   target?: { href: string; joinHit?: string; host?: string };
+  /**
+   * The post it was about (a like, a comment, a save): the plain look says "this clip" or "this photo"
+   * when it has no name, and its "we'll bring you straight back here" brings them back to this post.
+   */
+  post?: AskedPost;
   /** Counts up on every ask, so the same ask twice still opens the sheet again. */
   at: number;
 }
@@ -26,8 +33,21 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
-export function openJoinSheet(what: string, options?: { report?: string; who?: string; target?: JoinAsk['target'] }) {
-  current = { what, report: options?.report, who: options?.who || undefined, target: options?.target, at: Date.now() };
+/** A post an ask was about: its id, and whether it is a clip, a photo or a written post. */
+export interface AskedPost {
+  id: string;
+  kind: 'clip' | 'photo' | 'post';
+}
+
+/** The post behind an ask, from the post itself. */
+export function askedPost(post?: Pick<Post, 'id' | 'kind' | 'videoUrl' | 'imageUrl' | 'thumbnailUrl' | 'mediaLabel'>): AskedPost | undefined {
+  if (!post) return undefined;
+  const clip = post.kind === 'clip' || !!post.videoUrl || /·\s*\d+:\d+/.test(post.mediaLabel ?? '');
+  return { id: post.id, kind: clip ? 'clip' : post.imageUrl || post.thumbnailUrl ? 'photo' : 'post' };
+}
+
+export function openJoinSheet(what: string, options?: { report?: string; who?: string; target?: JoinAsk['target']; post?: AskedPost }) {
+  current = { what, report: options?.report, who: options?.who || undefined, target: options?.target, post: options?.post, at: Date.now() };
   emit();
 }
 

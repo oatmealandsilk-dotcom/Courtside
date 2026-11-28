@@ -22,7 +22,7 @@ import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, fetchGuestThreads, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
-import { openJoinSheet } from '@/features/guest/joinAsk';
+import { askedPost, openJoinSheet, type AskedPost } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
@@ -10683,20 +10683,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * come from guest mode's own data. Everything else is the app's own action.
    */
   const guestActions = useMemo<AppActions>(() => {
-    const ask = (what: string, report?: string, who?: string) => openJoinSheet(what, report || who ? { report, who } : undefined);
+    const ask = (what: string, report?: string, who?: string, post?: AskedPost) => openJoinSheet(what, report || who || post ? { report, who, post } : undefined);
     const gate = <A extends unknown[], R>(what: string, answer: R) => (..._args: A) => { ask(what); return answer; };
     // The prompt names the person it was about (Nov 28: "Join CourtSide to let Sam know you liked it"), from guest mode's own lists.
     const nameOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId)?.name : undefined);
     const postBy = (postId: ID) => nameOf(guestRef.current?.posts.find((p) => p.id === postId)?.authorId);
-    const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined) => (...args: A) => { ask(what, undefined, who(...args)); return answer; };
+    // And the post itself, so the plain prompt brings them back to it once they are in (joinLook: plain).
+    const postOf = (postId: ID) => askedPost(guestRef.current?.posts.find((p) => p.id === postId));
+    const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined, post?: (...args: A) => AskedPost | undefined) => (...args: A) => { ask(what, undefined, who(...args), post?.(...args)); return answer; };
     const later = <T,>(v: T) => Promise.resolve(v);
     const gated: Partial<AppActions> = {
-      toggleLike: named('like posts', undefined, (postId: ID) => postBy(postId)),
+      toggleLike: named('like posts', undefined, (postId: ID) => postBy(postId), (postId: ID) => postOf(postId)),
       toggleLikeComment: named('like comments', undefined, (commentId: ID) => nameOf(guestRef.current?.comments.find((c) => c.id === commentId)?.authorId)), toggleLikeStory: gate('like posts', undefined),
-      addComment: ((postId: ID) => { ask('comment', undefined, postBy(postId)); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
+      addComment: ((postId: ID) => { ask('comment', undefined, postBy(postId), postOf(postId)); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
       addAnswer: ((questionId: ID) => { ask('reply', undefined, nameOf(guestRef.current?.questions.find((q) => q.id === questionId)?.authorId)); return later(undefined); }),
       voteQuestion: gate('vote', undefined), voteAnswer: gate('vote', undefined), votePoll: gate('vote', undefined), voteTip: gate('vote', undefined),
-      toggleFollow: named('follow players', undefined, (userId: ID) => nameOf(userId)), toggleSavePost: named('save posts', undefined, (postId: ID) => postBy(postId)), toggleSaveQuestion: gate('save threads', undefined),
+      toggleFollow: named('follow players', undefined, (userId: ID) => nameOf(userId)), toggleSavePost: named('save posts', undefined, (postId: ID) => postBy(postId), (postId: ID) => postOf(postId)), toggleSaveQuestion: gate('save threads', undefined),
       shareToChats: gate('send this to friends', undefined), openConversationWith: named('message players', '', (userId: ID) => nameOf(userId)),
       sendMessage: (() => { ask('message players'); return later(undefined); }),
       joinHit: (() => { ask('join this hit'); return later({ error: 'Make a free account to join.' }); }),

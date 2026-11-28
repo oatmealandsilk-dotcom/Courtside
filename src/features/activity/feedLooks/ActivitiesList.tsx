@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken } from 'react-native';
+import { ActivityIndicator, Animated, AppState, FlatList, Platform, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken } from 'react-native';
 import Reanimated, { Easing as REasing, runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
@@ -595,6 +595,14 @@ function TurningChevron({ open }: { open: boolean }) {
 }
 
 /**
+ * The row's folds. On an iPhone, Fold's opening first waits for its contents to be measured and then lands them in
+ * one frame (the chevron turns for a quarter second while nothing moves, then the sessions and everything below jump);
+ * until Fold's own opening is mended there, the sessions show at once on a phone, as they did before Nov 28, and only
+ * the website folds them open.
+ */
+const RowFold = (Platform.OS === 'web' ? Fold : ({ open, children }: { open: boolean; children: React.ReactNode }) => (open ? <>{children}</> : null)) as typeof Fold;
+
+/**
  * 'gallery-rollup': the sessions without a photo by people you follow on one day, as ONE quiet row in the feed's
  * time order (their faces, then "Tomás and Nadia played today"). A tap opens their sessions in place, as small rows
  * inside the same surface on hairlines (a face, "Tomás · Evening practice", "48 min on court · 126 bpm"; never a
@@ -656,20 +664,20 @@ const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onTog
         </Text>
         <TurningChevron open={open} />
       </Pressable>
-      <Fold open={open} duration={WHO_OPEN_MS}>
+      <RowFold open={open} duration={WHO_OPEN_MS}>
         {first.map(item)}
         {rest.length ? (
           <>
             {/* "Show all N": the rest fold open under the first five as the button folds away. */}
-            <Fold open={all} duration={WHO_OPEN_MS}>{rest.map(item)}</Fold>
-            <Fold open={!all} duration={WHO_OPEN_MS}>
+            <RowFold open={all} duration={WHO_OPEN_MS}>{rest.map(item)}</RowFold>
+            <RowFold open={!all} duration={WHO_OPEN_MS}>
               <Pressable onPress={() => setAll(true)} accessibilityRole="button" accessibilityLabel={`Show all ${posts.length} sessions`} style={styles.wAll}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.wAllText}>Show all {posts.length}</Text>
               </Pressable>
-            </Fold>
+            </RowFold>
           </>
         ) : null}
-      </Fold>
+      </RowFold>
     </View>
   );
 });
