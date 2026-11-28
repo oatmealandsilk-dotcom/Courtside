@@ -27,15 +27,18 @@ import { plainCopy } from './joinPlainCopy';
  *
  * A sheet from the foot on a phone; on a computer it rises from the foot of the
  * clip's own column, not a box in the middle of the window. The page dims behind
- * it, except over the comments (a sheet already up, which keeps its own look).
- * Escape, a tap outside or the × close it; the focus goes in as it opens and
- * back to what was tapped as it closes. It slides on its own layer, never fading
- * anything the tab bar's glass sits in.
+ * it, except over comments that already dim it (a phone's sheet, a computer's
+ * centred box); beside a computer's docked comments, which dim nothing, it dims
+ * as it does everywhere else. Escape (heard before the comments underneath, so
+ * it closes only this), a tap outside or the × close it; the focus goes in as
+ * it opens and back to what was tapped as it closes. It slides on its own
+ * layer, never fading anything the tab bar's glass sits in.
  *
  * Either button remembers where to bring them back to and the app opens there
  * once they are in (useShareLanding): the hit they said I'm in to, the post it
- * was about (its own page, when the page they are on does not name it: the Feed
- * keeps no clip in its address), or else the page they are on.
+ * was about (always its own page: the Feed keeps no clip in its address, and
+ * the comments' address would open over whichever clip the app starts on), or
+ * else the page they are on.
  */
 const RISE = Easing.bezier(0.32, 0.72, 0, 1);
 const FALL = Easing.bezier(0.4, 0, 1, 1);
@@ -56,7 +59,9 @@ function focusables(root: HTMLElement): HTMLElement[] {
 
 /**
  * Escape closes; Tab stays inside; the focus goes into the letter as it opens (retrying each frame while
- * its entering animation hides it) and back to what was tapped (the heart) as it closes.
+ * its entering animation hides it) and back to what was tapped (the heart) as it closes. Keys are heard on
+ * the window on the way in, before the comments sheet underneath (which listens on the document on the way
+ * in, DragSheet.web's useEscape), and Escape goes no further: it closes the letter, never the comments.
  */
 function useLetterFocus(ask: JoinAsk, box: React.RefObject<View | null>) {
   useEffect(() => {
@@ -74,7 +79,7 @@ function useLetterFocus(ask: JoinAsk, box: React.RefObject<View | null>) {
     };
     frame = requestAnimationFrame(focusIn);
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.preventDefault(); closeJoinSheet(); return; }
+      if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); closeJoinSheet(); return; }
       if (e.key !== 'Tab') return;
       const el = root(); if (!el) return;
       const list = focusables(el); if (!list.length) return;
@@ -84,10 +89,10 @@ function useLetterFocus(ask: JoinAsk, box: React.RefObject<View | null>) {
       if (e.shiftKey && (!inside || now === first || now === el)) { e.preventDefault(); last.focus(); }
       else if (!e.shiftKey && (!inside || now === last)) { e.preventDefault(); first.focus(); }
     };
-    window.addEventListener('keydown', onKey);
+    window.addEventListener('keydown', onKey, true);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
       // Back to the heart, unless they have already moved on to something else on the page.
       const now = document.activeElement;
       const el = root();
@@ -97,23 +102,18 @@ function useLetterFocus(ask: JoinAsk, box: React.RefObject<View | null>) {
   }, [ask.at, box]);
 }
 
-const decode = (part: string) => { try { return decodeURIComponent(part); } catch { return part; } };
-
 /**
  * Where they come back to once they are in, and whether that is really "here": the hit they said I'm in
- * to; the post it was about (the page they are on when its address names that post, as the comments'
- * does, or else the post's own page); or the page they are on, which is "here" only when it has its own
- * address. A tab's own page is not: the Feed's clip is not in its address, so it would open at the top.
+ * to; the post it was about, always its own page (opened over the app's start, the comments' address
+ * would put them beside whichever clip the Feed starts on, not this one; from its page the comments are
+ * one tap); or the page they are on, which is "here" only when it has its own address. A tab's own page
+ * is not: the Feed's clip is not in its address, so it would open at the top.
  */
 function comeBack(ask: JoinAsk, pathname: string): { href: string; back: boolean } {
   const search = Platform.OS === 'web' && typeof window !== 'undefined' ? window.location.search.replace(/([?&])(ref|r)=[^&]*/g, '$1').replace(/[?&]+$/, '') : '';
   const here = `${pathname}${search}`;
   if (ask.target) return { href: ask.target.href, back: true };
-  if (ask.post) {
-    const id = ask.post.id;
-    const named = here.split(/[/?&=#]/).some((part) => decode(part) === id);
-    return { href: named ? here : `/post/${encodeURIComponent(id)}`, back: true };
-  }
+  if (ask.post) return { href: `/post/${encodeURIComponent(ask.post.id)}`, back: true };
   return { href: here, back: !isTabPage(pathname) && /^\/[a-z]/.test(pathname) };
 }
 
@@ -133,19 +133,24 @@ function useColumn(): { left: number; width: number } | null {
   return { left: side + (room - w) / 2, width: w };
 }
 
-/** A sheet already up (the comments over a clip): the letter over it does not dim the page twice. */
-const overSheet = (pathname: string) => pathname.startsWith('/comments');
+/**
+ * The comments are up and already dim the page (a phone's sheet, a computer's centred box): the letter over
+ * them does not dim it twice. A computer's docked comments (the side panel, `panel` > 0) dim nothing, so
+ * there it dims as it does everywhere else.
+ */
+const overDimmingSheet = (pathname: string, panel: number) => pathname.startsWith('/comments') && panel === 0;
 
 export function JoinPlain({ ask }: { ask: JoinAsk }) {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const column = useColumn();
+  const panel = useSidePanel();
   const pathname = usePathname();
   const box = useRef<View>(null);
   useLetterFocus(ask, box);
   const { href, back } = comeBack(ask, pathname);
   const copy = plainCopy(ask, back);
-  const dimmed = !overSheet(pathname);
+  const dimmed = !overDimmingSheet(pathname, panel);
 
   const go = async (create: boolean) => {
     const label = `Make a free account to ${ask.what}`;
@@ -177,12 +182,12 @@ export function JoinPlain({ ask }: { ask: JoinAsk }) {
             </Pressable>
           </View>
           {report ? (
-            <Pressable accessibilityRole="link" hitSlop={6} onPress={() => { void Linking.openURL(`mailto:support@courtsidebase.com?subject=${encodeURIComponent(`Report ${report}`)}`); closeJoinSheet(); }} style={styles.quiet}>
+            <Pressable accessibilityRole="link" hitSlop={6} onPress={() => { void Linking.openURL(`mailto:support@courtsidebase.com?subject=${encodeURIComponent(`Report ${report}`)}`); closeJoinSheet(); }} style={[styles.quiet, styles.near]}>
               <Text style={styles.quietText}>No account? <Text style={styles.quietLink}>Email us about it</Text></Text>
             </Pressable>
           ) : null}
           {/* Today's prompt had it, so it stays: a quiet line of words, no icon. */}
-          <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.quiet, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" hitSlop={8} onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.quiet, !!report && styles.near, pressed && styles.pressed]}>
             <Text style={styles.quietText}>Get the iPhone app</Text>
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={closeJoinSheet} style={({ pressed }) => [styles.close, pressed && styles.pressed]}>
@@ -214,6 +219,8 @@ const styleDefinitions = StyleSheet.create({
   inkText: { ...font('600'), fontSize: buttonShape.label, color: colors.bg },
   // The quiet ways out, under the buttons with a little air: no account to report, the iPhone app.
   quiet: { alignSelf: 'flex-start', paddingTop: spacing.lg },
+  // The report line sits as close under the buttons as in the D he was shown (its ReportLine); the app's line keeps that step under it.
+  near: { paddingTop: spacing.md },
   quietText: { ...typography.small, color: colors.textMuted },
   quietLink: { ...typography.smallStrong, color: colors.text, textDecorationLine: 'underline' },
   close: { position: 'absolute', top: -spacing.sm, right: -spacing.md, width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },

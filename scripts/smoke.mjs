@@ -680,6 +680,14 @@ class Page {
   }
   /** Types into whatever has the keyboard, as a phone's keyboard would. */
   async type(text) { await this.send('Input.insertText', { text }); }
+  /** A key on a computer's keyboard (Escape), pressed and let go. */
+  async key(key) {
+    const code = { Escape: 27, Tab: 9, Enter: 13 }[key];
+    const k = { key, code: key, windowsVirtualKeyCode: code, nativeVirtualKeyCode: code };
+    log('key', key);
+    await this.send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...k });
+    await this.send('Input.dispatchKeyEvent', { type: 'keyUp', ...k });
+  }
 
   async health() { return this.call(() => window.__smoke.health()); }
 
@@ -1053,6 +1061,35 @@ const STEPS = [
       await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
     },
   },
+  // The plain letter over a clip's comments (review, Nov 28). Only while it is the look: X's prompt, rolled back, is as it was.
+  ...(JOIN_LOOK === 'plain' ? [{
+    name: 'guest-comments-ask',
+    title: 'Guest mode: a comment asks to join over the comments, and Esc closes only the ask',
+    async run(page) {
+      await page.tap({ label: 'Clip comments' });
+      await page.waitFor({ text: /^Comments( · \d+)?$/ });
+      await page.tap({ label: /^Add a comment/ });
+      await page.waitFor({ text: /^\S+ posted this\. Join to comment\.$/ });
+      await page.waitUntil(() => page.call(() => !!document.activeElement?.closest('[role=dialog]')), 3000, 'the focus to go into the join prompt');
+      // Esc is heard by the ask before the comments underneath: it closes the ask and leaves the comments up.
+      await page.key('Escape');
+      await page.gone({ text: /Join to comment\.$/ });
+    },
+    expect: [{ text: /^Comments( · \d+)?$/ }, { label: /^Add a comment/ }],
+    after: async (page) => {
+      // From the comments, either button remembers the clip's own page: the comments' own address, opened
+      // once they are in, would sit beside whichever clip the Feed starts on, not this one.
+      await page.tap({ label: /^Add a comment/ });
+      await page.waitFor({ text: /Join to comment\.$/ });
+      await page.tap({ label: 'Log in' });
+      await page.waitUntil(() => page.call(() => location.pathname === '/sign-in'), 15000, 'Log in to open the sign-in page');
+      const back = await page.call(() => { try { return JSON.parse(localStorage.getItem('courtside-share-target') || 'null')?.href ?? null; } catch { return null; } });
+      if (!/^\/post\/[^/?#]+$/.test(back ?? '')) throw new Error(`Log in from the comments did not remember the clip's own page (remembered ${back ?? 'nothing'})`);
+      await page.call(() => { localStorage.removeItem('courtside-share-target'); });
+      await page.goto('/');
+      await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
+    },
+  }] : []),
   {
     name: 'guest-thread',
     title: 'Guest mode: Discussions and a thread',
