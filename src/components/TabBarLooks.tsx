@@ -23,7 +23,7 @@ import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { APP_C_PREVIEW } from '@/features/community/appCPreview';
+import { APP_C_BAR } from '@/features/community/appCPreview';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -1025,7 +1025,7 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // brand's colour, icon and word; a faint edge that keeps it apart from a white page (its glass has its own light).
   // The preview of the website's option C in the app (appCPreview; demo builds with its switch only): one ink for the lit
   // tab, a plain hairline, a soft highlight under the lit tab; the glass itself stays the app's own (real Apple glass).
-  const cBar = APP_C_PREVIEW;
+  const cBar = APP_C_BAR;
   const line = cBar && !media ? c.border : fresh
     ? (media || darkPage ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, 0.07))
     : media ? withAlpha(c.onMedia, 0.14) : c.border;

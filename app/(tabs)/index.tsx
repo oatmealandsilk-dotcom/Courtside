@@ -98,8 +98,9 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
-import { activitiesLook, isGalleryLook, type ActivitiesLook } from '@/features/activity/feedLooks/activitiesLook';
+import { activitiesLook, type ActivitiesLook } from '@/features/activity/feedLooks/activitiesLook';
 import { ActivitiesList } from '@/features/activity/feedLooks/ActivitiesList';
+import { isActivity, reachable, unfinishedClip, useActivitiesFeed } from '@/features/activity/feedLooks/useActivitiesFeed';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -111,23 +112,8 @@ import { ActivitiesList } from '@/features/activity/feedLooks/ActivitiesList';
  * Something that can be tapped away: it shrinks and fades in one short move,
  * then tells its page it is gone. The page decides how long to remember that.
  */
-/** Media the internet can reach: a file:// link only ever worked on the phone that made it. Every photo of a carousel too. */
-const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[] }) => [p.imageUrl, p.videoUrl, ...(p.imageUrls ?? [])].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
-/**
- * One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only).
- * For a new player (following fewer than five), also one by a player near them (`near`, features/activity/nearYou), marked "Near you".
- */
-const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
-
-/**
- * One for Activities in the classic look (owner, Nov 27: "the instagram feed which has activities, pictures. regular
- * posts. and videos"): every kind of post from the same people isActivity draws from (you, who you follow, and for a
- * new player the players near them), with the same rules (not archived, taken down or group-only, media the internet
- * can reach). Sessions, pictures, text posts and clips alike.
- */
-const inClassicActivities = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
+// reachable (media the internet can reach) and isActivity (one for Activities) live in feedLooks/useActivitiesFeed,
+// shared with the map-then-activity picture (homePreview).
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /**
@@ -285,13 +271,7 @@ export interface FeedChrome { picture: boolean; hidden: boolean; /** Pinched in:
  * 108) is in no feed: its author and admins see it only on its author's
  * own pages, marked.
  */
-/**
- * A clip whose video never finished uploading (no video, no picture): to
- * anyone but its author it would only be a grey box, so only its author sees
- * it. The demo's stand-in clips are drawn as court cards on purpose and stay.
- */
-const unfinishedClip = (p: Post, me: string | null | undefined) =>
-  isSupabaseConfigured && p.kind === 'clip' && !p.videoUrl && !p.imageUrl && !p.imageUrls?.length && p.authorId !== me;
+// unfinishedClip (a clip that never finished uploading: its author's only) lives in feedLooks/useActivitiesFeed.
 /**
  * A page that fills the top of the screen with a real picture (a clip or an Instant with its media):
  * the Feed's top row reads white over it, and the bar turns dark. The demo's court cards are the
@@ -2913,35 +2893,8 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
  * ones last, blocked, muted, unfollowed private and unfinished ones left out), and the same start for a new player.
  */
 function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: Exclude<ActivitiesLook, 'now'>; paused: boolean; onChrome?: (c: FeedChrome) => void; row?: SharedValue<number> }) {
-  const app = useApp();
-  const { ready, posts, users, followingIds, blockedIds, mutedIds, currentUserId, actions } = app;
-  const nearAuthors = useNearYouAuthors(true);
-  const connectRow = useConnectRow();
-  // Decided once, as Home's Activities decides its start page: a new player, or a watch still to connect.
-  const startKept = useRef(false);
-  if (!startKept.current && ready && (followingIds.length < START_UNDER || (connectRow.known && connectRow.offer))) startKept.current = true;
-  const showStart = startKept.current;
-  const askedNear = useRef(false);
-  useEffect(() => {
-    if (!showStart || askedNear.current) return;
-    askedNear.current = true;
-    void actions.loadRecentSessionPosts();
-  }, [showStart, actions]);
+  const { list, showStart, nearCount, nearAuthors } = useActivitiesFeed(look);
   useEffect(() => { if (!paused) onChrome?.({ picture: false, hidden: false, pinched: false }); }, [paused, onChrome]);
-  const [demotedTick, setDemotedTick] = useState(0);
-  useEffect(() => onDemotedChange(() => setDemotedTick((n) => n + 1)), []);
-  const list = useMemo(() => {
-    const follows = new Set(followingIds);
-    const hidden = new Set([...blockedIds, ...mutedIds]);
-    const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
-    const acts = posts
-      // The mixed looks hold every kind of post, as the classic one.
-      .filter((p) => (look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' || isGalleryLook(look) ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
-    return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);
-  }, [look, posts, users, followingIds, blockedIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
-  const nearCount = list.filter((p) => nearAuthors.has(p.authorId)).length;
   return <ActivitiesList look={look} posts={list} showStart={showStart} nearCount={nearCount} near={nearAuthors} paused={paused} row={row} />;
 }
 

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { HOME_MAP_FEED } from './homePreview';
 
 /**
  * A look at the website's Community option C inside the iPhone app (Nov 27, owner, after picking C for the website:
@@ -22,10 +23,17 @@ import { isSupabaseConfigured } from '@/lib/supabase';
  * store build, an over-the-air update or the website never shows it, even if this branch were merged by mistake.
  */
 const ROUND = Platform.OS !== 'web' && !isSupabaseConfigured ? process.env.EXPO_PUBLIC_APP_C_PREVIEW : undefined;
-export const APP_C_PREVIEW = ROUND === '1' || ROUND === '2' || ROUND === '3';
+const C_ROUND = ROUND === '1' || ROUND === '2' || ROUND === '3';
+/**
+ * The map card's look: edge to edge, one small label. Also the map-then-activity picture's (homePreview), which takes
+ * round 2's map, shorter.
+ */
+export const APP_C_PREVIEW = C_ROUND || HOME_MAP_FEED;
+/** C's bar (the rounded capsule): rounds 1 to 3 only. The map-then-activity picture keeps today's bar (Bar A). */
+export const APP_C_BAR = C_ROUND;
 /** Round 1 only: the near-me row under the card. */
 export const APP_C_NEAR_ROW = ROUND === '1';
 /** Rounds 2 and 3: the map as tall as the screen allows, down to the bar. */
 export const APP_C_BIG_MAP = ROUND === '2' || ROUND === '3';
-/** Round 2: Open to hit on the map. */
-export const APP_C_OVERLAY = ROUND === '2';
+/** Round 2 (and the map-then-activity picture): Open to hit on the map. */
+export const APP_C_OVERLAY = ROUND === '2' || HOME_MAP_FEED;

@@ -3,7 +3,7 @@ import { PRESS_DIM } from '@/theme/press';
 import { asTabRoute, useOnShowNow } from '@/features/navigation/tabFocus';
 import { SectionPager } from '@/components/SectionPager';
 import { PULL_GAP } from '@/lib/pullRefresh';
-import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Reanimated, { Easing, FadeIn, FadeOut, interpolateColor, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { Fold, FoldList, Pop } from '@/components/ui/Fold';
 import { useRestKey } from '@/components/ui/restMotion';
 import * as haptics from '@/lib/haptics';
@@ -46,6 +46,10 @@ import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barIn
 import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
+import { HOME_FEED_LOOK, HOME_MAP_FEED } from '@/features/community/homePreview';
+import { ActivitiesInline, type FeedSlot } from '@/features/activity/feedLooks/ActivitiesList';
+import { useActivitiesFeed } from '@/features/activity/feedLooks/useActivitiesFeed';
+import { ActivitiesStart } from '@/components/ActivitiesStart';
 import { simAction } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
@@ -688,7 +692,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // Near the end of the list (within a screen of it), the next page comes on its own.
   const { height: screenHeight } = useWindowDimensions();
   // The simulator proof harness only (simDriver: demo builds with the app preview of option C, rounds 2 and 3): "scroll y=400" scrolls Find Players, for the pictures.
-  useEffect(() => (APP_C_BIG_MAP ? simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: false }); }) : undefined), [pageTop]);
+  // ("scroll y=400&animated=1" glides there, for the map-then-activity picture's video.)
+  useEffect(() => (APP_C_BIG_MAP || HOME_MAP_FEED ? simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); }) : undefined), [pageTop]);
   // Round 2: how tall Open to hit is over the map's foot (the bar's room under it included), so the city sits above it.
   const [cStripH, setCStripH] = useState(0);
   const listEnd = useRef<View>(null);
@@ -733,6 +738,128 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </View>
     </MapGlass>
   ) : null);
+  // Hits: someone wants a game, yours first, then near you. Posting one is right here.
+  const hitsSection = () => (
+    <View style={styles.hits}>
+      <View style={styles.hitsHead}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
+        {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
+        {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None at courts near you yet.'}</Text>}
+      </View>
+      {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
+          the title. With nothing open and a public court close by, it starts the hit at that
+          court; then the note under it says what happens next ("Pick a time" when the court
+          is already picked). "Post a hit", not just "Post", for a screen reader: a post
+          elsewhere is a photo or clip. */}
+      {(() => {
+        const court = !listedHits.length ? promptCourt : null;
+        const who = hitsForFriends ? 'Friends who follow you' : 'Players';
+        return (
+          <PostHitField
+            label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
+            accessibilityLabel={court ? `Post a hit at ${labelOf(court)}` : 'Post a hit'}
+            onPress={() => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'))}
+            note={listedHits.length || LESS_AI ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
+          />
+        );
+      })()}
+      {/* Cards fold in and out (a hit posted or called off, More open hits) and the rest glide (Oct 22 sweep, item 7). */}
+      <FoldList items={shownHits} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />} />
+      {moreHits ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
+          <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+      {listedFurther.length ? (
+        <>
+          <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>Further away ({listedFurther.length})</Text>
+            <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+          </Pressable>
+          <FoldList items={furtherOpen ? listedFurther : NO_HITS} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} />} />
+        </>
+      ) : null}
+    </View>
+  );
+  // Near you: friends checked in within 30 miles, then the players whose profile town is yours.
+  const nearSection = () => (
+    <View>
+      <View style={styles.playersHead}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
+        {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends up to hit, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends up to hit within 30 miles'}</Text>}
+      </View>
+      {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
+        <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+          <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            </View>
+            <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+          </View>
+        </Pressable>
+      ))}
+      {/* In your town by their profile: the town where a friend's row says how far; Show all unfolds the rest. */}
+      <FoldList items={nearOpen ? townNear : townNear.slice(0, NEW_SHOWN)} keyOf={townRowKey} render={({ user, town }, index) => (
+        <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${town}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+          <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+          <View style={[styles.playerBody, styles.playerFollowBody, (index > 0 || nearPlayers.length > 0) && styles.playerLine]}>
+            <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+              <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[town, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
+            </View>
+            <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+          </View>
+        </Pressable>
+      )} />
+      {townNear.length > NEW_SHOWN ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: nearOpen }} onPress={() => setNearOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{nearOpen ? 'Fewer' : `Show all (${townNear.length})`}</Text>
+          <Ionicons name={nearOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+  // New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap.
+  const newSection = () => (
+    <>
+      <Fold open={newPlayers.length > 0 && newTucked} gap={16}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>New players in other cities</Text>
+          <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
+        </Pressable>
+      </Fold>
+      <Fold open={newPlayers.length > 0 && !newTucked} gap={16}>
+        <View>
+          <View style={styles.playersHead}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>New on CourtSide</Text>
+            {LESS_AI && !newElsewhere ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? (LESS_AI ? 'In other cities' : 'Joined in the last two weeks, in other cities') : 'Joined in the last two weeks'}</Text>}
+          </View>
+          {/* Show all unfolds the rest, Fewer folds them away (Oct 22 sweep, item 7). */}
+          <FoldList items={newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)} keyOf={userKey} render={(user, index) => (
+            <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
+              <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
+              <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
+                <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                  <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
+                </View>
+                <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
+              </View>
+            </Pressable>
+          )} />
+          {newPlayers.length > NEW_SHOWN ? (
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
+              <Ionicons name={newOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+            </Pressable>
+          ) : null}
+        </View>
+      </Fold>
+    </>
+  );
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 12 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
@@ -759,6 +886,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}>{(() => {
             const map = (cardHeight?: number, cover?: number) => <NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} cardHeight={cardHeight} cardCover={cover} />;
             // The app preview of option C, rounds 2 and 3 only (demo builds with its switch): the tall map, measured in its own slot.
+            // The map-then-activity picture (homePreview): round 2's map, as tall as leaves the first activity's top in sight above the bar.
+            if (HOME_MAP_FEED) return <HomeMap render={(h) => <>{map(h, cStripH)}{cOverlay(0)}</>} />;
             return APP_C_BIG_MAP ? <CBigMap render={(h, bar) => <>{map(h, APP_C_OVERLAY ? cStripH : bar)}{cOverlay(bar)}</>} /> : map();
           })()}</View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
@@ -784,59 +913,31 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         ) : null}
         {/* People you may know (admins first, Oct 28): people who follow you to follow back, then people you may know.
             People first: under Up to hit / "Most active in <city>", above the city board. */}
-        {!search && pymk ? <FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal> : null}
+        {!search && pymk && !HOME_MAP_FEED ? <FirstReveal order={0}><PeopleYouMayKnow model={pymk} /></FirstReveal> : null}
         {/* City boards (admins first): the month's board, in the invite card's place for a quiet area.
             People first (Oct 28, owner): it sits under Up to hit / "Most active in <city>", not above it. */}
-        {!search && boardShown ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
+        {!search && boardShown && !HOME_MAP_FEED ? <FirstReveal order={0}><CityBoardPreview /></FirstReveal> : null}
         {/* A quiet area leads with where to play (your courts, then the others
             near you); once it has open hits, they come first, and Your courts
             follows them, since its "Hit today" badges repeat those cards. */}
-        {courtsAt(true)}
-        {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
-        {!search ? (
-          <FirstReveal order={openHits.length ? 1 : 3}><View style={styles.hits}>
-            <View style={styles.hitsHead}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.playersTitle}>Open hits</Text>
-              {/* Nothing open: the section says so in one muted line under its title, the way a section opens. */}
-              {listedHits.length ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{hitsForFriends ? 'None from your friends yet.' : 'None at courts near you yet.'}</Text>}
-            </View>
-            {/* The way to post one (Oct 7): a field at the top of the list, not a small link beside
-                the title. With nothing open and a public court close by, it starts the hit at that
-                court; then the note under it says what happens next ("Pick a time" when the court
-                is already picked). "Post a hit", not just "Post", for a screen reader: a post
-                elsewhere is a photo or clip. */}
-            {(() => {
-              const court = !listedHits.length ? promptCourt : null;
-              const who = hitsForFriends ? 'Friends who follow you' : 'Players';
-              return (
-                <PostHitField
-                  label={court ? `Play at ${labelOf(court)}?` : 'Looking for a hit?'}
-                  accessibilityLabel={court ? `Post a hit at ${labelOf(court)}` : 'Post a hit'}
-                  onPress={() => (court ? playHere({ id: court.id, name: labelOf(court), lat: court.lat, lng: court.lng }) : router.push('/hit-request/new'))}
-                  note={listedHits.length || LESS_AI ? null : `${court ? 'Pick a time' : 'Post a time and place'}. ${who} can tap I’m in, and a chat opens to sort out the rest.`}
-                />
-              );
-            })()}
-            {/* Cards fold in and out (a hit posted or called off, More open hits) and the rest glide (Oct 22 sweep, item 7). */}
-            <FoldList items={shownHits} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} {...(hitTip?.hitId === hit.id ? { tip: hitTip.tip, tipReady: hitTipReady, tipAt: '/discuss', restKey: section } : {})} />} />
-            {moreHits ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: moreHitsOpen }} onPress={() => setMoreHitsOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{moreHitsOpen ? 'Fewer open hits' : `More open hits (${moreHits})`}</Text>
-                <Ionicons name={moreHitsOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-              </Pressable>
-            ) : null}
-            {listedFurther.length ? (
-              <>
-                <Pressable accessibilityRole="button" accessibilityState={{ expanded: furtherOpen }} onPress={() => setFurtherOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>Further away ({listedFurther.length})</Text>
-                  <Ionicons name={furtherOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-                </Pressable>
-                <FoldList items={furtherOpen ? listedFurther : NO_HITS} keyOf={hitKey} gap={spacing.md} render={({ hit, miles }) => <HitCard hit={hit} miles={miles} />} />
-              </>
-            ) : null}
-          </View></FirstReveal>
+        {HOME_MAP_FEED ? null : courtsAt(true)}
+        {/* The map-then-activity picture (homePreview): the friends' activity right under the map, one continuous
+            scroll; what sat under the map goes into it as rows of their own between the activities. */}
+        {HOME_MAP_FEED && currentUser && !search ? (
+          <HomeFeed active={!previewSection && section === 'players'} scrollY={playersY}
+            follow={pymk ? <View style={styles.homeFollow}><PeopleYouMayKnow model={pymk} /></View> : null}
+            slots={[
+              { key: 'hits', after: HOME_SLOT_AFTER.hits, node: hitsSection() },
+              { key: 'courts', after: HOME_SLOT_AFTER.courts, node: <View style={styles.courtsPair}>{yourCourts(0)}{courtsBlock(0)}</View> },
+              ...(boardShown ? [{ key: 'board', after: HOME_SLOT_AFTER.board, node: <CityBoardPreview /> }] : []),
+              ...(nearPlayers.length || townNear.length ? [{ key: 'near', after: HOME_SLOT_AFTER.near, node: nearSection() }] : []),
+              ...(newPlayers.length ? [{ key: 'new', after: HOME_SLOT_AFTER.new, node: <View>{newSection()}</View> }] : []),
+            ]}
+          />
         ) : null}
-        {courtsAt(false)}
+        {/* Hits: someone wants a game, yours first, then near you. Posting one is right here. */}
+        {!search && !HOME_MAP_FEED ? <FirstReveal order={openHits.length ? 1 : 3}>{hitsSection()}</FirstReveal> : null}
+        {HOME_MAP_FEED ? null : courtsAt(false)}
         {search && (foundPlayers.length || courtMatches.length || placeMatches.length) ? <View style={styles.playersHead}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Players</Text>
           {/* Players first (Oct 22 sweep, item 6): they are known the moment you type, so nothing that arrives later lands above them. A court matched but no one did: one quiet line, not a big empty state under the court that was found. */}
@@ -896,80 +997,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {search && !foundPlayers.length && !courtMatches.length && !placeMatches.length && !placeSearch.searching ? <EmptyState title={`Nothing matches “${search.trim()}”`} body={placeSearch.failed ? 'Places can’t be searched right now. Try a player’s or a court’s name.' : 'No players, courts or places found. Try a name, a city or a park.'} /> : null}
         {/* Near you: friends checked in within 30 miles (only friends since migration 189), with how far, then the players
             whose profile town is yours (migration 190), by their town only: the same "near" as the map's Near me. */}
-        {!search && (nearPlayers.length || townNear.length) ? (
-          <View>
-            <View style={styles.playersHead}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>Near you</Text>
-              {LESS_AI ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{townNear.length && myCityName ? (nearPlayers.length ? `Friends up to hit, and players in ${myCityName}` : `Players in ${myCityName}`) : 'Friends up to hit within 30 miles'}</Text>}
-            </View>
-            {nearPlayers.map(({ user, miles, seenAt, rough }, index) => (
-              <Pressable key={user.id} accessibilityRole="link" accessibilityLabel={`${user.name}, ${formatSpotMiles(miles, rough)}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
-                <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
-                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[formatSpotMiles(miles, rough), seenAt ? agoLabel(seenAt) : null, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
-                  </View>
-                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
-                </View>
-              </Pressable>
-            ))}
-            {/* In your town by their profile: the town where a friend's row says how far; Show all unfolds the rest. */}
-            <FoldList items={nearOpen ? townNear : townNear.slice(0, NEW_SHOWN)} keyOf={townRowKey} render={({ user, town }, index) => (
-              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${town}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
-                <View style={[styles.playerBody, styles.playerFollowBody, (index > 0 || nearPlayers.length > 0) && styles.playerLine]}>
-                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[town, isOpenToHitNow(user) ? 'open to hit' : null].filter(Boolean).join(' · ')}</Text>
-                  </View>
-                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
-                </View>
-              </Pressable>
-            )} />
-            {townNear.length > NEW_SHOWN ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: nearOpen }} onPress={() => setNearOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{nearOpen ? 'Fewer' : `Show all (${townNear.length})`}</Text>
-                <Ionicons name={nearOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-        ) : null}
+        {!search && !HOME_MAP_FEED && (nearPlayers.length || townNear.length) ? nearSection() : null}
         {/* New on CourtSide: who joined in the last two weeks (adults, and people you already follow), with Follow in one tap. */}
         {/* New players in other cities: the link folds away as the list unfolds in its place (Oct 22 sweep, item 7). */}
-        {search ? null : <Fold open={newPlayers.length > 0 && newTucked} gap={16}>
-          <Pressable accessibilityRole="button" accessibilityState={{ expanded: false }} onPress={() => setElsewhereOpen(true)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>New players in other cities</Text>
-            <Ionicons name="chevron-down" size={14} color={colors.textMuted} />
-          </Pressable>
-        </Fold>}
-        {search ? null : <Fold open={newPlayers.length > 0 && !newTucked} gap={16}>
-          <View>
-            <View style={styles.playersHead}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersTitle}>New on CourtSide</Text>
-              {LESS_AI && !newElsewhere ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playersBody}>{newElsewhere ? (LESS_AI ? 'In other cities' : 'Joined in the last two weeks, in other cities') : 'Joined in the last two weeks'}</Text>}
-            </View>
-            {/* Show all unfolds the rest, Fewer folds them away (Oct 22 sweep, item 7). */}
-            <FoldList items={newOpen ? newPlayers : newPlayers.slice(0, NEW_SHOWN)} keyOf={userKey} render={(user, index) => (
-              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${joinedLabel(user.joinedAt).toLowerCase()}, open profile`} onPress={() => router.push(`/user/${user.id}`)} style={({ pressed }) => [styles.player, pressed && styles.playerPressed]}>
-                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={52} ring={user.isCoach} />
-                <View style={[styles.playerBody, styles.playerFollowBody, index > 0 && styles.playerLine]}>
-                  <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                    <View style={styles.playerTop}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerName} numberOfLines={1}>{user.name}</Text><OfficialCheck userId={user.id} size={14} style={{ marginLeft: -4 }} /><LevelPill profile={user.profile} userId={user.id} small /></View>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.playerMeta} numberOfLines={1}>{[joinedLabel(user.joinedAt), user.location.split(',')[0] || null].filter(Boolean).join(' · ')}</Text>
-                  </View>
-                  <FollowPill small soft={LESS_AI_ROUND2} following={followingIds.includes(user.id)} userId={user.id} onPress={() => followRow(user.id)} name={user.name.split(' ')[0]} />
-                </View>
-              </Pressable>
-            )} />
-            {newPlayers.length > NEW_SHOWN ? (
-              <Pressable accessibilityRole="button" accessibilityState={{ expanded: newOpen }} onPress={() => setNewOpen((o) => !o)} hitSlop={6} style={({ pressed }) => [styles.further, pressed && { opacity: PRESS_DIM }]}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.furtherText}>{newOpen ? 'Fewer' : `Show all (${newPlayers.length})`}</Text>
-                <Ionicons name={newOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-        </Fold>}
+        {search || HOME_MAP_FEED ? null : newSection()}
       </View> : <>
       {/* A tap anywhere outside the open sort menu closes it (under the controls, over the threads). */}
       {sortOpen ? <Pressable accessibilityLabel="Close sort menu" onPress={() => setSortOpen(false)} style={[StyleSheet.absoluteFill, { zIndex: 4, elevation: 4 }]} /> : null}
@@ -1220,7 +1251,51 @@ function CBigMap({ render }: { render: (height: number | undefined, bar: number)
   return <View ref={box} collapsable={false} onLayout={top ? undefined : read}>{render(height, bar)}</View>;
 }
 
+/**
+ * The map-then-activity picture (homePreview): how much of the first activity shows above the bar on the first screen
+ * (its header and title: the peek that says the page goes on).
+ */
+const HOME_PEEK = 96;
+/** Where the rows that sat under the map go in the feed: after this many activities (past its end: at its end, in order). People you may know is the feed's follow block, after the second. */
+const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 };
+
+/**
+ * The map-then-activity picture (homePreview; demo builds with its switch only): the Community map from where it starts on
+ * the page down to just above the bar, less the first activity's peek. Read from where the slot is drawn, and once more
+ * after the tab's arrival has settled; `render` gets the map's height. Bar A's own room (useBarInset).
+ */
+function HomeMap({ render }: { render: (height: number | undefined) => React.ReactNode }) {
+  const { height: screenHeight } = useWindowDimensions();
+  const barInset = useBarInset();
+  const box = useRef<View>(null);
+  const [top, setTop] = useState(0);
+  const read = useCallback(() => box.current?.measureInWindow((_x, y) => { if (y > 0) setTop(Math.round(y)); }), []);
+  useEffect(() => { const t = setTimeout(read, 900); return () => clearTimeout(t); }, [read]);
+  const height = top > 0 ? Math.max(CARD_HEIGHT, screenHeight - top - barInset - HOME_PEEK) : undefined;
+  return <View ref={box} collapsable={false} onLayout={top ? undefined : read}>{render(height)}</View>;
+}
+
+/**
+ * The map-then-activity picture (homePreview): the friends' activity under the map, in the look he picked for Activities
+ * ('gallery-rollup'), exactly the posts Activities shows. `follow`: People you may know, as the feed's follow block; with
+ * nobody to suggest, a new player's own Activities start (ActivitiesStart) instead.
+ */
+function HomeFeed({ active, scrollY, follow, slots }: { active: boolean; scrollY: SharedValue<number>; follow: React.ReactNode; slots: FeedSlot[] }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { list, showStart, nearCount, nearAuthors } = useActivitiesFeed(HOME_FEED_LOOK);
+  const start = follow ?? (showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={list.length} shown={active} onTop /> : null);
+  return (
+    <View style={styles.homeFeed}>
+      <ActivitiesInline look={HOME_FEED_LOOK} posts={list} nearCount={nearCount} near={nearAuthors} paused={!active} start={start} slots={slots} scrollY={scrollY} />
+    </View>
+  );
+}
+
 const styleDefinitions = StyleSheet.create({
+  // The map-then-activity picture (homePreview): the feed edge to edge, right under the map (the page's gap taken back).
+  homeFeed: { marginHorizontal: -spacing.lg, marginTop: -12 },
+  // People you may know as the feed's follow block: in the page's margins, its cards' row running to the edges.
+  homeFollow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   // The page, as one view the check-in zoom can photograph (phone) or push in (browser).
   growHost: { flex: 1 },
   hits: { gap: spacing.md },
