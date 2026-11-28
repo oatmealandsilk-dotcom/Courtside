@@ -15,6 +15,10 @@ import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import type { QuestionTopic } from '@/data/types';
 import { colors, spacing, typography } from '@/theme';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): Add a poll beside the button, one line. */
+const PLAIN = noBoxes();
 
 const TOPICS = Object.keys(TOPIC_META) as QuestionTopic[];
 
@@ -100,13 +104,24 @@ export default function Ask() {
                 </Pressable>
               ) : null}
             </Section>
-          ) : (
+          ) : PLAIN ? null : (
             <Pressable accessibilityRole="button" onPress={() => setPoll(['', ''])} style={styles.link}>
               <Ionicons name="stats-chart-outline" size={17} color={colors.brand} />
               <Text style={styles.linkText}>Add a poll</Text>
             </Pressable>
           )}
-          <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} busy={checking} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />
+          {PLAIN ? (
+            // No boxes (demo only): Add a poll and the button on one line, the words at the left, the button at the right.
+            <View style={styles.plainFoot}>
+              {poll ? <View /> : (
+                <Pressable accessibilityRole="button" onPress={() => setPoll(['', ''])} hitSlop={8} style={styles.plainLink}>
+                  <Ionicons name="stats-chart-outline" size={17} color={colors.brand} />
+                  <Text style={styles.linkText}>Add a poll</Text>
+                </Pressable>
+              )}
+              <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} busy={checking} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />
+            </View>
+          ) : <Submit label="Post to the room" onPress={submit} disabled={!canSubmit} busy={checking} waiting={title.trim().length < 3 ? 'Write your question first' : 'Fill in two poll options'} />}
         </ScrollView>
       </KeyboardAvoidingView>
     </DragSheet>
@@ -117,4 +132,6 @@ const styleDefinitions = StyleSheet.create({
   remove: { ...typography.smallStrong, color: colors.textMuted },
   link: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', paddingVertical: 4, marginTop: -spacing.sm },
   linkText: { ...typography.smallStrong, color: colors.brand },
+  plainFoot: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  plainLink: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
 });

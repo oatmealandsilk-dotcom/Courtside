@@ -487,7 +487,7 @@ export default function GroupForm() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
           >
-            <Animated.View style={[styles.stepBody, (gate || step === 3) && styles.centred, stepStyle]} key={gate ?? `step-${step}`}>{body}</Animated.View>
+            <Animated.View style={[styles.stepBody, (gate || step === 3) && !PLAIN && styles.centred, stepStyle]} key={gate ?? `step-${step}`}>{body}</Animated.View>
           </ScrollView>
         </KeyboardScrollContext.Provider>
         {primary ? (
@@ -537,7 +537,7 @@ const styleDefinitions = StyleSheet.create({
   errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   error: { ...typography.small, color: colors.danger, flex: 1, lineHeight: 18 },
   center: { alignItems: 'center', gap: spacing.md, paddingVertical: 60 },
-  plainGate: { alignItems: 'flex-start', gap: 0, paddingHorizontal: spacing.xs },
+  plainGate: { alignItems: 'flex-start', gap: 0, paddingHorizontal: 0, paddingTop: spacing.sm },
   plainTitle: { ...plainText.titleLg, textAlign: 'left' },
   plainBody: { ...plainText.bodyLg, textAlign: 'left', maxWidth: 420 },
   gate: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.md },

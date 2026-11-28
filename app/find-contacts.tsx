@@ -212,7 +212,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text, textAlign: 'center' },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.sm },
   results: { gap: 4 },
-  plainIntro: { paddingTop: spacing.xl, paddingHorizontal: spacing.xs },
+  plainIntro: { paddingTop: spacing.xl },
   plainTitle: { ...plainText.titleLg },
   plainLead: { ...plainText.bodyLg },
   plainActions: { marginTop: spacing.lg },

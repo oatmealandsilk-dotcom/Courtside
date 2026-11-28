@@ -314,7 +314,7 @@ const styleDefinitions = StyleSheet.create({
   cardTitle: { ...typography.bodyStrong, color: colors.text },
   cardBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   failed: { padding: spacing.lg, gap: spacing.md, alignItems: 'flex-start' },
-  plainEmpty: { paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
+  plainEmpty: { paddingVertical: spacing.sm },
   emptyCard: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, alignItems: 'flex-start' },
   emptyTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyWords: { flex: 1, minWidth: 0, gap: 4 },

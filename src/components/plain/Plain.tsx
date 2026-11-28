@@ -17,6 +17,15 @@ import { TextScale } from '@/theme/textScale';
 
 /** A browser evens out a wrapped line, so a sentence never ends on one word alone. */
 const EVEN_WEB = Platform.OS === 'web' ? ({ textWrap: 'pretty' } as unknown as TextStyle) : null;
+/** A headline's lines evened out as a whole (a browser; an iPhone pushes a lone last word down by itself). */
+const BALANCE_WEB = Platform.OS === 'web' ? ({ textWrap: 'balance' } as unknown as TextStyle) : {};
+const PRETTY_WEB = Platform.OS === 'web' ? ({ textWrap: 'pretty' } as unknown as TextStyle) : {};
+
+/**
+ * Which side a row of answers sits on. In a note on a page (start) the words have no side padding of their own,
+ * so a choice that wraps under the button starts on the page's own left edge, as the words above it do.
+ */
+const ActionsSide = React.createContext<'end' | 'start' | null>(null);
 
 type Tone = 'ink' | 'danger';
 
@@ -50,7 +59,8 @@ export function InkButton({ label, onPress, onPressIn, tone = 'ink', small = fal
       style={({ pressed }) => [styles.ink, small ? styles.inkSmall : styles.inkFull, tone === 'danger' && styles.danger, off && styles.off, pressed && styles.pressed, style]}
     >
       {loading ? <ActivityIndicator size="small" color={tone === 'danger' ? colors.onDanger : colors.bg} /> : (
-        <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={[styles.inkText, small && styles.inkTextSmall, labelColor]}>{label}</Text>
+        // Two lines before it ever cuts a word off (a long label, a small phone, large text).
+        <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={2} style={[styles.inkText, small && styles.inkTextSmall, labelColor]}>{label}</Text>
       )}
     </Pressable>
   );
@@ -69,6 +79,7 @@ export function TextAction({ label, onPress, onPressIn, tone = 'ink', small = fa
   disabled?: boolean;
 }) {
   const styles = useThemedStyles(styleDefinitions);
+  const side = React.useContext(ActionsSide);
   return (
     <Pressable
       ref={nativeRef}
@@ -79,17 +90,26 @@ export function TextAction({ label, onPress, onPressIn, tone = 'ink', small = fa
       onPress={onPress}
       onPressIn={onPressIn}
       hitSlop={8}
-      style={({ pressed }) => [styles.link, small ? styles.linkSmall : styles.linkFull, disabled && styles.off, pressed && styles.pressed, style]}
+      style={({ pressed }) => [styles.link, small ? styles.linkSmall : styles.linkFull, side === 'start' && styles.linkFlush, disabled && styles.off, pressed && styles.pressed, style]}
     >
-      <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={[styles.linkText, small && styles.linkTextSmall, tone === 'muted' && styles.muted, tone === 'brand' && styles.brand, tone === 'danger' && styles.dangerText]}>{label}</Text>
+      <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={2} style={[styles.linkText, small && styles.linkTextSmall, tone === 'muted' && styles.muted, tone === 'brand' && styles.brand, tone === 'danger' && styles.dangerText]}>{label}</Text>
     </Pressable>
   );
 }
 
-/** The answers, at the right: the words first, the one filled button last. Wraps under large text. */
+/**
+ * The answers. A sheet, a bar or a footer (end): at the right, the words first and the one filled button last;
+ * when they do not fit on one line (a small phone, large text) the button keeps the line at the right and the
+ * words go under it, never a lone word on a line of its own above the button. A note on a page (start): at the
+ * page's left edge, the filled button first and the words after it, or under it.
+ */
 export function PlainActions({ children, align = 'end', style }: { children: React.ReactNode; align?: 'end' | 'start'; style?: StyleProp<ViewStyle> }) {
   const styles = useThemedStyles(styleDefinitions);
-  return <View style={[styles.actions, align === 'start' && styles.actionsStart, style]}>{children}</View>;
+  return (
+    <ActionsSide.Provider value={align}>
+      <View style={[styles.actions, align === 'start' ? styles.actionsStart : styles.actionsEnd, style]}>{children}</View>
+    </ActionsSide.Provider>
+  );
 }
 
 /**
@@ -173,35 +193,43 @@ export const plainDialog = {
 
 /** Plain-look text styles for spots that keep their own layout. */
 export const plainText = {
-  titleLg: { ...font('400'), fontSize: 22, lineHeight: 29, letterSpacing: -0.3, color: colors.text },
-  titleMd: { ...font('500'), fontSize: 17, lineHeight: 23, letterSpacing: -0.2, color: colors.text },
-  bodyLg: { ...typography.body, lineHeight: 22, color: colors.textMuted, marginTop: spacing.sm },
-  bodyMd: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: spacing.xs },
+  titleLg: { ...font('400'), fontSize: 22, lineHeight: 29, letterSpacing: -0.3, color: colors.text, ...BALANCE_WEB },
+  titleMd: { ...font('500'), fontSize: 17, lineHeight: 23, letterSpacing: -0.2, color: colors.text, ...BALANCE_WEB },
+  bodyLg: { ...typography.body, lineHeight: 22, color: colors.textMuted, marginTop: spacing.sm, ...PRETTY_WEB },
+  bodyMd: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.textMuted, marginTop: spacing.xs, ...PRETTY_WEB },
+  /** Lines evened out (a browser): never one word alone on the last line. */
+  even: { ...PRETTY_WEB },
+  /** Small print under a note's words: the same width as them, regular, muted. */
+  fine: { ...typography.small, lineHeight: 18, color: colors.textMuted, marginTop: spacing.sm, ...PRETTY_WEB },
 } as const;
 
 const styleDefinitions = StyleSheet.create({
   pressed: { opacity: PRESS_DIM },
   off: { opacity: 0.45 },
-  ink: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.text, ...buttonShape.curve },
+  ink: { flexShrink: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.text, ...buttonShape.curve },
   inkFull: { minHeight: buttonShape.height, paddingHorizontal: spacing.xl, borderRadius: radius.md },
   inkSmall: { minHeight: buttonShape.smallHeight, paddingHorizontal: spacing.lg, borderRadius: radius.sm },
   danger: { backgroundColor: colors.danger },
-  inkText: { ...font('600'), fontSize: buttonShape.label, color: colors.bg },
+  inkText: { ...font('600'), fontSize: buttonShape.label, color: colors.bg, textAlign: 'center' },
   inkTextSmall: { fontSize: buttonShape.smallLabel },
-  link: { alignItems: 'center', justifyContent: 'center' },
+  link: { flexShrink: 1, alignItems: 'center', justifyContent: 'center' },
   linkFull: { minHeight: buttonShape.height, paddingHorizontal: spacing.md },
   linkSmall: { minHeight: buttonShape.smallHeight, paddingHorizontal: spacing.sm },
+  linkFlush: { paddingHorizontal: 0, alignItems: 'flex-start' },
   linkText: { ...font('600'), fontSize: buttonShape.label, color: colors.text },
   linkTextSmall: { fontSize: buttonShape.smallLabel },
   muted: { ...font('500'), color: colors.textMuted },
   brand: { color: colors.brand },
   dangerText: { color: colors.danger },
-  actions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm, marginTop: spacing.xl },
-  actionsStart: { justifyContent: 'flex-start' },
+  actions: { flexDirection: 'row', alignItems: 'center', marginTop: spacing.xl },
+  // When they wrap, the lines stack upward: the button (last) on the upper line, the words on the line under it.
+  actionsEnd: { flexWrap: 'wrap-reverse', justifyContent: 'flex-end', columnGap: spacing.sm, rowGap: spacing.xs },
+  actionsStart: { flexWrap: 'wrap', justifyContent: 'flex-start', columnGap: spacing.lg + spacing.xs, rowGap: spacing.sm },
   titleLg: plainText.titleLg,
   titleMd: plainText.titleMd,
   bodyLg: plainText.bodyLg,
   bodyMd: plainText.bodyMd,
-  note: { alignSelf: 'stretch', paddingVertical: spacing.xxl, paddingHorizontal: spacing.lg },
+  // No side padding of its own: the page it sits on owns the margin, so the note starts on the page's left edge.
+  note: { alignSelf: 'stretch', paddingVertical: spacing.xxl },
   noteActions: { marginTop: spacing.lg },
 });

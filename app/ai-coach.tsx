@@ -228,7 +228,7 @@ const introDefinitions = StyleSheet.create({
   go: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', minHeight: buttonShape.height, paddingVertical: 10, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, ...brandShadow, marginTop: spacing.sm },
   goText: { ...typography.bodyStrong, color: colors.brandInk },
   later: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.sm },
-  plainCard: { gap: spacing.md, paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
+  plainCard: { gap: spacing.md, paddingTop: spacing.lg },
   plainTitle: { ...plainText.titleLg, textAlign: 'left' },
   plainBody: { textAlign: 'left' },
   plainActions: { marginTop: spacing.sm },

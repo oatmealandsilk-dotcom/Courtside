@@ -339,7 +339,7 @@ export function CourtTimeHost() {
                 accessibilityState={{ disabled: atMin || !!lit }}
                 hitSlop={8}
                 onPress={() => step(-COURT_TIME_STEP)}
-                style={({ pressed }) => [styles.round, (atMin || !!lit) && styles.roundOff, pressed && !atMin && styles.roundPressed]}
+                style={({ pressed }) => [styles.round, PLAIN && styles.plainRound, (atMin || !!lit) && (PLAIN ? styles.plainRoundOff : styles.roundOff), pressed && !atMin && styles.roundPressed]}
               >
                 <Ionicons name="remove" size={24} color={atMin || lit ? colors.textFaint : colors.text} />
               </Pressable>
@@ -353,7 +353,7 @@ export function CourtTimeHost() {
                 accessibilityState={{ disabled: atMax || !!lit }}
                 hitSlop={8}
                 onPress={() => step(COURT_TIME_STEP)}
-                style={({ pressed }) => [styles.round, (atMax || !!lit) && styles.roundOff, pressed && !atMax && styles.roundPressed]}
+                style={({ pressed }) => [styles.round, PLAIN && styles.plainRound, (atMax || !!lit) && (PLAIN ? styles.plainRoundOff : styles.roundOff), pressed && !atMax && styles.roundPressed]}
               >
                 <Ionicons name="add" size={24} color={atMax || lit ? colors.textFaint : colors.text} />
               </Pressable>
@@ -362,11 +362,12 @@ export function CourtTimeHost() {
           </ScrollView>
           {PLAIN ? (
             <View>
-              <PlainActions>
+              {/* Who sees it, said before the answer, not after it. */}
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.fine, styles.plainFine]}>Friends who follow you back see you here.</Text>
+              <PlainActions style={styles.plainActions}>
                 <TextAction label="Not now" tone="muted" disabled={busy || !!lit} onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} />
                 <InkButton label={lit ? 'Lit up' : busy ? 'Lighting it up' : 'Light it up'} disabled={busy || !!lit} onPress={() => { void lightUp(); }} />
               </PlainActions>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.fine, styles.plainFine]}>Friends who follow you back see you here.</Text>
             </View>
           ) : (
           <View style={styles.actions}>
@@ -523,5 +524,9 @@ const styleDefinitions = StyleSheet.create({
   plainWords: { alignItems: 'stretch' },
   plainTitle: { ...plainText.titleLg, textAlign: 'left' },
   plainCourt: { ...plainText.bodyLg, marginTop: spacing.xs, textAlign: 'left' },
-  plainFine: { textAlign: 'left', marginTop: spacing.md },
+  plainFine: { ...plainText.fine, textAlign: 'left', marginTop: spacing.lg },
+  plainActions: { marginTop: spacing.lg },
+  // No boxes: − and + as a hairline ring, no grey disc.
+  plainRound: { backgroundColor: 'transparent', borderWidth: StyleSheet.hairlineWidth, borderColor: colors.borderStrong },
+  plainRoundOff: { opacity: 0.45 },
 });

@@ -135,8 +135,10 @@ interface Action { label: string; onPress: () => void; disabled?: boolean; loadi
  * The pinned bottom of a setup page: the main button full width, then a
  * quieter way on (Back, Not now, Sign out) as a word under it.
  */
-export function SetupFooter({ primary, secondary, link, children }: {
+export function SetupFooter({ primary, secondary, link, children, quietPrimary = false }: {
   primary: Action;
+  /** No boxes (demo only): the page's own main action sits above (an ink button), so the way on is words here. */
+  quietPrimary?: boolean;
   /** A second choice of equal standing (Connect WHOOP beside Connect Apple Health), full width under the main one. */
   secondary?: Action;
   link?: { label: string; onPress: () => void; disabled?: boolean; accessibilityLabel?: string };
@@ -151,18 +153,25 @@ export function SetupFooter({ primary, secondary, link, children }: {
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
         {children}
         {secondary ? (
-          // Two ways on of equal standing (Connect Apple Health, Connect WHOOP): the main one first, the other as words under it.
+          // Two ways on of equal standing (Connect Apple Health, Connect WHOOP): stacked at the left, the main one an ink
+          // button and the other as words right under it, on the same edge. The skip (Not now) quiet and apart, at the right.
           <View style={styles.plainStack}>
-            <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
-            <PlainActions style={styles.plainUnder}>
+            <View style={styles.plainStackLead}>
+              <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
+            </View>
+            <View style={styles.plainUnderRow}>
+              <PlainActions align="start" style={styles.plainUnder}>
+                <TextAction label={secondary.label} disabled={secondary.disabled || secondary.loading} onPress={secondary.onPress} />
+              </PlainActions>
               {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
-              <TextAction label={secondary.loading ? '…' : secondary.label} disabled={secondary.disabled || secondary.loading} onPress={secondary.onPress} />
-            </PlainActions>
+            </View>
           </View>
         ) : (
           <PlainActions style={styles.plainRow}>
             {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
-            <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
+            {quietPrimary
+              ? <TextAction label={primary.label} onPress={primary.onPress} disabled={primary.disabled || primary.loading} />
+              : <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />}
           </PlainActions>
         )}
       </View>
@@ -197,8 +206,10 @@ const styleDefinitions = StyleSheet.create({
   linkSpace: { height: 36 },
   plainRow: { marginTop: spacing.xs, minHeight: 80, alignItems: 'flex-start' },
   plainDim: { opacity: 0.45 },
-  plainStack: { alignItems: 'flex-end', marginTop: spacing.xs, minHeight: 80 },
-  plainUnder: { marginTop: spacing.xs },
+  plainStack: { marginTop: spacing.xs, minHeight: 80 },
+  plainStackLead: { alignItems: 'flex-start' },
+  plainUnderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginTop: spacing.xs },
+  plainUnder: { marginTop: 0, flexShrink: 1 },
   plainQuiet: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
   plainQuietText: { ...typography.bodyStrong, color: colors.text },
   // ONBOARDING_V2's pieces.

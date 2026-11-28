@@ -34,7 +34,7 @@ import { LaunchLookGate } from '@/theme/LaunchLookGate';
 import { whiteRootAfterLaunch } from '@/lib/launchLook';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
-import { buttonShape, colors, font, lightColors } from '@/theme';
+import { buttonShape, colors, font, lightColors, radius, spacing } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark';
 import { NEW_LAUNCH_LIGHT, NEW_SPLASH } from '@/lib/splashLook';
@@ -62,12 +62,13 @@ export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   // Drawn with plain styles: this page stands in for the whole app, outside the theme's provider.
   if (noBoxes()) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', padding: 32, backgroundColor: colors.bg }}>
+      // The same size, margin and button as "Could not load your account" (PlainNote, size lg): its sibling page.
+      <View style={{ flex: 1, justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.bg }}>
         <View style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }}>
-          <Text style={{ fontSize: 24, lineHeight: 31, letterSpacing: -0.3, ...font('400'), color: colors.text }}>Something went wrong</Text>
-          <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textMuted, marginTop: 8 }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
-          <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 24, alignSelf: 'flex-start', minHeight: buttonShape.height, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 12, ...buttonShape.curve, backgroundColor: colors.text }}>
-            <Text style={{ color: colors.bg, fontSize: 15, ...font('600') }}>Try again</Text>
+          <Text style={{ fontSize: 22, lineHeight: 29, letterSpacing: -0.3, ...font('400'), color: colors.text }}>Something went wrong</Text>
+          <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textMuted, marginTop: spacing.sm }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
+          <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: spacing.lg, alignSelf: 'flex-start', minHeight: buttonShape.smallHeight, justifyContent: 'center', paddingHorizontal: spacing.lg, borderRadius: radius.sm, ...buttonShape.curve, backgroundColor: colors.text }}>
+            <Text style={{ color: colors.bg, fontSize: buttonShape.smallLabel, ...font('600') }}>Try again</Text>
           </Pressable>
         </View>
       </View>

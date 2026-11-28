@@ -13,7 +13,7 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { REWARDS, dollars, nextReward, notCountedReason, stepFill, wontCount } from './affiliate';
 import { corner } from '@/theme/look';
-import { PlainWords } from '@/components/plain/Plain';
+import { InkButton, PlainActions, PlainWords, TextAction } from '@/components/plain/Plain';
 import { forced } from '@/features/noBoxes/demoForce';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
 
@@ -91,6 +91,13 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, code, l
           <Ionicons name="link-outline" size={16} color={colors.textMuted} />
           <Text style={styles.link} numberOfLines={1}>{link.replace('https://', '')}</Text>
         </View>
+        {noBoxes() ? (
+          // No boxes (demo only): Share link in ink sized to its words, Copy as words beside it.
+          <PlainActions align="start" style={styles.plainActions}>
+            <InkButton label="Share link" accessibilityLabel="Share your invite link" onPress={onShare} />
+            <TextAction label={copied ? 'Copied' : 'Copy'} accessibilityLabel="Copy your invite link" onPress={onCopy} />
+          </PlainActions>
+        ) : (
         <View style={styles.actions}>
           <Pressable accessibilityRole="button" accessibilityLabel="Share your invite link" onPress={onShare} style={({ pressed }) => [styles.primary, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="paper-plane-outline" size={16} color={colors.brandInk} />
@@ -100,6 +107,7 @@ export function AffiliateDashboard({ stats, people, peopleAsked, userId, code, l
             <Text style={styles.secondaryText}>{copied ? 'Copied' : 'Copy'}</Text>
           </Pressable>
         </View>
+        )}
         {tools ? <View style={styles.tools}>{tools}</View> : null}
       </View>
 
@@ -301,7 +309,7 @@ function People({ people, asked, invited, counted, onOpen }: { people: Invitee[]
       ) : (
         noBoxes() ? (
           // No boxes (demo only): plain words under the heading, no card or icon tile.
-          <PlainWords title="No one yet" body="When someone joins with your link or code, they show up here." style={{ paddingVertical: spacing.sm, paddingHorizontal: spacing.xs }} />
+          <PlainWords title="No one yet" body="When someone joins with your link or code, they show up here." style={{ paddingVertical: spacing.sm }} />
         ) : (
         <View style={[styles.card, styles.empty]}>
           <View style={styles.emptyIcon}><Ionicons name="people-outline" size={22} color={colors.brand} /></View>
@@ -368,6 +376,7 @@ const styleDefinitions = StyleSheet.create({
   code: { height: 30, paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center', maxWidth: '55%' },
   codeText: { ...typography.smallStrong, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  plainActions: { marginTop: spacing.md },
   primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: buttonShape.height, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
   secondary: { height: buttonShape.height, paddingHorizontal: 20, borderRadius: buttonShape.radius, ...buttonShape.curve, borderWidth: 1, borderColor: colors.borderStrong, alignItems: 'center', justifyContent: 'center' },

@@ -16,6 +16,8 @@ import type { User } from '@/data/types';
 import { initials } from '@/lib/format';
 import { themes, useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, surfaceColorFor, typography } from '@/theme';
+import { plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /**
  * Which loading look the Find Players map card shows while its map is on its way (Oct 24, owner:
@@ -228,6 +230,15 @@ function SweepBand({ width }: { width: number }) {
 /** The still card when its map did not come after every retry: one quiet message. The card itself takes the tap that tries again. */
 export function MapCardFailed() {
   const styles = useThemedStyles(styleDefinitions);
+  // No boxes (demo only): the words at the left, the full map's own wording, no disc on top.
+  if (noBoxes()) {
+    return (
+      <View style={[styles.fill, styles.plainFill, still.fill]}>
+        <Text style={styles.plainTitle}>The map didn’t load</Text>
+        <Text style={styles.plainBody}>Tap to try again.</Text>
+      </View>
+    );
+  }
   return (
     <View style={[styles.fill, still.fill]}>
       <View style={styles.disc}><Ionicons name="refresh" size={18} color={colors.brand} /></View>
@@ -286,6 +297,9 @@ const styleDefinitions = StyleSheet.create({
   youInitials: { fontSize: 11, ...font('600'), color: colors.onMedia },
   youTag: { marginTop: 2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.bg, boxShadow: '0px 1px 4px rgba(0, 0, 0, 0.16)' },
   youTagText: { fontSize: 11, lineHeight: 13, ...font('600'), color: colors.text },
+  plainFill: { alignItems: 'flex-start', justifyContent: 'center', gap: 0, paddingHorizontal: spacing.xl },
+  plainTitle: { ...plainText.titleMd },
+  plainBody: { ...plainText.bodyMd },
   disc: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center', marginBottom: 2 },
   title: { ...typography.bodyStrong, color: colors.text, textAlign: 'center', marginBottom: -4 },
   again: { ...typography.smallStrong, color: colors.brand, textAlign: 'center' },

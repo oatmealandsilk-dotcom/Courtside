@@ -2322,7 +2322,7 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
-  plainCityless: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xs },
+  plainCityless: { paddingVertical: spacing.lg },
   plainTitle: { ...plainText.titleMd },
   plainBody: { ...plainText.bodyMd },
   plainCitylessActions: { marginTop: spacing.md },

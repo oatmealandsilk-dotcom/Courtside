@@ -49,7 +49,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
-import { InkButton, plainText } from '@/components/plain/Plain';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
 import { forced } from '@/features/noBoxes/demoForce';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
 
@@ -321,7 +321,17 @@ export default function FirstMove() {
       </Pressable>
     );
     const sectionLabel = (section: Pick['section']) => (section === 'city' ? `Most active in ${homeCityName ?? cityName ?? 'your city'}` : section === 'coaches' ? 'Coaches' : null);
-    const ways = (
+    // No boxes (demo only): with nobody to suggest, inviting is the page's point: an ink button, Search by @handle as words beside it.
+    const plainInvite = PLAIN && empty;
+    const ways = plainInvite ? (
+      <>
+        <PlainActions align="start" style={styles.plainInvite}>
+          <InkButton label={inviteLabel} onPress={() => { void share(); }} />
+          <TextAction label="Search by @handle" onPress={() => done('find', () => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } }))} />
+        </PlainActions>
+        {contacts && adult ? contactsRow : null}
+      </>
+    ) : (
       <>
         <View style={empty ? null : styles.v2InviteGap}>
           <QuietButton label={inviteLabel} icon="paper-plane-outline" onPress={() => { void share(); }} />
@@ -383,7 +393,7 @@ export default function FirstMove() {
           </Animated.View>
         </ScrollView>
         <Animated.View entering={enter(2)}>
-          <SetupFooter primary={{ label: finishLabel, onPress: () => done(null) }} />
+          <SetupFooter quietPrimary={plainInvite} primary={{ label: finishLabel, onPress: () => done(null) }} />
         </Animated.View>
         <StatusShade wash={setupLook.wash} />
         {curtain}
@@ -520,8 +530,9 @@ const styleDefinitions = StyleSheet.create({
   // The prompt card, the same as "You're early" and "Looking for someone to play?" on Find Players.
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   main: { padding: spacing.lg },
-  plainMain: { backgroundColor: 'transparent', boxShadow: 'none', paddingHorizontal: spacing.xs },
+  plainMain: { backgroundColor: 'transparent', boxShadow: 'none', paddingHorizontal: 0 },
   plainTitle: { ...plainText.titleMd },
+  plainInvite: { marginTop: spacing.xs },
   plainBody: { ...plainText.bodyMd },
   waiting: { height: 120, alignItems: 'center', justifyContent: 'center' },
   mainHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

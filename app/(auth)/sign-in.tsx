@@ -460,24 +460,26 @@ export default function SignIn() {
             <Animated.View key="inbox" entering={BOXES_IN} exiting={BOXES_OUT} style={styles.inbox}>
               {PLAIN ? null : <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>}
               <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, PLAIN && styles.plainTitle]}>Check your inbox</Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxBody}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.inboxBody, PLAIN && plainText.even]}>
                 We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
                 {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.'
                   : canContinue ? 'Tap the link in it, then come back here and tap Continue.' : 'Follow the link to confirm your email, then sign in here.'}
               </Text>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxHint}>Didn’t get it? Check your spam folder, or resend the email.</Text>
+              {/* No boxes: "Resend email" sits right under it as its own answer, so the line does not say it twice. */}
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.inboxHint, PLAIN && styles.plainHint]}>{PLAIN ? 'Didn’t get it? Check your spam folder.' : 'Didn’t get it? Check your spam folder, or resend the email.'}</Text>
               {error ? <Text style={styles.error}>{error}</Text> : null}
               {notice ? <Text style={styles.notice}>{notice}</Text> : null}
               {PLAIN ? (
                 <View style={styles.inboxActions}>
-                  <PlainActions style={styles.plainActions}>
-                    <TextAction label={(sent.kind === 'reset' ? busy : resending) ? 'Sending…' : 'Resend email'} disabled={sent.kind === 'reset' ? busy : resending} onPress={() => { void (sent.kind === 'reset' ? forgot() : resendConfirm()); }} />
+                  {/* A page: the way on first at the left, under the words, then Resend as words. */}
+                  <PlainActions align="start" style={styles.plainActions}>
                     {canContinue
                       ? <InkButton label={busy ? 'Signing in…' : 'Continue'} disabled={busy} onPress={() => { void confirmed(); }} />
-                      : <InkButton label="Back to sign in" onPress={backToForm} />}
+                      : <InkButton label="Back to log in" onPress={backToForm} />}
+                    <TextAction label={(sent.kind === 'reset' ? busy : resending) ? 'Sending…' : 'Resend email'} disabled={sent.kind === 'reset' ? busy : resending} onPress={() => { void (sent.kind === 'reset' ? forgot() : resendConfirm()); }} />
                   </PlainActions>
                   {canContinue ? (
-                    <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={styles.linkButton}>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={[styles.linkButton, styles.plainLinkLeft]}>
                       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietLink}>Wrong email? Go back</Text>
                     </Pressable>
                   ) : null}
@@ -761,4 +763,6 @@ const styleDefinitions = StyleSheet.create({
   inboxActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.sm },
   plainTitle: { ...plainText.titleLg, fontSize: 26, lineHeight: 32 },
   plainActions: { marginTop: 0 },
+  plainHint: { ...typography.small, color: colors.textMuted },
+  plainLinkLeft: { alignSelf: 'flex-start' },
 });

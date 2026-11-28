@@ -642,7 +642,7 @@ export default function Thread() {
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </Pressable>
         </View>
-        <EmptyState title="Conversation not found" body="It may have been removed." />
+        <EmptyState inset title="Conversation not found" body="It may have been removed." />
       </View>
     );
   }

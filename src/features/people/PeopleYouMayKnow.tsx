@@ -13,6 +13,11 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { PRESS_DIM } from '@/theme/press';
 import { TextScale } from '@/theme/textScale';
+import { InkButton, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): each person plain on the page, Follow back in ink sized to its words. */
+const PLAIN = noBoxes();
 
 /*
  * People you may know (owner, Oct 28, picking B1 of the mutuals mocks: "I
@@ -117,20 +122,28 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
         </Pressable>
       </View>
       {/* The row runs to the screen's edges, so a card half in view says "there is more this way". */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.strip}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={[styles.strip, PLAIN && styles.plainStrip]}>
         {cards.map(({ user, followsYou, line, second }) => {
           const following = followingIds.includes(user.id);
           const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
           const label = following ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
           return (
-            <Reanimated.View key={user.id} exiting={LEAVE} style={styles.card}>
-              <Pressable accessibilityRole="link" accessibilityLabel={[user.name, line, second].filter(Boolean).join(', ')} onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
-                <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={68} ring={user.isCoach} />
+            <Reanimated.View key={user.id} exiting={LEAVE} style={[styles.card, PLAIN && styles.plainCard]}>
+              <Pressable accessibilityRole="link" accessibilityLabel={[user.name, line, second].filter(Boolean).join(', ')} onPress={() => router.push(`/user/${user.id}`)} style={[styles.who, PLAIN && styles.plainWho]}>
+                <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={PLAIN ? 56 : 68} ring={user.isCoach} />
                 {/* The name, then one short line of why (Oct 30, owner: "add a short line under their name between that and follow
                     which says smth"; Oct 28 took out the longer explanation). One line only, so the card stays as short. */}
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.why} numberOfLines={1}>{line}</Text>
               </Pressable>
+              {PLAIN ? (
+                // No boxes (demo only): Follow back in ink sized to its words, at the left; Following / Requested as quiet words.
+                <View style={styles.plainFollow}>
+                  {following || requested
+                    ? <TextAction small tone="muted" label={label} accessibilityLabel={`${label} ${user.name}`} onPress={() => undefined} style={styles.plainFlush} />
+                    : <InkButton small label={label} accessibilityLabel={`${label} ${user.name}`} onPress={() => follow(user.id)} />}
+                </View>
+              ) : (
               <Button
                 label={label}
                 accessibilityLabel={`${label} ${user.name}`}
@@ -139,6 +152,7 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
                 full
                 onPress={() => { if (!following && !requested) follow(user.id); }}
               />
+              )}
               {/* After the face, so a screen reader meets the person first. */}
               <Pressable accessibilityRole="button" accessibilityLabel={`Hide ${user.name}`} hitSlop={8} onPress={() => hide(user.id)} style={({ pressed }) => [styles.hide, pressed && { opacity: PRESS_DIM }]}>
                 <Ionicons name="close" size={16} color={colors.textFaint} />
@@ -167,4 +181,10 @@ const styleDefinitions = StyleSheet.create({
   who: { alignItems: 'center', gap: 2 },
   name: { ...typography.smallStrong, fontSize: 15, color: colors.text, marginTop: spacing.sm, maxWidth: CARD - spacing.md * 2 },
   why: { ...typography.small, color: colors.textMuted, maxWidth: CARD - spacing.md * 2 },
+  // No boxes (demo only): a person on the page, not a card: no surface, edge or shadow; the words at the left.
+  plainCard: { backgroundColor: 'transparent', borderWidth: 0, boxShadow: 'none', shadowOpacity: 0, elevation: 0, width: 132, paddingHorizontal: 0, paddingTop: spacing.xs, gap: spacing.sm },
+  plainWho: { alignItems: 'flex-start' },
+  plainFollow: { alignItems: 'flex-start' },
+  plainFlush: { paddingHorizontal: 0 },
+  plainStrip: { gap: spacing.lg },
 });

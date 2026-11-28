@@ -117,7 +117,7 @@ function MapUnavailable({ expanded, onBack, cardHeight }: NearbyMapProps) {
   if (noBoxes()) {
     return (
       <View style={[styles.fill, { alignItems: 'stretch' }]}>
-        <PlainNote size="lg" style={{ maxWidth: 420, alignSelf: 'center', paddingHorizontal: 0 }} title="The map didn’t load" body="Check your connection, then refresh the page." action={onBack ? { label: 'Go back', onPress: onBack } : null} />
+        <PlainNote size="lg" style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }} title="The map didn’t load" body="Check your connection, then refresh the page." action={onBack ? { label: 'Go back', onPress: onBack } : null} />
       </View>
     );
   }

@@ -93,7 +93,7 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
             <Ionicons name="print-outline" size={15} color={colors.textMuted} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
           </Pressable>
-          {court ? <Text style={[styles.fine, PLAIN && { textAlign: 'left' }]} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
+          {court ? <Text style={PLAIN ? styles.plainFine : styles.fine} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
         </>
       )}
     </View>
@@ -107,11 +107,12 @@ const styleDefinitions = StyleSheet.create({
   washClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: corner(20), overflow: 'hidden' },
   wash: { position: 'absolute', left: 0, right: 0, top: 0 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
-  plainCard: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xs, gap: spacing.sm },
+  plainCard: { paddingVertical: spacing.lg, gap: spacing.sm },
   plainTitle: { ...plainText.titleMd },
   plainBody: { ...plainText.bodyMd },
   plainActions: { alignItems: 'flex-start' },
   plainLink: { alignSelf: 'flex-start' },
+  plainFine: { ...plainText.fine, marginTop: 0 },
   // The empty state's tile: the icon on Dim Green, as "Looking for someone to play?" and the first-move page hold theirs.
   tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   headWords: { flex: 1, minWidth: 0, gap: 2, paddingTop: 2 },

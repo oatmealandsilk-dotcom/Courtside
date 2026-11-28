@@ -207,9 +207,10 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
   );
   const actions = PLAIN ? (
     <Animated.View entering={FadeIn.delay(250).duration(500).reduceMotion(ReduceMotion.System)}>
-      <PlainActions style={styles.plainActions}>
-        <TextAction label="Log in" onPress={onLogIn} />
+      {/* A page of its own: the way in at the left under the dots, the button first, Log in as words after it. */}
+      <PlainActions align="start" style={styles.plainActions}>
         <InkButton label="Create an account" onPress={onCreate} />
+        <TextAction label="Log in" onPress={onLogIn} />
       </PlainActions>
     </Animated.View>
   ) : (

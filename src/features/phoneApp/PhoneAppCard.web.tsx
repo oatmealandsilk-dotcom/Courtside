@@ -14,6 +14,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { PRESS_DIM } from '@/theme/press';
 import { InkButton, PlainActions, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
 import { forced } from '@/features/noBoxes/demoForce';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
@@ -84,11 +85,13 @@ export function PhoneAppRow({ style }: { style?: object }) {
     // A line on the page between hairlines, not a tinted box: the words, the way there as words, and the ×.
     return (
       <View style={[styles.plainRow, style]}>
-        <View style={{ flex: 1 }}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Get CourtSide on your iPhone</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>So you hear when someone wants to hit or replies to you.</Text>
-        </View>
-        <TextAction small label="Get the app" accessibilityLabel="Get the iPhone app" onPress={open} />
+        {/* The words are the way there (one tap target, with its ›), and the × beside them: two targets, not three. */}
+        <Pressable accessibilityRole="link" accessibilityLabel="Get CourtSide on your iPhone" onPress={open} style={({ pressed }) => [styles.plainRowLink, pressed && { opacity: PRESS_DIM }]}>
+          <View style={{ flex: 1 }}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Get CourtSide on your iPhone ›</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>So you hear when someone wants to hit or replies to you.</Text>
+          </View>
+        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="Close the iPhone app card" hitSlop={10} onPress={close} style={styles.plainRowClose}>
           <Ionicons name="close" size={16} color={colors.textMuted} />
         </Pressable>
@@ -148,11 +151,11 @@ export function PhoneAppWelcome({ calm }: { calm: boolean }) {
           <View style={styles.inner}>
             <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>Get CourtSide on your iPhone</Text>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>The app tells you when someone near you wants to hit, or replies to you. The website can’t.</Text>
+            <Text style={styles.plainFoot}>No iPhone? Everything works here in your browser too.</Text>
             <PlainActions style={styles.plainActions}>
               <TextAction label="Not now" tone="muted" onPress={close} />
               <InkButton label="Get the iPhone app" onPress={() => { open(); close(); }} />
             </PlainActions>
-            <Text style={styles.plainFoot}>No iPhone? Everything works here in your browser too.</Text>
           </View>
         ) : (
         <View style={styles.inner}>
@@ -189,6 +192,7 @@ const styleDefinitions = StyleSheet.create({
   foot: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
   plainRow: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   plainRowClose: { paddingVertical: spacing.sm, paddingLeft: spacing.xs },
+  plainRowLink: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   plainSheet: { ...plainSheet },
   plainTitle: { ...plainText.titleLg, paddingRight: spacing.xl },
   plainBody: { ...plainText.bodyLg, marginTop: 0 },

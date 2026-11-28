@@ -107,11 +107,12 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
               <Text style={styles.wordmark}>CourtSide</Text>
             </View>
             <Pressable accessibilityRole="button" hitSlop={10} onPress={() => { void go(false); }}>
-              <Text style={styles.signIn}>Sign in</Text>
+              <Text style={styles.signIn}>{PLAIN ? 'Log in' : 'Sign in'}</Text>
             </Pressable>
           </View>
 
-          {sharer && !waiting ? (
+          {/* No boxes: a locked page says who shared it in its own first line. */}
+          {sharer && !waiting && !(PLAIN && (!open || !preview)) ? (
             <Animated.View entering={FadeIn.duration(240)} style={styles.invited}>
               <Ionicons name="paper-plane-outline" size={13} color={colors.brand} />
               <Text style={styles.invitedText} numberOfLines={1}>@{sharer.handle} shared this with you</Text>
@@ -121,7 +122,7 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
           {waiting ? (
             <View style={styles.loading}><CourtSpinner size={32} /></View>
           ) : !open || !preview ? (
-            <Locked group={kind === 'group'} />
+            <Locked group={kind === 'group'} by={sharer?.handle} />
           ) : kind === 'post' && preview.post ? (
             <PostCard preview={preview} />
           ) : kind === 'hit-request' && preview.hit ? (
@@ -135,11 +136,13 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
           ) : <Locked />}
 
           {waiting ? null : PLAIN ? (
+            // A page, so the way in sits at the left under the words, the button first. No rule above it, and a
+            // locked page leaves out the pitch: its own two lines already say it (and "players near you" is not true in every town).
             <View style={styles.plainJoin}>
-              <Text style={styles.plainPitch}>{pitch}</Text>
-              <PlainActions style={styles.plainActions}>
-                <TextAction label="Sign in" onPress={() => { void go(false); }} />
+              {open && preview ? <Text style={styles.plainPitch}>{pitch}</Text> : null}
+              <PlainActions align="start" style={styles.plainActions}>
                 <InkButton label={cta} onPress={() => { void go(true); }} />
+                <TextAction label="Log in" onPress={() => { void go(false); }} />
               </PlainActions>
             </View>
           ) : (
@@ -175,11 +178,13 @@ function Person({ person, line }: { person: SharePerson; line?: string }) {
   );
 }
 
-function Locked({ group = false }: { group?: boolean }) {
+function Locked({ group = false, by }: { group?: boolean; by?: string }) {
   const styles = useThemedStyles(styleDefinitions);
   if (PLAIN) {
+    // Who shared what, then what to do about it (review: "Join CourtSide to join this group" said join twice).
+    const who = by ? `@${by}` : 'Someone';
     return (
-      <PlainWords size="lg" style={styles.plainLocked} title={group ? 'Join CourtSide to join this group' : 'Join CourtSide to see this'} body="It's shared with players on CourtSide. Make a free account and it opens right here." />
+      <PlainWords size="lg" style={styles.plainLocked} title={group ? `${who} shared a group with you.` : `${who} shared this with you.`} body="Make a free account to see it." />
     );
   }
   return (
@@ -387,7 +392,7 @@ const styleDefinitions = StyleSheet.create({
   alreadyText: { ...typography.small, color: colors.textMuted },
   alreadyLink: { ...typography.smallStrong, color: colors.brand },
   plainLocked: { paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  plainJoin: { paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  plainJoin: { paddingTop: spacing.xs },
   plainPitch: { ...typography.body, color: colors.textMuted, marginTop: spacing.lg },
   plainActions: { marginTop: spacing.lg },
 });

@@ -150,7 +150,7 @@ export function GuestFindPlayers() {
                     <View style={styles.chip}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.chipText}>{FORMAT_LABEL[h.format]}</Text></View>
                     <View style={styles.chip}><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.chipText}>{levelText(h, h.skillSystem)}</Text></View>
                   </View>
-                  <Button label="I'm in" size="sm" onPress={() => join(h)} />
+                  {PLAIN ? <InkButton small label="I'm in" onPress={() => join(h)} /> : <Button label="I'm in" size="sm" onPress={() => join(h)} />}
                 </View>
               </View>
             );
@@ -223,9 +223,10 @@ export function GuestJoinCard({ title, body, profile = false }: { /** Left out w
       {title ? <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text> : null}
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
       {PLAIN ? (
-        <PlainActions style={styles.plainRow}>
-          <TextAction label="Log in" accessibilityLabel="I already have an account" onPress={toSignIn} />
+        // A note on the page: the way in first at the left, Log in as words after it.
+        <PlainActions align="start" style={styles.plainRow}>
           <InkButton label="Create a free account" onPress={toCreate} />
+          <TextAction label="Log in" accessibilityLabel="I already have an account" onPress={toSignIn} />
         </PlainActions>
       ) : <>
       <Button label="Create a free account" full onPress={toCreate} />

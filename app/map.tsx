@@ -67,7 +67,7 @@ export default function MapScreen() {
       {currentUser ? (
         <NearbyMap expanded fullscreen me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onBack={back} onOpen={(id) => router.push(`/user/${id}`)} focusCourt={focusCourt} focusHit={params.hit ?? null} focusUser={params.user ?? null} focusSpot={focusSpot} focusPlace={focusPlace} holdPins={holdPins} growFrom={growFrom} onGrown={() => setGrown(true)} />
       ) : (
-        <EmptyState title="Sign in to see who is around" />
+        <EmptyState inset title="Sign in to see who is around" />
       )}
     </View>
   );

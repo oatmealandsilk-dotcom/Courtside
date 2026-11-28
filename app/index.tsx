@@ -194,9 +194,9 @@ export default function Index() {
     if (noBoxes()) {
       return (
         <View style={[styles.splash, { alignItems: 'stretch', padding: spacing.xl }]}>
-          <PlainNote size="lg" style={{ maxWidth: 420, alignSelf: 'center', paddingHorizontal: 0 }} title="Could not load your account" body="Check your connection and try again. Nothing you have saved is lost."
+          <PlainNote size="lg" style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }} title="Could not load your account" body="Check your connection and try again. Nothing you have saved is lost."
             action={{ label: retrying ? 'Trying…' : 'Try again', loading: retrying, onPress: async () => { setRetrying(true); try { await actions.retryLoad(); } finally { setRetrying(false); } } }}
-            secondary={{ label: 'Sign out', onPress: () => leaveGently(() => actions.signOut()) }} />
+            secondary={{ label: 'Log out', onPress: () => leaveGently(() => actions.signOut()) }} />
         </View>
       );
     }

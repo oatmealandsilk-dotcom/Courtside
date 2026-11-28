@@ -28,7 +28,7 @@ import { useModalSheetBottom } from '@/lib/modalSheet';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { corner } from '@/theme/look';
-import { plainText } from '@/components/plain/Plain';
+import { InkButton, plainText } from '@/components/plain/Plain';
 import { forced } from '@/features/noBoxes/demoForce';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
 
@@ -337,7 +337,8 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
                 <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.pageTitle, PLAIN && styles.plainTitle]}>Password updated</Text>
                 <Text style={styles.pageLine}>You’re all set. Use your new password the next time you sign in{email ? ` with ${email}` : ''}.</Text>
               </View>
-              <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />
+              {/* No boxes: a page, so its one way on sits at the left under the words. */}
+              {PLAIN ? <View style={{ alignItems: 'flex-start' }}><InkButton label="Continue to CourtSide" onPress={() => router.replace('/')} /></View> : <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />}
             </>
           ) : (
             <>

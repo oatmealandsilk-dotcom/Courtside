@@ -181,7 +181,10 @@ export default function AutoLogAsk() {
             <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, PLAIN && styles.plainTitle, EVEN_WEB]}>Let friends see your tennis?</Text>
             {/* Apple 5.1.3: who sees them and exactly what of them, said before the yes. */}
             <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, PLAIN && styles.plainLine, EVEN_WEB]}>{askLine(sourcesWords(currentUserId, detectedActivities), currentUser, teen)}</Text>
-            <Text {...EVEN} style={[styles.cardLine, styles.cardSmall, EVEN_WEB]}>Only friends who follow you back · change anytime in Settings</Text>
+            {PLAIN
+              // The small print on the body's own width, a line to each fact.
+              ? <Text style={styles.plainFine}>{'Only friends who follow you back.\nChange anytime in Settings.'}</Text>
+              : <Text {...EVEN} style={[styles.cardLine, styles.cardSmall, EVEN_WEB]}>Only friends who follow you back · change anytime in Settings</Text>}
           </ScrollView>
           {PLAIN ? (
             <View>
@@ -260,4 +263,5 @@ const styleDefinitions = StyleSheet.create({
   plainTitle: { ...plainText.titleLg },
   plainLine: { ...plainText.bodyLg, fontSize: 15 },
   plainError: { marginTop: spacing.md },
+  plainFine: { ...plainText.fine, fontSize: 13, color: colors.textFaint },
 });

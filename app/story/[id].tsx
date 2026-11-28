@@ -118,7 +118,7 @@ function StoryViewer() {
         <Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={() => goBack('/')} style={styles.close}>
           <Ionicons name="close" size={28} color="#FFFFFF" />
         </Pressable>
-        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState title="Nothing to show" body="This Instant has gone." />}
+        {loading ? <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><CourtSpinner size={28} ink="white" /></View> : <EmptyState inset title="Nothing to show" body="This Instant has gone." />}
       </View>
     );
   }

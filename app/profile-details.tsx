@@ -781,7 +781,7 @@ const styleDefinitions = StyleSheet.create({
   tabBody: { gap: spacing.xxl, paddingTop: spacing.xl },
   theirBody: { gap: spacing.xxl, paddingTop: spacing.xxl },
   gone: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 64 },
-  plainLocked: { alignItems: 'flex-start', paddingTop: spacing.xxl, paddingHorizontal: spacing.lg, gap: 0 },
+  plainLocked: { alignItems: 'flex-start', paddingTop: spacing.xxl, paddingHorizontal: 0, gap: 0 },
   plainTitle: { ...plainText.titleLg },
   plainBody: { ...plainText.bodyLg, textAlign: 'left', maxWidth: 420 },
   locked: { alignItems: 'center', paddingTop: 56, paddingHorizontal: spacing.xl, gap: spacing.sm },

@@ -134,11 +134,12 @@ function GroupPage() {
 
   return (
     <Screen title="Group" compactTitle onBack={() => goBack('/groups')} right={right}>
-      <View style={[styles.head, PLAIN && styles.plainHead]}>
-        <GroupTile name={title} look={group?.look ?? card?.look} size={PLAIN ? 56 : 88} />
-        <Text style={[styles.title, PLAIN && styles.plainTitle]} numberOfLines={2}>{title}</Text>
-        {description ? <Text style={[styles.about, PLAIN && styles.plainLeft]}>{description}</Text> : null}
-        <Text style={[styles.headMeta, PLAIN && styles.plainLeft]}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
+      {/* No boxes: only the page a visitor (not in the group) sees is redrawn; a member's head stays as it is. */}
+      <View style={[styles.head, PLAIN && !group && styles.plainHead]}>
+        <GroupTile name={title} look={group?.look ?? card?.look} size={PLAIN && !group ? 56 : 88} />
+        <Text style={[styles.title, PLAIN && !group && styles.plainTitle]} numberOfLines={2}>{title}</Text>
+        {description ? <Text style={[styles.about, PLAIN && !group && styles.plainLeft]}>{description}</Text> : null}
+        <Text style={[styles.headMeta, PLAIN && !group && styles.plainLeft]}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
       </View>
 
       {/* Joined here: Feed / Post / Invite, the members and Leave unfold as the Join box folds away, rather
@@ -299,11 +300,11 @@ const styleDefinitions = StyleSheet.create({
   action: { ...lift, flex: 1, height: 68, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionText: { ...typography.smallStrong, color: colors.text },
   joinBox: { gap: spacing.sm },
-  plainHead: { alignItems: 'flex-start', paddingHorizontal: spacing.xs },
+  plainHead: { alignItems: 'flex-start', paddingHorizontal: 0 },
   plainTitle: { ...plainText.titleLg, textAlign: 'left', marginTop: spacing.md },
   plainLeft: { textAlign: 'left', maxWidth: 520 },
   plainActions: { marginTop: 0 },
-  plainNote: { textAlign: 'left', paddingHorizontal: spacing.xs },
+  plainNote: { textAlign: 'left', paddingHorizontal: 0 },
   plainInvited: { justifyContent: 'flex-start' },
   invitedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingBottom: spacing.xs },
   invitedText: { ...typography.bodyStrong, color: colors.text },

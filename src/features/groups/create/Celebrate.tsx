@@ -111,7 +111,7 @@ const styleDefinitions = StyleSheet.create({
   words: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
   title: { ...typography.title, fontSize: 26, letterSpacing: -0.5, color: colors.text, textAlign: 'center' },
   line: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
-  plainWrap: { alignItems: 'flex-start', gap: spacing.lg, paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
+  plainWrap: { alignItems: 'flex-start', gap: spacing.lg, paddingTop: spacing.lg },
   plainTick: { right: -6, bottom: -6, width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
   plainWords: { gap: 0 },
   plainTitle: { ...plainText.titleLg },

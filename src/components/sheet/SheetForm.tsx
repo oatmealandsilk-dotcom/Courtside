@@ -32,14 +32,17 @@ const KEEP_SUBMIT = /^\/(log-session|new-session|live-session)(\/|$)/;
 /** The sheet's title, a line under it that can change as you fill it in, and a round close. `lines`: how many lines the line may run to (one unless said). */
 export function SheetTitle({ title, line, lineTone = 'muted', lines = 1, onClose, titleSize }: { title: string; /** Words, or words with a tappable part (nested Text). */ line?: React.ReactNode; lineTone?: 'muted' | 'brand'; lines?: number; onClose: () => void; /** A little smaller than the usual 24, for a longer title that should stay on one line on a phone. */ titleSize?: number }) {
   const styles = useThemedStyles(styleDefinitions);
+  // No boxes (demo only): the close is the plain ×, no disc and no shadow (not on the sheets it leaves as they are).
+  const path = usePathname();
+  const plainClose = noBoxes() && !KEEP_SUBMIT.test(path);
   return (
     <View style={styles.titleRow}>
       <View style={{ flex: 1, gap: 3 }}>
         <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, titleSize ? { fontSize: titleSize, letterSpacing: -0.03 * titleSize } : null]}>{title}</Text>
         {line ? <Text style={[styles.line, lineTone === 'brand' && styles.lineBrand]} numberOfLines={lines}>{line}</Text> : null}
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, pressed && { opacity: PRESS_DIM }]}>
-        <Ionicons name="close" size={18} color={colors.textMuted} />
+      <Pressable accessibilityRole="button" accessibilityLabel="Close" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.close, plainClose && styles.plainClose, pressed && { opacity: PRESS_DIM }]}>
+        <Ionicons name="close" size={plainClose ? 22 : 18} color={colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -335,6 +338,7 @@ const styleDefinitions = StyleSheet.create({
   submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   submitShort: { minHeight: buttonShape.height },
   plainRow: { flexDirection: 'row', justifyContent: 'flex-end' },
+  plainClose: { backgroundColor: 'transparent', boxShadow: 'none', shadowOpacity: 0, elevation: 0 },
   submitOn: { backgroundColor: colors.brand, boxShadow: brandBoxShadow },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },

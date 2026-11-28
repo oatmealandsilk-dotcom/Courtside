@@ -108,7 +108,7 @@ function CoachMemoryScreen() {
       {consent.agreed ? (
         <View style={{ paddingTop: spacing.lg }}>
           {/* No boxes (demo only): a quiet way out in words, not a full-width box. */}
-          {noBoxes() ? <TextAction label={stopping ? 'Stopping…' : 'Stop using the AI coach'} disabled={stopping} onPress={stop} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />}
+          {noBoxes() ? <TextAction label={stopping ? 'Stopping…' : 'Stop using the AI coach'} tone="muted" disabled={stopping} onPress={stop} style={{ alignSelf: 'flex-start', paddingHorizontal: 0 }} /> : <Button label="Stop using the AI coach" variant="secondary" loading={stopping} onPress={stop} full />}
         </View>
       ) : null}
     </Screen>

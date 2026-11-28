@@ -416,7 +416,7 @@ const styleDefinitions = StyleSheet.create({
   },
   blockedText: { ...typography.small, color: colors.textMuted, flex: 1, lineHeight: 19 },
   notice: { ...typography.small, color: colors.brand, textAlign: 'center', paddingVertical: spacing.sm },
-  plainLocked: { alignItems: 'flex-start', gap: 0, paddingHorizontal: spacing.lg },
+  plainLocked: { alignItems: 'flex-start', gap: 0, paddingHorizontal: 0 },
   plainTitle: { ...plainText.titleMd },
   plainBody: { ...plainText.bodyMd, textAlign: 'left' },
   lockedBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },

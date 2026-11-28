@@ -159,7 +159,7 @@ export default function Peek() {
               <Text style={styles.wordmark}>CourtSide</Text>
             </View>
             <Pressable accessibilityRole="button" hitSlop={10} onPress={() => { void signUp(null, false); }}>
-              <Text style={styles.signIn}>Sign in</Text>
+              <Text style={styles.signIn}>{PLAIN ? 'Log in' : 'Sign in'}</Text>
             </Pressable>
           </View>
 
@@ -177,6 +177,12 @@ export default function Peek() {
                   <Ionicons name="close" size={15} color={colors.brand} />
                 </Pressable>
               </View>
+            ) : PLAIN ? (
+              // No boxes: words with their arrow, in ink, not a green pill.
+              <Pressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} hitSlop={8} style={({ pressed }) => [styles.plainLocate, pressed && styles.pressed]}>
+                <Ionicons name="navigate-outline" size={15} color={colors.text} />
+                <Text style={styles.plainLocateText}>{locating ? 'Finding you…' : 'Use my location'}</Text>
+              </Pressable>
             ) : (
               <Pressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} style={({ pressed }) => [styles.pill, styles.locate, pressed && styles.pressed]}>
                 <Ionicons name="navigate-outline" size={15} color={colors.brandInk} />
@@ -242,7 +248,7 @@ export default function Peek() {
         {PLAIN ? (
           <View style={styles.stickyInner}>
             <PlainActions style={styles.plainBar}>
-              <TextAction label="Sign in" onPress={() => { void signUp(null, false); }} />
+              <TextAction label="Log in" onPress={() => { void signUp(null, false); }} />
               <InkButton label="Create a free account" onPress={() => { void signUp(null, true); }} />
             </PlainActions>
           </View>
@@ -284,7 +290,7 @@ function HitCard({ hit, index, onJoin }: { hit: PeekHit; index: number; onJoin: 
       <View style={styles.cardFoot}>
         {/* Signed out there is no name (Oct 17 privacy pass): "A player is looking for a hit". */}
         <Text style={styles.host} numberOfLines={1}><Text style={styles.hostName}>{hit.hostFirst || 'A player'}</Text> is looking for a hit</Text>
-        <Button label="I'm in" size="sm" onPress={onJoin} />
+        {PLAIN ? <InkButton small label="I'm in" onPress={onJoin} /> : <Button label="I'm in" size="sm" onPress={onJoin} />}
       </View>
     </Animated.View>
   );
@@ -309,7 +315,9 @@ function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit | null; onClose: () =
             {/* The hit first, as the plain letter says the post first ("Kai posted this."), then the ask. */}
             <Text accessibilityRole="header" style={styles.plainTitle}>{hit.hostFirst ? `${hit.hostFirst}’s hit, ${whenInWords(hit.startsAt)}.` : `An open hit, ${whenInWords(hit.startsAt)}.`}{'\n'}Make a free account to join it.</Text>
             <Text style={styles.plainBody}>{hit.court.name} · {FORMAT_LABEL[hit.format]} · {spotsText(hit.spotsLeft)}</Text>
-            <Text style={styles.sheetNote}>It takes a minute. Once you’re in, the app opens on this hit and joins it for you. Add your birthday when you sign up: hits with players you don’t follow yet are for players 18 and over.</Text>
+            {/* The same two facts, one to a line, so neither is lost in a block of grey. */}
+            <Text style={styles.sheetNote}>It takes a minute. Once you’re in, the app opens on this hit and joins it for you.</Text>
+            <Text style={[styles.sheetNote, styles.plainNoteGap]}>Hits with players you don’t follow yet are for 18 and over, so add your birthday when you sign up.</Text>
             <PlainActions style={styles.plainSheetActions}>
               <TextAction label="Log in" onPress={() => onGo(false)} />
               <InkButton label="Create a free account" onPress={() => onGo(true)} />
@@ -394,6 +402,9 @@ const styleDefinitions = StyleSheet.create({
   sheetNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   plainNote: { paddingHorizontal: 0, paddingVertical: spacing.xl },
   plainBar: { marginTop: 0 },
+  plainNoteGap: { marginTop: -spacing.xs },
+  plainLocate: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingVertical: spacing.sm },
+  plainLocateText: { ...typography.smallStrong, fontSize: 14, color: colors.text },
   plainSheet: { ...plainSheet, paddingHorizontal: spacing.xl },
   plainTitle: { ...plainText.titleLg, paddingRight: spacing.xxl },
   plainBody: { ...typography.body, color: colors.text },

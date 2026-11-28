@@ -10,6 +10,11 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { InkButton, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): each person plain on the page, Follow in ink sized to its word. */
+const PLAIN = noBoxes();
 
 /**
  * "Suggested for you", the way Instagram fills the space under a private
@@ -26,16 +31,24 @@ export function SuggestedPlayers({ near, exclude }: { near?: string; exclude?: s
   return (
     <View style={styles.wrap}>
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Suggested for you</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.row}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={[styles.row, PLAIN && styles.plainStrip]}>
         {list.map(({ user, reason }) => {
           const following = followingIds.includes(user.id);
           return (
-            <View key={user.id} style={styles.card}>
-              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${reason}`} onPress={() => router.push(`/user/${user.id}`)} style={styles.body}>
-                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={60} ring={user.isCoach} />
+            <View key={user.id} style={[styles.card, PLAIN && styles.plainCard]}>
+              <Pressable accessibilityRole="link" accessibilityLabel={`${user.name}, ${reason}`} onPress={() => router.push(`/user/${user.id}`)} style={[styles.body, PLAIN && styles.plainBody]}>
+                <Avatar name={user.name} seed={user.avatarSeed} uri={user.avatarUrl} size={PLAIN ? 56 : 60} ring={user.isCoach} />
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
                 <Text style={styles.reason} numberOfLines={1}>{reason}</Text>
               </Pressable>
+              {PLAIN ? (
+                // No boxes (demo only): Follow in ink sized to its word, at the left; Following as quiet words.
+                <View style={styles.plainFollow}>
+                  {following
+                    ? <TextAction small tone="muted" label="Following" accessibilityLabel={`Following ${user.name}`} onPress={() => confirmUnfollow(user, () => actions.toggleFollow(user.id))} style={styles.plainFlush} />
+                    : <InkButton small label="Follow" accessibilityLabel={`Follow ${user.name}`} onPress={() => { setFollowedHere((h) => (h.includes(user.id) ? h : [...h, user.id])); actions.toggleFollow(user.id); }} />}
+                </View>
+              ) : (
               <FollowPill
                 small
                 wide
@@ -48,6 +61,7 @@ export function SuggestedPlayers({ near, exclude }: { near?: string; exclude?: s
                   else actions.toggleFollow(user.id);
                 }}
               />
+              )}
             </View>
           );
         })}
@@ -68,4 +82,10 @@ const styleDefinitions = StyleSheet.create({
   body: { alignItems: 'center', gap: 4 },
   name: { ...typography.smallStrong, color: colors.text, marginTop: 6, maxWidth: CARD - spacing.md * 2 },
   reason: { ...typography.caption, color: colors.textMuted, maxWidth: CARD - spacing.md * 2 },
+  // No boxes (demo only): a person on the page, not a card.
+  plainCard: { backgroundColor: 'transparent', borderWidth: 0, boxShadow: 'none', shadowOpacity: 0, elevation: 0, width: 132, paddingHorizontal: 0, gap: spacing.sm },
+  plainBody: { alignItems: 'flex-start' },
+  plainFollow: { alignItems: 'flex-start' },
+  plainFlush: { paddingHorizontal: 0 },
+  plainStrip: { gap: spacing.lg },
 });

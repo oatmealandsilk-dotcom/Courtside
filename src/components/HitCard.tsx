@@ -32,6 +32,10 @@ import { LESS_AI_HITS, LESS_AI_COURTS, corner } from '@/theme/look';
 import { surfaceTint } from '@/components/place/SurfaceTag';
 import { surfaceKind, surfaceLabel, surfaceAdjective } from '@/features/places/courtSurface';
 import { useLoadedSurface } from '@/features/players/courts';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): I'm in in ink, as every other main button in that look. */
+const PLAIN = noBoxes();
 
 /**
  * A "Looking for a hit" post: who, when, where, what level and format, and
@@ -294,9 +298,10 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.secondaryText}>Chat</Text>
           </SwipePressable>
         ) : full ? null : (
-          <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
-            <BrandWash radius={buttonShape.smallRadius} curve />
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.primaryText}>{busy ? 'Joining…' : 'I’m in'}</Text>
+          <SwipePressable accessibilityRole="button" hitSlop={buttonShape.smallSlop} disabled={busy} onPress={(e) => { e.stopPropagation?.(); void join(); }} style={({ pressed }) => [styles.button, styles.primary, PLAIN && styles.plainPrimary, busy && { opacity: 0.6 }, pressed && styles.buttonPressed]}>
+            {/* No boxes (demo only): the ink of every other main button, no green wash. */}
+            {PLAIN ? null : <BrandWash radius={buttonShape.smallRadius} curve />}
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.primaryText, PLAIN && styles.plainPrimaryText]}>{busy ? 'Joining…' : 'I’m in'}</Text>
           </SwipePressable>
         )}
       </View>
@@ -416,6 +421,8 @@ const styleDefinitions = StyleSheet.create({
   buttonPressed: { transform: [{ scale: PRESS_SHRINK }] },
   primary: { paddingHorizontal: 22, backgroundColor: colors.brand, borderColor: colors.brand, ...brandShadow },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
+  plainPrimary: { backgroundColor: colors.text, borderColor: colors.text, boxShadow: 'none', shadowOpacity: 0, elevation: 0 },
+  plainPrimaryText: { color: colors.bg },
   secondary: { backgroundColor: colors.surfaceAlt, borderColor: colors.border },
   secondaryText: { ...typography.bodyStrong, color: colors.text },
   // Destructive, so quiet: an outline in the hairline and the word in red, never a filled or tinted pill.

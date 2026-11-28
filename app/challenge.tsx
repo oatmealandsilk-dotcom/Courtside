@@ -13,6 +13,8 @@ import { useTagPosting } from '@/lib/uploads';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, radius, spacing, typography, buttonShape } from '@/theme';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /** Every entry in this week's challenge, in its standing, with a way to enter. */
 export default function ChallengeScreen() {
@@ -34,6 +36,12 @@ export default function ChallengeScreen() {
             <Text style={styles.eyebrowText}>Weekly challenge · {timeLeft(challenge)} · {entries.length} {entries.length === 1 ? 'entry' : 'entries'}</Text>
           </View>
           <Text style={styles.lead}>{challenge.ask} Post a clip with <Text style={styles.tag}>#{challenge.tag}</Text> in the caption. The most-liked are featured on the feed.</Text>
+          {noBoxes() ? (
+            // No boxes (demo only): ink, sized to its words, at the left under the words; no green slab.
+            <View style={styles.plainRow}>
+              <InkButton label={posting ? 'Your entry is posting…' : 'Enter with a clip'} accessibilityLabel={posting ? 'Your entry is posting' : `Enter the ${challenge.title} challenge with a clip`} disabled={posting} onPress={() => enterChallenge(challenge)} />
+            </View>
+          ) : (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={posting ? 'Your entry is posting' : `Enter the ${challenge.title} challenge with a clip`}
@@ -45,6 +53,7 @@ export default function ChallengeScreen() {
             <Ionicons name={posting ? 'cloud-upload-outline' : 'add'} size={18} color={colors.brandInk} />
             <Text style={styles.primaryText}>{posting ? 'Your entry is posting…' : 'Enter with a clip'}</Text>
           </Pressable>
+          )}
         </View>
         {entries.length ? <ChallengeEntries entries={entries} /> : <EmptyState icon="videocam-outline" title={posting ? 'Yours is on its way' : 'No entries yet'} body={posting ? 'It shows here as soon as it has posted.' : 'Yours could be the first.'} />}
       </View>
@@ -61,5 +70,6 @@ const styleDefinitions = StyleSheet.create({
   tag: { ...font('600'), color: colors.text },
   primary: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
   primaryBusy: { opacity: 0.6 },
+  plainRow: { alignItems: 'flex-start' },
   primaryText: { ...typography.bodyStrong, color: colors.brandInk },
 });

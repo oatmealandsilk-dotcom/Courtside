@@ -123,7 +123,7 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22, maxWidth: 380 },
   service: { ...typography.smallStrong, color: colors.text, textAlign: 'center' },
   fine: { ...typography.small, color: colors.textFaint, textAlign: 'center', lineHeight: 19, maxWidth: 360 },
-  plainBody: { alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.xs },
+  plainBody: { alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: 0 },
   plainTitle: { ...plainText.titleLg, fontSize: 28, lineHeight: 34, textAlign: 'left' },
   plainLead: { textAlign: 'left', maxWidth: 520 },
   plainLeft: { textAlign: 'left' },

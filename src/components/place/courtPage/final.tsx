@@ -134,7 +134,7 @@ export function NowRow({ view }: { view: CourtView }) {
           <Text style={now.said || now.playing ? styles.nowSaid : styles.nowAsk} numberOfLines={1}>{now.title}</Text>
           {now.said && now.playing ? <Text style={styles.nowSub} numberOfLines={1}>{now.playing}</Text> : null}
         </View>
-        {now.said ? <Text style={styles.update}>Update</Text> : <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
+        {now.said ? <Text style={[styles.update, noBoxes() && styles.plainUpdate]}>Update</Text> : <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
       </Pressable>
       <Collapse open={now.youHere}><View style={styles.here}><HereTag until={now.youUntil} onCheckOut={() => { void actions.checkOutOfCourt(); }} /></View></Collapse>
     </View>
@@ -167,11 +167,12 @@ export function PlayAndSquares({ view }: { view: CourtView }) {
           </Tappable>
         ) : null}
       </View>
-      <Tappable dim accessibilityLabel={`Directions to ${view.name}`} onPress={view.onDirections} style={styles.square}>
-        <Ionicons name="car-outline" size={21} color={colors.brand} />
+      {/* No boxes (demo only): the two as plain icons in ink, no outlined squares around them. */}
+      <Tappable dim accessibilityLabel={`Directions to ${view.name}`} onPress={view.onDirections} style={[styles.square, noBoxes() && styles.plainSquare]}>
+        <Ionicons name="car-outline" size={21} color={noBoxes() ? colors.text : colors.brand} />
       </Tappable>
-      <Tappable dim accessibilityLabel={`Share ${view.name} in a chat`} onPress={view.onShare} style={styles.square}>
-        <Ionicons name="paper-plane-outline" size={20} color={colors.brand} />
+      <Tappable dim accessibilityLabel={`Share ${view.name} in a chat`} onPress={view.onShare} style={[styles.square, noBoxes() && styles.plainSquare]}>
+        <Ionicons name="paper-plane-outline" size={20} color={noBoxes() ? colors.text : colors.brand} />
       </Tappable>
     </View>
   );
@@ -286,6 +287,8 @@ const styleDefinitions = StyleSheet.create({
   nowSaid: { ...typography.bodyStrong, color: colors.text },
   nowSub: { ...typography.small, color: colors.textMuted },
   update: { ...typography.smallStrong, fontSize: 14, color: colors.brand },
+  plainUpdate: { color: colors.text },
+  plainSquare: { backgroundColor: 'transparent', borderWidth: 0, width: 40 },
   here: { paddingTop: spacing.sm, alignItems: 'flex-start' },
   // Play here and the two squares.
   second: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: spacing.md },

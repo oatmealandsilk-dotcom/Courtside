@@ -14,6 +14,7 @@ import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { LESS_AI as LESS_AI_LOOK, corner } from '@/theme/look';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { InkButton, PlainActions, TextAction } from '@/components/plain/Plain';
 
 /** No boxes (demo only, features/noBoxes): the hand-made row (a small Join at its end, Not now in words), Join in ink. */
 const PLAIN = noBoxes();
@@ -99,7 +100,7 @@ export function GroupInvitesSection({ onOpen }: {
                 </View>
               </SwipePressable>
               {/* The hand-made look (Oct 24): a small soft Join at the row's end, Not now a text link under the words. */}
-              {LESS_AI ? (
+              {LESS_AI && !PLAIN ? (
                 <SwipePressable
                   accessibilityRole="button"
                   accessibilityLabel={`Join ${inv.name}`}
@@ -114,7 +115,13 @@ export function GroupInvitesSection({ onOpen }: {
                 </SwipePressable>
               ) : null}
               </View>
-              {LESS_AI ? (
+              {PLAIN ? (
+                // No boxes (demo only): the two answers together at the right, under the words: Not now, then Join in ink.
+                <PlainActions style={styles.plainAnswers}>
+                  <TextAction small tone="muted" label={busyHere && !answering?.accept ? 'Not now…' : 'Not now'} accessibilityLabel={`Not now, ${inv.name}`} disabled={!!answering} onPress={() => { void answer(inv, false); }} />
+                  <InkButton small label="Join" accessibilityLabel={`Join ${inv.name}`} loading={busyHere && answering?.accept} disabled={!!answering || full} onPress={() => { void answer(inv, true); }} />
+                </PlainActions>
+              ) : LESS_AI ? (
                 <SwipePressable
                   accessibilityRole="button"
                   accessibilityLabel={`Not now, ${inv.name}`}
@@ -173,11 +180,13 @@ export function GroupInvitesSection({ onOpen }: {
 const styleDefinitions = StyleSheet.create({
   part: { gap: spacing.sm },
   section: { ...typography.smallStrong, color: colors.textMuted, paddingHorizontal: spacing.xs },
-  card: { ...(LESS_AI ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
+  // No boxes: the same surface as "Your groups" under it, no 1px edge of its own.
+  card: { ...(LESS_AI_LOOK ? { borderWidth: 1, borderColor: colors.border } : lift), borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   groupLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   joinSoft: { height: 32, minWidth: 64, paddingHorizontal: 14, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   joinSoftText: { color: colors.brand },
   joinInk: { backgroundColor: colors.text },
+  plainAnswers: { marginTop: spacing.xs },
   joinInkText: { color: colors.bg },
   notNow: { alignSelf: 'flex-start', marginLeft: 44 + spacing.md, paddingVertical: 2 },
   notNowText: { ...typography.small, color: colors.textMuted },

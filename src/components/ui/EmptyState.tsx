@@ -20,18 +20,20 @@ interface Props {
   body?: string;
   /** Where to go from here: an empty screen should never be a dead end. */
   action?: { label: string; onPress: () => void };
+  /** No boxes (demo only): a page with no side margin of its own (a full-screen feed, a map): the note keeps the usual one. */
+  inset?: boolean;
 }
 
 /** One soft arrival for every empty card, instead of popping in from a spinner or a list. */
 const ARRIVE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 
 /** Nothing here yet: a quiet mark, a line on why, and air around it. */
-export function EmptyState({ icon, glyph, title, body, action }: Props) {
+export function EmptyState({ icon, glyph, title, body, action, inset }: Props) {
   const styles = useThemedStyles(styleDefinitions);
   // No boxes (demo only): the words at the page's left margin, no mark on top, the way out a compact ink button.
   if (noBoxes()) {
     return (
-      <Reanimated.View entering={ARRIVE} style={styles.plainWrap}>
+      <Reanimated.View entering={ARRIVE} style={[styles.plainWrap, inset && styles.plainInset]}>
         <PlainNote title={title} body={body} action={action} />
       </Reanimated.View>
     );
@@ -48,6 +50,7 @@ export function EmptyState({ icon, glyph, title, body, action }: Props) {
 
 const styleDefinitions = StyleSheet.create({
   plainWrap: { alignSelf: 'stretch', width: '100%', maxWidth: 560 },
+  plainInset: { paddingHorizontal: spacing.lg },
   wrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxxl, paddingHorizontal: spacing.lg },
   title: { ...typography.heading, color: colors.text, textAlign: 'center', marginTop: spacing.xs },
   body: { ...typography.small, color: colors.textMuted, textAlign: 'center', maxWidth: 300, lineHeight: 19 },

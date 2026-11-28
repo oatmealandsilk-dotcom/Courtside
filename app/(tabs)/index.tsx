@@ -2191,6 +2191,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
             )
           ) : (
             <EmptyState
+              inset
               title={scope?.groupId ? 'Loading the group' : scope?.activities ? (ready ? 'No activities yet' : 'Loading activities') : scope ? 'Nothing here yet' : ready && !awaitingSeen ? 'Your court is quiet' : 'Loading your clips'}
               body={scope?.activities ? 'Log a session after you play, or follow players, and their sessions show up here.' : scope || awaitingSeen ? undefined : instantsOn ? 'Be the first on it: a clip, a photo, or an Instant after you play.' : 'Be the first on it: a clip or a photo after you play.'}
               // "Log a session" opens the log sheet itself (Oct 5: it opened the + menu).
@@ -2204,7 +2205,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={!scope && forced('feed-end') ? feed.length : active} onIndex={setActive} onSwiped={onSwiped} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
+          <VerticalPager ref={pager} key={visit} initialIndex={!scope && forced('feed-end') ? feed.length : !scope && forced('feed-challenge') ? Math.max(0, feed.findIndex((i) => i.type === 'challenge')) : active} onIndex={setActive} onSwiped={onSwiped} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
             looks={followLive ? followLooks : undefined} startEarly={swipeFollow} onHead={swipeFollow ? headStore.set : undefined}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);
@@ -2812,11 +2813,11 @@ const styleDefinitions = StyleSheet.create({
   endPage: { flex: 1, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   // Centred in its page on every screen size (it sat to the left on a wide computer window).
   endCard: { ...lift, alignSelf: 'center', maxWidth: 520, width: '100%', gap: spacing.lg, padding: spacing.xl, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
-  plainEnd: { alignSelf: 'center', maxWidth: 520, width: '100%', paddingHorizontal: spacing.sm },
+  plainEnd: { alignSelf: 'center', maxWidth: 520, width: '100%' },
   plainEndTitle: { ...plainText.titleLg },
   plainEndBody: { ...plainText.bodyLg },
   plainEndActions: { marginTop: spacing.xl },
-  plainGroupEmpty: { width: '100%', maxWidth: 520, paddingHorizontal: spacing.xl },
+  plainGroupEmpty: { width: '100%', maxWidth: 520, paddingHorizontal: spacing.lg },
   endTile: { width: 56, height: 56, borderRadius: radius.lg, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   endTitle: { ...typography.title, color: colors.text },
   endBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
