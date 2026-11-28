@@ -39,7 +39,7 @@ Ship the app change first (it does nothing until this rule exists), then:
    **Redirect Rules**. Open the rule that sends courtsidebase.com to the
    waitlist page (or **Create rule** if there is none).
 2. **When incoming requests match** → **Edit expression**, paste:
-   `(http.host eq "courtsidebase.com" and not http.request.uri.query contains "go=app")`
+   `(http.host in {"courtsidebase.com" "www.courtsidebase.com"} and http.request.uri.path eq "/" and not http.request.uri.query contains "go=app")`
 3. **Then** → Type **Dynamic**, expression:
    `concat("https://app.courtsidebase.com/?", http.request.uri.query, "&from=site")`
    Status code **302**. Leave **Preserve query string** off (the expression carries it).
