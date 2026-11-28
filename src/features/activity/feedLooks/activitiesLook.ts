@@ -13,13 +13,20 @@ import { Platform } from 'react-native';
  *   photo (Strava/Hevy's order), B under it (Instagram's).
  * - 'mixed-a2': A again, the card sitting as Strava/Hevy/Instagram's do (edge to edge, no box round the numbers, the
  *   photo full bleed, a title line).
+ * - 'gallery' / 'gallery-rollup' (Nov 28, owner: "other ppl can only see it if it has a photo attatched ... like a
+ *   scrolling gallary"): calmer cards (two numbers, no streak or level on the card); other people's sessions show
+ *   only with a photo or clip, yours without one show to you alone as a small "Only you" card. 'gallery-rollup' also
+ *   keeps other people's photo-less sessions as one quiet "who played" row per day, opened in place.
  *
  * Nothing chooses one but a web address's `?look=` (or this browser's saved choice), so the app as everyone has
  * it is exactly 'now'.
  */
-export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b' | 'mixed-a2';
+export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b' | 'mixed-a2' | 'gallery' | 'gallery-rollup';
 
-export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b', 'mixed-a2'];
+export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b', 'mixed-a2', 'gallery', 'gallery-rollup'];
+
+/** The gallery looks: other people's sessions only with a photo or clip. */
+export const isGalleryLook = (l: ActivitiesLook) => l === 'gallery' || l === 'gallery-rollup';
 const KEY = 'courtside.activitiesLook';
 const isLook = (v: unknown): v is ActivitiesLook => typeof v === 'string' && (ACTIVITIES_LOOKS as string[]).includes(v);
 

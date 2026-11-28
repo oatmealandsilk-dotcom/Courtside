@@ -30,7 +30,7 @@ import { hasSessionStats, resultWord, scoreLine, sessionTitle, sourceLabel, what
 import { sharePost, shareLabel } from '@/features/share/sharePost';
 import { localDay } from '@/features/practice/stats';
 import { matchTiebreakAt } from '@/features/activity/score';
-import type { ActivitiesLook } from './activitiesLook';
+import { isGalleryLook, type ActivitiesLook } from './activitiesLook';
 
 /*
  * The Activities looks the owner asked to see (Nov 27): one continuous list, no snapping, that you flick through at
@@ -811,12 +811,263 @@ const MixedCard2 = React.memo(function MixedCard2({ post, author, me, hidden, on
   );
 });
 
+/* ------------------------------------------------------------------ gallery: calmer cards, photos carry the feed */
+
+/*
+ * 'gallery' / 'gallery-rollup' (Nov 28, owner, on mixed-a2: "it can still be significantly improved for the stats
+ * and cards. just seems a bit like crowded? ... other ppl can only see it if it has a photo attatched, like hevy is
+ * cool because people always post their pics so its like a scrolling gallary"). The card says less: the name and
+ * "when · where" (no streak flame, no level pill: those stay on profiles), one title line, at most TWO numbers (the
+ * score for a match, else the time; then the time for a match, else the average heart rate), labels small and in
+ * sentence case, a caption of one line (two under a photo), and like + comment on the left, save + ••• on the right.
+ * Spacing comes off the theme's 4pt ladder; the 6pt band of the page's second ground still parts two cards.
+ */
+export const GALLERY = {
+  band: 6,
+  padTop: spacing.lg,
+  head: 36,
+  /** Header to title. */
+  gap: spacing.md,
+  title: 22,
+  /** Title to numbers. */
+  statsGap: 6,
+  /** A small label (12/16) over its figure (22/26). */
+  stats: 42,
+  /** To the caption, and the caption's one line. */
+  lineGap: 10,
+  line: 20,
+  actions: 44,
+  padBottom: 2,
+};
+/** A card with no photo: header, title, the two numbers, (one line of caption,) actions. */
+export const GALLERY_PLAIN_H = GALLERY.band + GALLERY.padTop + GALLERY.head + GALLERY.gap + GALLERY.title + GALLERY.statsGap + GALLERY.stats + GALLERY.actions + GALLERY.padBottom;
+
+/** The two numbers a card shows: the hero (a match's score, else the time), then the time (a match) or the average heart rate. */
+function twoStats(s: SessionDetail): { label: string; value: string; unit?: string }[] {
+  const score = scoreLine(s);
+  const time = { label: onCourtLabel(s), value: duration(s.minutes) };
+  if (score) return [{ label: resultWord(s) ?? 'Score', value: score }, time];
+  const second = s.avgHr ? { label: 'Avg heart rate', value: String(s.avgHr), unit: 'bpm' }
+    : s.kcal ? { label: 'Calories', value: String(Math.round(s.kcal)), unit: 'Cal' } : null;
+  return second ? [time, second] : [time];
+}
+const onCourtLabel = (s: SessionDetail) => (s.kind === 'fitness' ? 'Active' : 'On court');
+
+function GalleryHead({ post, author, right }: { post: Post; author: User; right?: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const place = placeOf(post, author);
+  return (
+    <View style={styles.gHead}>
+      <Pressable onPress={() => router.push(`/user/${author.id}`)} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={[styles.who, styles.flex]}>
+        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
+        <View style={[styles.flex, styles.m2Words]}>
+          <View style={styles.mNameRow}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gName}>{author.name}</Text>
+            <PushedDownTag post={post} />
+          </View>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gMeta}>{agoInWords(post.createdAt)}{place ? ` · ${place}` : ''}</Text>
+        </View>
+      </Pressable>
+      {right}
+    </View>
+  );
+}
+
+/** The title and the two numbers, straight on the card; a tap opens the session's stats when it has them. */
+function GalleryStats({ post }: { post: Post }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const s = post.session!;
+  const stats = twoStats(s);
+  const open = hasSessionStats(s) ? () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } }) : undefined;
+  const title = titleOf(post, s);
+  return (
+    <Pressable onPress={open} disabled={!open} accessibilityRole={open ? 'button' : undefined} accessibilityLabel={`${title}. ${stats.map((x) => `${x.label} ${x.value}${x.unit ? ` ${x.unit}` : ''}`).join(', ')}`} accessibilityHint={open ? 'Opens the session stats' : undefined}>
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gTitle}>{title}</Text>
+      <View style={styles.gStats}>
+        {stats.map((x) => (
+          <View key={x.label} style={styles.gStat}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gLabel}>{x.label}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.gValue}>
+              {x.value}{x.unit ? <Text style={styles.gUnit}> {x.unit}</Text> : null}
+            </Text>
+          </View>
+        ))}
+      </View>
+    </Pressable>
+  );
+}
+
+/** Like and comment with their counts on the left, save and ••• on the right; nothing else. `onlyYou` swaps the left for the quiet label. */
+function GalleryActions({ post, me, onlyYou = false, children }: { post: Post; me: string | null; onlyYou?: boolean; children?: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { saved: savedItems, actions } = useApp();
+  const act = useCardActions(post, me);
+  const likes = post.likedBy.length;
+  const n = post.commentIds.length;
+  const saved = savedItems.postIds.includes(post.id);
+  return (
+    <View style={styles.gActions}>
+      {onlyYou ? (
+        <View style={styles.gOnly} accessible accessibilityLabel="Only you can see this session">
+          <Ionicons name="lock-closed-outline" size={13} color={colors.textMuted} />
+          <Text maxFontSizeMultiplier={1.1} style={styles.gOnlyText}>Only you</Text>
+        </View>
+      ) : (
+        <>
+          <Pressable onPress={act.like} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
+            <Heart liked={act.liked} size={22} ink={colors.text} />
+            {likes ? <Text maxFontSizeMultiplier={1.1} style={styles.gCount}>{compactNumber(likes)}</Text> : null}
+          </Pressable>
+          <Pressable onPress={act.comments} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel={n ? `Comments, ${n}` : 'Comments'}>
+            <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
+            {n ? <Text maxFontSizeMultiplier={1.1} style={styles.gCount}>{compactNumber(n)}</Text> : null}
+          </Pressable>
+        </>
+      )}
+      {children}
+      <Pressable onPress={() => actions.toggleSavePost(post.id)} hitSlop={8} style={[styles.mAct, styles.mSave]} accessibilityRole="button" accessibilityLabel={saved ? 'Remove from saved' : 'Save this post'}>
+        <Ionicons name={saved ? 'bookmark' : 'bookmark-outline'} size={20} color={colors.text} />
+      </Pressable>
+      <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.mAct} accessibilityRole="button" accessibilityLabel="More options">
+        <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** One gallery card. `onlyYou`: your own session with no photo, which no one else sees. */
+const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, near = false, width = 390, onlyYou = false }: CardProps & { onlyYou?: boolean }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions } = useApp();
+  const act = useCardActions(post, me);
+  const media = hasMedia(post);
+  const clip = isClip(post);
+  const s = post.session;
+  const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
+  const photos = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0;
+  const [page, setPage] = useState(0);
+  // A double tap on a picture likes it (never takes a like away); a single tap does nothing.
+  const [bloom, setBloom] = useState(0);
+  const lastTap = useRef(0);
+  const likedNow = useRef(act.liked);
+  likedNow.current = act.liked;
+  const tapPicture = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      if (!likedNow.current) actions.toggleLike(post.id, true);
+      setBloom((b) => b + 1);
+    } else lastTap.current = now;
+  };
+  const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+  const nearLine = near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null;
+  const captionView = (lines: number) => caption ? (
+    <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${caption}. Open comments`} style={styles.gCaption}>
+      <Text numberOfLines={lines} maxFontSizeMultiplier={1.1} style={styles.gCaptionText}>{caption}</Text>
+    </Pressable>
+  ) : null;
+
+  if (!media) {
+    return (
+      <View testID="mixed-plain" style={styles.gCard}>
+        <GalleryHead post={post} author={author} />
+        {nearLine}
+        {s ? <View style={styles.gBlock}><GalleryStats post={post} /></View> : (
+          // A text post: its words in the title's and numbers' place, three lines at most.
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.gBlock}>
+            <Text numberOfLines={3} maxFontSizeMultiplier={1.1} style={styles.gWords}>{post.body}</Text>
+          </Pressable>
+        )}
+        {s ? captionView(1) : null}
+        <GalleryActions post={post} me={me} onlyYou={onlyYou} />
+      </View>
+    );
+  }
+
+  // The picture: the column's full width, square cornered, 4:5.
+  const picture = (
+    <View style={[styles.gPhoto, { width, height: Math.round(width / PHOTO_SHAPE) }]}>
+      {clip ? (
+        <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} clipBadge />
+        </Pressable>
+      ) : (
+        <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Photo'} accessibilityHint="Double tap to like" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} onPage={photos ? setPage : undefined} count={false} />
+          <Bloom token={bloom} />
+        </Pressable>
+      )}
+    </View>
+  );
+  return (
+    <View testID="mixed-photo" style={styles.gCard}>
+      <GalleryHead post={post} author={author} />
+      {nearLine}
+      {s ? <View style={styles.gBlock}><GalleryStats post={post} /></View> : null}
+      {picture}
+      {captionView(2)}
+      <GalleryActions post={post} me={me}>{photos ? <Dots n={photos} at={page} /> : null}</GalleryActions>
+    </View>
+  );
+});
+
+/** "today", "yesterday", "on Tuesday", "on Nov 20": when a day's sessions were, for the "who played" row. */
+function dayWords(day: string): string {
+  const now = new Date();
+  if (day === localDay(now)) return 'today';
+  if (day === localDay(new Date(now.getTime() - 86_400_000))) return 'yesterday';
+  const at = new Date(`${day}T12:00:00`);
+  if (now.getTime() - at.getTime() < 6 * 86_400_000) return `on ${at.toLocaleDateString(undefined, { weekday: 'long' })}`;
+  return `on ${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+}
+
+/** "Tomas played today", "Tomas and Nadia played today", "Tomas, Nadia and 2 others played yesterday". */
+function whoPlayedWords(names: string[], day: string): string {
+  const when = dayWords(day);
+  if (names.length <= 1) return `${names[0] ?? 'Someone'} played ${when}`;
+  if (names.length === 2) return `${names[0]} and ${names[1]} played ${when}`;
+  if (names.length === 3) return `${names[0]}, ${names[1]} and ${names[2]} played ${when}`;
+  return `${names[0]}, ${names[1]} and ${names.length - 2} others played ${when}`;
+}
+
+/**
+ * 'gallery-rollup': other people's sessions with no photo on one day, as ONE quiet row in the feed's time order
+ * (their faces, then "Sam, June and 2 others played today"). A tap opens their small cards in place, under it.
+ */
+function WhoPlayedRow({ day, people, open, onToggle }: { day: string; people: User[]; open: boolean; onToggle: () => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const names = people.map((u) => u.name?.trim().split(/\s+/)[0] || `@${u.handle}`);
+  const words = whoPlayedWords(names, day);
+  return (
+    <Pressable testID="who-played" onPress={onToggle} accessibilityRole="button" accessibilityLabel={words} accessibilityState={{ expanded: open }} accessibilityHint={open ? 'Hides their sessions' : 'Shows their sessions'} style={styles.wRow}>
+      <View style={styles.wFaces}>
+        {people.slice(0, 3).map((u, i) => (
+          <View key={u.id} style={[styles.wFace, i > 0 && styles.wFaceOver]}>
+            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
+          </View>
+        ))}
+      </View>
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={[styles.flex, styles.wText]}>{words}</Text>
+      <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 const MixedA = (p: CardProps) => <MixedCard {...p} order="stats" />;
 const MixedB = (p: CardProps) => <MixedCard {...p} order="photo" />;
 
 /* ------------------------------------------------------------------ the list */
 
-const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB, 'mixed-a2': MixedCard2 };
+const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB, 'mixed-a2': MixedCard2, gallery: GalleryCard, 'gallery-rollup': GalleryCard };
+
+/**
+ * What the list draws: a post's card; in the gallery looks also your own photo-less session as a small card ('mini',
+ * marked "Only you" in 'gallery'), and in 'gallery-rollup' one "who played" row per day for other people's.
+ */
+type Row =
+  | { key: string; kind: 'post'; post: Post }
+  | { key: string; kind: 'mini'; post: Post; onlyYou: boolean }
+  | { key: string; kind: 'rollup'; day: string; posts: Post[] };
 
 export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
   look: Exclude<ActivitiesLook, 'now'>;
@@ -839,7 +1090,32 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const Card = CARD[look];
   // The mixed looks behave as the classic one (every kind of post, a clip opens the reel); only the cards differ.
-  const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2';
+  const gallery = isGalleryLook(look);
+  const rollup = look === 'gallery-rollup';
+  const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' || gallery;
+  // The gallery looks: other people's sessions only with a photo or clip; yours without one as a small card for you;
+  // in 'gallery-rollup', other people's without one as a "who played" row per day, opened in place.
+  const [openDays, setOpenDays] = useState<Set<string>>(() => new Set());
+  const toggleDay = useCallback((day: string) => setOpenDays((was) => {
+    const next = new Set(was);
+    if (next.has(day)) next.delete(day); else next.add(day);
+    return next;
+  }), []);
+  const rows = useMemo<Row[]>(() => {
+    if (!gallery) return posts.map((post) => ({ key: post.id, kind: 'post', post }));
+    const out: Row[] = [];
+    const days = new Map<string, Extract<Row, { kind: 'rollup' }>>();
+    for (const post of posts) {
+      if (!post.session || hasMedia(post)) { out.push({ key: post.id, kind: 'post', post }); continue; }
+      if (post.authorId === currentUserId) { out.push({ key: post.id, kind: 'mini', post, onlyYou: !rollup }); continue; }
+      if (!rollup) continue;
+      const day = localDay(post.createdAt);
+      let r = days.get(day);
+      if (!r) { r = { key: `day:${day}`, kind: 'rollup', day, posts: [] }; days.set(day, r); out.push(r); }
+      r.posts.push(post);
+    }
+    return out.flatMap((r): Row[] => (r.kind === 'rollup' && openDays.has(r.day) ? [r, ...r.posts.map((post): Row => ({ key: post.id, kind: 'mini', post, onlyYou: false }))] : [r]));
+  }, [gallery, rollup, posts, currentUserId, openDays]);
   const { width: screenW } = useWindowDimensions();
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
@@ -859,7 +1135,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   }, []);
   // The mixed looks' column on a computer: a photo card (4:5) still fits under the top row of an 800-tall window.
   // mixed-a2's photo runs edge to edge of the column, so the column is a phone's width: the whole card, actions too, fits.
-  const column = look === 'mixed-a2' ? 390 : look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
+  const column = look === 'mixed-a2' || gallery ? 390 : look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
   const cardW = Math.min(screenW, column);
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
@@ -868,7 +1144,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   const lastY = useRef(0);
   // Where the list was while it was the page on show: back from the reel (or any page over it) it is put back
   // exactly there if the browser let it slip while covered, so the feed never jumps or starts over.
-  const listRef = useRef<FlatList<Post>>(null);
+  const listRef = useRef<FlatList<Row>>(null);
   const keptY = useRef(0);
   const onShow = useRef(true);
   useFocusEffect(useCallback(() => {
@@ -906,8 +1182,9 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   // again while the store has more, up to 5 pages per reach of the end.
   const moreRef = useRef(app.feed.more);
   moreRef.current = app.feed.more;
-  const lenRef = useRef(posts.length);
-  lenRef.current = posts.length;
+  // What the list draws, not what it was given: in a gallery look a page of hidden sessions does not grow it.
+  const lenRef = useRef(rows.length);
+  lenRef.current = rows.length;
   const askedAt = useRef<number | null>(null);
   const tries = useRef(0);
   const [landed, setLanded] = useState(0);
@@ -932,7 +1209,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     if (!landed || askedAt.current === null) return;
     const before = askedAt.current;
     askedAt.current = null;
-    if (posts.length > before) { setLoading(false); return; }
+    if (rows.length > before) { setLoading(false); return; }
     if (!moreRef.current) { setEnded(true); setLoading(false); return; }
     if (tries.current < 4) { tries.current += 1; loadMore(true); return; }
     setLoading(false);
@@ -945,12 +1222,18 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     try { await actions.refresh(); } finally { setRefreshing(false); setEnded(false); }
   }, [actions, liveRow]);
 
-  const renderItem = useCallback(({ item }: { item: Post }) => {
+  const renderItem = useCallback(({ item: row }: { item: Row }) => {
+    if (row.kind === 'rollup') {
+      const people = [...new Set(row.posts.map((p) => p.authorId))].flatMap((id) => usersById.get(id) ?? []);
+      return <View style={[styles.column, { maxWidth: column }]}><WhoPlayedRow day={row.day} people={people} open={openDays.has(row.day)} onToggle={() => toggleDay(row.day)} /></View>;
+    }
+    const item = row.post;
     const author = usersById.get(item.authorId);
     if (!author || (!item.session && !classic)) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !followingIds.includes(author.id);
+    if (row.kind === 'mini') return <View style={[styles.column, { maxWidth: column }]}><GalleryCard post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} near={nearOne} width={cardW} onlyYou={row.onlyYou} /></View>;
     return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
-  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card]);
+  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay]);
 
   const header = (
     <View style={{ paddingTop: top }}>
@@ -967,8 +1250,8 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     <View style={styles.screen}>
       <FlatList
         ref={listRef}
-        data={posts}
-        keyExtractor={(p) => p.id}
+        data={rows}
+        keyExtractor={(r) => r.key}
         renderItem={renderItem}
         ListHeaderComponent={header}
         ListEmptyComponent={showStart ? null : <Text style={[styles.endText, styles.empty]}>{classic ? 'No posts yet. Yours and the people you follow show up here.' : 'No sessions yet. Yours and the people you follow show up here.'}</Text>}
@@ -1118,4 +1401,31 @@ const styleDefinitions = StyleSheet.create({
   // Full bleed: out past the card's gutter on both sides, square cornered.
   m2Photo: { marginTop: 12, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   m2Caption: { height: 38, marginTop: MIXED2.lineGap + 2, justifyContent: 'flex-start' },
+
+  // gallery: fewer pieces, one rhythm off the 4pt ladder, a 6pt band of the second ground above each card.
+  gCard: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: GALLERY.padTop, paddingBottom: GALLERY.padBottom, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },
+  gHead: { height: GALLERY.head, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  gName: { ...font('500'), fontSize: 15, lineHeight: 19, letterSpacing: -0.1, color: colors.text, flexShrink: 1 },
+  gMeta: { ...typography.small, fontSize: 13, lineHeight: 16, color: colors.textMuted },
+  gBlock: { marginTop: GALLERY.gap },
+  gTitle: { ...typography.heading, lineHeight: GALLERY.title, color: colors.text },
+  gStats: { flexDirection: 'row', gap: spacing.xxl, marginTop: GALLERY.statsGap, height: GALLERY.stats },
+  gStat: { minWidth: 0, flexShrink: 1 },
+  gLabel: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted },
+  gValue: { ...font('500'), fontSize: 22, lineHeight: 26, letterSpacing: -0.4, color: colors.text, fontVariant: ['tabular-nums'] },
+  gUnit: { ...font('400'), fontSize: 13, letterSpacing: 0, color: colors.textMuted },
+  gWords: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.text },
+  gPhoto: { marginTop: spacing.lg, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  gCaption: { marginTop: GALLERY.lineGap },
+  gCaptionText: { ...typography.body, fontSize: 14, lineHeight: GALLERY.line, color: colors.text },
+  gActions: { height: GALLERY.actions, flexDirection: 'row', alignItems: 'center', gap: spacing.xl, position: 'relative' },
+  gCount: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  gOnly: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 },
+  gOnlyText: { ...typography.small, color: colors.textMuted },
+  // gallery-rollup's "who played" row: a band above, faces overlapping, one line of words, a chevron.
+  wRow: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, height: GALLERY.band + 56, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, backgroundColor: colors.bg },
+  wFaces: { flexDirection: 'row', alignItems: 'center' },
+  wFace: { borderRadius: 16, borderWidth: 2, borderColor: colors.bg },
+  wFaceOver: { marginLeft: -10 },
+  wText: { ...typography.body, fontSize: 14, color: colors.textMuted },
 });
