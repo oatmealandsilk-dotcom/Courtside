@@ -38,6 +38,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Which look the website's Activities ships with (ACTIVITIES_LOOK_WEB in src/features/activity/feedLooks/activitiesLook.ts;
+// this tester drives the website): the gallery step runs for 'gallery' and 'gallery-rollup', the friends-played step for
+// 'gallery-rollup' only, neither for 'now'. A line it cannot read stops the run rather than quietly skipping steps.
+const ACTIVITIES_LOOK = /ACTIVITIES_LOOK_WEB: ActivitiesLook = '([\w-]+)'/.exec(fs.readFileSync(path.join(ROOT, 'src/features/activity/feedLooks/activitiesLook.ts'), 'utf8'))?.[1];
+if (!['now', 'gallery', 'gallery-rollup'].includes(ACTIVITIES_LOOK)) {
+  console.error(`smoke: cannot read ACTIVITIES_LOOK_WEB in src/features/activity/feedLooks/activitiesLook.ts (got ${ACTIVITIES_LOOK})`);
+  process.exit(2);
+}
+const ACTIVITIES_GALLERY = ACTIVITIES_LOOK === 'gallery' || ACTIVITIES_LOOK === 'gallery-rollup';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -1313,6 +1322,80 @@ const STEPS = [
     expect: [{ text: /^Comments( · \d+)?$/ }, { label: /^Add a comment/ }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: /^Add a comment/ }); },
   },
+  // Only while the website's Activities is a gallery (ACTIVITIES_LOOK_WEB in activitiesLook.ts): rolled back to 'now', the old pages have no such cards.
+  ...(ACTIVITIES_GALLERY ? [{
+    // Nov 28 (owner: "1 gallery is better"): Activities is one continuous list. Other people's sessions show only
+    // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list where it was.
+    name: 'activities-gallery',
+    title: 'Activities: the gallery, a clip full screen and back to the same spot',
+    async run(page) {
+      await page.tap({ label: 'Activities' });
+      await page.waitFor({ label: /^June's photo/ }, 20000);
+      // Scrolled well down first, so a list that started over (back at the top) cannot pass for one that stayed.
+      // The list itself (its aria-label; the tab button shares the name but does not scroll).
+      const scrollerOf = `[...document.querySelectorAll('[aria-label="Activities"]')].find((el) => el.scrollHeight > el.clientHeight + 20)`;
+      const picked = await page.waitUntil(() => page.eval(`(() => {
+        const list = ${scrollerOf};
+        if (!list) return false;
+        // A clip at least 500px down the list, put a third of the way down the screen; none drawn yet, scroll on and look again.
+        const box = list.getBoundingClientRect();
+        const clips = [...list.querySelectorAll('[aria-label*="s clip"]')];
+        const far = clips.find((c) => c.getBoundingClientRect().top - box.top + list.scrollTop > 500);
+        if (!far) { list.scrollTop = Math.min(list.scrollTop + 400, list.scrollHeight - list.clientHeight); return false; }
+        list.scrollTop += far.getBoundingClientRect().top - window.innerHeight / 3;
+        const r = far.getBoundingClientRect();
+        if (list.scrollTop < 300 || r.top < 120 || r.bottom > window.innerHeight - 60) return false;
+        return JSON.stringify({ label: far.getAttribute('aria-label'), top: Math.round(list.scrollTop) });
+      })()`), 20000, 'a clip on screen with the list scrolled down');
+      const { label, top } = JSON.parse(picked);
+      await page.tap({ label });
+      await page.waitFor({ label: 'Go back' }, 20000);
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ label }, 20000);
+      // Back on the list exactly where it was (the list did not jump or start over).
+      const after = await page.waitUntil(() => page.eval(`(() => { const list = ${scrollerOf}; return list ? String(Math.round(list.scrollTop)) : false; })()`), 10000, 'the Activities list after back').then(Number);
+      if (Math.abs(after - top) > 4) throw new Error(`back from the reel the Activities list moved: scrollTop ${top} before the clip, ${after} after`);
+    },
+    expect: [{ label: /'s clip/ }, { label: 'Save this post', any: true }],
+    // Scrolled back up the top row comes back in (it rides away with a scroll down), then For you again for the steps after.
+    after: async (page) => { await page.reveal({ label: /^June's photo/ }); await page.tap({ label: 'For you' }, 20000); await page.waitFor({ label: 'Clip comments' }); },
+  }] : []),
+  // Only for 'gallery-rollup' (Nov 28, owner: "Gallaty+ friends played"): the demo's friends with a session and no
+  // photo (Tomás and Nadia, a few hours ago) are one "who played" row for their day; a tap opens their sessions in
+  // place, another closes them. Read by its label's shape, not its exact words: after midnight the day's words (and
+  // which day each session falls on) change.
+  ...(ACTIVITIES_LOOK === 'gallery-rollup' ? [{
+    name: 'activities-friends-played',
+    title: 'Activities: the friends-played row opens in place and closes',
+    async run(page) {
+      await page.tap({ label: 'Activities' });
+      await page.waitFor({ label: /^June's photo/ }, 20000);
+      await page.reveal({ testId: 'who-played' }, 20000);
+      const { label } = await page.waitFor({ testId: 'who-played' });
+      const m = /^(.+ played (?:today|yesterday|on .+)), show sessions$/.exec(label ?? '');
+      if (!m) throw new Error(`the friends-played row reads "${label}"`);
+      if (!/Tomás|Nadia/.test(m[1])) throw new Error(`the friends-played row names neither of the demo's friends: "${m[1]}"`);
+      // Closed, its sessions are not drawn.
+      if (await page.find({ testId: 'who-item', any: true })) throw new Error('the friends-played row shows its sessions before it is tapped');
+      await page.tap({ label });
+      // Opened in place: the same row says so (its words, aria-expanded), and the day's sessions sit under it.
+      await page.waitFor({ label: `${m[1]}, hide sessions` });
+      const state = await page.eval(`[...document.querySelectorAll('[data-testid="who-played"]')].map((el) => el.getAttribute('aria-expanded')).join(',')`);
+      if (!/\btrue\b/.test(state)) throw new Error(`the opened friends-played row is not marked expanded (aria-expanded: ${state || 'none'})`);
+      await page.waitFor({ label: /^(Tomás|Nadia) .*, .+\. .+ on court/ });
+      page.whoPlayed = m[1];
+    },
+    expect: [{ testId: 'who-item' }, { label: /played .+, hide sessions$/ }],
+    // A second tap closes it again; then back to the top and For you for the steps after.
+    after: async (page) => {
+      await page.tap({ label: `${page.whoPlayed}, hide sessions` });
+      await page.waitFor({ label: `${page.whoPlayed}, show sessions` });
+      await page.gone({ testId: 'who-item' }, 10000);
+      await page.reveal({ label: /^June's photo/ });
+      await page.tap({ label: 'For you' }, 20000);
+      await page.waitFor({ label: 'Clip comments' });
+    },
+  }] : []),
   {
     name: 'coaching',
     title: 'Coaching tab',
@@ -1859,6 +1942,8 @@ const STEPS = [
       await page.waitFor({ text: 'Find Players' }, 45000);
       await page.tap({ label: 'Feed' });
       await page.tap({ label: 'Activities' }, 20000);
+      // The gallery (Nov 28) opens on pictures: the card sits after the first two items, so it is scrolled to.
+      await page.reveal({ label: /^Connect your watch\./ }, 30000);
       // Honest about who sees it: one tap never chooses (migration 193 review).
       await page.waitFor({ label: /^Connect your watch\. Your tennis logs itself from .+\. You choose who sees it\.$/ }, 30000);
     },

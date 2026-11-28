@@ -3,6 +3,7 @@ import type { Comment, Post } from '../types';
 import { CURRENT_USER_ID } from './users';
 import { DEMO_PARK } from './courts';
 import { PLAYED_TODAY_GLOW } from '@/features/places/playedToday';
+import { ACTIVITIES_LOOK, isGalleryLook } from '@/features/activity/feedLooks/activitiesLook';
 
 /** A demo park as a post's court tag. */
 const courtTag = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
@@ -59,7 +60,7 @@ const BALLS_BY_THE_NET = svg(800, 1000, `
 <rect x="250" y="560" width="300" height="300" rx="24" fill="#8A8F94"/>
 <g fill="#E3EF5A">${Array.from({ length: 15 }, (_, i) => `<circle cx="${290 + (i % 5) * 55}" cy="${590 - Math.floor(i / 5) * 40}" r="26"/>`).join('')}</g>`);
 
-export const posts: Post[] = [
+const allPosts: Post[] = [
   {
     // Dev's clip from WHOOP, heart rate and zones shared: the glass "See stats" pill over it, the stats over the playing clip.
     id: 'p-dev-clip',
@@ -88,6 +89,8 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 6),
     body: 'Lost this one, but look at that lob.',
     mediaLabel: 'Match point · 0:18',
+    // A drawn cover, so the demo's clip shows a court scene like the photo posts (Nov 28 gallery examples; demo only).
+    thumbnailUrl: BALLS_BY_THE_NET,
     session: {
       // Doubles (the ScoreBoard's "Sam / June" over "Mira / Dev", Oct 22), a second-set tiebreak.
       focus: 'Match · Lost', minutes: 65, drills: [], activityId: 'act-sam-1', source: 'whoop', kind: 'match', won: false, day: dayAgo(0), sets: [[4, 6], [6, 7, 4]],
@@ -163,6 +166,83 @@ export const posts: Post[] = [
     body: 'An hour of serve and volley patterns. Legs are done.',
     session: { focus: 'Practice', minutes: 62, drills: [], activityId: 'act-june-1', source: 'apple-watch', kind: 'practice', day: dayAgo(1), maxHr: 158, avgHr: 132 },
     likedBy: ['u-mira'],
+    commentIds: [],
+    tags: [],
+  },
+  // Sessions with a photo from people the demo player follows (Nov 28, Activities "gallery" examples: other people's
+  // sessions show there only with a photo or clip, so the demo needs a few). Demo seed only, never real data.
+  {
+    id: 'p-june-photo',
+    authorId: 'u-june',
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 3),
+    body: 'Serve basket before work. Toss finally behaving.',
+    imageUrl: MORNING_COURT,
+    mediaLabel: 'Morning court',
+    session: { focus: 'Practice', minutes: 55, drills: [], activityId: 'act-june-2', source: 'apple-watch', kind: 'practice', day: dayAgo(0), maxHr: 151, avgHr: 128 },
+    likedBy: ['u-sam', 'u-tomas'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    id: 'p-tomas-photo',
+    authorId: 'u-tomas',
+    kind: 'note',
+    createdAt: isoDaysAgo(1, 1),
+    body: 'Closed it out under the lights. Second set was a fight.',
+    imageUrl: DUSK_COURT,
+    mediaLabel: 'Court at dusk',
+    session: { focus: 'Match · Won', minutes: 88, drills: [], activityId: 'act-tomas-2', source: 'whoop', kind: 'match', won: true, day: dayAgo(1), sets: [[6, 3], [7, 5]], maxHr: 168, avgHr: 139 },
+    likedBy: ['u-june', 'u-sam', 'u-nadia', CURRENT_USER_ID],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    id: 'p-nadia-photos',
+    authorId: 'u-nadia',
+    kind: 'note',
+    createdAt: isoDaysAgo(2, 2),
+    body: 'Crosscourt drills, then a basket of second serves.',
+    imageUrl: COURT_FROM_ABOVE,
+    imageUrls: [COURT_FROM_ABOVE, BALLS_BY_THE_NET],
+    mediaLabel: 'Practice court',
+    session: { focus: 'Practice', minutes: 70, drills: [], activityId: 'act-nadia-2', source: 'apple-watch', kind: 'practice', day: dayAgo(2), maxHr: 155, avgHr: 131 },
+    likedBy: ['u-june'],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    id: 'p-omar-photo',
+    authorId: 'u-omar',
+    kind: 'note',
+    createdAt: isoDaysAgo(3, 1),
+    body: 'Lost in straight sets but the backhand held up.',
+    mediaLabel: 'After the match',
+    session: { focus: 'Match · Lost', minutes: 79, drills: [], activityId: 'act-omar-2', source: 'whoop', kind: 'match', won: false, day: dayAgo(3), sets: [[3, 6], [4, 6]], maxHr: 172, avgHr: 144 },
+    likedBy: ['u-sam'],
+    commentIds: [],
+    tags: [],
+  },
+  // And two sessions with no photo today, so the "who played" example has a day with several players in it.
+  {
+    id: 'p-tomas-watch',
+    authorId: 'u-tomas',
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 4),
+    body: '',
+    session: { focus: 'Practice', minutes: 48, drills: [], activityId: 'act-tomas-3', source: 'apple-watch', kind: 'practice', day: dayAgo(0), maxHr: 149, avgHr: 126 },
+    likedBy: [],
+    commentIds: [],
+    tags: [],
+  },
+  {
+    id: 'p-nadia-watch',
+    authorId: 'u-nadia',
+    kind: 'note',
+    createdAt: isoDaysAgo(0, 7),
+    body: '',
+    session: { focus: 'Practice', minutes: 66, drills: [], activityId: 'act-nadia-3', source: 'apple-watch', kind: 'practice', day: dayAgo(0), maxHr: 160, avgHr: 134 },
+    likedBy: ['u-june'],
     commentIds: [],
     tags: [],
   },
@@ -294,6 +374,8 @@ export const posts: Post[] = [
     createdAt: isoDaysAgo(0, 5),
     body: 'Inside-out forehand drill on court 2. The lights here stay on till 10.',
     mediaLabel: 'Clip · 0:24',
+    // A drawn cover (demo only), as above.
+    thumbnailUrl: COURT_FROM_ABOVE,
     likedBy: ['u-marcus', CURRENT_USER_ID],
     commentIds: [],
     tags: ['forehand'],
@@ -437,6 +519,21 @@ export const posts: Post[] = [
     tags: [],
   }] : []),
 ];
+
+/**
+ * The demo posts and clip covers added for the Activities gallery's examples (Nov 28), only where the gallery is the
+ * look (ACTIVITIES_LOOK: the website): a demo build with today's Activities pages (the iPhone's, for its simulator
+ * proofs) has exactly the posts it had before. Demo seed only; real accounts never see fixtures.
+ */
+const GALLERY_DEMO_POSTS = new Set(['p-june-photo', 'p-tomas-photo', 'p-nadia-photos', 'p-omar-photo', 'p-tomas-watch', 'p-nadia-watch']);
+const GALLERY_DEMO_COVERS = new Set(['p-sam-clip', 'p-court-1']);
+export const posts: Post[] = isGalleryLook(ACTIVITIES_LOOK) ? allPosts
+  : allPosts.flatMap((p) => {
+    if (GALLERY_DEMO_POSTS.has(p.id)) return [];
+    if (!GALLERY_DEMO_COVERS.has(p.id)) return [p];
+    const { thumbnailUrl: _cover, ...before } = p;
+    return [before];
+  });
 
 export const comments: Comment[] = [
   {

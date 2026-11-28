@@ -9,6 +9,7 @@ import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { launchLookAtOpen, launchLookNow, launchLookStatus } from '@/lib/launchLook';
+import { learned } from '@/features/tips/tips';
 
 /**
  * The simulator proof harness's app-wide commands (simDriver: demo builds with EXPO_PUBLIC_SIM_DRIVER only; AppShell mounts
@@ -68,6 +69,8 @@ export function SimDriverHost() {
       // How long the live app's reply fetch takes when a thread opens (simThreadFetch): ms=0 never, as the demo always was.
       simAction('threadfetch', (q) => { simThreadFetch.ms = Number(q.ms) || 0; simLog(`[sim] threadfetch ${simThreadFetch.ms}`); }),
       simAction('back', () => { if (router.canGoBack()) router.back(); }),
+      // A tip put away, as its Got it does (key=activities), so a picture shows the page under it.
+      simAction('tipdone', (q) => { if (q.key) learned(q.key as Parameters<typeof learned>[0]); }),
       simAction('mapvis', () => { void now.current.setMapVisibility('mutuals'); }),
       // Taps answering sooner (pressV2's TAP_FAST) off or on for this build, whoever is signed in, so the tap timing
       // (tapTiming) can time the same build both ways: on=0, on=1, or on=switch (back to the switch and the admin flag).
