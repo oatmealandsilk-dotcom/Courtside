@@ -689,7 +689,7 @@ export const MIXED2 = {
   padTop: 12,
   head: 36,
   gap: 10,
-  /** The title line, 6pt, and the numbers' row: SessionCard compact `bare`. */
+  /** The title line (20/700), 4pt, and the numbers' row packed from the left: SessionCard compact `bare`. */
   stats: 86,
   lineGap: 6,
   line: 20,
@@ -710,7 +710,7 @@ function MixedHead2({ post, author, me }: { post: Post; author: User; me: string
         <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
         <View style={[styles.flex, styles.m2Words]}>
           <View style={styles.mNameRow}>
-            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.mName}>{author.name}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.m2Name}>{author.name}</Text>
             <StreakFlame days={streak} maxFontSizeMultiplier={1.1} />
             <PushedDownTag post={post} />
           </View>
@@ -1106,12 +1106,15 @@ const styleDefinitions = StyleSheet.create({
   m2Card: { borderTopWidth: MIXED2.band, borderTopColor: colors.surfaceAlt, paddingTop: MIXED2.padTop, paddingBottom: MIXED2.padBottom, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },
   m2Head: { height: MIXED2.head, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   m2Words: { justifyContent: 'center', gap: 1 },
+  // The name a step under the title (15/600), so the title reads as the card's headline.
+  m2Name: { ...typography.bodyStrong, fontSize: 15, lineHeight: 19, color: colors.text, flexShrink: 1 },
   m2Meta: { ...typography.small, fontSize: 13, lineHeight: 16, color: colors.textMuted },
   m2Stats: { height: MIXED2.stats, marginTop: MIXED2.gap },
   m2Line: { height: MIXED2.line, marginTop: MIXED2.lineGap, justifyContent: 'center' },
-  // A text post's words a size up and centred in their slot, so a short post doesn't leave a hole above the actions.
-  m2Text: { height: TEXT2_H, marginTop: MIXED2.gap, justifyContent: 'center' },
-  m2TextWords: { ...typography.body, fontSize: 18, lineHeight: 25, letterSpacing: -0.2, color: colors.text },
+  // A text post's words start right under the header, where a title line would (as Instagram, Threads and Strava);
+  // any height left over falls below them, above the actions.
+  m2Text: { height: TEXT2_H, marginTop: MIXED2.gap, justifyContent: 'flex-start' },
+  m2TextWords: { ...typography.body, fontSize: 17, lineHeight: 24, letterSpacing: -0.2, color: colors.text },
   // Full bleed: out past the card's gutter on both sides, square cornered.
   m2Photo: { marginTop: 12, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   m2Caption: { height: 38, marginTop: MIXED2.lineGap + 2, justifyContent: 'flex-start' },

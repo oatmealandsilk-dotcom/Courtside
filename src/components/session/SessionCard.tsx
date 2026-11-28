@@ -772,15 +772,26 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
           </View>
         </View>
       )}
-      <View style={[styles.top, { height: bare ? 24 : 20 }]}>
-        <Text style={bare ? { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.3, color: look.ink, flex: 1 } : { ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
-        {result ? (
-          <View style={[styles.pill, { height: 20, borderRadius: 10, paddingHorizontal: 8, backgroundColor: look.pillFill }]}>
-            <Text style={{ ...font('700'), fontSize: 11, color: look.pillInk }} maxFontSizeMultiplier={1}>{result}</Text>
-          </View>
-        ) : null}
-      </View>
-      <View style={[styles.compactRow, bare && { marginTop: 6 }]}>
+      {bare ? (
+        // No box: the title is the card's headline (20/700, as Strava's activity name), the result a quiet word after
+        // it (no filled pill: the ScoreBoard already bolds the winner), in the court's accent when won.
+        <View style={[styles.top, { height: 26 }]}>
+          <Text style={{ ...font('700'), fontSize: 20, lineHeight: 26, letterSpacing: -0.4, color: look.ink, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>
+            {top}
+            {result ? <Text style={{ ...font('600'), color: session.won ? (look.touch ?? look.pillFill) : look.muted }}>{` · ${result}`}</Text> : null}
+          </Text>
+        </View>
+      ) : (
+        <View style={[styles.top, { height: 20 }]}>
+          <Text style={{ ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
+          {result ? (
+            <View style={[styles.pill, { height: 20, borderRadius: 10, paddingHorizontal: 8, backgroundColor: look.pillFill }]}>
+              <Text style={{ ...font('700'), fontSize: 11, color: look.pillInk }} maxFontSizeMultiplier={1}>{result}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+      <View style={[styles.compactRow, bare && styles.compactRowBare]}>
         <View style={styles.compactLead}>
           {score ? (
             <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.62 * k} inks={look.plain ? undefined : boxInks(look)} />
@@ -792,7 +803,7 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
           )}
         </View>
         {score || shown.length ? (
-          <View style={[styles.compactStats, { gap: 14 * k }]}>
+          <View style={[styles.compactStats, { gap: (bare ? 28 : 14) * k }]}>
             {score ? (
               <View style={styles.compactStat}>
                 <Duration minutes={session.minutes} size={Math.round(20 * k)} unitScale={0.5} color={look.figure} unitColor={look.muted} play={play} delay={wait + 200} maxGrow={1} />
@@ -850,6 +861,8 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1 },
   // The compact band: the lead (time or ScoreBoard) at the left, its numbers at the right, both on the bottom edge.
   compactRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, minHeight: 0 },
+  // Bare (no box): packed from the left with even gaps, as Strava's stat columns, so the hero never moves.
+  compactRowBare: { justifyContent: 'flex-start', gap: 28, marginTop: 4 },
   compactLead: { flexShrink: 1, minWidth: 0 },
   compactStats: { flexDirection: 'row', alignItems: 'flex-end', flexShrink: 0 },
   compactStat: { minWidth: 0 },
