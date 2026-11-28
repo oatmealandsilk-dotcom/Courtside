@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react';
-import { useWindowDimensions, type LayoutChangeEvent, type ScrollView, type View } from 'react-native';
+import { useCallback, useState } from 'react';
+import { type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { CARD_HEIGHT } from '@/components/map/cardFit';
@@ -7,7 +7,6 @@ import { PANE_TOP } from '@/components/ui/PaneScroller';
 import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barInset';
 import { useBarIg } from '@/features/navigation/barLens';
 import { BAR_METRICS, NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
-import { useTabActive } from '@/features/navigation/tabFocus';
 
 /**
  * How high today's bottom bar stands above the screen's bottom edge on a phone (its top), with the live session's bar
@@ -26,36 +25,24 @@ export function useBarTop(): number {
 }
 
 /**
- * The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): how tall it is, from where it starts on Find Players down
- * to the screen's foot, under the bottom bar, the way Apple Maps runs. Read from the page's own layout (where the map
- * sits in the section, where the section's scroller sits on the screen), never from where the page happens to be
- * scrolled, so a section put back half way down still gets the right map. Undefined until read (the card's usual
- * height meanwhile). `onSlotLayout` goes on the view that holds the map, a direct child of the section's first column.
+ * The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): how tall it is, from where it starts on Find Players
+ * (under the search box) down to the section's foot, which is the screen's foot, under the floating bottom bar, the way
+ * Apple Maps runs. From the page's own layout only (the section's height on the screen, where the map sits in it), never
+ * from where the page happens to be scrolled or how it is moving, so a section put back half way down, or still settling
+ * in as the app opens, gets the right map all the same. Undefined until both are known (the card's usual height meanwhile).
+ * `onSlotLayout` goes on the view that holds the map (a direct child of the section's first column), `onPaneHeight` on
+ * the section's PaneScroller.
  */
-export function useTallMap(scroller: RefObject<ScrollView | null>, on: boolean): { height: number | undefined; onSlotLayout: (e: LayoutChangeEvent) => void } {
-  const { height: screenH, fontScale } = useWindowDimensions();
-  const active = useTabActive();
-  // Where the map starts in the section (under the search box): it moves only with the page's layout (bigger text).
+export function useTallMap(on: boolean): { height: number | undefined; onSlotLayout: (e: LayoutChangeEvent) => void; onPaneHeight: (h: number) => void } {
+  // Where the map starts in the section: it moves only with the page's layout (bigger text, say).
   const [slotY, setSlotY] = useState(0);
-  // Where the section's scroller starts on the screen (under the section row): it never scrolls.
-  const [paneTop, setPaneTop] = useState(0);
+  // The section's own height on the screen (from under the section row to the screen's foot).
+  const [paneH, setPaneH] = useState(0);
   const onSlotLayout = useCallback((e: LayoutChangeEvent) => {
     const y = Math.round(e.nativeEvent.layout.y);
     // 0 only while it is laid aside (a search under way hides it, out of the page's flow): kept as it was.
     if (y > 0) setSlotY(y);
   }, []);
-  useEffect(() => {
-    if (!on) return undefined;
-    const read = () => {
-      const node = scroller.current as unknown as (View & { getNativeScrollRef?: () => View | null }) | null;
-      const host = node && typeof node.measureInWindow === 'function' ? node : node?.getNativeScrollRef?.() ?? null;
-      host?.measureInWindow((_x, y) => { if (y > 0) setPaneTop(Math.round(y)); });
-    };
-    read();
-    // Once more after the tab's arrival has settled (it may still be sliding in now).
-    const t = setTimeout(read, 900);
-    return () => clearTimeout(t);
-  }, [on, scroller, slotY, fontScale, active]);
-  const height = on && paneTop > 0 && slotY > 0 ? Math.max(CARD_HEIGHT, Math.round(screenH - (paneTop + PANE_TOP + slotY))) : undefined;
-  return { height, onSlotLayout };
+  const height = on && paneH > 0 && slotY > 0 ? Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY) : undefined;
+  return { height, onSlotLayout, onPaneHeight: setPaneH };
 }

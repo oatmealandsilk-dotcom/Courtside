@@ -693,7 +693,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // the screen's foot, under the bottom bar, and Open to hit on its lower part just clear of the bar. While the card asks
   // for a city instead (no map), Open to hit stays in its usual place under it.
   const [mapCityless, setMapCityless] = useState(false);
-  const tallMap = useTallMap(playersRef, MAP_OVERLAY && !!currentUser);
+  const tallMap = useTallMap(MAP_OVERLAY && !!currentUser);
   const barTop = useBarTop();
   const stripOn = MAP_OVERLAY && showUpToday && !mapCityless;
   // How tall Open to hit's own rows are on the map (its panel adds its padding and the bar's room under them).
@@ -1144,7 +1144,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
+          <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={MAP_OVERLAY ? tallMap.onPaneHeight : undefined}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
           <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}

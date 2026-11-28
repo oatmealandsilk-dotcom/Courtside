@@ -52,6 +52,8 @@ export interface PaneScrollerProps {
   inStrip?: SharedValue<boolean>;
   /** On a computer: the width the section's content keeps to, centred in a scroller as wide as the window. */
   column?: number;
+  /** Told the section's own height on the screen each time it is laid out (the iPhone's Community map runs down to its foot). */
+  onViewHeight?: (height: number) => void;
   children: ReactNode;
 }
 
@@ -74,7 +76,7 @@ export interface PaneScrollerProps {
  *  - a section not on show only obeys a jump to its top (the tab being left,
  *    or the bar bringing you to the map), never a glide meant for the other.
  */
-export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, children }: PaneScrollerProps) {
+export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, onViewHeight, children }: PaneScrollerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const barInset = useBarInset();
   const insets = useSafeAreaInsets();
@@ -357,7 +359,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
           // The auto-tester finds each section's scroller by this (scripts/smoke.mjs, community-swipe-still).
           testID={`pane-${memoryKey}`}
           contentContainerStyle={[styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null]}
-          onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); }}
+          onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); if (h > 0) onViewHeight?.(h); }}
           scrollEnabled={!swiping}
           // A tap on an iPhone's clock takes the section on show to its top; only one scroller may say yes.
           scrollsToTop={active && tabActive}
