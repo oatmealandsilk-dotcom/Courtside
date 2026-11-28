@@ -240,7 +240,7 @@ async function sharePhoto(source: string) {
  * full screen in Activities (Nov 28), there without the share button: their
  * "paths" are the posts' own links, shown as they are.
  */
-export function PhotoViewer({ photos, start, homes, homeRadius = ROUND, caption, who, share: shareOn = true, onClose }: {
+export function PhotoViewer({ photos, start, homes, homeRadius = ROUND, caption, who, share: shareOn = true, onIndex, onClose }: {
   photos: ChatPhoto[];
   start: number;
   /** Where each photo sits in the chat, by its place in the message: the tapped one grows out of its spot, and any of them goes back into its own. */
@@ -252,6 +252,8 @@ export function PhotoViewer({ photos, start, homes, homeRadius = ROUND, caption,
   who?: string;
   /** The share button (a chat's photos); false leaves it out (a post's, which its own ••• shares). */
   share?: boolean;
+  /** Hears which photo is showing as it changes (Activities turns the card's own photos to it, so the one put back lands on itself). */
+  onIndex?: (i: number) => void;
   onClose: () => void;
 }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -263,6 +265,9 @@ export function PhotoViewer({ photos, start, homes, homeRadius = ROUND, caption,
   const [index, setIndex] = useState(first);
   const at = useRef(first);
   at.current = index;
+  const onIndexRef = useRef(onIndex);
+  onIndexRef.current = onIndex;
+  useEffect(() => { onIndexRef.current?.(index); }, [index]);
   const zooms = useRef<(ZoomableMediaHandle | null)[]>([]);
   const row = useRef<ScrollView>(null);
   // A move asked for by the strip or the arrow keys: the pages it passes on the way are not "the one showing".
