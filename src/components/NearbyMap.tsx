@@ -9,7 +9,7 @@ import Reanimated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withDela
 import { router } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { APP_C_PREVIEW } from '@/features/community/appCPreview';
+import { APP_C_NEAR_ROW, APP_C_PREVIEW } from '@/features/community/appCPreview';
 import { CardCredit, ChipsNoteLine, CitylessCard, CourtSheet, CourtsZoomNote, FilterChips, HitSheet, NearMeRow, ListCrown, PIN_FIT_TOP, YouSheet, MapButtons, MapTopBar, PlaceSheet, PlayerSheet, PlayersPill, PlayersSheet, PreviewOverlay, WhereCard } from '@/components/map/MapChrome';
 import { CardStage } from '@/components/map/CardStage';
 import { warmMapEngine } from '@/components/map/engineCopy';
@@ -1109,7 +1109,7 @@ export function NearbyMap(props: NearbyMapProps) {
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
-        style={[styles.card, cardHeight ? { height: cardHeight } : null, APP_C_PREVIEW && [styles.cardEdge, { height: (cardHeight ?? HEIGHT) - C_ROW_ROOM }]]}
+        style={[styles.card, cardHeight ? { height: cardHeight } : null, APP_C_PREVIEW && [styles.cardEdge, { height: (cardHeight ?? HEIGHT) - (APP_C_NEAR_ROW ? C_ROW_ROOM : 0) }]]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
@@ -1154,7 +1154,7 @@ export function NearbyMap(props: NearbyMapProps) {
         </Reanimated.View>
       </Pressable>
     );
-    if (!APP_C_PREVIEW) return cardView;
+    if (!APP_C_NEAR_ROW) return cardView;
     return (
       <View>
         {cardView}
