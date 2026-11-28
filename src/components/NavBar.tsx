@@ -22,6 +22,7 @@ import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { openJoinSheet } from '@/features/guest/joinAsk';
+import { Button } from '@/components/ui/Button';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
@@ -454,6 +455,23 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
           <Ionicons name="add-circle-outline" size={23} color={colors.textMuted} />
           {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarLabel}>Create</Text>}
         </Pressable>
+
+        {/* A visitor on a computer (Nov 27): the menu stays exactly as it is, with one Join CourtSide button
+            under it (owner: "keep the side bar the same other than a new join button"). */}
+        {isGuest ? (
+          compact ? (
+            <Pressable
+              onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })}
+              accessibilityRole="button"
+              accessibilityLabel="Join CourtSide"
+              style={({ pressed }) => [styles.sidebarItem, styles.sidebarItemCompact, pressed && { backgroundColor: colors.surfaceAlt }]}
+            >
+              <Ionicons name="person-add-outline" size={22} color={colors.brand} />
+            </Pressable>
+          ) : (
+            <Button label="Join CourtSide" size="sm" full style={styles.sidebarJoin} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
+          )
+        ) : null}
       </View>
 
       {compact ? null : (
@@ -579,5 +597,6 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'center',
   },
   sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
+  sidebarJoin: { marginTop: spacing.md, marginHorizontal: spacing.xs },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

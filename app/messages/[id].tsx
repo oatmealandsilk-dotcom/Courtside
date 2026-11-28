@@ -203,6 +203,8 @@ export default function Thread() {
   const styles = useThemedStyles(styleDefinitions);
   const { id: routeId } = useLocalSearchParams<{ id: string }>();
   const insets = useSafeAreaInsets();
+  /** How far the header steps in on each side to sit in the messages' column (a computer only). */
+  const [headerSide, setHeaderSide] = useState(0);
   const { width: winW } = useWindowDimensions();
   const { conversations, messages, users, posts, questions, hitRequests, currentUserId, currentUser, detectedCoords, defaultReaction, actions, blockedIds, lastSeen } = useApp();
   // A new chat opened here that took the server's id with its first message
@@ -955,7 +957,9 @@ export default function Thread() {
       {/* First, so everything else covers it: where the court cards' little maps are drawn. */}
       <CourtMapSnapshots />
       <Wash height={340} strength={0.75} />
-      <View style={styles.header}>
+      {/* On a computer the back arrow, name and info sit in the messages' own 700-wide column, the line under them still
+          the window's full width (Nov 27). A phone is narrower than the column: nothing changes there. */}
+      <View style={[styles.header, headerSide > 0 && { paddingLeft: spacing.sm + headerSide, paddingRight: spacing.md + headerSide }]} onLayout={(e) => { const side = Math.max(0, Math.floor((e.nativeEvent.layout.width - CHAT_COLUMN) / 2)); if (side !== headerSide) setHeaderSide(side); }}>
         {/* Back to the inbox even when this chat was the first page opened (a link, a reload). */}
         <Pressable onPress={() => goBack('/messages')} accessibilityRole="button" accessibilityLabel="Back" hitSlop={10} style={({ pressed }) => [styles.back, pressed && styles.pressedDim]}>
           <Ionicons name="chevron-back" size={26} color={colors.text} />
@@ -2758,6 +2762,9 @@ function TypingDot({ styles, delay }: { styles: ReturnType<typeof useThemedStyle
   const style = useAnimatedStyle(() => ({ opacity: 0.35 + 0.65 * v.value, transform: [{ translateY: -3 * v.value }] }));
   return <Reanimated.View style={[styles.typingDot, style]} />;
 }
+
+/** The messages' column, as wide as their list (scrollContent) and the bar under them. */
+const CHAT_COLUMN = 700;
 
 const styleDefinitions = StyleSheet.create({
   blockedNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingTop: spacing.md, paddingBottom: spacing.xs, maxWidth: 700, width: '100%', alignSelf: 'center' },

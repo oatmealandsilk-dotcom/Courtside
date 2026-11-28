@@ -48,7 +48,7 @@ export const LevelPill = React.memo(function LevelPill({ profile, userId, small 
       style={[styles.pill, small && styles.small, onMedia ? [styles.frost, liquidGlass && styles.frostLiquid] : { backgroundColor: tintFill(tone) }, style]}
     >
       {onMedia ? <GlassFill radius={10} tint={tone} strength={0.18} fill="rgba(16, 18, 17, 0.38)" /> : null}
-      {system ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia]}>{system}</Text> : null}
+      {system ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.system, small && styles.systemSmall, { color: onMedia ? tone : ink }, onMedia && styles.systemOnMedia, onMedia && small && styles.systemOnMediaSmall]}>{system}</Text> : null}
       <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.value, small && styles.valueSmall, { color: ink }]}>{value}</Text>
     </View>
   );
@@ -81,7 +81,9 @@ const styles = StyleSheet.create({
   frostLiquid: { backgroundColor: 'transparent' },
   system: { ...font('600'), fontSize: 10.5, letterSpacing: 0.3, opacity: 0.8 },
   systemSmall: { fontSize: 10 },
-  systemOnMedia: { opacity: 1 },
+  // Over a picture the system's word is a touch bigger (11.5 from 10.5, Nov 27) so it reads over video; it keeps its colour.
+  systemOnMedia: { opacity: 1, fontSize: 11.5 },
+  systemOnMediaSmall: { fontSize: 11 },
   value: { ...font('700'), fontSize: 12.5, fontVariant: ['tabular-nums'] },
   valueSmall: { fontSize: 12 },
 });

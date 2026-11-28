@@ -131,7 +131,7 @@ function Coaching() {
       {/* Oct 25 ("D all for less ai", item 7): the line goes; the question page itself says "Free and public." */}
       {LESS_AI_ROUND2 ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.askNote}>{shown.length ? 'Public. A verified coach answers, usually within a day.' : 'Public. Your question stays up until a coach answers.'}</Text>}
       {/* A guest with no coach to show yet (only public adults' listings show signed out): the way in, in the page. */}
-      {isGuest && !shown.length ? <GuestJoinCard title="Ask real coaches" body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
+      {isGuest && !shown.length ? <GuestJoinCard body="Make a free account to ask a coach about your game and see coaches near you." /> : null}
       {/* The AI coach shows up here once it is switched on (its key added on the server). */}
       {aiCoachOn ? (
         <SwipePressable accessibilityRole="link" accessibilityLabel="AI coach" onPress={() => router.push('/ai-coach')} style={({ pressed }) => [styles.ai, pressed && styles.pressed]}>
@@ -148,14 +148,16 @@ function Coaching() {
       <View style={styles.section}>
         <View style={styles.sectionRow}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionTitle}>Coaches</Text>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{shown.length}</Text>
+          {/* A visitor sees no bare "0" (Nov 27). */}
+          {isGuest && !shown.length ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sectionCount}>{shown.length}</Text>}
         </View>
       </View>
       {shown.length === 0 ? (
         <View style={styles.none}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noneTitle}>No coaches yet</Text>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.noneBody}>We’re approving the first ones now.</Text>
-          {currentUser?.isCoach ? null : (
+          {/* Applying to coach needs an account: a visitor isn't asked before having one (Nov 27). */}
+          {currentUser?.isCoach || isGuest ? null : (
             <Button label="Apply to coach" variant="secondary" onPress={() => router.push('/coach-apply')} />
           )}
         </View>

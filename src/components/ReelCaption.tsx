@@ -1,7 +1,7 @@
 import { PRESS_DIM } from '@/theme/press';
 import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ShadeGradient } from '@/components/ui/ShadeGradient';
@@ -441,44 +441,54 @@ export function RailShade() {
 }
 
 const HINT_KEY = 'courtside-swipe-hint-shows';
-/** How many opens of the app teach the swipes; after that the hint never shows again. */
+/** Set once the person has swiped to another clip: from then on the hint never shows again on this device (Nov 27). */
+const HINT_DONE_KEY = 'courtside-swipe-hint-done';
+/** Before Nov 27 the hint showed on the first 3 opens; someone who saw all 3 has been taught already. */
 const HINT_OPENS = 3;
-/** Decided once per launch: whether this open still teaches the swipes, and whether it already has. */
-let hintThisLaunch: Promise<boolean> | null = null;
-let hintShown = false;
+/** Known once per launch: whether this device still teaches the swipe. */
+let hintTeach: Promise<boolean> | null = null;
+let hintDone = false;
+const hintHiders = new Set<() => void>();
+/** A browser with a mouse (a computer): nothing there swipes, so the hint never shows (Nov 27). */
+const NO_SWIPES = Platform.OS === 'web' && typeof window !== 'undefined' && !window.matchMedia?.('(pointer: coarse)').matches;
+
+/** The person swiped to another clip: the hint goes and is remembered on the device, never to come back. */
+export function swipedPastHint() {
+  if (hintDone) return;
+  hintDone = true;
+  hintTeach = Promise.resolve(false);
+  hintHiders.forEach((hide) => hide());
+  void AsyncStorage.setItem(HINT_DONE_KEY, '1').catch(() => {});
+}
 
 /**
- * "↑ Next moment · → Community" just above the first clip's words, for a few
- * seconds, on the first few opens of the app only: a nudge for someone new,
- * not a fixture an everyday player keeps seeing. Community sits to Home's left
- * now, so its arrow points right: the way the finger moves. It floats rather than taking
- * a line, so nothing jumps when it appears or goes.
+ * "Swipe up for the next clip" (Nov 27: one clear white line, from a faint
+ * "↑ Next moment · → Community") just above the first clip's words, until the
+ * person swipes once (owner, Nov 27: "it should dissapear after swiping once");
+ * then it is gone for good on that device, like the other one-time tips. None on
+ * a computer. It floats rather than taking a line, so nothing jumps when it
+ * appears or goes.
  */
 export function SwipeHint() {
   const [shown, setShown] = useState(false);
   // The first-run tour teaches the same swipes; the hint keeps out of its way, and out from under it.
   const touring = useTourBusy();
   useEffect(() => {
+    if (NO_SWIPES || hintDone) return undefined;
     let on = true;
-    let t: ReturnType<typeof setTimeout> | undefined;
-    hintThisLaunch ??= (async () => {
+    const hide = () => { if (on) setShown(false); };
+    hintHiders.add(hide);
+    hintTeach ??= (async () => {
       try {
-        const opens = Number(await AsyncStorage.getItem(HINT_KEY)) || 0;
-        if (opens >= HINT_OPENS) return false;
-        await AsyncStorage.setItem(HINT_KEY, String(opens + 1));
-        return true;
+        const [done, opens] = await Promise.all([AsyncStorage.getItem(HINT_DONE_KEY), AsyncStorage.getItem(HINT_KEY)]);
+        return !done && (Number(opens) || 0) < HINT_OPENS;
       } catch { return false; }
     })();
-    void hintThisLaunch.then((teach) => {
-      if (!on || !teach || hintShown) return;
-      hintShown = true;
-      setShown(true);
-      t = setTimeout(() => { if (on) setShown(false); }, 4000);
-    });
-    return () => { on = false; if (t) clearTimeout(t); };
+    void hintTeach.then((teach) => { if (on && teach && !hintDone) setShown(true); });
+    return () => { on = false; hintHiders.delete(hide); };
   }, []);
   if (!shown || touring) return null;
-  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>↑ Next moment   ·   → Community</Animated.Text>;
+  return <Animated.Text exiting={FadeOut.duration(400)} style={styles.hint} maxFontSizeMultiplier={MAX_GROW}>Swipe up for the next clip</Animated.Text>;
 }
 
 const styles = StyleSheet.create({
@@ -528,7 +538,7 @@ const styles = StyleSheet.create({
   // The session's pill: 10 under the small line.
   pill: { marginTop: 10 },
   // Out of the words' layout, 10 above the name, in the words' column (16 in from the left, clear of the rail).
-  hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: 'rgba(255,255,255,0.8)', fontSize: 12, lineHeight: 15, ...font('500'), letterSpacing: 0.1, ...EDGE_SMALL },
+  hint: { position: 'absolute', left: 16, right: 72, bottom: '100%', marginBottom: 10, color: '#fff', fontSize: 13.5, lineHeight: 17, ...font('600'), letterSpacing: -0.05, ...EDGE },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0 },
   // From the rail's top, up past the heart and down past the bookmark, to the screen's right edge (the rail stands 12 in).
   railShade: { position: 'absolute', top: -115, right: -12, width: 112, height: 340 },

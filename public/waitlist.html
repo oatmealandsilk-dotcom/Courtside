@@ -37,10 +37,13 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="CourtSide on an iPhone, next to the words: the social media app for tennis.">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#F8F7F2">
+<meta name="theme-color" content="#F8F7F2" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0F1412" media="(prefers-color-scheme: dark)">
 <noscript><meta http-equiv="refresh" content="0; url=https://app.courtsidebase.com/"></noscript>
 <style>
   :root { --bg: #F8F7F2; --text: #18201B; --muted: #5C6660; --brand: #3F7049; }
+  /* A phone in dark mode: the app's Night colours for the moment this page shows (Nov 27). */
+  @media (prefers-color-scheme: dark) { :root { --bg: #0F1412; --text: #EDF1EE; --muted: #A6B1AB; --brand: #6FB483; color-scheme: dark; } }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
   main { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px 16px; box-sizing: border-box; text-align: center; }
   .name { font-weight: 700; font-size: 28px; letter-spacing: -0.8px; color: var(--brand); }

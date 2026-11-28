@@ -184,7 +184,7 @@ const toSignIn = () => router.push({ pathname: '/sign-in', params: { mode: 'sign
  * screen readers. On Coaching, when nobody is listed for guests yet: the words, the button, and "I already have an
  * account" as a plain link.
  */
-export function GuestJoinCard({ title, body, profile = false }: { title: string; body: string; profile?: boolean }) {
+export function GuestJoinCard({ title, body, profile = false }: { /** Left out where the page's own heading already says it (Coaching's "Ask a coach"). */ title?: string; body: string; profile?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   if (profile) {
     return (
@@ -213,7 +213,7 @@ export function GuestJoinCard({ title, body, profile = false }: { title: string;
   }
   return (
     <View style={styles.plain}>
-      <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text>
+      {title ? <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text> : null}
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
       <Button label="Create a free account" full onPress={toCreate} />
       <Pressable accessibilityRole="link" accessibilityLabel="I already have an account" onPress={toSignIn} hitSlop={8} style={({ pressed }) => [styles.plainLink, pressed && styles.pressed]}>

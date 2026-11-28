@@ -70,3 +70,50 @@ export async function noteCampaignSignup() {
   // Not answered (offline, or the server does not have it yet): kept, and tried again next time.
   if ((await remote.noteSignupSource(label)) === 'ok') forgetCampaign();
 }
+
+/**
+ * Campaign labels: a link's ?ref= that names where it was posted, not a person. Keep in step with
+ * public/waitlist.html's CAMPAIGNS (and welcome.html's list, and the server's campaign_label, migration 161).
+ */
+export const CAMPAIGNS: readonly string[] = ['instagram', 'ig', 'insta', 'courtsidebase', 'courtside', 'reddit', 'tiktok', 'facebook', 'fb', 'fbdm', 'fbgroup', 'twitter', 'threads', 'youtube', 'snapchat', 'whatsapp', 'discord', 'linktree', 'linkinbio', 'bio', 'email', 'newsletter', 'qr', 'flyer', 'poster', 'google', 'share', 'web', 'app', 'testflight', 'beta', 'robertzchen', 'robchzn', 'gipsperformance'];
+
+const LANDING_LABEL = /^[a-z0-9_]{2,24}$/;
+const CODE = /^[0-9a-f]{8}$/;
+
+/** The visit counted for Admin → Links, once a day per label (the same mark waitlist.html sets, so never twice). */
+function noteVisit(label: string) {
+  if (!web || !isSupabaseConfigured) return;
+  const mark = `courtside-seen-${label}`;
+  const today = new Date().toDateString();
+  try { if (localStorage.getItem(mark) === today) return; } catch { /* counted anyway; the server holds to once a day */ }
+  const visitor = visitorId();
+  if (!visitor) return;
+  try { localStorage.setItem(mark, today); } catch { /* as above */ }
+  // After the page's first work, never in its way.
+  setTimeout(() => { void remote.logLinkEvent(label, 'visit', visitor).catch(() => undefined); }, 0);
+}
+
+/**
+ * What the address the app opened on carries, read once as the page loads (AppShell): the person who
+ * shared the link (?ref=handle, or a friend's ?r=code), for crediting a sign-up, and the campaign it
+ * came from (?src=fb), kept by rememberCampaign.
+ *
+ * Straight from courtsidebase.com (Nov 27): Cloudflare's redirect now sends courtsidebase.com/?ref=ig
+ * on to app.courtsidebase.com/?ref=ig&from=site itself, skipping the "Opening CourtSide" hop
+ * (public/waitlist.html, about half a second). The app then does that page's two jobs: counts the
+ * visit, and reads a campaign's ?ref= as the campaign, not a person. Only with from=site: a share
+ * link's ?ref=handle inside the app was never a site visit. Without it, as before.
+ */
+export function readLanding(q: URLSearchParams): string | null {
+  rememberCampaign(q.get('src'));
+  const ref = q.get('ref');
+  const code = (q.get('r') ?? '').toLowerCase();
+  const asCode = CODE.test(code) ? `r=${code}` : null;
+  if (q.get('from') !== 'site') return ref ? ref : asCode;
+  const raw = (ref || q.get('utm_source') || '').trim().toLowerCase().replace(/^@+/, '');
+  const label = LANDING_LABEL.test(raw) ? raw : null;
+  if (!label) return ref ? ref : asCode;
+  noteVisit(label);
+  if (CAMPAIGNS.includes(label)) { rememberCampaign(label); return asCode; }
+  return ref ? label : asCode;
+}

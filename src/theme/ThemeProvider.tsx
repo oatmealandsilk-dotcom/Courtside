@@ -225,7 +225,7 @@ export const themes: Record<ThemeName, Palette> = {
 // so a theme someone already picked survives the rename.
 export const themeList: { name: ThemeName; label: string; blurb: string }[] = [
   // Clean first: it is what a new player gets (Oct 24, owner: "clean should be the default color, not courtside … at the top in theme setting").
-  { name: 'clean', label: 'Clean', blurb: 'Plain white, black text' },
+  { name: 'clean', label: 'Clean', blurb: 'White, black text, club green' },
   { name: 'default', label: 'CourtSide', blurb: 'Warm neutrals, club green' },
   { name: 'night', label: 'Night', blurb: 'Dark, for late sessions' },
   { name: 'ao', label: 'Melbourne', blurb: 'Blue hard court' },
