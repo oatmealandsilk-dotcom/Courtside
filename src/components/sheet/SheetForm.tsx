@@ -15,8 +15,11 @@ import { usePathname } from 'expo-router';
 import { InkButton } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
 
-/** The sheets the no-boxes look leaves exactly as they are (owner's standing rule: never change the log-session sheet). */
-const KEEP_SUBMIT = /^\/(log-session|new-session)(\/|$)/;
+/**
+ * The sheets the no-boxes look leaves exactly as they are: the log-session sheet and the Session sheet (owner's
+ * standing rule: never change the log-session sheet), and the live session sheet (the Start/Finish flow he signed off on Oct 7).
+ */
+const KEEP_SUBMIT = /^\/(log-session|new-session|live-session)(\/|$)/;
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
