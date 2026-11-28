@@ -47,6 +47,8 @@ export interface NearbyMapProps {
    * "N players around" counts the faces on a card this tall.
    */
   cardHeight?: number;
+  /** The app preview of option C only (appCPreview, native demo builds): how much of the still card's foot is covered (Open to hit over it, the bar under it). The city sits in the middle of what shows, and the map's credit rises clear of it. */
+  cardCover?: number;
   /** Shown in its own screen (a pager page that can be swiped away): false while that page is hidden, so its load clocks wait. */
   visible?: boolean;
   /**

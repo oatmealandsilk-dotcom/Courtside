@@ -603,10 +603,10 @@ export function MapCredit({ style, align = 'left' }: { style?: object; align?: '
  * The Find Players card's credit (bottom right). With the check-in zoom's grow (mapGrow) it slips down out of the card at
  * its own size as the page pushes in, like the weather opposite it.
  */
-export function CardCredit() {
+export function CardCredit({ lift = 0 }: { /** Points of the card's foot covered by something over it (the app preview of option C): the credit sits clear above. */ lift?: number } = {}) {
   const away = useGrowAway('bottom');
   return (
-    <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10, zIndex: 20 }, away]}>
+    <Animated.View pointerEvents="box-none" style={[{ position: 'absolute', right: 10, bottom: 10 + lift, zIndex: 20 }, away]}>
       <MapCredit align="right" />
     </Animated.View>
   );
@@ -2353,7 +2353,7 @@ const styleDefinitions = StyleSheet.create({
   nearTitle: { ...typography.bodyStrong, color: colors.text },
   nearSub: { ...typography.small, color: colors.textMuted },
   // The app preview of option C (appCPreview): its one small label on the map, top left (Up to hit is top right).
-  cLabel: { position: 'absolute', left: 12, top: 12, maxWidth: '62%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, zIndex: 10 },
+  cLabel: { position: 'absolute', left: 12, top: 12, maxWidth: '62%', height: 32, justifyContent: 'center', paddingHorizontal: 12, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, zIndex: 10 },
   cLabelText: { ...typography.smallStrong, color: colors.text },
   previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   // The full-pins card: weather and the city chip side by side along the foot (the credit keeps the corner on the right).
