@@ -65,6 +65,15 @@ const PLUS_GAP = 6;
 const WORD_MAX = 150;
 /** The words' dark edge, faded all the way out (on a written page). */
 const EDGE_NONE = 'rgba(0, 0, 0, 0)';
+/**
+ * A long group name reaching the cut fades out over its last 28 points instead of stopping mid-letter
+ * ("Wakefield c", Nov 27). A mask, so it works over a clip and over a page alike; the browser's own
+ * (an iPhone would need a native mask view, which this build does not carry).
+ */
+const WORDS_FADE = {
+  WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+  maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+} as unknown as object;
 /** A change of ink that no swipe carries (a feed picked, a page dealt again): blended over 180 ms. */
 const INK_FADE = { duration: 180, easing: Easing.out(Easing.quad) };
 
@@ -393,7 +402,7 @@ export function FeedTopRow({ groups, selected, onSelect, onPlus, onPicture, hidd
     <Animated.View pointerEvents={hidden || outOfWay ? 'none' : 'box-none'} style={[styles.layer, { top: insets.top + TOP_BAND_TOP }, awayStyle]}>
       <View style={styles.clip} onLayout={(e) => setViewW(e.nativeEvent.layout.width)} pointerEvents="box-none">
         {/* The words, cut off just short of the "+" at its stop. While the "+" rides at the row's end, no word reaches the cut. */}
-        <View style={styles.words} pointerEvents="box-none">
+        <View style={[styles.words, Platform.OS === 'web' && WORDS_FADE]} pointerEvents="box-none">
           <Animated.View style={[styles.row, slide, { opacity: ready }]}>
             {words.map((w, i) => {
               const on = w.id === selected;
