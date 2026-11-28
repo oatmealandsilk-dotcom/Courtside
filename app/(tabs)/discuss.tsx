@@ -120,11 +120,17 @@ const HOME_HITS_SHOWN = 2;
 /**
  * The iPhone's first page (HOME_FEED): where the parts that sat under the map go among the activity, after this many of
  * its items (People you may know, the follow block, after the 2nd: the gallery's own START_AFTER). Past the feed's end:
- * at its end, in this order, once no more pages are coming.
+ * at its end, in this order, as soon as the posts are in, and kept where first shown as older pages come in under them
+ * (useGalleryInPage).
  */
 const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 } as const;
-/** The iPhone's first page (HOME_FEED): how much of the first activity shows above the bar until the feed has said (a photo card's: useGalleryInPage's peek). */
-const HOME_PEEK = 196;
+/**
+ * The iPhone's first page (HOME_FEED): how much of the first activity the map leaves room for above the bar, a photo
+ * card's band, header, title and numbers and the top of its photo (the gallery's own measures: 6 + 12 + 44, 30 + 36,
+ * 56), as on the approved first screen. Fixed, never read off the posts, so the map never changes height after the
+ * first draw whatever the newest item is; Open to hit under the map takes its room out of this (the map's size wins).
+ */
+const HOME_PEEK = 184;
 /** Find Players' head column: the gap between its parts. */
 const HEAD_GAP = 12;
 const NO_SLOTS: FeedSlot[] = [];
@@ -552,6 +558,15 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const cityBoard = useCityBoard();
   // People you may know (admins first, PYMK_FOR_EVERYONE): null when off, resting or with nobody to show.
   const pymk = usePeopleYouMayKnow();
+  // The iPhone's first page (HOME_FEED): People you may know as the activity's follow block, kept as it is between
+  // unrelated draws (the model is new each time; its parts are not), so the activity's rows are not all drawn again.
+  const pymkCards = pymk?.cards;
+  const pymkFollow = pymk?.follow;
+  const pymkHide = pymk?.hide;
+  const pymkClose = pymk?.close;
+  const homeFollow = useMemo(() => (HOME_FEED && pymkCards && pymkFollow && pymkHide && pymkClose
+    ? <View style={styles.homeFollow}><PeopleYouMayKnow model={{ cards: pymkCards, follow: pymkFollow, hide: pymkHide, close: pymkClose }} inFeed /></View>
+    : null), [pymkCards, pymkFollow, pymkHide, pymkClose, styles]);
   // With every board city listed (the ones not ranked at 0), there is always a list; with your town it leads it,
   // even in a month with none ranked yet. With no town and none ranked, only an A to Z of zeros: "You're early" keeps its place.
   const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
@@ -723,13 +738,12 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The iPhone's first page (HOME_FEED): the map at least the card's own height (Nov 28, owner: "The map should still be
   // large though"), taller where the phone leaves room for Open to hit under it and the top of the first activity
   // above the bar (useHomeMap). Each part measured on its own: Open to hit's height, what else sits under it in the
-  // head ("You're early"…, with its gap), and the first activity's peek (HomePane says it, once). While "You're early"
+  // head ("You're early"…, with its gap), and the first activity's peek (HOME_PEEK). While "You're early"
   // / "Bring your friends" is up, that card's button is what must show: the map and Open to hit then take the card's
   // height together, as the map with Open to hit over its foot did, so the card sits where it did.
   const [homeStripH, setHomeStripH] = useState(0);
   const [homeUnder, setHomeUnder] = useState(0);
-  const [homePeek, setHomePeek] = useState(HOME_PEEK);
-  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: homePeek, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
+  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: HOME_PEEK, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
   // Under the map and Open to hit, in the head: "You're at <court>?" (when Open to hit is not there to carry it), "You're
   // early" or "Bring your friends". Gone (and not mid-search): nothing under.
   const homeUnderOn = HOME_FEED && !search && ((!!currentUser && !stripOn) || early || friendsEarly);
@@ -1259,8 +1273,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           HOME_FEED ? (
             // The iPhone's first page: one list, the search, the map and Open to hit its head, the friends' activity under them.
             <HomePane key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={homeMap.onPaneHeight}
-              feedOn={!!currentUser && !isGuest && !search && !(pictureOnly && previewSection !== 'players')} paused={!!previewSection || section !== 'players'} onPeek={setHomePeek}
-              follow={pymk ? <View style={styles.homeFollow}><PeopleYouMayKnow model={pymk} inFeed /></View> : null}
+              feedOn={!!currentUser && !isGuest && !search && !(pictureOnly && previewSection !== 'players')} paused={!!previewSection || section !== 'players'}
+              follow={homeFollow}
               slots={homeSlots}
             >{pictureOnly && previewSection !== 'players' ? null : content('players')}</HomePane>
           ) : <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={MAP_OVERLAY ? tallMap.onPaneHeight : undefined}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
@@ -1337,18 +1351,17 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
  * show, or a picture of this tab): nothing marked seen, no pages asked for. A pull refreshes the page as before (the
  * map's players and hits, the posts) and lets the activity ask for older pages again.
  */
-function HomePane({ feedOn, paused, follow, slots, onPeek, onRefresh, children, ...pane }: Omit<PaneScrollerProps, 'list'> & { feedOn: boolean; paused: boolean; follow: React.ReactNode; slots: FeedSlot[]; onPeek: (peek: number) => void }) {
+function HomePane({ feedOn, paused, follow, slots, onRefresh, children, ...pane }: Omit<PaneScrollerProps, 'list'> & { feedOn: boolean; paused: boolean; follow: React.ReactNode; slots: FeedSlot[] }) {
   const { remoteLoaded } = useApp();
   // Always 'gallery-rollup' here (Nov 28, owner: "Gallaty+ friends played"), whatever the Feed tab's Activities shows.
   const { list, showStart, nearCount, nearAuthors, ready } = useGalleryPosts(true);
-  const start = follow ?? (showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={list.length} shown={!paused && feedOn} onTop /> : null);
-  const feed = useGalleryInPage({ posts: list, rollup: true, nearCount, near: nearAuthors, paused: paused || !feedOn, start, slots });
-  // How much of the first activity shows above the bar: read once, when the posts are in (the store's own, not just the
-  // phone's copy from last time), and kept, so the map never changes height under you as a pull or a page brings posts.
-  const peekKept = useRef<number | null>(null);
-  if (peekKept.current === null && ready && (remoteLoaded || !isSupabaseConfigured)) peekKept.current = feed.peek;
-  const peek = peekKept.current;
-  useEffect(() => { if (peek !== null) onPeek(peek); }, [peek, onPeek]);
+  const sessions = list.length;
+  const startShown = !paused && feedOn;
+  // Kept as it is between unrelated draws, so the activity's rows are not all drawn again for nothing.
+  const start = useMemo(() => follow ?? (showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={sessions} shown={startShown} onTop /> : null), [follow, showStart, nearCount, sessions, startShown]);
+  // The posts are in: the store's own, not just the phone's copy from last time (the page's rows past them can show).
+  const postsIn = ready && (remoteLoaded || !isSupabaseConfigured);
+  const feed = useGalleryInPage({ posts: list, rollup: true, nearCount, near: nearAuthors, paused: paused || !feedOn, postsIn, start, slots });
   const { reopen } = feed;
   const pull = useMemo(() => (onRefresh ? async () => { try { return await onRefresh(); } finally { reopen(); } } : undefined), [onRefresh, reopen]);
   const rows: PaneList<InPageRow> = { data: feedOn ? feed.data : NO_ROWS, renderItem: feed.renderItem, keyExtractor: feed.keyExtractor, onEndReached: feedOn ? feed.onEndReached : undefined, onViewableItemsChanged: feed.onViewableItemsChanged, viewabilityConfig: feed.viewabilityConfig };
@@ -1359,8 +1372,8 @@ function HomePane({ feedOn, paused, follow, slots, onPeek, onRefresh, children, 
 const styleDefinitions = StyleSheet.create({
   // The iPhone's first page (HOME_FEED): Open to hit under the map, edge to edge on the page's own ground (the map's
   // hairline above it), a little tighter above and below than over the map (the big map leaves the activity less
-  // room); the activity's band follows it.
-  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm + 2, paddingBottom: spacing.xs + 2, backgroundColor: colors.bg },
+  // room), as the approved big-map picture (design/home-map-feed '3': 8 above, 2 below); the activity's band follows it.
+  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 2, backgroundColor: colors.bg },
   // What else sits under them in the head ("You're early"…), held together to be measured.
   homeUnder: { gap: HEAD_GAP },
   // People you may know as the activity's follow block: in the page's margins, its cards' row running to the edges.

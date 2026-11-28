@@ -133,10 +133,10 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
    * With `compact`: the small row right under the map, on the page's own ground rather than over the map (HOME_LOOK
    * 'map-feed'; Apple 5.1.2(i), as told to Apple on Oct 27: "The map never shows a stranger's face or name", and outside
    * the map "I'm free today" is shown with the town they chose). It runs to the screen's edges as the page's row does;
-   * the line beside its title carries the town for everyone ("5 free in Los Angeles": a stranger in it is by definition
-   * free in that town), the faces first names only, never a distance.
+   * the line beside its title carries the town for everyone ("5 free in Los Angeles", when every stranger in it chose
+   * that town; "5 free near Los Angeles" when they chose neighbouring ones), the faces first names only, never a distance.
    */ belowMap?: boolean;
-  /** With `belowMap`: your profile's town, for that line when the players in it do not all share one. */ town?: string;
+  /** With `belowMap`: your town (board city or profile), for that line when only friends are in it, or "free near" it when strangers chose different towns. */ town?: string;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -146,12 +146,20 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   const itemW = compact ? { width: item } : null;
   // Your own held at a player's height: a ring and a name in the small row.
   const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 } : null;
-  // Under the map (belowMap): the one town the line beside the title names: the players' own when they all chose the
-  // same one, else yours (a friend's check-in is within the map's "in town" reach of you); none known, "near you".
-  const freeIn = useMemo(() => {
+  // Under the map (belowMap): the line beside the title names a town only as one every stranger in the row chose (the
+  // Apple reply: "I'm free today" shows with the town they chose): "free in" the players' own when they all chose the
+  // same one, or yours when only friends' check-ins are in it (each within the map's "in town" reach of you). Strangers
+  // from neighbouring towns together (Santa Monica, Pasadena…): "free near" yours, never one of theirs for everyone;
+  // with no town of yours, "near you".
+  const freeLine = useMemo(() => {
     if (!belowMap) return '';
+    const n = people.length;
     const towns = [...new Set(people.flatMap((p) => (p.town ? [p.town] : [])))];
-    return towns.length === 1 ? towns[0] : town?.trim() || towns[0] || '';
+    const mine = town?.trim();
+    if (towns.length === 1) return `${n} free in ${towns[0]}`;
+    if (!towns.length && mine) return `${n} free in ${mine}`;
+    if (towns.length > 1 && mine) return `${n} free near ${mine}`;
+    return '';
   }, [belowMap, people, town]);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
@@ -216,7 +224,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         {!people.length && fill.length && fillTitle
           ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, compact && styles.titleCompact, styles.titleFit]}>{fillTitle}</Text>
           : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.title, compact && styles.titleCompact]}>Open to hit</Text>}
-        {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={belowMap ? 1 : undefined} style={[styles.count, belowMap && styles.countFit]}>{belowMap && freeIn ? `${people.length} free in ${freeIn}` : `${people.length} near you`}</Text> : null}
+        {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={belowMap ? 1 : undefined} style={[styles.count, belowMap && styles.countFit]}>{freeLine || `${people.length} near you`}</Text> : null}
       </View>
       <View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.row, compact && !belowMap && styles.rowCompact]} style={[styles.scroll, compact && !belowMap && styles.scrollCompact]}>

@@ -961,9 +961,11 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
+  // (Both kept as they are between unrelated draws, so a list that draws them is not drawn again for nothing.)
   const settled = (ended || stalled) && !loading;
-  const quiet = !fromOthers && settled && !showStart ? (
-    <View style={[styles.column, { maxWidth: cardW }, rows.length || inPage ? styles.emptyUnder : null]}>
+  const anyRows = rows.length > 0;
+  const quiet = useMemo(() => (!fromOthers && settled && !showStart ? (
+    <View style={[styles.column, { maxWidth: cardW }, anyRows || inPage ? styles.emptyUnder : null]}>
       {rollup ? (
         <EmptyState
           icon="images-outline"
@@ -978,20 +980,20 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
         />
       )}
     </View>
-  ) : null;
+  ) : null), [fromOthers, settled, showStart, styles, cardW, anyRows, inPage, rollup]);
   // One fixed height whatever it holds, so swapping spinner, button and words never changes the list's length.
-  const end = (
+  const end = useMemo(() => (
     <View style={styles.end}>
       {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" />
-        : !rows.length ? null
+        : !anyRows ? null
         : stalled ? (
           <Pressable onPress={() => { tries.current = 0; loadMore(); }} accessibilityRole="button" style={styles.older}>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.olderText}>Show older posts</Text>
           </Pressable>
         ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
     </View>
-  );
-  return { rows, rowsRef, renderRow, openClip, openPhoto, toggleDay, viewerNode, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more: app.feed.more, cardW };
+  ), [styles, loading, anyRows, stalled, loadMore, ended, fromOthers]);
+  return { rows, rowsRef, renderRow, openClip, openPhoto, toggleDay, viewerNode, onEnd, reopen, onScreenNow, quiet, end, cardW };
 }
 
 export function ActivitiesList({ posts, rollup = false, showStart, nearCount, near, paused, row }: {
@@ -1143,7 +1145,10 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
 /** Something the page puts into the gallery between its items (the Community map's page: Open hits, courts, the city board…). */
 export interface FeedSlot {
   key: string;
-  /** Goes after this many of the gallery's items (the follow block not counted); past the end, at the end, in order, once no more pages are coming. */
+  /**
+   * Goes after this many of the gallery's items (the follow block not counted). Past the items loaded so far: at the
+   * end, in order, once the posts are in, and kept where it was first shown (a later page goes under it).
+   */
   after: number;
   node: React.ReactNode;
 }
@@ -1155,36 +1160,13 @@ export type InPageRow =
   | { key: string; kind: 'quiet' }
   | { key: string; kind: 'end' };
 
-/** How much of a photo's top shows under the first item's words on the first screen: enough to pull a thumb down. */
-const PEEK_PHOTO = 56;
-/** Under a first item with no photo: its last line, and this much air. */
-const PEEK_AIR = 16;
-
-/**
- * How much of the gallery's first item shows above the bottom bar on the Community map's first screen (HOME_LOOK
- * 'map-feed'), read off the gallery's own measures (GALLERY and the styles below, at the phone's usual text size): a
- * photo card down through its numbers and the top of its photo, anything else down to its last line and a little air,
- * so the bar never cuts through words.
- */
-function firstPeek(row: Row | undefined): number {
-  // The band, the room above the header, the header.
-  const head = GALLERY.band + GALLERY.padTop + GALLERY.head;
-  // Title (22) under the header's tap air (12).
-  const title = GALLERY.gap - 4 + 22;
-  if (!row) return 64;
-  if (row.kind === 'own') return GALLERY.band + 2 * GALLERY.rowPad + 20 + 2 + 18 + PEEK_AIR;
-  if (row.kind === 'rollup') return GALLERY.band + GALLERY.who + PEEK_AIR;
-  // The follow block first (a short feed): its title.
-  if (row.kind === 'start') return GALLERY.band + spacing.lg + 24 + PEEK_AIR;
-  const p = row.post;
-  const s = p.session;
-  // A photo card: (a session's title and its one line of numbers), then the top of the photo.
-  if (hasPicture(p)) return head + (s ? title + 4 + 20 + spacing.md : spacing.sm) + PEEK_PHOTO;
-  // A plain session: its title, its two numbers (label and figure) and, with one, its caption's line.
-  if (s) return head + title + GALLERY.statsGap + 16 + 26 + (p.body?.trim() ? GALLERY.lineGap + 20 : 0) + PEEK_AIR;
-  // A text post: its words (three lines at most, about 38 letters to a line).
-  return head + GALLERY.gap - 4 + 23 * Math.min(3, Math.max(1, Math.ceil((p.body?.length ?? 0) / 38))) + PEEK_AIR;
-}
+/** The page's list keeps one row object per gallery row, so a row that did not change is never drawn again. */
+const feedItems = new WeakMap<Row, InPageRow>();
+const feedItem = (row: Row): InPageRow => {
+  let item = feedItems.get(row);
+  if (!item) { item = { key: row.key, kind: 'feed', row }; feedItems.set(row, item); }
+  return item;
+};
 
 /**
  * The gallery under something else on a page, as that page's own list rows (the iPhone app's Community map, HOME_LOOK
@@ -1192,41 +1174,60 @@ function firstPeek(row: Row | undefined): number {
  * behaviour as the Feed's Activities (a clip opens the reel and back lands on the same spot, the page keeping its
  * place; double tap likes; •••; Save; the "who played" rows open in place; what is on screen marked seen; older posts
  * asked for as the list's end nears, with the quiet-page guard), the follow block after the first two items, and the
- * page's own rows between the items (`slots`). The page's rows that would go past the items loaded so far wait until
- * no more pages are coming: shown at the end now, a page landing would push them up into the middle of the feed, under
- * the reader's thumb. Hand the result to PaneScroller's `list`; `peek` is how much of the first item should show above
- * the bar on the first screen; `reopen` after a pull; `viewerNode` (a photo full screen, a Modal) anywhere in the page.
+ * page's own rows between the items (`slots`). A page's row that would go past the items loaded so far shows at the
+ * end as soon as the posts are in (`postsIn`), never waiting on older pages (a quiet feed would hide Open hits, the
+ * courts and the rest for many pages, or for good), and stays where it was first shown: a page landing goes under it,
+ * so nothing above the reader's thumb moves. A pull lets them all find their usual places again. Hand the result to
+ * PaneScroller's `list`; `reopen` after a pull; `viewerNode` (a photo full screen, a Modal) anywhere in the page.
  */
-export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start, slots }: {
+export function useGalleryInPage({ posts, rollup, nearCount, near, paused, postsIn, start, slots }: {
   posts: Post[];
   rollup: boolean;
   nearCount: number;
   near?: Set<string>;
   /** The page is not on show (or is only a picture of it): nothing is marked seen, no pages are asked for. */
   paused: boolean;
+  /** The posts are in (the store's own, not only the phone's copy from last time): the page's rows past them can show. */
+  postsIn: boolean;
   /** The follow block (null: none). */
   start: React.ReactNode;
   slots: FeedSlot[];
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows, renderRow, openClip, viewerNode, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
-  const settled = ended || stalled || !more;
+  const { rows, renderRow, openClip, viewerNode, onEnd, reopen: reopenFeed, onScreenNow, quiet, end, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
+  // Where each of the page's rows shown past the items stands: after the items there were when it was first shown.
+  const placed = useRef(new Map<string, number>());
+  const [placing, setPlacing] = useState(0);
   const hasQuiet = !!quiet;
   const data = useMemo<InPageRow[]>(() => {
-    const out: InPageRow[] = [];
-    // The page's rows after so many items (the follow block is not counted).
-    let items = 0;
-    for (const row of rows) {
-      out.push({ key: row.key, kind: 'feed', row });
-      if (row.kind === 'start') continue;
-      items += 1;
-      for (const slot of slots) if (slot.after === items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
+    const items = rows.reduce((n, r) => (r.kind === 'start' ? n : n + 1), 0);
+    // Each slot's place: its own, or (past the items) where it was first shown, never further down.
+    const at = new Map<string, number>();
+    for (const slot of slots) {
+      const kept = placed.current.get(slot.key);
+      if (kept !== undefined) at.set(slot.key, Math.min(kept, slot.after, items));
+      else if (slot.after <= items) at.set(slot.key, slot.after);
+      else if (postsIn) { placed.current.set(slot.key, items); at.set(slot.key, items); }
     }
+    const out: InPageRow[] = [];
+    const put = (n: number) => { for (const slot of slots) if (at.get(slot.key) === n) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node }); };
+    let n = 0;
+    for (const row of rows) {
+      if (row.kind !== 'start' && n === 0 && items > 0) put(0);
+      out.push(feedItem(row));
+      if (row.kind === 'start') continue;
+      n += 1;
+      if (n < items) put(n);
+    }
+    // The calm empty note, then the page's rows at the end, then the spinner / "Show older posts" / "You're all caught
+    // up", under which a page landing adds its items.
     if (hasQuiet) out.push({ key: 'inpage:quiet', kind: 'quiet' });
+    put(items);
     out.push({ key: 'inpage:end', kind: 'end' });
-    if (settled) for (const slot of slots) if (slot.after > items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
     return out;
-  }, [rows, slots, hasQuiet, settled]);
+  }, [rows, slots, hasQuiet, postsIn, placing]); // eslint-disable-line react-hooks/exhaustive-deps
+  /** A pull: the run of quiet pages starts over, and the page's rows go back to their usual places (the reader is at the top). */
+  const reopen = useCallback(() => { placed.current.clear(); setPlacing((x) => x + 1); reopenFeed(); }, [reopenFeed]);
   const renderItem = useCallback(({ item }: { item: InPageRow }) => {
     if (item.kind === 'feed') return renderRow(item.row);
     // In the gallery's column, as its cards are (on a wide screen, a phone's width).
@@ -1235,7 +1236,11 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start
     return end;
   }, [renderRow, styles, quiet, end, cardW]);
   const keyExtractor = useCallback((item: InPageRow) => item.key, []);
-  const onEndReached = useCallback(() => { if (!paused) onEnd(); }, [paused, onEnd]);
+  // The list's end reached while the page is not on show (Discussions in front, say) asks for nothing, but the list
+  // never says it again for the same length: it is kept, and asked for as the page comes back on show.
+  const missedEnd = useRef(false);
+  const onEndReached = useCallback(() => { if (paused) missedEnd.current = true; else onEnd(); }, [paused, onEnd]);
+  useEffect(() => { if (!paused && missedEnd.current) { missedEnd.current = false; onEnd(); } }, [paused, onEnd]);
   // FlatList takes one handler and one setting for the list's whole life.
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<InPageRow>[] }) => {
@@ -1251,8 +1256,7 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start
       if (clip) openClip(clip.id);
     });
   }, [paused, posts, openClip]);
-  const peek = firstPeek(rows[0]);
-  return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, peek, reopen, viewerNode };
+  return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, reopen, viewerNode };
 }
 
 const styleDefinitions = StyleSheet.create({

@@ -53,9 +53,10 @@ const HOME_MAP_MIN = 220;
 /**
  * The iPhone's first page (HOME_LOOK 'map-feed'): how tall the map is. At least the map card's usual height
  * (CARD_HEIGHT; Nov 28, owner: "The map should still be large though"): exactly as tall as the approved first screen's
- * map with Open to hit over its foot was (home-1.png), that is from where it starts down to the bar less the first
- * activity's top (`peek`) and whatever else sits under it in the page's head (`under`: "You're at <court>?", with its
- * gap), never under the card's height. Open to hit under it then takes its room out of the activity's peek: the map's
+ * map with Open to hit over its foot was (home-1.png, and strip-under-map-big.png's, design/home-map-feed's HomeMap),
+ * that is from where it starts down to the bar's room (useBarInset: the pill, its gap and the phone's bottom strip,
+ * as that design measured it) less the first activity's top (`peek`) and whatever else sits under it in the page's
+ * head (`under`: "You're at <court>?", with its gap), never under the card's height. Open to hit under it then takes its room out of the activity's peek: the map's
  * size wins over the peek. With `short` ("You're early" / "Bring your friends" under them, whose button must show on
  * the first screen, the map 2 review's fix) the map and Open to hit together take the card's height, as the map with
  * Open to hit over its foot did, so that card sits where it did. From the page's own layout only, as useTallMap:
@@ -65,7 +66,7 @@ const HOME_MAP_MIN = 220;
  * known (the card's usual height meanwhile).
  */
 export function useHomeMap(on: boolean, { peek, strip, stripKnown, under, short, still }: { peek: number; strip: number; stripKnown: boolean; under: number; short: boolean; still: boolean }): { height: number | undefined; onSlotLayout: (e: LayoutChangeEvent) => void; onPaneHeight: (h: number) => void } {
-  const barTop = useBarTop();
+  const barInset = useBarInset();
   const [slotY, setSlotY] = useState(0);
   const [paneH, setPaneH] = useState(0);
   const stillRef = useRef(still);
@@ -78,6 +79,6 @@ export function useHomeMap(on: boolean, { peek, strip, stripKnown, under, short,
   const ready = on && paneH > 0 && slotY > 0 && stripKnown;
   const height = !ready ? undefined
     : short ? Math.max(HOME_MAP_MIN, CARD_HEIGHT - strip)
-      : Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barTop - under - peek);
+      : Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barInset - under - peek);
   return { height, onSlotLayout, onPaneHeight: setPaneH };
 }
