@@ -3,6 +3,7 @@ import type { Comment, Post } from '../types';
 import { CURRENT_USER_ID } from './users';
 import { DEMO_PARK } from './courts';
 import { PLAYED_TODAY_GLOW } from '@/features/places/playedToday';
+import { ACTIVITIES_LOOK, isGalleryLook } from '@/features/activity/feedLooks/activitiesLook';
 
 /** A demo park as a post's court tag. */
 const courtTag = (n: number) => { const c = DEMO_PARK(n); return { id: c.id, name: c.name ?? 'Public courts', lat: c.lat, lng: c.lng }; };
@@ -59,7 +60,7 @@ const BALLS_BY_THE_NET = svg(800, 1000, `
 <rect x="250" y="560" width="300" height="300" rx="24" fill="#8A8F94"/>
 <g fill="#E3EF5A">${Array.from({ length: 15 }, (_, i) => `<circle cx="${290 + (i % 5) * 55}" cy="${590 - Math.floor(i / 5) * 40}" r="26"/>`).join('')}</g>`);
 
-export const posts: Post[] = [
+const allPosts: Post[] = [
   {
     // Dev's clip from WHOOP, heart rate and zones shared: the glass "See stats" pill over it, the stats over the playing clip.
     id: 'p-dev-clip',
@@ -518,6 +519,21 @@ export const posts: Post[] = [
     tags: [],
   }] : []),
 ];
+
+/**
+ * The demo posts and clip covers added for the Activities gallery's examples (Nov 28), only where the gallery is the
+ * look (ACTIVITIES_LOOK: the website): a demo build with today's Activities pages (the iPhone's, for its simulator
+ * proofs) has exactly the posts it had before. Demo seed only; real accounts never see fixtures.
+ */
+const GALLERY_DEMO_POSTS = new Set(['p-june-photo', 'p-tomas-photo', 'p-nadia-photos', 'p-omar-photo', 'p-tomas-watch', 'p-nadia-watch']);
+const GALLERY_DEMO_COVERS = new Set(['p-sam-clip', 'p-court-1']);
+export const posts: Post[] = isGalleryLook(ACTIVITIES_LOOK) ? allPosts
+  : allPosts.flatMap((p) => {
+    if (GALLERY_DEMO_POSTS.has(p.id)) return [];
+    if (!GALLERY_DEMO_COVERS.has(p.id)) return [p];
+    const { thumbnailUrl: _cover, ...before } = p;
+    return [before];
+  });
 
 export const comments: Comment[] = [
   {

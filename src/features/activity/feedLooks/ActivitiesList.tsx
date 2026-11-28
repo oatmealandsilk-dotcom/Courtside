@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Animated, AppState, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type AccessibilityActionEvent, type NativeScrollEvent, type NativeSyntheticEvent, type ViewToken } from 'react-native';
 import Reanimated, { useAnimatedStyle, useReducedMotion, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
@@ -24,6 +24,12 @@ import { hasSessionStats, resultWord, scoreLine, sessionTitle, whatWord } from '
 import { localDay } from '@/features/practice/stats';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
+import { markSeen } from '@/features/feed/seenPosts';
+import { useIsFocused } from '@/lib/useIsFocused';
+import { useTourOpen } from '@/features/tour/tourStore';
+
+/** On screen this long before a row counts as seen (Home's GLANCE_MS): one flown past mid-fling never does. */
+const GLANCE_MS = 300;
 
 /*
  * Activities as a gallery (Nov 28, owner: "1 gallery is better", then "Gallaty+ friends played"; the look is
@@ -495,7 +501,8 @@ const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onTog
             </View>
           ))}
         </View>
-        <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wText}>
+        {/* Two lines at most: with larger text or several names the day ("played yesterday") wraps rather than being cut. */}
+        <Text numberOfLines={2} maxFontSizeMultiplier={TextScale.CARD} style={styles.wText}>
           <Text style={styles.wWho}>{words.who}</Text>{words.rest}
         </Text>
         <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
@@ -548,15 +555,20 @@ const QUIET_PAGES = 8;
  * the first two. `rollup` ('gallery-rollup'): other people's without one, when you follow them and the session has
  * its numbers (as today's Activities pages take them), go into their day's one "who played" row, placed where the
  * day's newest of them falls in the feed's time order; a later page bringing more of that day adds to the same row.
+ * The day is the one it was PLAYED (the session's own day), never the day it was posted: Saturday's match logged on
+ * Monday is "played on Saturday", with Saturday's. Only a day still to come here (the player's clock a day ahead of
+ * yours) falls back to the day it was posted.
  */
 export function galleryRows(posts: Post[], me: string | null | undefined, showStart: boolean, rollup = false, follows: ReadonlySet<string> = new Set()): Row[] {
   const out: Row[] = [];
   const days = new Map<string, Extract<Row, { kind: 'rollup' }>>();
+  const today = localDay(new Date());
   for (const post of posts) {
     if (!post.session || hasPicture(post)) out.push({ key: post.id, kind: 'post', post });
     else if (post.authorId === me) out.push({ key: post.id, kind: 'own', post, joined: false });
     else if (rollup && follows.has(post.authorId) && hasSessionStats(post.session)) {
-      const day = localDay(post.createdAt);
+      const played = post.session.day;
+      const day = played && played <= today ? played : localDay(post.createdAt);
       let r = days.get(day);
       if (!r) { r = { key: `day:${day}`, kind: 'rollup', day, posts: [] }; days.set(day, r); out.push(r); }
       r.posts.push(post);
@@ -737,6 +749,61 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
   }, [openClip]);
   useFocusEffect(useCallback(() => { if (SIM_DRIVER) simLog(`[acts] on show at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)}`); }, []));
 
+  // Seen, as Home's pages are (Oct 7, owner: "don't keep seeing the same videos"): a card, your own row or a "who
+  // played" row on screen for GLANCE_MS while this list is the one in front (the Feed showing Activities, its route
+  // on top, no tutorial over it, the app open) goes in this phone's seen list (features/feed/seenPosts), so the Feed's
+  // Activities card stops counting it as new and For you deals it below what you have not seen yet. A "who played"
+  // row counts for each session in it. As a card or your own row leaves the screen the server is told the same, with
+  // how long it was there (noteFeedSignal, as Home's endViewing). A row flown past mid-fling is neither.
+  const focused = useIsFocused();
+  const touring = useTourOpen();
+  const [appActive, setAppActive] = useState(AppState.currentState === 'active');
+  useEffect(() => { const sub = AppState.addEventListener('change', (next) => setAppActive(next === 'active')); return () => sub.remove(); }, []);
+  const looking = focused && !touring && !paused && appActive;
+  const lookingRef = useRef(looking);
+  lookingRef.current = looking;
+  const meRef = useRef(currentUserId);
+  meRef.current = currentUserId;
+  const actionsRef = useRef(actions);
+  actionsRef.current = actions;
+  // The rows on screen now (by key), and the ones being looked at since when.
+  const onScreen = useRef<string[]>([]);
+  const views = useRef(new Map<string, { since: number; glance: ReturnType<typeof setTimeout> | null }>());
+  const startView = useCallback((key: string) => {
+    if (views.current.has(key)) return;
+    const view: { since: number; glance: ReturnType<typeof setTimeout> | null } = { since: Date.now(), glance: null };
+    view.glance = setTimeout(() => {
+      view.glance = null;
+      const r = rowsRef.current.find((x) => x.key === key);
+      const shown = !r || r.kind === 'start' ? [] : r.kind === 'rollup' ? r.posts : [r.post];
+      for (const p of shown) markSeen(meRef.current, `p:${p.id}`);
+    }, GLANCE_MS);
+    views.current.set(key, view);
+  }, []);
+  const endView = useCallback((key: string) => {
+    const view = views.current.get(key);
+    if (!view) return;
+    views.current.delete(key);
+    if (view.glance) { clearTimeout(view.glance); return; }
+    const r = rowsRef.current.find((x) => x.key === key);
+    if (!r || (r.kind !== 'post' && r.kind !== 'own')) return;
+    const seconds = (Date.now() - view.since) / 1000;
+    actionsRef.current.noteFeedSignal({ kind: 'post', id: r.post.id, seen: true, watched: seconds, skipped: seconds < 1.5 });
+  }, []);
+  // FlatList takes one handler and one setting for the list's whole life.
+  const viewability = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
+    const now = viewableItems.flatMap((t) => (t.isViewable && t.item && t.item.kind !== 'start' ? [t.item.key] : []));
+    for (const key of onScreen.current) if (!now.includes(key)) endView(key);
+    onScreen.current = now;
+    if (lookingRef.current) now.forEach(startView);
+  }).current;
+  useEffect(() => {
+    if (looking) onScreen.current.forEach(startView);
+    else [...views.current.keys()].forEach(endView);
+  }, [looking, startView, endView]);
+  useEffect(() => () => { [...views.current.keys()].forEach(endView); }, [endView]);
+
   const [refreshing, setRefreshing] = useState(false);
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -807,6 +874,8 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
         ListHeaderComponent={<View style={{ height: top }} />}
         ListFooterComponent={footer}
         onEndReached={() => { if (!stalledRef.current) loadMore(); }}
+        onViewableItemsChanged={onViewable}
+        viewabilityConfig={viewability}
         windowSize={7}
         initialNumToRender={4}
         maxToRenderPerBatch={4}

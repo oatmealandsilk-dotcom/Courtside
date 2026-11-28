@@ -2904,10 +2904,14 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
   const follows = new Set(app.followingIds);
   const none = new Set<string>();
   const group = key === ACTIVITIES || key === FOR_YOU ? undefined : app.feedGroups.find((g) => g.id === key);
+  // The gallery leaves out someone else's photo-less session an admin pushed down (ActivitiesGallery): never counted
+  // as new here either, as it is never on screen to be seen.
+  const down = key === ACTIVITIES && isGalleryLook(ACTIVITIES_LOOK) ? demotedPosts() : null;
   const out: Post[] = [];
   for (const p of app.posts) {
     if (hidden.has(p.authorId) || unfinishedClip(p, me)) continue;
     if (key === ACTIVITIES ? !(isGalleryLook(ACTIVITIES_LOOK) ? inActivitiesGallery(p, me, follows, none) : isActivity(p, me, follows, none)) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
+    if (down?.has(p.id) && !!p.session && p.authorId !== me && !hasPicture(p)) continue;
     out.push(p);
   }
   return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
