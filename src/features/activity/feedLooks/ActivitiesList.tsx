@@ -11,6 +11,7 @@ import { Avatar } from '@/components/ui';
 import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
 import { Heart } from '@/components/Heart';
+import { pairTiles, startIndex } from './gridRows';
 import { PushedDownTag } from '@/components/PushedDownTag';
 import { SessionCard } from '@/components/session/SessionCard';
 import { StreakFlame } from '@/components/StreakFlame';
@@ -1575,32 +1576,12 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     // Under another of your rows, a row sits on a hairline rather than the band.
     const joinedRows = out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
     if (!grid) return joinedRows;
-    // gv4: a run of photo and clip posts becomes pairs of tiles; anything else sits full width between blocks. A
-    // full-width item that arrives when a pair is half full waits for the next tile (at most a few of them), so the
-    // grid never leaves a lone tile mid-feed; the order shifts by one picture at most.
-    const paired: Row[] = [];
-    let run: Post[] = [];
-    let held: Row[] = [];
-    const flush = () => {
-      for (let i = 0; i < run.length; i += 2) paired.push({ key: `pair:${run[i].id}`, kind: 'pair', posts: run.slice(i, i + 2), first: i === 0 });
-      run = [];
-    };
-    const release = () => { flush(); paired.push(...held); held = []; };
-    for (const r of joinedRows) {
-      if (r.kind === 'post' && galleryMedia(r.post)) {
-        run.push(r.post);
-        if (held.length && run.length % 2 === 0) release();
-        continue;
-      }
-      if (run.length % 2 === 1 && held.length < 4) { held.push(r); continue; }
-      release();
-      paired.push(r);
-    }
-    release();
-    if (showStart) {
-      const pairs = paired.flatMap((r, i) => (r.kind === 'pair' ? [i] : []));
-      const at = pairs.length >= 2 ? pairs[1] + 1 : paired.length > START_AFTER ? START_AFTER : -1;
-      if (at >= 0) paired.splice(at, 0, { key: 'start', kind: 'start' });
+    // gv4: pairs of tiles, full-width rows between blocks (feedLooks/gridRows: never a lone tile mid-feed).
+    const paired = pairTiles<Row, Post>(joinedRows, (r) => (r.kind === 'post' && galleryMedia(r.post) ? r.post : null),
+      (two, first) => ({ key: `pair:${two[0].id}`, kind: 'pair', posts: two, first }));
+    // (A list of one or two items keeps it at the head, as the gallery does.)
+    if (showStart && paired.length > START_AFTER) {
+      paired.splice(startIndex(paired, (r) => r.kind === 'pair'), 0, { key: 'start', kind: 'start' });
     }
     // Your rows regrouped: a row under another of yours sits on a hairline, else on its own edge.
     return paired.map((r, i): Row => (r.kind === 'mini' ? { ...r, joined: paired[i - 1]?.kind === 'mini' } : r));
