@@ -323,6 +323,8 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     const looseKey = (event: KeyboardEvent) => {
       const active = document.activeElement as HTMLElement | null;
       if (event.defaultPrevented || (active && active !== document.body && (el.contains(active) || active.closest('input,textarea,select,[contenteditable="true"],[role="slider"]')))) return;
+      // Space presses a focused button; it pages only with nothing focused.
+      if (event.key === ' ' && active && active !== document.body) return;
       const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
       if (!hit || !el.contains(hit)) return;
       keyFrom(event, el);
