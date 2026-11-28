@@ -772,7 +772,7 @@ const MixedCard2 = React.memo(function MixedCard2({ post, author, me, hidden, on
         {s ? <>{stats}{lineView}</> : (
           // A text post: its words, plain on the card, in the numbers' and the line's place.
           <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.m2Text}>
-            <Text numberOfLines={5} maxFontSizeMultiplier={1.1} style={styles.m2TextWords}>{post.body}</Text>
+            <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.m2TextWords}>{post.body}</Text>
           </Pressable>
         )}
         {actionsRow}
@@ -1108,8 +1108,9 @@ const styleDefinitions = StyleSheet.create({
   m2Meta: { ...typography.small, fontSize: 13, lineHeight: 16, color: colors.textMuted },
   m2Stats: { height: MIXED2.stats, marginTop: MIXED2.gap },
   m2Line: { height: MIXED2.line, marginTop: MIXED2.lineGap, justifyContent: 'center' },
-  m2Text: { height: TEXT2_H, marginTop: MIXED2.gap, justifyContent: 'flex-start' },
-  m2TextWords: { ...typography.body, fontSize: 16, lineHeight: 22, color: colors.text },
+  // A text post's words a size up and centred in their slot, so a short post doesn't leave a hole above the actions.
+  m2Text: { height: TEXT2_H, marginTop: MIXED2.gap, justifyContent: 'center' },
+  m2TextWords: { ...typography.body, fontSize: 18, lineHeight: 25, letterSpacing: -0.2, color: colors.text },
   // Full bleed: out past the card's gutter on both sides, square cornered.
   m2Photo: { marginTop: 12, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   m2Caption: { height: 38, marginTop: MIXED2.lineGap + 2, justifyContent: 'flex-start' },
