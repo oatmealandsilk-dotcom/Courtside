@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /**
  * Which sign-up ask a visitor sees on the website (Nov 28, owner: "The new web
@@ -29,6 +30,8 @@ export function joinLook(): JoinLook {
   if (chosen) return chosen;
   chosen = 'today';
   if (Platform.OS !== 'web' || isSupabaseConfigured || typeof window === 'undefined') return chosen;
+  // No boxes (demo only): the plain letter he chose, D, as everywhere else in that look.
+  if (noBoxes()) { chosen = 'd'; return chosen; }
   try {
     const asked = new URLSearchParams(window.location.search).get('joinlook');
     if (isLook(asked)) {

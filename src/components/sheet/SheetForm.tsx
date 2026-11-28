@@ -11,6 +11,12 @@ import { buttonShape, colors, font, lift, radius, spacing, typography } from '@/
 import { TextScale } from '@/theme/textScale';
 import { brandBoxShadow } from '@/theme/fillMode';
 import { corner, trackCorner } from '@/theme/look';
+import { usePathname } from 'expo-router';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** The sheets the no-boxes look leaves exactly as they are (owner's standing rule: never change the log-session sheet). */
+const KEEP_SUBMIT = /^\/(log-session|new-session)(\/|$)/;
 
 /*
  * The pieces every sheet's form is built from, in the app's own language
@@ -217,6 +223,15 @@ export function ChipStrip<T extends string | number>({ options, value, onChange,
 export function Submit({ label, onPress, disabled = false, busy = false, waiting, busyLabel, short = false, radius: corner }: { label: string; onPress: () => void; disabled?: boolean; busy?: boolean; waiting?: string; busyLabel?: string; /** A page's button height (44), for a small pop-up card rather than a sheet. */ short?: boolean; /** Its corner, when a small card it sits in has a tighter one than a button's own (buttonShape.radius). */ radius?: number }) {
   const styles = useThemedStyles(styleDefinitions);
   const off = disabled || busy;
+  const pathname = usePathname();
+  // No boxes (demo only): a compact ink button at the right, sized to its word, in place of the full-width green slab.
+  if (noBoxes() && !KEEP_SUBMIT.test(pathname)) {
+    return (
+      <View style={styles.plainRow}>
+        <InkButton label={busy ? (busyLabel ?? label) : disabled && waiting ? waiting : label} onPress={onPress} loading={busy && !busyLabel} disabled={off} />
+      </View>
+    );
+  }
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: off, busy }} disabled={off} onPress={onPress} style={({ pressed }) => [styles.submit, short && styles.submitShort, corner != null && { borderRadius: corner }, busy ? [styles.submitOn, styles.submitBusy] : off ? styles.submitOff : styles.submitOn, pressed && !off && { transform: [{ scale: 0.99 }] }]}>
       {busy ? (
@@ -316,6 +331,7 @@ const styleDefinitions = StyleSheet.create({
   // page's button, as the one thing a sheet or sign-in asks you to tap.
   submit: { minHeight: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, alignItems: 'center', justifyContent: 'center' },
   submitShort: { minHeight: buttonShape.height },
+  plainRow: { flexDirection: 'row', justifyContent: 'flex-end' },
   submitOn: { backgroundColor: colors.brand, boxShadow: brandBoxShadow },
   submitOff: { backgroundColor: colors.surfaceAlt },
   submitBusy: { opacity: 0.92 },

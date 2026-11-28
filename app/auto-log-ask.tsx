@@ -11,6 +11,9 @@ import { askLine, demoAsk, markAsked, sourcesWords, willSeeWords } from '@/featu
 import { isDemo } from '@/features/activity/flags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InkButton, PlainActions, TextAction, plainDialog, plainSheet, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -150,19 +153,23 @@ export default function AutoLogAsk() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const cardStyle = useAnimatedStyle(() => (SHEET
+    // No boxes on a phone: the sheet rises from the foot (Reduce Motion: it only fades).
+    ? { opacity: Math.min(1, shown.value * 2), transform: [{ translateY: reduce ? 0 : (1 - shown.value) * 360 }] }
+    : { opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const insets = useSafeAreaInsets();
   const webDialog = Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID, 'aria-describedby': LINE_ID } : {};
   const sees = willSeeWords(friends);
 
   return (
-    <View style={styles.layer}>
+    <View style={[styles.layer, SHEET && styles.plainLayer]}>
       <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
-      <View ref={boxRef} style={[styles.box, desktop && styles.boxWide]} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
-        <Animated.View style={[styles.card, cardStyle]}>
+      <View ref={boxRef} style={[styles.box, desktop && styles.boxWide, SHEET && styles.plainBox]} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
+        <Animated.View style={[styles.card, PLAIN && (SHEET ? styles.plainSheet : styles.plainDialog), SHEET && { paddingBottom: insets.bottom + spacing.lg }, cardStyle]}>
           <ScrollView
             ref={scroll}
             style={styles.cardScroll}
-            contentContainerStyle={styles.cardWords}
+            contentContainerStyle={PLAIN ? null : styles.cardWords}
             bounces={false}
             alwaysBounceVertical={false}
             showsVerticalScrollIndicator={overflow}
@@ -171,11 +178,21 @@ export default function AutoLogAsk() {
           >
             {/* Who a yes shows them to, by face and name: real friends who follow you back only; none, no row. */}
             {friends.length ? <Faces people={friends} words={sees} label={sees} lines={2} /> : null}
-            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>Let friends see your tennis?</Text>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, PLAIN && styles.plainTitle, EVEN_WEB]}>Let friends see your tennis?</Text>
             {/* Apple 5.1.3: who sees them and exactly what of them, said before the yes. */}
-            <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(sourcesWords(currentUserId, detectedActivities), currentUser, teen)}</Text>
+            <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, PLAIN && styles.plainLine, EVEN_WEB]}>{askLine(sourcesWords(currentUserId, detectedActivities), currentUser, teen)}</Text>
             <Text {...EVEN} style={[styles.cardLine, styles.cardSmall, EVEN_WEB]}>Only friends who follow you back · change anytime in Settings</Text>
           </ScrollView>
+          {PLAIN ? (
+            <View>
+              {error ? <Text style={[styles.error, styles.plainError]}>{error}</Text> : null}
+              {/* The no stays plain words in the page's own ink, never hidden, one tap; the yes the one filled button. */}
+              <PlainActions>
+                <TextAction nativeRef={keepRef} label={busy === 'private' ? 'Saving…' : 'Keep private'} disabled={!!busy} onPress={() => { void choose('private'); }} />
+                <InkButton label={busy === 'mutuals' ? 'Saving…' : 'Show to friends'} disabled={!!busy} onPress={() => { void choose('mutuals'); }} />
+              </PlainActions>
+            </View>
+          ) : (
           <View style={styles.cardActions}>
             {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}
             {/* The one to tap: the sheet-size, solid green button, the card's full width. */}
@@ -185,6 +202,7 @@ export default function AutoLogAsk() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.keepText}>{busy === 'private' ? 'Saving…' : 'Keep private'}</Text>
             </Pressable>
           </View>
+          )}
         </Animated.View>
       </View>
       {/* A tap outside closes it and saves nothing. Not a button for a screen reader: Keep private says no. */}
@@ -203,6 +221,9 @@ const CARD_PAD = spacing.lg + spacing.xs;
 /** The button's corner: a step under the card's, as the map's card. */
 const BUTTON_CORNER = radius.md;
 const desktop = isDesktopBrowser();
+/** No boxes (demo only): the plain words and answers; a sheet from the foot on a phone, a plain letter on a computer. */
+const PLAIN = noBoxes();
+const SHEET = PLAIN && !desktop;
 
 const styleDefinitions = StyleSheet.create({
   // The map's "Who can see you" card (E1): its size, place, corner, edge and shadow.
@@ -232,4 +253,11 @@ const styleDefinitions = StyleSheet.create({
   keepText: { ...typography.body, fontSize: 15, color: colors.text, textAlign: 'center' },
   error: { ...typography.small, color: colors.danger },
   errorGap: { marginBottom: spacing.xs },
+  plainLayer: { justifyContent: 'flex-end', alignItems: 'stretch', paddingHorizontal: 0, paddingBottom: 0 },
+  plainBox: { maxWidth: '100%' as unknown as number },
+  plainSheet: { ...plainSheet, overflow: 'visible' },
+  plainDialog: { ...plainDialog },
+  plainTitle: { ...plainText.titleLg },
+  plainLine: { ...plainText.bodyLg, fontSize: 15 },
+  plainError: { marginTop: spacing.md },
 });

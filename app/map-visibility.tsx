@@ -12,6 +12,9 @@ import { Avatar } from '@/components/ui';
 import { quietTintFor, quietTints } from '@/components/ui/Avatar';
 import { SheetTitle, Submit } from '@/components/sheet/SheetForm';
 import { isDesktopBrowser } from '@/lib/browserDevice';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InkButton, PlainActions, TextAction, plainDialog, plainSheet, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 import type { MapVisibility, User } from '@/data/types';
 import { CONSENT_CHOICES, FIRST_YES, TEEN_NOTICE, onTeenMap, settleWhoSeesYou } from '@/features/players/mapPrivacy';
 import { checkInEnds, clock } from '@/features/players/checkIn';
@@ -209,21 +212,25 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const cardStyle = useAnimatedStyle(() => (SHEET
+    // No boxes on a phone: the sheet rises from the foot (Reduce Motion: it only fades).
+    ? { opacity: Math.min(1, shown.value * 2), transform: [{ translateY: reduce ? 0 : (1 - shown.value) * 360 }] }
+    : { opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const insets = useSafeAreaInsets();
   // In a browser it is announced as a dialog: the question, then the line under it.
   const webDialog = Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID, 'aria-describedby': LINE_ID } : {};
 
   return (
-    <View style={styles.layer}>
+    <View style={[styles.layer, SHEET && styles.plainLayer]}>
       <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
       {/* The dialog's own box is a plain view (a browser drops dialog settings from an animated one), raised over the dimmed screen. */}
-      <View ref={boxRef} style={[styles.box, desktop && styles.boxWide]} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
-        <Animated.View style={[styles.card, cardStyle]}>
+      <View ref={boxRef} style={[styles.box, desktop && styles.boxWide, SHEET && styles.plainBox]} accessibilityViewIsModal onAccessibilityEscape={leave} {...webDialog}>
+        <Animated.View style={[styles.card, PLAIN && (SHEET ? styles.plainSheet : styles.plainDialog), SHEET && { paddingBottom: insets.bottom + spacing.lg }, cardStyle]}>
           {/* Only scrolls if the phone's largest text would push the buttons off the screen; then its bar says so. */}
           <ScrollView
             ref={scroll}
             style={styles.cardScroll}
-            contentContainerStyle={styles.cardWords}
+            contentContainerStyle={PLAIN ? null : styles.cardWords}
             bounces={false}
             alwaysBounceVertical={false}
             showsVerticalScrollIndicator={overflow}
@@ -232,10 +239,20 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
           >
             {/* With no friend who follows you back yet there are simply no faces and no names: the question starts the card. */}
             {friends.length ? <Faces people={friends} /> : null}
-            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, EVEN_WEB]}>{askTitle(upToHit)}</Text>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} {...EVEN} style={[styles.cardTitle, PLAIN && styles.plainTitle, EVEN_WEB]}>{askTitle(upToHit)}</Text>
             {/* Apple 5.1.2(i) / 5.1.1: who sees you (only friends who follow you back), only when you tap or share, and that it ends by itself. */}
-            <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, EVEN_WEB]}>{askLine(upToHit, teen, ageUnknown(currentUser))}</Text>
+            <Text nativeID={LINE_ID} {...EVEN} style={[styles.cardLine, PLAIN && styles.plainLine, EVEN_WEB]}>{askLine(upToHit, teen, ageUnknown(currentUser))}</Text>
           </ScrollView>
+          {PLAIN ? (
+            <View>
+              {error ? <Text style={[styles.error, styles.plainError]}>{error}</Text> : null}
+              {/* The decline stays plain to see and one tap (Apple 5.1.1(iv)): words beside the one filled button. */}
+              <PlainActions>
+                <TextAction nativeRef={notNowRef} label="Not now" tone="muted" disabled={busy} onPress={notNow} />
+                <InkButton label={busy ? 'Saving…' : FIRST_YES} disabled={busy} onPress={() => { void turnOn(); }} />
+              </PlainActions>
+            </View>
+          ) : (
           <View style={styles.cardActions}>
             {error ? <Text style={[styles.error, styles.errorGap]}>{error}</Text> : null}
             {/* Corners a step tighter than the card's own, so the buttons never look softer than what holds them. */}
@@ -246,6 +263,7 @@ function FirstAsk({ upToHit }: { upToHit: boolean }) {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.notNowText}>Not now</Text>
             </Pressable>
           </View>
+          )}
         </Animated.View>
       </View>
       {/* A tap outside is Not now. Not a button for a screen reader or the Tab key: Not now on the card says it. */}
@@ -517,6 +535,9 @@ const BUTTON_CORNER = radius.md;
 
 /** ConfirmHost's own test: a computer's browser gets the wider card. */
 const desktop = isDesktopBrowser();
+/** No boxes (demo only): the plain words and answers; a sheet from the foot on a phone, a plain letter on a computer. */
+const PLAIN = noBoxes();
+const SHEET = PLAIN && !desktop;
 
 const styleDefinitions = StyleSheet.create({
   // The first ask: design C's size (Oct 28, owner: "Now card is fine"), in the middle of the dimmed screen.
@@ -583,4 +604,11 @@ const styleDefinitions = StyleSheet.create({
   noticeText: { ...typography.bodyStrong, color: colors.text, lineHeight: 21 },
   noticeSmall: { ...typography.small, color: colors.textMuted, lineHeight: 18 },
   error: { ...typography.small, color: colors.danger },
+  plainLayer: { justifyContent: 'flex-end', alignItems: 'stretch', paddingHorizontal: 0, paddingBottom: 0 },
+  plainBox: { maxWidth: '100%' as unknown as number },
+  plainSheet: { ...plainSheet, overflow: 'visible' },
+  plainDialog: { ...plainDialog },
+  plainTitle: { ...plainText.titleLg },
+  plainLine: { ...plainText.bodyLg, fontSize: 15 },
+  plainError: { marginTop: spacing.md },
 });
