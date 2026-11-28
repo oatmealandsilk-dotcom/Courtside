@@ -168,7 +168,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => { setRootNavigation(rootNavigation); return () => setRootNavigation(null); }, [rootNavigation]);
   // The simulator's tap timing (tapTiming, demo builds with EXPO_PUBLIC_SIM_DRIVER only): the router's calls and page changes.
   useEffect(() => (TAP_TIMING ? listenToRouter(rootNavigation as unknown as Parameters<typeof listenToRouter>[0]) : undefined), [rootNavigation]);
-  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession, isGuest } = useApp();
+  const { currentUserId, currentUser, ready, authResolved, remoteLoaded, onboardingComplete, termsVersion, healthIsReal, actions, liveSession, isGuest, guestLoaded } = useApp();
   // Crash reports say which screen they happened on.
   useEffect(() => { setCrashScreen(pathname); }, [pathname]);
   // Alerts: a tap on one opens what it is about. Once someone is signed in
@@ -333,7 +333,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const segments = useSegments() as string[];
   const onSplash = segments.length === 0 || (segments.length === 1 && segments[0] === 'index');
   // The website's loader goes once the first page is whole under it (Nov 12, Instagram-style load; webLoader.web.ts).
-  useDropWebLoader(onSplash);
+  // A guest's first page is whole only with its posts in (Nov 27: with the icon font early, the loader went
+  // before them and showed "Loading your clips" for half a second).
+  useDropWebLoader(onSplash || (isGuest && !guestLoaded));
   // On the comments stage the phone's bar does not pop away: it stays, out of
   // reach of touches, and fades out with the first of the opening (and back
   // in with the last of the closing), following the sheet (see commentStage).
