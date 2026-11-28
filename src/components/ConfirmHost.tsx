@@ -13,6 +13,14 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, font, radius, spacing, typography } from '@/theme';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { POP_FROM_SCALE, POP_IN, POP_OUT, POP_SETTLE_MS, POP_SPRING } from '@/components/popMotion';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InkButton, PlainActions, TextAction, plainDialog, plainSheet, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a sheet from the foot on a phone, a plain letter on a computer. */
+const PLAIN = noBoxes();
+/** How far the sheet travels as it rises (its own height is unknown before it draws; this is past any question's). */
+const RISE_FROM = 360;
 
 // The pop-up card's motion, shared with the first "Let friends see you're up to hit?" (popMotion).
 // Timed by hand, so Reduce Motion is honoured here (fade only) rather than by skipping the fade too.
@@ -196,6 +204,9 @@ export function ConfirmHost() {
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   const cardStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: scale.value }] }));
+  // The plain sheet rises from the foot instead of growing (Reduce Motion: it only fades, as the card does).
+  const sheetStyle = useAnimatedStyle(() => ({ opacity: PLAIN && !desktop ? Math.min(1, shown.value * 2) : shown.value, transform: [{ translateY: reduceRef.current || desktop ? 0 : (1 - shown.value) * RISE_FROM }] }));
+  const insets = useSafeAreaInsets();
 
   if (!request) return null;
 
@@ -212,7 +223,38 @@ export function ConfirmHost() {
       if (e.target === e.currentTarget) setTimeout(() => (cancelRef.current as unknown as HTMLElement | null)?.focus?.(), 0);
     },
   } : {};
-  const layer = (
+  const plainLayer = PLAIN ? (
+    <View style={[styles.layer, styles.plainLayer, desktop && styles.plainLayerDesk]}>
+      <View
+        style={[styles.box, styles.plainBox, desktop && styles.plainBoxDesk]}
+        accessibilityViewIsModal
+        onAccessibilityEscape={() => answer('cancel')}
+        {...webDialog}
+      >
+        <Animated.View style={[desktop ? styles.plainDialog : styles.plainSheet, !desktop && { paddingBottom: insets.bottom + spacing.lg }, sheetStyle]}>
+          <ScrollView style={styles.scroll} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" style={styles.plainTitle}>{request.title}</Text>
+            {request.message ? <Text nativeID={MESSAGE_ID} style={styles.plainMessage}>{request.message}</Text> : null}
+          </ScrollView>
+          {/* Cancel first (the keyboard starts on it, so a stray Enter never deletes anything), then any other answer, the action last at the right. */}
+          <PlainActions style={styles.plainActions}>
+            <TextAction nativeRef={cancelRef} label={request.cancelLabel ?? 'Cancel'} tone="muted" onPressIn={touchBegan} onPress={() => tapped('cancel', true)} />
+            {alsoChoices(request).map((choice, at) => (
+              <TextAction key={`${at}-${choice.label}`} label={choice.label} tone={choice.destructive ? 'danger' : 'ink'} onPressIn={touchBegan} onPress={() => tapped(at)} />
+            ))}
+            <InkButton label={request.confirmLabel} tone={request.destructive ? 'danger' : 'ink'} onPressIn={touchBegan} onPress={() => tapped('yes')} />
+          </PlainActions>
+        </Animated.View>
+      </View>
+      <Animated.View
+        style={[styles.dim, dimStyle]}
+        onStartShouldSetResponder={() => true}
+        onResponderGrant={touchBegan}
+        onResponderRelease={() => tapped('cancel')}
+      />
+    </View>
+  ) : null;
+  const layer = plainLayer ?? (
     <View style={styles.layer}>
       {/* The card comes first, so a keyboard Tab never lands on the dimmed screen; it is raised above it instead.
           The dialog's own box is a plain view: the browser drops focus settings from an animated one. */}
@@ -323,4 +365,14 @@ const styleDefinitions = StyleSheet.create({
   action: { ...typography.body, ...font('600'), color: colors.brand, textAlign: 'center' },
   danger: { color: colors.danger },
   cancel: { ...typography.body, color: colors.text, textAlign: 'center' },
+  // No boxes: the sheet from the foot (phone) or the letter (computer); words left, answers at the right.
+  plainLayer: { justifyContent: 'flex-end', alignItems: 'stretch', paddingHorizontal: 0, paddingVertical: 0, paddingTop: spacing.xxxl },
+  plainLayerDesk: { justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xxl },
+  plainBox: { maxWidth: '100%' as unknown as number },
+  plainBoxDesk: { maxWidth: 440 },
+  plainSheet: { ...plainSheet, flexShrink: 1 },
+  plainDialog: { ...plainDialog, flexShrink: 1 },
+  plainTitle: { ...plainText.titleLg, paddingRight: spacing.lg },
+  plainMessage: { ...plainText.bodyLg },
+  plainActions: { marginTop: spacing.xl },
 });

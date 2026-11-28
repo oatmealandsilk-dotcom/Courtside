@@ -8,6 +8,8 @@ import { MarkDraw } from '@/components/MarkDraw';
 import { Button } from './Button';
 import { colors, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
+import { PlainNote } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 interface Props {
   /** An icon for this particular emptiness; without one, the mark. */
@@ -26,6 +28,14 @@ const ARRIVE = FadeIn.duration(240).easing(Easing.bezier(0.33, 1, 0.68, 1));
 /** Nothing here yet: a quiet mark, a line on why, and air around it. */
 export function EmptyState({ icon, glyph, title, body, action }: Props) {
   const styles = useThemedStyles(styleDefinitions);
+  // No boxes (demo only): the words at the page's left margin, no mark on top, the way out a compact ink button.
+  if (noBoxes()) {
+    return (
+      <Reanimated.View entering={ARRIVE} style={styles.plainWrap}>
+        <PlainNote title={title} body={body} action={action} />
+      </Reanimated.View>
+    );
+  }
   return (
     <Reanimated.View entering={ARRIVE} style={styles.wrap}>
       {glyph ?? (icon ? <Ionicons name={icon} size={26} color={colors.textFaint} /> : <MarkDraw size={30} color={colors.borderStrong} play={false} />)}
@@ -37,6 +47,7 @@ export function EmptyState({ icon, glyph, title, body, action }: Props) {
 }
 
 const styleDefinitions = StyleSheet.create({
+  plainWrap: { alignSelf: 'stretch', width: '100%', maxWidth: 560 },
   wrap: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxxl, paddingHorizontal: spacing.lg },
   title: { ...typography.heading, color: colors.text, textAlign: 'center', marginTop: spacing.xs },
   body: { ...typography.small, color: colors.textMuted, textAlign: 'center', maxWidth: 300, lineHeight: 19 },
