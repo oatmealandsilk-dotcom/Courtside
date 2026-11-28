@@ -6,7 +6,7 @@ import { font, wordmarkFont } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
 import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS, SPLASH_C_DARK_COLORS } from '@/components/launchPictureC';
-import { NEW_LAUNCH_GREEN, NEW_SPLASH, OLD_LAUNCH_GREEN } from '@/lib/splashLook';
+import { NEW_LAUNCH_LIGHT, NEW_SPLASH, OLD_LIGHT_LOOK } from '@/lib/splashLook';
 import { onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
 import { launchLookNow, type LaunchLook } from '@/lib/launchLook';
 
@@ -270,11 +270,12 @@ export function useLaunchDark(on = true): boolean {
 }
 
 /**
- * The launch look's colours: white or dark. The white look's green is the icon's since Nov 27, but only
- * where the phone's own picture has it too (NEW_LAUNCH_GREEN, src/lib/splashLook.ts); older builds keep
- * their picture's lighter green, so the hand-over does not change colour.
+ * The launch look's colours: light or dark. The light look is the icon's reversed since Nov 27 (cream
+ * mark on dark green), but only where the phone's own picture has it too (NEW_LAUNCH_LIGHT,
+ * src/lib/splashLook.ts); older builds keep their picture's white look, so the hand-over does not
+ * change colour. Ground, mark, line and status-bar icons all follow LIGHT_C.
  */
-const LIGHT_C = NEW_LAUNCH_GREEN ? SPLASH_C_COLORS : { ...SPLASH_C_COLORS, green: OLD_LAUNCH_GREEN };
+const LIGHT_C: { ground: string; green: string; line: string } = NEW_LAUNCH_LIGHT ? SPLASH_C_COLORS : OLD_LIGHT_LOOK;
 const lookC = (dark: boolean) => (dark ? SPLASH_C_DARK_COLORS : LIGHT_C);
 const LINE_C_TEXT = { size: LINE_C.size, tracking: LINE_C.tracking, baseline: LINE_C.baseline, centre: PICTURE_C.width / 2 };
 
@@ -374,19 +375,22 @@ export const LaunchMark: (props: { ink: string; faint: string; line?: string; da
   ? (Platform.OS === 'web' ? WebLaunchMarkC : Platform.OS === 'android' ? AndroidLaunchMarkC : PhoneLaunchMarkC)
   : (Platform.OS === 'android' ? AndroidLaunchMark : PictureLaunchMark);
 
-const GROUND_LIGHT = { backgroundColor: SPLASH_C_COLORS.ground };
+const GROUND_LIGHT = { backgroundColor: LIGHT_C.ground };
 const GROUND_DARK = { backgroundColor: SPLASH_C_DARK_COLORS.ground };
 /**
- * Splash C is drawn on its own ground, white or dark (`dark`: the screen's own useLaunchDark; a reading
+ * Splash C is drawn on its own ground, light (dark green since Nov 27; white on older builds) or dark (`dark`: the screen's own useLaunchDark; a reading
  * now when not given), whatever the theme; today's look keeps the screen's own colour.
  */
 export function launchGround(dark: boolean = launchDark()) {
   return NEW_SPLASH ? (dark ? GROUND_DARK : GROUND_LIGHT) : null;
 }
 
-/** The status bar's icons over the launch look: light on the dark one, dark on white (and on today's cream). */
+/**
+ * The status bar's icons over the launch look: light on the dark one and on the green light one (Nov 27),
+ * dark on the white light one of older builds (and on today's cream).
+ */
 export function launchStatusStyle(dark: boolean = launchDark()): 'light' | 'dark' {
-  return dark ? 'light' : 'dark';
+  return dark || (NEW_SPLASH && NEW_LAUNCH_LIGHT) ? 'light' : 'dark';
 }
 
 const styles = StyleSheet.create({

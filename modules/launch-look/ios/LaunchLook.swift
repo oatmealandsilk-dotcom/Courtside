@@ -256,12 +256,14 @@ final class LaunchLook: NSObject {
   }
 
   /**
-   * The status bar's icons over the launch copies: light on the dark look, dark on the white one, until
-   * the app's code sets them from its first screen (as before). The app sets them this same way
+   * The status bar's icons over the launch copies: light on both looks (the dark one, and since Nov 27 the
+   * light one too: a cream mark on dark green; dark icons were for the white one before it), until the
+   * app's code sets them from its first screen (as before). The app sets them this same way
    * (UIViewControllerBasedStatusBarAppearance is off, so this is what React Native's StatusBar uses).
+   * Native: only in builds whose launch picture is the green one (after 29).
    */
   private func setStatusBar(_ look: LaunchLookStyle, animated: Bool) {
-    let style: UIStatusBarStyle = look == .dark ? .lightContent : .darkContent
+    let style: UIStatusBarStyle = .lightContent
     UIApplication.shared.setStatusBarStyle(style, animated: animated)
   }
 

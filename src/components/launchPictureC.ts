@@ -8,8 +8,12 @@
 /** The picture's size, in its own pixels (the same as the old launch picture's). */
 export const PICTURE_C = { width: 1284, height: 2778 };
 
-/** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
-export const SPLASH_C_COLORS = { ground: '#FFFFFF', green: '#236B3F', line: '#536471' };
+/**
+ * The light look's colours (Nov 27, the icon's colours reversed): the ground (dark green), the mark (`green`:
+ * the mark's colour, here the icon's cream) and the quiet line (the cream with 15% of the ground in it).
+ * Drawn only on builds whose own launch picture has them (src/lib/splashLook.ts, NEW_LAUNCH_LIGHT).
+ */
+export const SPLASH_C_COLORS = { ground: '#1C5835', green: '#F6EFE4', line: '#D5D8CA' };
 
 /**
  * The dark look (Oct 25, assets/splash-c-dark.png), shown when the phone is in dark mode: the Night

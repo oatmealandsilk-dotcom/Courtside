@@ -36,7 +36,7 @@ import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark';
-import { NEW_SPLASH } from '@/lib/splashLook';
+import { NEW_LAUNCH_LIGHT, NEW_SPLASH } from '@/lib/splashLook';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
@@ -235,6 +235,19 @@ function ThemedStatusBar() {
       // Not in this build: the window keeps its launch colour.
     }
   }, [theme]);
+  useEffect(() => {
+    // iPhone builds with the green launch look (Nov 27): the root behind the app is the launch screen's
+    // dark green (app.config.js backgroundColor) only for the launch; once the app is up it goes back to
+    // white, as it always was, so nothing after the launch changes. Only those builds (after 29), which
+    // all carry expo-system-ui.
+    if (Platform.OS !== 'ios' || !NEW_LAUNCH_LIGHT) return;
+    try {
+      const SystemUI = require('expo-system-ui') as typeof import('expo-system-ui');
+      void SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => undefined);
+    } catch {
+      // Not in this build: the root keeps its launch colour.
+    }
+  }, []);
   // Animated: on a theme change the icons fade across with the page rather than flipping (iOS).
   return <StatusBar style={style} animated />;
 }
