@@ -118,6 +118,8 @@ const asTopic = (value: string | undefined): QuestionTopic | 'all' => (value && 
 const SORT_LABEL = { new: 'New', hot: 'Hot', top: 'Top', unanswered: 'Unanswered' } as const;
 /** Open hits shown before "More open hits": the rest are a tap away, never dropped. */
 const HITS_SHOWN = 5;
+/** The map-then-activity picture (homePreview): Open hits is one row of the feed, so two cards, the rest a tap away in place. */
+const HOME_HITS_SHOWN = 2;
 /**
  * "Further away" stops here (Oct 5): a player in Boise was offered a hit in
  * Raleigh, about 2,000 miles off. Beyond it a hit is still on the full map,
@@ -437,8 +439,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   }, [openHits, furtherHits, currentUserId]);
   const [furtherOpen, setFurtherOpen] = useState(false);
   const [moreHitsOpen, setMoreHitsOpen] = useState(false);
-  const moreHits = Math.max(0, listedHits.length - HITS_SHOWN);
-  const shownHits = moreHitsOpen ? listedHits : listedHits.slice(0, HITS_SHOWN);
+  const hitsFirst = HOME_MAP_FEED ? HOME_HITS_SHOWN : HITS_SHOWN;
+  const moreHits = Math.max(0, listedHits.length - hitsFirst);
+  const shownHits = moreHitsOpen ? listedHits : listedHits.slice(0, hitsFirst);
   // The hit tips (Oct 7, audit item 3): one card in the list carries one, once it is in view, and
   // only while this page is on show with no tutorial or search over it (see HitCard's tip).
   // "On show" is asked by the tip itself (tipAt), not here: the address changes with every page
@@ -691,9 +694,9 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   // Near the end of the list (within a screen of it), the next page comes on its own.
   const { height: screenHeight } = useWindowDimensions();
-  // The simulator proof harness only (simDriver: demo builds with the app preview of option C, rounds 2 and 3): "scroll y=400" scrolls Find Players, for the pictures.
-  // ("scroll y=400&animated=1" glides there, for the map-then-activity picture's video.)
-  useEffect(() => (APP_C_BIG_MAP || HOME_MAP_FEED ? simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); }) : undefined), [pageTop]);
+  // The simulator proof harness only (simDriver: demo builds bundled with EXPO_PUBLIC_SIM_DRIVER; nothing anywhere else): "scroll y=400"
+  // scrolls Find Players, for the pictures; "scroll y=400&animated=1" glides there (the map-then-activity picture's video).
+  useEffect(() => (previewSection ? undefined : simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); })), [pageTop, previewSection]);
   // Round 2: how tall Open to hit is over the map's foot (the bar's room under it included), so the city sits above it.
   const [cStripH, setCStripH] = useState(0);
   const listEnd = useRef<View>(null);

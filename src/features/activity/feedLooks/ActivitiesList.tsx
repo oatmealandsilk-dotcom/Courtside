@@ -1662,6 +1662,9 @@ function useFeedRows({ look, posts, showStart, nearCount, near, paused, start }:
   }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
   /** A refresh brought the newest again: the end may have more once more. */
   const reopen = useCallback(() => setEnded(false), []);
+  // The store has more again (a refresh from anywhere, such as the page holding ActivitiesInline): so may the end.
+  const storeMore = app.feed.more;
+  useEffect(() => { if (storeMore) setEnded(false); }, [storeMore]);
 
   const startBlock = start !== undefined ? start : showStart ? <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop /> : null;
   const startInRows = rows.some((r) => r.kind === 'start');
