@@ -23,6 +23,7 @@ import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { APP_C_PREVIEW } from '@/features/community/appCPreview';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -1022,17 +1023,21 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   const ground = groundOf(media);
   // The new bar (Oct 28, after Instagram's and Strava's): the tabs in the page's own ink, the lit one in the
   // brand's colour, icon and word; a faint edge that keeps it apart from a white page (its glass has its own light).
-  const line = fresh
+  // The preview of the website's option C in the app (appCPreview; demo builds with its switch only): one ink for the lit
+  // tab, a plain hairline, a soft highlight under the lit tab; the glass itself stays the app's own (real Apple glass).
+  const cBar = APP_C_PREVIEW;
+  const line = cBar && !media ? c.border : fresh
     ? (media || darkPage ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, 0.07))
     : media ? withAlpha(c.onMedia, 0.14) : c.border;
-  const idleIcon = media ? withAlpha(c.onMedia, fresh ? 0.92 : 0.66) : fresh ? c.text : c.textMuted;
-  const idleLabel = media ? withAlpha(c.onMedia, fresh ? 0.88 : 0.6) : fresh ? c.text : c.textFaint;
+  const idleIcon = cBar ? (media ? withAlpha(c.onMedia, 0.6) : c.textMuted) : media ? withAlpha(c.onMedia, fresh ? 0.92 : 0.66) : fresh ? c.text : c.textMuted;
+  const idleLabel = cBar ? (media ? withAlpha(c.onMedia, 0.6) : c.textFaint) : media ? withAlpha(c.onMedia, fresh ? 0.88 : 0.6) : fresh ? c.text : c.textFaint;
   // The lit tab in today's colours: Community amber, Coaching blue, the rest the court's own colour
   // (on the new bar, every tab the court's own colour). Over a clip on a light court (its ground gone
   // near-black) that colour is lifted a little toward white so it still reads, in the same hue.
   // On the new bar over a clip, the brand's colour lightened in its own hue instead (mixing in white
   // turned the lit tab a washed-out grey-green on the dark glass).
   const litOf = (route: string) => {
+    if (cBar) return media ? c.onMedia : c.text;
     const base = fresh ? c.brand : route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
     if (!media || darkPage) return base;
     return fresh ? lightened(base) : toward(base, c.onMedia, 0.35);
@@ -1125,7 +1130,9 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   const lensFill = lensDark ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, darkPage ? 0.12 : 0.07);
   // The new bar's: a soft wash of the brand's colour on a light court (the lit icon and word are that
   // colour), a step lighter on a dark court and over a clip. Never a heavy grey.
-  const tint = lensDark ? { color: c.onMedia, alpha: 0.18 } : darkPage ? { color: c.text, alpha: 0.13 } : { color: c.brand, alpha: 0.11 };
+  const tint = lensDark ? { color: c.onMedia, alpha: 0.18 }
+    : cBar ? (darkPage ? { color: c.text, alpha: 0.08 } : { color: c.brandDim, alpha: 1 })
+    : darkPage ? { color: c.text, alpha: 0.13 } : { color: c.brand, alpha: 0.11 };
   // The lens motion's rim and highlight: light on a dark court and over a clip; on a light court a rim in
   // the brand's colour (white would vanish on the light glass) and a white highlight.
   const lensRim = lensDark || darkPage ? withAlpha(c.onMedia, 0.34) : withAlpha(c.brand, 0.3);
@@ -1140,7 +1147,7 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
           Create box's veil, so the bar keeps its own edge while the box is up. */}
       <View pointerEvents="none" style={[st.rim, { borderColor: line }]} />
       {/* The new bar's bright inner edge, as Apple's glass has its own (so not there on iOS 26). */}
-      {fresh && !liquidGlass ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
+      {fresh && !liquidGlass && !cBar ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
       {/* While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
           gets dark grey"): a veil of its own ground, not the page's dim, steps the four tabs back so the
           lit + stands out, and catches a tap there to close the box. Only this child fades, never the glass. */}

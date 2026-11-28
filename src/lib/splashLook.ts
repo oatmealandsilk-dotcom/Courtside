@@ -35,3 +35,50 @@ export function iosBuild(): number {
 /** True when this app draws the new, logo-only launch look (splash C); false: today's picture. */
 export const NEW_SPLASH: boolean =
   Platform.OS === 'web' || Platform.OS === 'android' || (Platform.OS === 'ios' && iosBuild() > LAST_OLD_SPLASH_BUILD);
+
+/*
+ * The light launch look (Nov 27). The owner first asked for one green (the icon's own #236B3F on the
+ * icon, the app's buttons and the launch screen: "new green is better"), then for the launch screen to
+ * match the icon, reversed: the icon's cream mark on a dark green ground ("between 2 and 3": #1C5835),
+ * the line in the cream with a little of the ground in it (SPLASH_C_COLORS, scripts/make-splash-c.py).
+ * The phone's own launch picture only changes with a new store build, so the app's drawn copy (the
+ * loading screen, the curtain) keeps the picture's old look, white with the old lighter green
+ * (OLD_LIGHT_LOOK), on the builds that still carry it, and the hand-over from picture to drawing never
+ * changes colour: iPhone builds up to 29 (in review Nov 25), Android's first build (versionCode 1,
+ * Nov 5). The ground, the mark, the line and the status bar's icons all switch together. The dark look
+ * is the same on every build. The website has no picture of its own: its loader (public/index.html)
+ * and drawing switch together.
+ */
+
+/** The light launch look on builds made before Nov 27 (assets/splash-c.png until then): white, the old green, Clean's grey. */
+export const OLD_LIGHT_LOOK = { ground: '#FFFFFF', green: '#2E7E4B', line: '#536471' } as const;
+/** The last iPhone store build whose launch picture has OLD_LIGHT_LOOK. */
+export const LAST_OLD_LIGHT_IOS_BUILD = 29;
+/** The last Android build whose launch screen has OLD_LIGHT_LOOK. */
+export const LAST_OLD_LIGHT_ANDROID_BUILD = 1;
+
+/**
+ * The installed Android app's own version code (0 when unknown). Read from the phone by expo-application
+ * (its nativeBuildVersion, the package's own versionCode), never from expo-constants, whose Android side
+ * sends no versionCode at all (so every Android build read 0), nor from the update's own config, which an
+ * update could change. Loaded on Android only and inside try: a build without the module counts as old.
+ */
+function androidBuild(): number {
+  if (Platform.OS !== 'android') return 0;
+  try {
+    const Application = require('expo-application') as typeof import('expo-application');
+    const n = Number(Application.nativeBuildVersion ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * True when this app's own launch picture is the green one (Nov 27), so its drawn copy should be too;
+ * false: the white one (OLD_LIGHT_LOOK). No build number (Expo Go, a failed read) keeps the white one.
+ */
+export const NEW_LAUNCH_LIGHT: boolean =
+  Platform.OS === 'web' ||
+  (Platform.OS === 'ios' && iosBuild() > LAST_OLD_LIGHT_IOS_BUILD) ||
+  (Platform.OS === 'android' && androidBuild() > LAST_OLD_LIGHT_ANDROID_BUILD);

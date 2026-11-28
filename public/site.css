@@ -26,7 +26,7 @@
   --bg: #FFFFFF; --bg-el: #F7F8F8; --surface: #FAFAFA; --surface-alt: #F0F1F1;
   --border: #E6E7E8; --border-strong: #C7CACC;
   --text: #0F1419; --muted: #536471; --faint: #5F6871;
-  --brand: #2C7446; --brand-ink: #FFFFFF; --brand-dim: #E8F3EC;
+  --brand: #236B3F; --brand-ink: #FFFFFF; --brand-dim: #E8F3EC;
   color-scheme: light;
 }
 :root[data-theme="night"] {

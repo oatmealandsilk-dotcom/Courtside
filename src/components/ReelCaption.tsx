@@ -101,11 +101,12 @@ export const railCount = (n: number) => (n > 0 ? compactNumber(n) : ' ');
 let clipsSeen = 0;
 
 export function ReelCaption({ post, author, onAuthor, onOpenComments, onOpenStats, active = false }: { post: Post; author: User; onAuthor: () => void; /** The comments, opened from the rail and from a tap on the words. */ onOpenComments?: (from?: unknown) => void; onOpenStats?: () => void; active?: boolean }) {
-  const { users, blockedIds } = useApp();
+  const { users, blockedIds, isGuest } = useApp();
   // Tips (features/tips): the stats pill the first time one shows; double-tap on the third clip seen.
   const statsTip = useTip('see-stats', active && !!post.session && hasSessionStats(post.session));
   useEffect(() => { if (active) clipsSeen += 1; }, [active]);
-  const likeTip = useTip('double-tap', active && post.kind === 'clip' && clipsSeen >= 3 && !(post.session && hasSessionStats(post.session)));
+  // Never for a guest: their double-tap only opens the sign-up wall.
+  const likeTip = useTip('double-tap', !isGuest && active && post.kind === 'clip' && clipsSeen >= 3 && !(post.session && hasSessionStats(post.session)));
   const touring = useTourBusy();
   const { height: screenH } = useWindowDimensions();
   const [open, setOpen] = useState(false);

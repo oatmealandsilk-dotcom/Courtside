@@ -204,7 +204,7 @@ const ScreenBody = React.memo(function ScreenBody({
   // The strip only exists on the phone, and only on pages that can refresh.
   const strip = Platform.OS !== 'web' && onRefresh ? PULL_GAP : 0;
   const restored = useRef(initial.current === 0);
-  const { isPhone, isDesktop } = useResponsive();
+  const { isPhone, isDesktop, width: windowWidth } = useResponsive();
   // Running up under the status bar (bleedTop): the pull's disc and its note keep below it.
   const bled = bleedTop && isPhone;
   const underBar = bled ? { marginTop: insets.top } : null;
@@ -574,7 +574,10 @@ const ScreenBody = React.memo(function ScreenBody({
     : onBack ? { maxFontSizeMultiplier: TextScale.TITLE } : oneLine(TextScale.TITLE);
   const titleText = (
     <Text
-      style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null]}
+      // A browser this narrow (a phone at 200% zoom, under ~260 CSS px) has no way to shrink the title to one line, and
+      // broke "Community" mid-word: the title steps down there, and a step further under 200. Wider windows unchanged.
+      style={[compactTitle || !isPhone ? styles.titleCompact : styles.title, titleSmall ? styles.titleCapped : null,
+        Platform.OS === 'web' && windowWidth < 260 ? (windowWidth < 200 || titleSmall ? styles.titleCapped : styles.titleCompact) : null]}
       // A tab's short fixed title (no way back): one line that shrinks a little rather than breaking a
       // word ("Communit / y") at a large phone text size. A pushed page's title (a way back, often from
       // data) wraps at word boundaries as before, capped; a page that asks for lines (titleLines) keeps them.

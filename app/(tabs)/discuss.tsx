@@ -41,6 +41,12 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts, usePeekLook } from '@/components/place/CourtsNear';
 import { CARD_HEIGHT } from '@/components/map/cardFit';
+import { MapGlass } from '@/components/map/MapGlass';
+import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barInset';
+import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
+import { simAction } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -681,6 +687,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   // Near the end of the list (within a screen of it), the next page comes on its own.
   const { height: screenHeight } = useWindowDimensions();
+  // The simulator proof harness only (simDriver: demo builds with the app preview of option C, rounds 2 and 3): "scroll y=400" scrolls Find Players, for the pictures.
+  useEffect(() => (APP_C_BIG_MAP ? simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: false }); }) : undefined), [pageTop]);
+  // Round 2: how tall Open to hit is over the map's foot (the bar's room under it included), so the city sits above it.
+  const [cStripH, setCStripH] = useState(0);
   const listEnd = useRef<View>(null);
   const nearEndRef = useRef(() => {});
   nearEndRef.current = () => {
@@ -713,6 +723,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     </Fold>
   );
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
+  // The app preview of option C, round 2 (appCPreview): Open to hit, small, over the map's foot and on down under the bar,
+  // on the map controls' one fixed see-through fill (MapGlass dense, for words: never live glass, never faded), its top
+  // corners rounded as the pills are; no hairline, no shadow.
+  const cOverlay = (bar: number) => (APP_C_OVERLAY && currentUser && showUpToday ? (
+    <MapGlass radius={0} dense style={[styles.cOverlay, { paddingBottom: bar + spacing.sm }]}>
+      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height + styles.cOverlay.paddingTop + bar + spacing.sm); if (h !== cStripH) setCStripH(h); }}>
+        <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+      </View>
+    </MapGlass>
+  ) : null);
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 12 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
@@ -736,7 +756,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
           // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
-          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}>{(() => {
+            const map = (cardHeight?: number, cover?: number) => <NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} cardHeight={cardHeight} cardCover={cover} />;
+            // The app preview of option C, rounds 2 and 3 only (demo builds with its switch): the tall map, measured in its own slot.
+            return APP_C_BIG_MAP ? <CBigMap render={(h, bar) => <>{map(h, APP_C_OVERLAY ? cStripH : bar)}{cOverlay(bar)}</>} /> : map();
+          })()}</View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
@@ -751,7 +775,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
-        {currentUser && !search && showUpToday ? (
+        {currentUser && !search && showUpToday && !APP_C_OVERLAY ? (
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
@@ -1175,6 +1199,27 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
   );
 }
 
+/**
+ * The app preview of option C, rounds 2 and 3 (appCPreview; mounted only in demo builds with its switch, so other builds never
+ * measure or follow the bar): the Community map from where it starts on the page down to the screen's foot, under the
+ * floating bar the way Apple Maps runs, so at rest only map shows round the bar. Read from where the slot is drawn, and once
+ * more after the tab's arrival has settled; `render` gets the map's height and the bar's room at the foot.
+ */
+function CBigMap({ render }: { render: (height: number | undefined, bar: number) => React.ReactNode }) {
+  const { height: screenHeight } = useWindowDimensions();
+  // The room the preview's bar (C's, the new bar: NEW_BAR, its foot newBarFoot) really takes at the foot, and the live
+  // session's bar over it: useBarInset counts today's taller pill, which would leave a band of air above the bar.
+  const { bottom } = useSafeAreaInsets();
+  const live = useBarInset() - (TAB_BAR_H + TAB_BAR_GAP + Math.max(bottom, 12));
+  const bar = NEW_BAR.height + newBarFoot(bottom) + Math.max(live, 0);
+  const box = useRef<View>(null);
+  const [top, setTop] = useState(0);
+  const read = useCallback(() => box.current?.measureInWindow((_x, y) => { if (y > 0) setTop(Math.round(y)); }), []);
+  useEffect(() => { const t = setTimeout(read, 900); return () => clearTimeout(t); }, [read]);
+  const height = top > 0 ? Math.max(CARD_HEIGHT, screenHeight - top) : undefined;
+  return <View ref={box} collapsable={false} onLayout={top ? undefined : read}>{render(height, bar)}</View>;
+}
+
 const styleDefinitions = StyleSheet.create({
   // The page, as one view the check-in zoom can photograph (phone) or push in (browser).
   growHost: { flex: 1 },
@@ -1223,6 +1268,8 @@ const styleDefinitions = StyleSheet.create({
   // On a phone it would not: the phone takes a view with display none off the screen entirely, its map's
   // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
   // place the page first opened on). There it stays put, laid over nothing, unseen and untouchable.
+  // The app preview of option C, round 2 (appCPreview): Open to hit along the map's foot, edge to edge as the map is.
+  cOverlay: { position: 'absolute', left: spacing.sm - spacing.lg, right: spacing.sm - spacing.lg, bottom: 0, paddingHorizontal: spacing.lg - spacing.sm, paddingTop: spacing.md - 2, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   // The map card's own height, so nothing jumps when the card takes its place.
   mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },

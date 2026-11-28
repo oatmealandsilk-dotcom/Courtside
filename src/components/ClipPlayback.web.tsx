@@ -16,6 +16,7 @@ import { forgetLeft, noteLeft, takeLeft } from '@/features/feed/clipResume';
 import { usePageHeading, usePageLeaving } from '@/features/feed/pageLeaving';
 import { TopBandContext } from '@/features/feed/topBand';
 import { noteClipLoad } from '@/lib/netSpeed';
+import { markFirstClipPlaying, useFirstClipPlayed } from '@/features/feed/firstPlay';
 
 /** How long a clip on screen may wait on its cover before the loading disc shows (the phone's ClipPlayback: 2.2 s since Oct 28). */
 const SPIN_AFTER_MS = 2200;
@@ -173,7 +174,10 @@ function ClipPlaybackInner({ uri, poster, active: asked, onDeck = false, preload
   // What the browser is asked to fetch: the clip on screen and those preloaded in full, a feed
   // warming up out of sight only its opening. (Never 'metadata' for a page you may land on: a clip
   // Chrome parked there does not fetch on when told 'auto', only once it plays, and stalls then.)
-  const fetchHint = active || preload ? (warmOnly && !active ? 'metadata' : 'auto') : 'none';
+  // Until the visit's first clip has started (firstPlay), the ones lined up after it fetch nothing, so
+  // the first one has the whole connection; then they fetch in full as before.
+  const firstPlayed = useFirstClipPlayed();
+  const fetchHint = active || preload ? (warmOnly && !active ? 'metadata' : active || firstPlayed ? 'auto' : 'none') : 'none';
   // Gone from the page (or given another clip): what it had fetched goes with it.
   useEffect(() => () => { latestReady.current?.(false); setFramed(false); }, [uri]);
   // The sound disc eases in when the clip starts and fades out quickly; a
@@ -308,7 +312,7 @@ function ClipPlaybackInner({ uri, poster, active: asked, onDeck = false, preload
 
   return <div style={{ position: 'absolute', inset: 0, background: letterbox ? '#000' : undefined, display: 'flex', alignItems: 'center' }}>
     <div style={{ ...cropCss(crop), display: 'flex', alignItems: 'center' }}>
-      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); }} onPause={(e) => { if (e.currentTarget.paused) { waitFrom.current = 0; stallFrom.current = 0; } }} onProgress={(e) => steadyCheck(e.currentTarget)} onCanPlayThrough={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
+      <video ref={video} src={uri} poster={poster} loop muted={muted || silent} playsInline preload={fetchHint} onError={fail} onLoadedData={() => setReady(true)} onCanPlay={() => setReady(true)} onWaiting={(e) => { stalled(e.currentTarget); setReady(false); }} onPlaying={(e) => { played(e.currentTarget); setReady(true); if (onScreen.current) markFirstClipPlaying(); }} onPause={(e) => { if (e.currentTarget.paused) { waitFrom.current = 0; stallFrom.current = 0; } }} onProgress={(e) => steadyCheck(e.currentTarget)} onCanPlayThrough={(e) => steadyCheck(e.currentTarget)} onTimeUpdate={(e) => steadyCheck(e.currentTarget)} style={{ width: '100%', height: '100%', objectFit: letterbox ? 'contain' : fit, pointerEvents: 'none' }} />
       {failed ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}><span style={{ padding: '8px 14px', borderRadius: 999, background: 'rgba(0,0,0,0.55)', color: 'white', font: `600 13px ${fontFamily.semibold}` }}>This video didn’t load</span></div> : null}
     </div>
     {/* Over the picture, under the disc: the top shade darkens the video, never the disc. */}

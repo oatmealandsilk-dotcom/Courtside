@@ -12,7 +12,7 @@ import { appleHealthAvailable, connectAppleFood, inExpoGo, readAppleNutritionFro
 import * as haptics from '@/lib/haptics';
 import { show as showToast } from '@/lib/toast';
 import { useThemedStyles } from '@/theme/ThemeProvider';
-import { buttonShape, colors, radius, spacing, typography } from '@/theme';
+import { TextScale, buttonShape, colors, radius, spacing, typography } from '@/theme';
 
 /*
  * Food, from Cronometer or MyFitnessPal, by way of Apple Health: neither app
@@ -187,7 +187,7 @@ export function FoodSection({ userId }: { userId: string | null }) {
           <Text style={styles.name}>Nothing from your food app yet</Text>
           <Text style={styles.how}>In Cronometer or MyFitnessPal, turn on sharing with Apple Health and log a meal. If you said no to CourtSide, switch it on in the Health app under Sharing → Apps → CourtSide.</Text>
           <Pressable accessibilityRole="button" accessibilityLabel="Check Apple Health again" onPress={() => { haptics.tap(); void read(); }} style={({ pressed }) => [styles.small, pressed && styles.pressedDim]}>
-            <Ionicons name="refresh" size={14} color={colors.text} /><Text style={styles.smallText}>Check again</Text>
+            <Ionicons name="refresh" size={14} color={colors.text} /><Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.smallText}>Check again</Text>
           </Pressable>
         </View>
       </View>

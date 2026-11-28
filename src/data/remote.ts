@@ -294,6 +294,24 @@ type StoryRow = {
   story_comments?: ({ id: string; story_id: string; author_id: string; body: string; created_at: string; parent_id?: string | null; reply_to_id?: string | null; story_comment_likes?: { user_id: string }[] } & RemovedColumns)[];
 } & RemovedColumns;
 
+/**
+ * Older uploads were saved with the project's raw address (cgitvbnvchmofqkhtlml.supabase.co); newer ones with the
+ * address the app talks to (auth.courtsidebase.com, the same storage). Read back, the old ones are pointed at the
+ * app's own address too, so a page never opens a second, cold connection just for them (Nov 27 speed pass).
+ */
+/** The project's raw storage address (https://<project ref>.supabase.co/storage/v1/), however it was written. */
+const RAW_STORAGE = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/storage\/v1\//;
+const APP_STORAGE = (() => {
+  const base = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '');
+  return /^https:\/\//.test(base) && !base.includes('.supabase.co') ? `${base}/storage/v1/` : null;
+})();
+function media(url: string): string;
+function media(url: string | null | undefined): string | undefined;
+function media(url: string | null | undefined): string | undefined {
+  if (!url) return url ?? undefined;
+  return APP_STORAGE && RAW_STORAGE.test(url) ? url.replace(RAW_STORAGE, APP_STORAGE) : url;
+}
+
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({
   id: row.id,
   handle: row.handle,
@@ -303,7 +321,7 @@ const toUser = (row: ProfileRow, followers: number, following: number): User => 
   cityAt: row.city_lat != null && row.city_lng != null ? { lat: row.city_lat, lng: row.city_lng } : undefined,
   joinedAt: row.created_at,
   avatarSeed: row.id,
-  avatarUrl: row.avatar_url ?? undefined,
+  avatarUrl: media(row.avatar_url),
   isPrivate: row.is_private || undefined,
   openToHitUntil: row.open_to_hit_until ?? undefined,
   openToHitMiles: asHitMiles(row.open_to_hit_miles),
@@ -382,9 +400,10 @@ function withSessionPlayer(row: FullPostRow, entry: SessionWith): FullPostRow {
  * than showing one picture as the grid tile and another as the first page.
  */
 const carouselOf = (row: PostRow): string[] | undefined => {
-  const list = (row.image_urls ?? []).filter((u): u is string => typeof u === 'string' && !!u);
-  if (list.length < 2 || !row.image_url) return undefined;
-  const photos = list[0] === row.image_url ? list : [row.image_url, ...list.filter((u) => u !== row.image_url)];
+  const list = (row.image_urls ?? []).filter((u): u is string => typeof u === 'string' && !!u).map((u) => media(u));
+  const cover = media(row.image_url);
+  if (list.length < 2 || !cover) return undefined;
+  const photos = list[0] === cover ? list : [cover, ...list.filter((u) => u !== cover)];
   return photos.slice(0, CAROUSEL_MAX);
 };
 
@@ -395,10 +414,10 @@ const toPost = (row: PostRow): Post => withRemoved<Post>({
   createdAt: row.created_at,
   body: row.body,
   mediaLabel: row.media_label ?? undefined,
-  imageUrl: row.image_url ?? undefined,
+  imageUrl: media(row.image_url),
   imageUrls: carouselOf(row),
-  videoUrl: row.video_url ?? undefined,
-  thumbnailUrl: row.thumbnail_url ?? undefined,
+  videoUrl: media(row.video_url),
+  thumbnailUrl: media(row.thumbnail_url),
   orientation: (row.orientation as 'portrait' | 'landscape' | null) ?? undefined,
   trimStart: row.trim_start != null ? Number(row.trim_start) : undefined,
   trimEnd: row.trim_end != null ? Number(row.trim_end) : undefined,
@@ -437,7 +456,7 @@ const toComment = (row: CommentRow): Comment => withHidden(withRemoved<Comment>(
   body: row.body,
   createdAt: row.created_at,
   likedBy: (row.comment_likes ?? []).map((l) => l.user_id),
-  imageUrl: row.image_url ?? undefined,
+  imageUrl: media(row.image_url),
   parentId: row.parent_id ?? undefined,
   replyToId: row.reply_to_id ?? undefined,
 }, row), row.id);
@@ -447,9 +466,9 @@ const toStory = (row: StoryRow): Story => withRemoved<Story>({
   authorId: row.author_id,
   createdAt: row.created_at,
   expiresAt: row.expires_at,
-  imageUrl: row.image_url ?? undefined,
-  videoUrl: row.video_url ?? undefined,
-  thumbnailUrl: row.thumbnail_url ?? undefined,
+  imageUrl: media(row.image_url),
+  videoUrl: media(row.video_url),
+  thumbnailUrl: media(row.thumbnail_url),
   mediaLabel: row.media_label ?? undefined,
   caption: row.caption ?? undefined,
   viewedBy: (row.story_views ?? []).map((v) => v.user_id),
@@ -848,11 +867,11 @@ const toQuestion = (r: QuestionRow, answers: AnswerRow[]): Question => withRemov
 const toAnswer = (r: AnswerRow): Answer => withHidden(withRemoved<Answer>({
   id: r.id, questionId: r.question_id, authorId: r.author_id, parentAnswerId: r.parent_answer_id ?? undefined, body: r.body,
   createdAt: r.created_at, votes: r.votes, votedBy: r.voted_by ?? {}, fromCoach: r.from_coach,
-  media: r.media_url && r.media_kind ? { kind: r.media_kind, url: r.media_url, thumb: r.media_thumb ?? undefined } : undefined,
+  media: r.media_url && r.media_kind ? { kind: r.media_kind, url: media(r.media_url), thumb: media(r.media_thumb) } : undefined,
 }, r), r.id);
 const toCoachQuestion = (r: CoachQuestionRow, replies: CoachReplyRow[]): CoachQuestion => withRemoved<CoachQuestion>({
   id: r.id, authorId: r.author_id, title: r.title, body: r.body, specialty: r.specialty as CoachQuestion['specialty'], createdAt: r.created_at,
-  videoUrl: r.video_url ?? undefined, mediaLabel: r.media_label ?? undefined, resolved: r.resolved,
+  videoUrl: media(r.video_url), mediaLabel: r.media_label ?? undefined, resolved: r.resolved,
   // One your Hidden words hid is not counted for you, the asker (the Coaching tab says "Awaiting a coach" until you unhide it).
   replyIds: replies.filter((x) => x.question_id === r.id && !heldHere(x.id)).map((x) => x.id),
 }, r);
@@ -861,7 +880,7 @@ const toCoachingRequest = (r: CoachingRequestRow): CoachingRequest => ({
   id: r.id, coachId: r.coach_id, userId: r.user_id, serviceId: r.service_id, question: r.question, videoLabel: r.video_label ?? undefined,
   status: r.status as CoachingRequest['status'], createdAt: r.created_at, response: r.response ?? undefined, respondedAt: r.responded_at ?? undefined,
   coachUserId: r.coach_user_id ?? undefined, priceCents: r.price_cents ?? undefined, feeCents: r.fee_cents ?? undefined, paidAt: r.paid_at ?? undefined,
-  dueAt: r.due_at ?? undefined, refundedAt: r.refunded_at ?? undefined, videoUrl: r.video_url ?? undefined,
+  dueAt: r.due_at ?? undefined, refundedAt: r.refunded_at ?? undefined, videoUrl: media(r.video_url),
 });
 const toNotification = (r: NotificationRow): Notification => ({
   id: r.id, userId: r.user_id, actorId: r.actor_id, kind: r.kind as Notification['kind'], targetId: r.target_id, targetKind: r.target_kind as Notification['targetKind'],
@@ -974,7 +993,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       event: system ? toChatEvent(row.event) : undefined,
       reactions: row.reactions && Object.keys(row.reactions).length ? row.reactions : undefined,
       editedAt: row.edited_at ?? undefined,
-      audio: row.audio_url ? { url: row.audio_url, ms: row.audio_ms ?? 0 } : undefined,
+      audio: row.audio_url ? { url: media(row.audio_url), ms: row.audio_ms ?? 0 } : undefined,
       place: row.place && typeof row.place.lat === 'number' && typeof row.place.lng === 'number' ? {
         id: isMapCourtId(row.place.id) ? row.place.id : undefined, name: String(row.place.name ?? 'Court').slice(0, 80), lat: row.place.lat, lng: row.place.lng,
         // How many courts stand there, when the sender's list knew it (newer builds send it).
@@ -1004,7 +1023,7 @@ export function toConversations(me: ID, convRows: ConversationRow[], messageRows
       createdBy: c.created_by ?? undefined,
       adminIds: hasRoles && c.is_group ? admins : undefined,
       receiptsOffIds: members.some((m) => m.read_receipts === false) ? members.filter((m) => m.read_receipts === false).map((m) => m.user_id) : undefined,
-      photoUrl: c.photo_url ?? undefined,
+      photoUrl: media(c.photo_url),
       mutedUntil: muted && Date.parse(muted) > Date.now() ? muted : undefined,
       pinnedAt: pref?.pinnedAt,
       markedUnread: pref?.markedUnread || undefined,
@@ -3170,7 +3189,7 @@ export const remote = {
     const { data, error } = await need().from('posts').select('id, kind, image_url, thumbnail_url').in('id', wanted);
     if (error || !data) return {};
     return Object.fromEntries((data as { id: string; kind: Post['kind']; image_url: string | null; thumbnail_url: string | null }[])
-      .map((r) => [r.id, { thumb: r.thumbnail_url ?? r.image_url ?? undefined, kind: r.kind }]));
+      .map((r) => [r.id, { thumb: media(r.thumbnail_url ?? r.image_url), kind: r.kind }]));
   },
   /** What was posted at a court: posts tagged within a few hundred feet of it, newest first. Empty before migration 51. */
   async fetchCourtPosts(at: { lat: number; lng: number }): Promise<Post[]> {
@@ -3314,7 +3333,7 @@ export const remote = {
       const parentId = kind === 'comment' ? row.story_id ?? row.post_id ?? undefined : kind === 'answer' || kind === 'coach-reply' ? row.question_id ?? undefined : undefined;
       const photos = table === 'posts' ? carouselOf(data as PostRow) : undefined;
       return {
-        body: words, picture: row.thumbnail_url ?? row.image_url ?? undefined, removed: !!removed, ...(removed ? { reason: removed.reason } : {}),
+        body: words, picture: media(row.thumbnail_url ?? row.image_url), removed: !!removed, ...(removed ? { reason: removed.reason } : {}),
         ...(parentId ? { parentId } : {}), ...(table === 'story_comments' ? { onHit: true } : {}), ...(photos ? { photos } : {}),
       };
     }
@@ -5992,7 +6011,7 @@ function guestUser(row: GuestPersonRow, coachIds: Set<string>): User | null {
   if (!row || typeof row.id !== 'string' || !UUID_RE.test(row.id) || typeof row.handle !== 'string') return null;
   return toUser({
     id: row.id, handle: row.handle, name: typeof row.name === 'string' && row.name ? row.name : row.handle, bio: '', location: '',
-    avatar_url: typeof row.avatar_url === 'string' && row.avatar_url.startsWith('https://') ? row.avatar_url : null,
+    avatar_url: typeof row.avatar_url === 'string' && row.avatar_url.startsWith('https://') ? media(row.avatar_url) : null,
     is_coach: coachIds.has(row.id), created_at: '1970-01-01T00:00:00.000Z',
     profile: {
       ...(row.skill_system === 'NTRP' || row.skill_system === 'UTR' || row.skill_system === 'ITF' ? { skillSystem: row.skill_system } : {}),
@@ -6017,9 +6036,23 @@ const listOf = <T,>(data: unknown, key: string): T[] => {
   return Array.isArray(v) ? (v as T[]) : [];
 };
 
+/**
+ * On the website, public/index.html asks for a signed-out visitor's first Feed page (guest_feed, the first 20) while
+ * the script is still downloading. Taken once, here; null when it was not asked, has failed, or was taken already.
+ */
+function takeEarlyGuestFeed(): Promise<unknown> | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as { __csGuestFeed?: Promise<unknown> };
+  const early = w.__csGuestFeed;
+  w.__csGuestFeed = undefined;
+  return early ? early.catch(() => null) : null;
+}
+
 /** One page of the guest feed, newest first: before `before` when paging on. Null when it could not be asked. */
 export async function guestFeed(before?: string | null, limit = 20): Promise<GuestPage | null> {
-  const { data, error } = await need().rpc('guest_feed', { p_before: before ?? null, p_limit: limit });
+  const early = !before && limit === 20 ? takeEarlyGuestFeed() : null;
+  const asked = early ? await early : null;
+  const { data, error } = asked ? { data: asked, error: null } : await need().rpc('guest_feed', { p_before: before ?? null, p_limit: limit });
   if (error || !data || typeof data !== 'object') return null;
   const rows = listOf<GuestPostRow>(data, 'posts');
   return {

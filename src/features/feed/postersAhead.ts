@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { Image as ExpoImage } from 'expo-image';
+import { useFirstClipPlayed } from '@/features/feed/firstPlay';
 
 /**
  * Every reel's cover picture, there before you reach it (Oct 25, owner: "I'm scrolling on
@@ -31,7 +33,10 @@ const remember = (url: string) => {
 
 /** Fetches `urls` (nearest first) into the picture cache while `on`; each address once per session. */
 export function usePostersAhead(urls: readonly string[], on: boolean) {
-  const key = on ? urls.filter((url) => /^https?:\/\//i.test(url)).join('\n') : '';
+  // On the website, the first open waits for the first clip to start (firstPlay), so ten covers never
+  // compete with the video on screen; then nearest first, as ever.
+  const firstPlayed = useFirstClipPlayed();
+  const key = on && (Platform.OS !== 'web' || firstPlayed) ? urls.filter((url) => /^https?:\/\//i.test(url)).join('\n') : '';
   useEffect(() => {
     const fresh = key ? key.split('\n').filter((url) => !asked.has(url)) : [];
     if (!fresh.length) return;

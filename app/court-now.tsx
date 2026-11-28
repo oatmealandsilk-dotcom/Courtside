@@ -19,7 +19,7 @@ import { getPosition, recentPosition } from '@/lib/geo';
 import { show as showToast } from '@/lib/toast';
 import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
-import { colors, font, lift, radius, spacing, typography } from '@/theme';
+import { TextScale, colors, font, lift, radius, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 
 const CHOICES: CourtNow[] = ['free', 'wait', 'full', 'wet', 'locked'];
@@ -202,7 +202,7 @@ export default function CourtNowSheet() {
               <Pressable key={c} accessibilityRole="radio" accessibilityState={{ selected: on, disabled: busy }} accessibilityLabel={NOW_LABEL[c]} disabled={busy || !courtId} onPress={() => { void pick(c); }} style={({ pressed }) => [styles.choice, edged && styles.choiceEdge, on && styles.choiceOn, pressed && { transform: [{ scale: 0.97 }] }]}>
                 {/* One quiet colour for all five: the shape and the word say which; no status colour reads the same in every theme. */}
                 <Ionicons name={NOW_ICON[c]} size={20} color={on ? colors.bg : colors.textMuted} />
-                <Text style={[styles.choiceText, on && styles.choiceTextOn]}>{NOW_LABEL[c]}</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.choiceText, on && styles.choiceTextOn]}>{NOW_LABEL[c]}</Text>
               </Pressable>
             );
           })}

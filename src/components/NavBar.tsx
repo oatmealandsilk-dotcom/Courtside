@@ -31,6 +31,7 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
+import { APP_C_PREVIEW } from '@/features/community/appCPreview';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -258,8 +259,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         onVeil={closeVeil}
         onFeedHold={onFeedHold}
         follow={swipeFollow}
-        lens={barLens || barIg}
-        newBar={barIg}
+        lens={barLens || barIg || APP_C_PREVIEW}
+        newBar={barIg || APP_C_PREVIEW}
       />
     );
   }

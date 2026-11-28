@@ -525,16 +525,19 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   // caption, buttons, wordmark, sound disc; pinch in brings it all back.
   const [immersive, setImmersive] = useState(false);
   const pager = useRef<VerticalPagerHandle>(null);
-  // Comments docked on the right of a computer screen: the clip slides left
-  // by half their width, so it sits centred in the space that is left.
+  // Comments docked on the right of a computer screen: the viewer gives up
+  // their width on its right, so the clip sits centred in the space that is
+  // left, the words on the left stay where they were (sliding the whole viewer
+  // left put them under the sidebar, cut mid-word) and the buttons on the right
+  // sit just beside the panel instead of under it.
   const viewer = useRef<View>(null);
   const sidePanel = useSidePanel();
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const node = viewer.current as unknown as HTMLElement | null;
     if (!node?.style) return;
-    node.style.transition = 'transform 300ms cubic-bezier(.22,.61,.36,1)';
-    node.style.transform = sidePanel ? `translateX(${-sidePanel / 2}px)` : '';
+    node.style.transition = 'padding-right 300ms cubic-bezier(.22,.61,.36,1)';
+    node.style.paddingRight = sidePanel ? `${sidePanel}px` : '';
   }, [sidePanel]);
   useEffect(() => subscribeScrollToTop((tab) => { if (tab === '/') pager.current?.scrollToTop(); }), []);
   // Locking in has a feel to it: the picture gives a small push and settles
@@ -2448,19 +2451,23 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                       </View>
                     </View>
                   ) : post.thumbnailUrl ? (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Double tap to like"
-                      onPress={doubleTapFor(post.id, liked)}
-                      style={StyleSheet.absoluteFill}
-                    >
-                      <ExpoImage
-                        accessibilityIgnoresInvertColors
-                        source={{ uri: post.thumbnailUrl }}
-                        style={StyleSheet.absoluteFill}
-                        contentFit="cover" cachePolicy="memory-disk"
-                      />
-                    </Pressable>
+                    // A cover with no playable video: boxed the way its video would be (on a computer a
+                    // vertical one is a tall box in the middle, not a 9:16 picture stretched across the window).
+                    <View style={[styles.clipFrame, post.orientation === 'landscape' && { backgroundColor: '#000' }]}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Double tap to like"
+                        onPress={doubleTapFor(post.id, liked)}
+                        style={post.orientation === 'landscape' || phone ? StyleSheet.absoluteFill : styles.clipPortrait}
+                      >
+                        <ExpoImage
+                          accessibilityIgnoresInvertColors
+                          source={{ uri: post.thumbnailUrl }}
+                          style={StyleSheet.absoluteFill}
+                          contentFit="cover" cachePolicy="memory-disk"
+                        />
+                      </Pressable>
+                    </View>
                   ) : (
                     <Pressable
                       accessibilityRole="button"
@@ -2472,11 +2479,15 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                         <View style={styles.net} />
                         <View style={styles.service} />
                       </View>
-                      <Ionicons name="cloud-offline-outline" size={54} color={colors.court} />
+                      {/* The demo's stand-in clips are court cards on purpose (see unfinishedClip): just the card and its label.
+                          Live, only a clip's author ever sees this, and is told why. */}
+                      {isSupabaseConfigured ? <Ionicons name="cloud-offline-outline" size={54} color={colors.court} /> : null}
                       <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.previewTitle}>{post.mediaLabel}</Text>
-                      <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.previewNote}>
-                        This clip didn’t finish uploading
-                      </Text>
+                      {isSupabaseConfigured ? (
+                        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.previewNote}>
+                          This clip didn’t finish uploading
+                        </Text>
+                      ) : null}
                     </Pressable>
                   )}
 

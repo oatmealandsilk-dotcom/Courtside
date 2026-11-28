@@ -31,12 +31,13 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { EarlyThemesGate } from '@/theme/EarlyThemesGate';
 import { VisitorThemeGate } from '@/theme/VisitorThemeGate';
 import { LaunchLookGate } from '@/theme/LaunchLookGate';
+import { whiteRootAfterLaunch } from '@/lib/launchLook';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
 import { BrandMark } from '@/components/BrandMark';
 import { LaunchMark, launchGround, useLaunchDark } from '@/components/LaunchMark';
-import { NEW_SPLASH } from '@/lib/splashLook';
+import { NEW_LAUNCH_LIGHT, NEW_SPLASH } from '@/lib/splashLook';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
@@ -235,6 +236,14 @@ function ThemedStatusBar() {
       // Not in this build: the window keeps its launch colour.
     }
   }, [theme]);
+  useEffect(() => {
+    // iPhone builds with the green launch look (Nov 27): the root behind the app is the launch screen's
+    // dark green (app.config.js backgroundColor) only for the launch; once the app is up it goes back to
+    // white, as it always was, so nothing after the launch changes. Through the app's own module, not
+    // expo-system-ui: that saves the colour and would paint the root white at every later launch.
+    if (Platform.OS !== 'ios' || !NEW_LAUNCH_LIGHT) return;
+    whiteRootAfterLaunch();
+  }, []);
   // Animated: on a theme change the icons fade across with the page rather than flipping (iOS).
   return <StatusBar style={style} animated />;
 }

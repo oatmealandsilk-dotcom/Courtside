@@ -9,6 +9,12 @@ Oct 25, later: two looks, white and dark (owner: "just have two themes for the l
 white clean and dark mode"). The dark one is the same mark and line on the Night theme's ground, the
 mark in Night's green and the line in Night's muted grey. The phone shows whichever matches its own
 light or dark mode; the app's drawn copy follows the phone the same way (src/components/LaunchMark.tsx).
+Nov 27: the light look reversed, to match the icon (owner: "Make this screen match the color of the
+app logo", "maybe make one green and then beige so reverse", "can we do like hte darkest green", then of
+four greens, "between 2 and 3"): the icon's cream mark on a dark green ground (#1C5835, between
+#1F5F39 and #1A5232), the line in the cream with 15% of the ground in it. The dark look is unchanged.
+The phone's own picture only changes with a store build, so the app draws this look only on builds
+made with it (src/lib/splashLook.ts: NEW_LAUNCH_LIGHT); older builds keep the white one.
 
 Writes, from one set of shapes, so the phone's launch picture and the app's drawn copy of it
 are the same pixels:
@@ -41,9 +47,12 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FONT = os.environ.get('INTER_SEMIBOLD') or os.path.join(ROOT, 'node_modules/@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf')
 
 ICON_CREAM = (0xF6, 0xEF, 0xE4)  # the icon's cream (assets/icon-thin.png): only to measure the mark against the icon
-GROUND = (0xFF, 0xFF, 0xFF)  # the launch screen's ground: the Clean theme's bg (src/theme/ThemeProvider.tsx), white
-GREEN = (0x2E, 0x7E, 0x4B)   # the icon's green
-LINE_INK = (0x53, 0x64, 0x71)  # the quiet line: Clean's muted ink (textMuted), 6.1:1 on white
+# The light look (Nov 27, owner: "between 2 and 3" of four dark greens, #1F5F39 and #1A5232): the ground
+# a dark green, the mark the icon's cream, so the look is the icon's own two colours reversed.
+GROUND = (0x1C, 0x58, 0x35)  # the launch screen's ground: dark green
+GREEN = ICON_CREAM           # the mark: the icon's cream (named GREEN as the mark's colour everywhere else)
+THIN_ICON_GREEN = (0x2E, 0x7E, 0x4B)  # assets/icon-thin.png's green: only to measure the mark against that picture
+LINE_INK = (0xD5, 0xD8, 0xCA)  # the quiet line: the cream with 15% of the ground mixed in (quiet, still readable)
 # The dark look (Oct 25): the Night theme's ground, its green (brand) and its muted ink (textMuted),
 # src/theme/ThemeProvider.tsx darkColors.
 DARK_GROUND = (0x0F, 0x14, 0x12)
@@ -176,7 +185,7 @@ def mark_polys(d, left, top, width):
 def check_against_icon(d):
     """How far this drawing of the mark is from assets/icon-thin.png (placed as that icon places it)."""
     icon = np.asarray(Image.open(os.path.join(ROOT, 'assets/icon-thin.png')).convert('RGB')).astype(np.float32)
-    ink = np.clip((ICON_CREAM[1] - icon[..., 1]) / (ICON_CREAM[1] - GREEN[1]), 0, 1)
+    ink = np.clip((ICON_CREAM[1] - icon[..., 1]) / (ICON_CREAM[1] - THIN_ICON_GREEN[1]), 0, 1)
     shapes = thin_mark(d); x0, y0, x1, y1 = bbox(shapes)
     w = 0.68 * 1024; h = w * (y1 - y0) / (x1 - x0)
     polys, _, _ = mark_polys(d, 512 - w / 2, 0.494 * 1024 - h / 2, w)
@@ -297,7 +306,7 @@ def main():
 
     # The website's own loader (public/index.html), shown before any of the app's code has run: the same
     # shapes, sized as the app's web splash sizes them (WebLaunchMarkC: the mark 22% of the width, at most
-    # 96 px), so the app's first screen replaces it with nothing moving. White, or dark when the browser
+    # 96 px), so the app's first screen replaces it with nothing moving. Green, or dark when the browser
     # (the phone or computer it runs on) is in dark mode: the app's first screen picks the same way.
     vb = lambda v: ' '.join(f'{x:g}' for x in (round(t, 2) for t in v))
     u = f'calc(min({MARK_FRAC * 100:g}vw, 96px) / {mw:.2f})'
@@ -332,7 +341,11 @@ TS = '''/*
 /** The picture's size, in its own pixels (the same as the old launch picture's). */
 export const PICTURE_C = {{ width: {W}, height: {H} }};
 
-/** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
+/**
+ * The light look's colours (Nov 27, the icon's colours reversed): the ground (dark green), the mark (`green`:
+ * the mark's colour, here the icon's cream) and the quiet line (the cream with 15% of the ground in it).
+ * Drawn only on builds whose own launch picture has them (src/lib/splashLook.ts, NEW_LAUNCH_LIGHT).
+ */
 export const SPLASH_C_COLORS = {{ ground: '{ground}', green: '{green}', line: '{line}' }};
 
 /**
