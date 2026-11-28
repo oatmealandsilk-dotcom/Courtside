@@ -10688,7 +10688,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // The prompt names the person it was about (Nov 28: "Join CourtSide to let Sam know you liked it"), from guest mode's own lists.
     const nameOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId)?.name : undefined);
     const postBy = (postId: ID) => nameOf(guestRef.current?.posts.find((p) => p.id === postId)?.authorId);
-    // Their face and the post's cover, for the sign-up looks that show them (features/guest/joinLook: b, c).
+    // Their face and the post's cover, for the sign-up looks that show them (features/guest/joinLook: a, b).
     const userOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId) : undefined);
     const postAbout = (postId: ID) => { const post = guestRef.current?.posts.find((p) => p.id === postId); return aboutPost(post, userOf(post?.authorId)); };
     const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined, about?: (...args: A) => JoinAbout | undefined) => (...args: A) => { ask(what, undefined, who(...args), about?.(...args)); return answer; };

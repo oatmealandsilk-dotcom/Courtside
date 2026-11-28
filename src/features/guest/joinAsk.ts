@@ -21,7 +21,7 @@ export interface JoinAsk {
   who?: string;
   /** Where to land once they are in, when not the page they are on: an open hit's page, joined for them (as the peek does). */
   target?: { href: string; joinHit?: string; host?: string };
-  /** The person and the post it was about, for the looks that show them (joinLook b, c): their face, the post's cover. */
+  /** The person and the post it was about, for the looks that show them (joinLook a, b): their face, the post's cover. */
   about?: JoinAbout;
   /** Where on the screen the button they tapped is (joinLook a, whose bubble points at it). Web only. */
   anchor?: { x: number; y: number; width: number; height: number };
@@ -81,6 +81,9 @@ function anchorNow(): JoinAsk['anchor'] {
 }
 
 export function openJoinSheet(what: string, options?: { report?: string; who?: string; target?: JoinAsk['target']; about?: JoinAbout }) {
+  // The other looks (a-d) leave the same ask be while it shows: a second tap on the heart under look a's
+  // bubble (or under c's bar) would otherwise close it and pop it straight back up. Today's dims the page, so it never comes up.
+  if (current && joinLook() !== 'today' && current.what === what && current.who === (options?.who || undefined) && current.report === options?.report) return;
   current = { what, report: options?.report, who: options?.who || undefined, target: options?.target, about: options?.about, anchor: anchorNow(), at: Date.now() };
   emit();
 }
