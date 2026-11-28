@@ -13,7 +13,13 @@
 //
 // Native config, so it arrives with a store build (iPhone: after 29; Android: after versionCode 1),
 // the same builds whose launch picture is green (src/lib/splashLook.ts, NEW_LAUNCH_LIGHT).
-const { AndroidConfig, withAndroidStyles, withInfoPlist } = require('expo/config-plugins');
+// Android's window behind the app (the theme's android:windowBackground, @color/activityBackground) is the
+// launch screen's ground too: dark green by day (app.config.js backgroundColor) and, from here, the dark
+// look's #0F1412 when the phone is in dark mode (values-night), so a frame where the window shows before
+// the app's first draw is never green next to the dark launch screen.
+const NIGHT_GROUND = '#0F1412';
+
+const { AndroidConfig, withAndroidColorsNight, withAndroidStyles, withInfoPlist } = require('expo/config-plugins');
 
 module.exports = function withLaunchStatusBar(config) {
   config = withInfoPlist(config, (mod) => {
@@ -29,6 +35,10 @@ module.exports = function withLaunchStatusBar(config) {
         value: 'false',
       });
     }
+    return mod;
+  });
+  config = withAndroidColorsNight(config, (mod) => {
+    mod.modResults = AndroidConfig.Colors.assignColorValue(mod.modResults, { name: 'activityBackground', value: NIGHT_GROUND });
     return mod;
   });
   return config;

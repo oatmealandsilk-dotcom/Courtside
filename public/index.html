@@ -41,6 +41,7 @@
          admins first: src/lib/launchLook.ts saves it, LaunchLookGate decides). Nothing saved: the browser's mode, as before.
          Out of the launch:start/end block, so scripts/make-splash-c.py leaves it alone; the colours are the loader's own. -->
     <script>
+      (function () {
       var look = null;
       try {
         look = window.localStorage.getItem('courtside-launch-look');
@@ -53,6 +54,7 @@
         var light = look === 'light' || (look !== 'dark' && !(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches));
         if (light) document.write('<meta name="theme-color" id="cs-launch-theme" content="#1C5835" />');
       } catch (e) { /* no bar colour */ }
+      })();
     </script>
     <style>
       html[data-launch=light] #cs-launch { background: #1C5835; }

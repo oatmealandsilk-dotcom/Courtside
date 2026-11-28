@@ -68,6 +68,7 @@ type Native = {
   applied(): string | null;
   setLook(look: string | null, snapshots: string, dissolveMs: number): void;
   confirm?(): void;
+  whiteRoot?(): void;
   status(): Promise<Record<string, unknown>>;
   syncNow(): Promise<Record<string, unknown>>;
 };
@@ -139,6 +140,19 @@ export function confirmLaunchLook() {
     native?.confirm?.();
   } catch {
     // Nothing: a saved look is then dropped after two opens, and saved again by the next save.
+  }
+}
+
+/**
+ * The root behind the app back to white once the app is up (iPhone builds after 29, whose root is the
+ * launch screen's dark green for the launch). Through the module, never expo-system-ui, which would save
+ * white and paint it at every later launch, under the green launch screen. Missing (older builds): nothing.
+ */
+export function whiteRootAfterLaunch() {
+  try {
+    native?.whiteRoot?.();
+  } catch {
+    // Not in this build: the root keeps its launch colour, under the app's own pages.
   }
 }
 

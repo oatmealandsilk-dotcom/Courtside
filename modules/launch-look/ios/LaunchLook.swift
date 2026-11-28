@@ -370,6 +370,24 @@ final class LaunchLook: NSObject {
     }
   }
 
+  // MARK: The root behind the app
+
+  /// The app's windows and their root views white again once the app is up (LaunchLookModule.whiteRoot); nothing saved.
+  static func whiteRoot() {
+    dispatchPrecondition(condition: .onQueue(.main))
+    var windows: [UIWindow] = []
+    if let window = UIApplication.shared.delegate?.window ?? nil { windows.append(window) }
+    for scene in UIApplication.shared.connectedScenes {
+      if let scene = scene as? UIWindowScene {
+        for window in scene.windows where !windows.contains(window) { windows.append(window) }
+      }
+    }
+    for window in windows {
+      window.backgroundColor = .white
+      window.rootViewController?.view.backgroundColor = .white
+    }
+  }
+
   // MARK: For the simulator checks
 
   func status() -> [String: Any] {

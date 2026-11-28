@@ -57,10 +57,17 @@ export const LAST_OLD_LIGHT_IOS_BUILD = 29;
 /** The last Android build whose launch screen has OLD_LIGHT_LOOK. */
 export const LAST_OLD_LIGHT_ANDROID_BUILD = 1;
 
-/** The installed Android app's own version code (0 when unknown). */
+/**
+ * The installed Android app's own version code (0 when unknown). Read from the phone by expo-application
+ * (its nativeBuildVersion, the package's own versionCode), never from expo-constants, whose Android side
+ * sends no versionCode at all (so every Android build read 0), nor from the update's own config, which an
+ * update could change. Loaded on Android only and inside try: a build without the module counts as old.
+ */
 function androidBuild(): number {
+  if (Platform.OS !== 'android') return 0;
   try {
-    const n = Number(Constants.platform?.android?.versionCode ?? 0);
+    const Application = require('expo-application') as typeof import('expo-application');
+    const n = Number(Application.nativeBuildVersion ?? 0);
     return Number.isFinite(n) ? n : 0;
   } catch {
     return 0;

@@ -31,6 +31,7 @@ import { ThemeProvider, useTheme } from '@/theme/ThemeProvider';
 import { EarlyThemesGate } from '@/theme/EarlyThemesGate';
 import { VisitorThemeGate } from '@/theme/VisitorThemeGate';
 import { LaunchLookGate } from '@/theme/LaunchLookGate';
+import { whiteRootAfterLaunch } from '@/lib/launchLook';
 import { Platform } from 'react-native';
 import { noteThemedStatusStyle } from '@/lib/statusBarStyle';
 import { buttonShape, colors, font, lightColors } from '@/theme';
@@ -238,15 +239,10 @@ function ThemedStatusBar() {
   useEffect(() => {
     // iPhone builds with the green launch look (Nov 27): the root behind the app is the launch screen's
     // dark green (app.config.js backgroundColor) only for the launch; once the app is up it goes back to
-    // white, as it always was, so nothing after the launch changes. Only those builds (after 29), which
-    // all carry expo-system-ui.
+    // white, as it always was, so nothing after the launch changes. Through the app's own module, not
+    // expo-system-ui: that saves the colour and would paint the root white at every later launch.
     if (Platform.OS !== 'ios' || !NEW_LAUNCH_LIGHT) return;
-    try {
-      const SystemUI = require('expo-system-ui') as typeof import('expo-system-ui');
-      void SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => undefined);
-    } catch {
-      // Not in this build: the root keeps its launch colour.
-    }
+    whiteRootAfterLaunch();
   }, []);
   // Animated: on a theme change the icons fade across with the page rather than flipping (iOS).
   return <StatusBar style={style} animated />;
