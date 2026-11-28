@@ -18,6 +18,11 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, radius, spacing, typography, buttonShape } from '@/theme';
 import { PHONE_LINKING } from '@/lib/phoneLinking';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
+import { InkButton, PlainActions, PlainNote, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): plain words at the left, no icon disc, the way on one ink button. */
+const PLAIN = noBoxes();
 
 type Found = { match: ContactMatch; contactName?: string };
 type Phase = 'asking' | 'start' | 'reading' | 'done' | 'denied' | 'ask-again' | 'unavailable' | 'limit' | 'failed';
@@ -110,12 +115,22 @@ export default function FindContacts() {
       {phase === 'asking' ? (
         <View style={styles.intro}><CourtSpinner /></View>
       ) : phase === 'start' || phase === 'reading' ? (
+        PLAIN ? (
+          <View style={styles.plainIntro}>
+            <Text accessibilityRole="header" style={styles.plainTitle}>See who you know on CourtSide</Text>
+            <Text style={styles.plainLead}>{INTRO}</Text>
+            <PlainActions align="start" style={styles.plainActions}>
+              <InkButton label={phase === 'reading' ? 'Checking your contacts…' : 'Find friends from contacts'} onPress={() => void run()} disabled={phase === 'reading'} />
+            </PlainActions>
+          </View>
+        ) : (
         <View style={styles.intro}>
           <View style={styles.badge}><Ionicons name="people" size={30} color={colors.brand} /></View>
           <Text style={styles.title}>See who you know on CourtSide</Text>
           <Text style={styles.lead}>{INTRO}</Text>
           <Button label={phase === 'reading' ? 'Checking your contacts…' : 'Find friends from contacts'} onPress={() => void run()} loading={phase === 'reading'} full />
         </View>
+        )
       ) : phase === 'denied' ? (
         <Message styles={styles} icon="lock-closed-outline" title="CourtSide can’t see your contacts" body={SETTINGS_LINE} action={{ label: 'Open Settings', onPress: () => void Linking.openSettings() }} />
       ) : phase === 'ask-again' ? (
@@ -180,6 +195,7 @@ export default function FindContacts() {
 }
 
 function Message({ styles, icon, title, body, action }: { styles: ReturnType<typeof useThemedStyles<typeof styleDefinitions>>; icon: keyof typeof Ionicons.glyphMap; title: string; body: string; action?: { label: string; onPress: () => void } }) {
+  if (PLAIN) return <PlainNote size="lg" style={styles.plainIntro} title={title} body={body} action={action} />;
   return (
     <View style={styles.intro}>
       <View style={styles.badge}><Ionicons name={icon} size={28} color={colors.textMuted} /></View>
@@ -196,6 +212,10 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text, textAlign: 'center' },
   lead: { ...typography.body, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.sm },
   results: { gap: 4 },
+  plainIntro: { paddingTop: spacing.xl, paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleLg },
+  plainLead: { ...plainText.bodyLg },
+  plainActions: { marginTop: spacing.lg },
   nudge: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: corner(16), backgroundColor: colors.surfaceAlt, marginBottom: spacing.md },
   nudgeText: { ...typography.smallStrong, color: colors.text, flex: 1 },
   section: { ...typography.smallStrong, color: colors.textMuted, marginBottom: 4 },

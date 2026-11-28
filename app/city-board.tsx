@@ -19,6 +19,11 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { PlainNote } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the foot's ask as plain words at the left, the way one ink button. */
+const PLAIN = noBoxes();
 
 /** The podium's rows are taller, their numbers bigger: the top 3 read first. */
 const PODIUM_H = 74;
@@ -279,7 +284,9 @@ export default function CityBoard() {
             </Text>
           ) : null}
           {!homeId ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.unranked}>Pick your town from the search in Edit profile to join a city board.</Text> : null}
-          {mine || unrankedHome ? (
+          {(mine || unrankedHome) && PLAIN ? (
+            <PlainNote style={{ paddingHorizontal: 0, paddingBottom: spacing.lg }} title={`Help ${mine ? cityLabel(mine) : unrankedHome!.name} climb`} body="Every session a player from here logs counts." action={{ label: 'Invite a hitting partner', onPress: () => router.push('/invite') }} />
+          ) : mine || unrankedHome ? (
             <View style={styles.climb}>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbHead}>Help {mine ? cityLabel(mine) : unrankedHome!.name} climb</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.climbBody}>Every session a player from here logs counts.</Text>

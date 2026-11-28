@@ -33,6 +33,11 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { useDemotedPosts } from '@/features/feed/demoted';
 import type { Post, Story } from '@/data/types';
 import { corner } from '@/theme/look';
+import { InkButton, PlainActions, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): what happened in plain words at the left, the way on at the right. */
+const PLAIN = noBoxes();
 
 type IconName = React.ComponentProps<typeof Ionicons>['name'];
 
@@ -427,7 +432,29 @@ export default function PostMenu() {
     </Pressable>
   );
 
-  const body = !item ? (
+  const body = PLAIN && !item ? (
+    <View style={styles.plainPanel} accessibilityLiveRegion="polite">
+      <Text style={styles.plainText}>{isHit ? 'This Instant isn’t here any more.' : 'This post isn’t here any more.'}</Text>
+      <PlainActions style={styles.plainActions}><InkButton label="Done" onPress={close} /></PlainActions>
+    </View>
+  ) : PLAIN && done ? (
+    <View style={styles.plainPanel} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status', 'aria-live': 'polite' } : {})}>
+      <Text style={[styles.plainText, !done.ok && styles.labelDanger]}>{done.text}</Text>
+      <PlainActions style={styles.plainActions}>
+        {done.retry ? <TextAction label="Try again" onPress={() => { const again = done.retry; setDone(null); again?.(); }} /> : null}
+        {reportedNow && author && !blockedIds.includes(author.id) ? (
+          <TextAction tone="danger" label={`Block @${author.handle}`} accessibilityLabel={`Block @${author.handle}`} onPress={() => ask(blockQuestion(author, () => { if (!actions.isBlocked(author.id)) actions.toggleBlock(author.id); close(); }))} />
+        ) : null}
+        <InkButton label="Done" onPress={close} />
+      </PlainActions>
+    </View>
+  ) : PLAIN && working ? (
+    <View style={styles.plainPanel} accessibilityLiveRegion="polite" {...(Platform.OS === 'web' ? { role: 'status', 'aria-live': 'polite' } : {})}>
+      <Text style={styles.plainText}>{storyMedia?.kind === 'photo' ? 'Getting your photo ready for Instagram…' : 'Getting your clip ready for Instagram…'}</Text>
+      {asIsNote ? <Text style={[styles.panelNote, styles.plainNote]}>{asIsNote}</Text> : null}
+      <PlainActions style={styles.plainActions}><CourtSpinner size={20} /><TextAction label="Cancel" tone="muted" onPress={cancelStory} /></PlainActions>
+    </View>
+  ) : !item ? (
     // Opened for something no longer loaded (an Instant that ran out, a post deleted, an old link).
     <View style={styles.panel} accessibilityLiveRegion="polite">
       <Ionicons name="time-outline" size={26} color={colors.textMuted} />
@@ -606,6 +633,10 @@ const styleDefinitions = StyleSheet.create({
   removedBox: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingVertical: 12, paddingHorizontal: spacing.md, marginBottom: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   removedTitle: { ...typography.body, ...font('600'), color: colors.danger },
   // What happened, in the sheet's place: an icon, a line or two, and the way on.
+  plainPanel: { paddingTop: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg },
+  plainText: { ...font('400'), fontSize: 19, lineHeight: 26, letterSpacing: -0.2, color: colors.text },
+  plainNote: { textAlign: 'left', marginTop: spacing.sm },
+  plainActions: { marginTop: spacing.lg },
   panel: { alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.lg, paddingHorizontal: spacing.lg },
   panelText: { ...typography.body, ...font('500'), color: colors.text, textAlign: 'center', lineHeight: 21 },
   panelNote: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },

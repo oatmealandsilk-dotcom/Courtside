@@ -22,6 +22,11 @@ import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
+import { PlainNote } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a quiet week in plain words, no card or disc, the way back one ink button. */
+const PLAIN = noBoxes();
 
 const ACTIONS: { key: StoryAction; label: string; spoken: string; icon: React.ComponentProps<typeof Ionicons>['name'] }[] = [
   { key: 'instagram', label: 'Stories', spoken: 'Share to Instagram Stories', icon: 'logo-instagram' },
@@ -80,12 +85,16 @@ export default function WeeklyRecap() {
   const restCard = (heading: string, words: string) => (
     <View style={styles.body}>
       {/* The page's own title already says which week: the card is the mark, the words and one way back on court. */}
+      {PLAIN ? (
+        <PlainNote size="lg" style={{ paddingHorizontal: 0, paddingTop: 0 }} title={heading} body={words} action={{ label: 'Find a hit', onPress: () => { requestSection('/discuss', 'players'); goToTab('/discuss'); } }} />
+      ) : (
       <View style={styles.rest}>
         <View style={styles.restDisc}><HitGlyph size={26} color={colors.brand} /></View>
         <Text accessibilityRole="header" style={styles.restTitle}>{heading}</Text>
         <Text style={styles.restLine}>{words}</Text>
         <View style={styles.restButton}><Button label="Find a hit" onPress={() => { requestSection('/discuss', 'players'); goToTab('/discuss'); }} full /></View>
       </View>
+      )}
       <FriendsOnStreak />
     </View>
   );

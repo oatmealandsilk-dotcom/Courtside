@@ -35,6 +35,11 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { PlainNote } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the foot's ask as plain words at the left, the way one ink button. */
+const PLAIN = noBoxes();
 
 /** Top players shown before your own row is pinned under them. */
 const TOP = 5;
@@ -284,6 +289,13 @@ export default function CityPage() {
       </View>
 
       {/* 6. Yours: help it climb. Another: the way there. */}
+      {PLAIN ? (
+        <View style={styles.plainFooter}>
+          <PlainNote style={{ paddingHorizontal: 0, paddingVertical: 0 }} title={mine ? `Help ${name} climb` : `Visiting ${name}?`} body={mine ? 'Every session a player from here logs counts.' : 'See its courts and who is up to hit on the map.'}
+            action={mine ? { label: 'Invite a hitting partner', onPress: () => router.push('/invite') } : { label: `See ${name} on the map`, onPress: () => seeOnMap(city) }} />
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.fine, styles.plainFine]}>Players are listed by the city on their profile, never where they are.</Text>
+        </View>
+      ) : (
       <View style={styles.footer}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footHead}>{mine ? `Help ${name} climb` : `Visiting ${name}?`}</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.footBody}>{mine ? 'Every session a player from here logs counts.' : 'See its courts and who is up to hit on the map.'}</Text>
@@ -294,6 +306,7 @@ export default function CityPage() {
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>Players are listed by the city on their profile, never where they are.</Text>
       </View>
+      )}
     </View>
   );
 
@@ -624,6 +637,8 @@ const styleDefinitions = StyleSheet.create({
   courtCard: { borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   courtPressed: { transform: [{ scale: PRESS_SHRINK }] },
   courtsEmpty: { ...typography.body, color: colors.textMuted, paddingTop: spacing.xs },
+  plainFooter: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl },
+  plainFine: { textAlign: 'left', marginTop: spacing.lg },
   footer: { paddingTop: spacing.xxl, paddingBottom: spacing.xxl, gap: 4, alignItems: 'center' },
   footHead: { ...typography.heading, color: colors.text, textAlign: 'center' },
   footBody: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
