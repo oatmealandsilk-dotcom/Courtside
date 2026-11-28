@@ -97,7 +97,7 @@ function Dot({ on }: { on: boolean }) {
 export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => void; onLogIn: () => void; still?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   useTheme();
-  const { width } = useWindowDimensions();
+  const { width, height: windowHeight } = useWindowDimensions();
   const space = useGateSpace();
   const wide = width >= WIDE;
   const reduced = useReducedMotion();
@@ -159,7 +159,7 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
     <View
       {...swipe.panHandlers}
       onLayout={measure}
-      style={wide ? styles.stageWide : styles.stage}
+      style={wide ? [styles.stageWide, { height: Math.max(260, Math.min(470, windowHeight - 330)) }] : styles.stage}
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={`${moment.headline} ${moment.spoken}`}
@@ -241,6 +241,7 @@ const styleDefinitions = StyleSheet.create({
   wordmark: { ...wordmarkFont('600'), fontSize: 24, lineHeight: 28, letterSpacing: -0.9, color: colors.brand },
   // The stage takes the height the rest leaves (never under 260, so a small phone scrolls instead).
   stage: { flexGrow: 1, minHeight: 260, marginTop: spacing.xl },
+  // Its height is set where it is drawn: 470, less on a short window (a 1280x800 laptop) so "Log in" stays on screen.
   stageWide: { height: 470, marginTop: spacing.xxl },
   words: { marginTop: spacing.xl, paddingHorizontal: spacing.sm },
   headline: { ...font('600'), fontSize: 28, lineHeight: 33, letterSpacing: -0.5, color: colors.text, textAlign: 'center' },
