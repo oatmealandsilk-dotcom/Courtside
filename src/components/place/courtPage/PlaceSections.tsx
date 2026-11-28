@@ -24,6 +24,7 @@ import type { CourtView } from './view';
 import { corner } from '@/theme/look';
 import { InkButton } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
 
 /** No boxes (demo only, features/noBoxes): an empty section is plain words under its heading, no card or icon tile. */
 const PLAIN = noBoxes();
@@ -115,7 +116,8 @@ export function ClipsSection({ view, quiet = false }: {
     );
   }
 
-  if (!posts.length) {
+  // ?force=court-empty (demo website, for a picture): as if nobody had posted or said anything here yet.
+  if (!posts.length || forced('court-empty')) {
     return (
       <View style={styles.section}>
         <SectionHead title="Clips" />
@@ -254,7 +256,7 @@ export function SaysSection({ courtId, name }: { courtId: string; name: string }
   const add = () => openCourtReview(courtId, { name });
   const addLabel = mine ? 'Update yours' : 'Add what you know';
   const addA11y = mine ? `Update what you said about ${name}` : `Add what you know about ${name}`;
-  if (!said.players) {
+  if (!said.players || forced('court-empty')) {
     return (
       <View style={styles.section}>
         <SectionHead title="What players say" sub="Nobody has said anything yet." />

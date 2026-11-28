@@ -76,24 +76,24 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
       </View>
       {/* The people you already know who are here (owner, Oct 6). A phone app with contacts only; the Find friends page keeps its own rules. */}
       {canReadContacts() ? (
-        <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel={CONTACTS_LABEL} hitSlop={8} onPress={() => router.push('/find-contacts')} style={({ pressed }) => [styles.link, PLAIN && styles.plainLink, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="people-outline" size={15} color={colors.textMuted} />
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{CONTACTS_LABEL}</Text>
         </Pressable>
       ) : null}
       {friends ? (
         // Teen search (migration 118): by name or @handle, never by town.
-        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
+        <Pressable accessibilityRole="link" accessibilityLabel="Find a friend by their @handle" hitSlop={8} onPress={() => router.push({ pathname: '/search', params: { scope: 'players', find: 'friend' } })} style={({ pressed }) => [styles.link, PLAIN && styles.plainLink, pressed && { opacity: PRESS_DIM }]}>
           <Ionicons name="search" size={15} color={colors.textMuted} />
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>Find a friend by @handle</Text>
         </Pressable>
       ) : (
         <>
-          <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, pressed && { opacity: PRESS_DIM }]}>
+          <Pressable accessibilityRole="link" accessibilityLabel={court ? `Print a poster for ${court.name}` : 'Print a poster'} hitSlop={8} onPress={poster} style={({ pressed }) => [styles.link, PLAIN && styles.plainLink, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="print-outline" size={15} color={colors.textMuted} />
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.linkText}>{court ? 'Print a poster for my court' : 'Print a poster'}</Text>
           </Pressable>
-          {court ? <Text style={styles.fine} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
+          {court ? <Text style={[styles.fine, PLAIN && { textAlign: 'left' }]} numberOfLines={2}>Both open on {court.name} for whoever joins.</Text> : null}
         </>
       )}
     </View>
@@ -111,6 +111,7 @@ const styleDefinitions = StyleSheet.create({
   plainTitle: { ...plainText.titleMd },
   plainBody: { ...plainText.bodyMd },
   plainActions: { alignItems: 'flex-start' },
+  plainLink: { alignSelf: 'flex-start' },
   // The empty state's tile: the icon on Dim Green, as "Looking for someone to play?" and the first-move page hold theirs.
   tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   headWords: { flex: 1, minWidth: 0, gap: 2, paddingTop: 2 },

@@ -229,7 +229,7 @@ const introDefinitions = StyleSheet.create({
   goText: { ...typography.bodyStrong, color: colors.brandInk },
   later: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.sm },
   plainCard: { gap: spacing.md, paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
-  plainTitle: { ...plainText.titleLg },
+  plainTitle: { ...plainText.titleLg, textAlign: 'left' },
   plainBody: { textAlign: 'left' },
   plainActions: { marginTop: spacing.sm },
 });

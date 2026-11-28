@@ -293,7 +293,7 @@ export default function CityBoard() {
               <View style={styles.climbButton}><Button label="Invite a hitting partner" variant="secondary" onPress={() => router.push('/invite')} full /></View>
             </View>
           ) : null}
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>A city's number is the tennis sessions logged{allTime ? '' : ' this month'} by players who call it home. A city needs {MIN_PLAYERS} players to be ranked; until then it shows 0.</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.fine, PLAIN && { textAlign: 'left' }]}>A city's number is the tennis sessions logged{allTime ? '' : ' this month'} by players who call it home. A city needs {MIN_PLAYERS} players to be ranked; until then it shows 0.</Text>
         </View>
         ) : null}
       </Screen>
