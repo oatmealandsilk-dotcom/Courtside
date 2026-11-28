@@ -75,7 +75,7 @@ import type { FoundPlace } from '@/features/places/geocode';
 import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { isOfficial } from '@/features/players/official';
-import { appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
+import { appleWouldAsk, appleWouldAskLast, getPosition } from '@/lib/geo';
 import { APP_C_PREVIEW } from '@/features/community/appCPreview';
 
 // Kept here too, for the screens that already import it from the map's chrome.
@@ -1183,7 +1183,7 @@ function activeLabel(iso: string): string {
  * card, where the location ask is, one grouped row in the iPhone Settings style. While iOS would still ask for location it
  * says "Continue" (Apple 5.1.1(iv): the button right before Apple's prompt), and "Show courts near me" once that is decided.
  */
-export function NearMeRow({ locating, onLocation }: { locating?: boolean; onLocation?: () => void }) {
+export function NearMeRow({ locating, onLocation, locationOn = false }: { locating?: boolean; onLocation?: () => void; /** Location already on in the app: the row then shows only while iOS would still ask, and a tap only brings iOS's question (never turns Location off). */ locationOn?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const [appleNext, setAppleNext] = useState(appleWouldAskLast);
   useEffect(() => {
@@ -1195,13 +1195,15 @@ export function NearMeRow({ locating, onLocation }: { locating?: boolean; onLoca
     return () => { on = false; sub.remove(); };
   }, [locating]);
   const title = locating ? 'Finding you…' : appleNext ? 'Continue' : 'Show courts near me';
+  if (locationOn && !appleNext) return null;
+  const onPress = locationOn ? () => { void getPosition().finally(() => { void appleWouldAsk().then(setAppleNext); }); } : onLocation;
   return (
     <View style={styles.nearGroup}>
-      <Pressable accessibilityRole="button" accessibilityLabel={appleNext && !locating ? 'Continue' : undefined} accessibilityHint="Shows the courts near you. Nobody sees where you are" onPress={onLocation} disabled={locating} style={({ pressed }) => [styles.nearRow, pressed && styles.nearPressed]}>
+      <Pressable accessibilityRole="button" accessibilityLabel={appleNext && !locating ? 'Continue' : undefined} accessibilityHint="Shows the courts near you. Nobody sees where you are" onPress={onPress} disabled={locating} style={({ pressed }) => [styles.nearRow, pressed && styles.nearPressed]}>
         <View style={styles.nearTile}><Ionicons name="navigate" size={16} color={colors.brand} /></View>
         <View style={styles.nearWords}>
           <Text maxFontSizeMultiplier={TextScale.TITLE} numberOfLines={1} style={styles.nearTitle}>{title}</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nearSub}>{appleNext ? 'Show courts near me · nobody sees where you are' : 'Nobody sees where you are'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.nearSub}>{appleNext ? 'Courts near you, kept private' : 'Nobody sees where you are'}</Text>
         </View>
         {locating ? <ActivityIndicator size="small" color={colors.textFaint} /> : <Ionicons name="chevron-forward" size={16} color={colors.textFaint} />}
       </Pressable>
@@ -2343,7 +2345,7 @@ const styleDefinitions = StyleSheet.create({
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12 },
   // The app preview of option C's row under the card (NearMeRow).
-  nearGroup: { marginHorizontal: spacing.lg, marginTop: spacing.md, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  nearGroup: { marginTop: spacing.md, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   nearRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 60, paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
   nearPressed: { backgroundColor: colors.surfaceAlt },
   nearTile: { width: 32, height: 32, borderRadius: radius.sm, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },

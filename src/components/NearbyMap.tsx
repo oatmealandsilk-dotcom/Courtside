@@ -1100,7 +1100,7 @@ export function NearbyMap(props: NearbyMapProps) {
   if (!expanded) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
     // The preview of the website's option C (appCPreview; demo builds with its switch only): the card edge to edge, and
-    // with Location off, an iPhone Settings-style row under it where the location ask is (NearMeRow).
+    // an iPhone Settings-style row under it where the location ask is (NearMeRow: with Location off, or while iOS would still ask).
     const cardView = (
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
@@ -1109,7 +1109,7 @@ export function NearbyMap(props: NearbyMapProps) {
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
-        style={[styles.card, cardHeight ? { height: cardHeight } : null, APP_C_PREVIEW && styles.cardEdge]}
+        style={[styles.card, cardHeight ? { height: cardHeight } : null, APP_C_PREVIEW && [styles.cardEdge, { height: (cardHeight ?? HEIGHT) - C_ROW_ROOM }]]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
@@ -1158,7 +1158,7 @@ export function NearbyMap(props: NearbyMapProps) {
     return (
       <View>
         {cardView}
-        {!locationOn && onToggleLocation ? <NearMeRow locating={locating} onLocation={onToggleLocation} /> : null}
+        {onToggleLocation ? <NearMeRow locating={locating} onLocation={onToggleLocation} locationOn={!!locationOn} /> : null}
       </View>
     );
   }
@@ -1387,6 +1387,9 @@ function tempPicture(dataUrl: string): string | null {
     return null;
   }
 }
+
+/** The app preview of option C (appCPreview): the card gives up the near-me row's room, so the page below stays where it was. */
+const C_ROW_ROOM = 76;
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
