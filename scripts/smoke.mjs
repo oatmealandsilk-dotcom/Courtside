@@ -1385,10 +1385,11 @@ const STEPS = [
       const listTop = () => page.eval(`(() => { const list = ${scrollerOf}; return list ? Math.round(list.scrollTop) : -1; })()`);
       const beforePhoto = await listTop();
       await page.tap({ label: /^June's photo/ });
-      await page.waitFor({ text: /^June · / }, 10000);
+      // (The who-and-when line lets touches through to the photo under it: found by its words, not as the top element.)
+      await page.waitFor({ text: /^June · /, any: true }, 10000);
       await page.waitFor({ label: 'Close' });
       await page.tap({ label: 'Close' });
-      await page.gone({ text: /^June · / }, 10000);
+      await page.gone({ text: /^June · /, any: true }, 10000);
       const afterPhoto = await listTop();
       if (Math.abs(afterPhoto - beforePhoto) > 4) throw new Error(`closing the full-screen photo moved the Activities list: scrollTop ${beforePhoto} before, ${afterPhoto} after`);
     },
