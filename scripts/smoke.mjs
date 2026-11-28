@@ -1037,11 +1037,11 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: 'Go back' });
       await page.tap({ text: 'Find Players' });
-      // The courts-only map (Oct 29): its own label, and its row that asks for Location only on a tap (option C, Nov 27:
-      // one row under the map, no second 'Use my location' button by the list).
+      // The courts-only map (Oct 29): its own label, and one small round locate button on it that asks for Location
+      // only on a tap (Nov 28: the 'Show courts near me' row under the map is gone; no 'Use my location' button either).
       await page.waitFor({ label: 'Map of courts near you', any: true });
-      await page.waitFor({ text: 'Show courts near me' });
-      await page.waitFor({ text: 'Nobody sees where you are' });
+      await page.waitFor({ label: 'Show courts near me' });
+      if (await page.find({ text: 'Show courts near me' }) || await page.find({ text: 'Nobody sees where you are' })) throw new Error('the guest Community screen still shows the row under the map');
       await page.waitFor({ text: 'Open hits' });
       if (await page.find({ text: 'Use my location' })) throw new Error('the guest Community screen still shows a second Use my location button');
       if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
