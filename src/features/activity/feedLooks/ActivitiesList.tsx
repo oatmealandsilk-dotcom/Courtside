@@ -1411,7 +1411,7 @@ const Gv3Card = React.memo(function Gv3Card({ post, author, me, onOpenClip, near
         </Pressable>
       ) : null}
       {media ? <PhotoStrip post={post} w={inner} onOpenClip={onOpenClip} like={like} /> : null}
-      <GalleryActions post={post} me={me} />
+      <GalleryActions post={post} me={me} menu={false} />
     </View>
   );
 });
@@ -1552,20 +1552,30 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     // Under another of your rows, a row sits on a hairline rather than the band.
     const joinedRows = out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
     if (!grid) return joinedRows;
-    // gv4: a run of photo and clip posts becomes pairs of tiles; anything else breaks the run and sits full width.
+    // gv4: a run of photo and clip posts becomes pairs of tiles; anything else sits full width between blocks. A
+    // full-width item that arrives when a pair is half full waits for the next tile (at most a few of them), so the
+    // grid never leaves a lone tile mid-feed; the order shifts by one picture at most.
     const paired: Row[] = [];
     let run: Post[] = [];
+    let held: Row[] = [];
     const flush = () => {
       for (let i = 0; i < run.length; i += 2) paired.push({ key: `pair:${run[i].id}`, kind: 'pair', posts: run.slice(i, i + 2), first: i === 0 });
       run = [];
     };
+    const release = () => { flush(); paired.push(...held); held = []; };
     for (const r of joinedRows) {
-      if (r.kind === 'post' && galleryMedia(r.post)) { run.push(r.post); continue; }
-      flush();
+      if (r.kind === 'post' && galleryMedia(r.post)) {
+        run.push(r.post);
+        if (held.length && run.length % 2 === 0) release();
+        continue;
+      }
+      if (run.length % 2 === 1 && held.length < 4) { held.push(r); continue; }
+      release();
       paired.push(r);
     }
-    flush();
-    return paired;
+    release();
+    // Your rows regrouped: a row under another of yours sits on a hairline, else on its own edge.
+    return paired.map((r, i): Row => (r.kind === 'mini' ? { ...r, joined: paired[i - 1]?.kind === 'mini' } : r));
   }, [gallery, rollup, grid, posts, currentUserId, showStart]);
   const { width: screenW } = useWindowDimensions();
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
