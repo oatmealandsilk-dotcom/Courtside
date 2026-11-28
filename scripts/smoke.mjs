@@ -785,8 +785,24 @@ const profilePageColour = (page) => page.call(() => {
 /** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
 const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
-/** The plain sign-up letter's first lines after a guest's like (Nov 28): "Kai posted this. / Join to like it.", by the clip's author. */
-const LIKE_ASK = /^\S+ posted this\. Join to like it\.$/;
+// Which sign-up ask the website shows a guest (JOIN_LOOK in src/features/guest/joinLook.ts): the plain letter
+// (Nov 28, owner: "i think d is solid") or, rolled back, X's prompt before it. Its words, for the guest steps.
+const JOIN_LOOK = /JOIN_LOOK: JoinLook = '(\w+)'/.exec(fs.readFileSync(path.join(ROOT, 'src/features/guest/joinLook.ts'), 'utf8'))?.[1];
+if (!['plain', 'x'].includes(JOIN_LOOK)) {
+  console.error(`smoke: cannot read JOIN_LOOK in src/features/guest/joinLook.ts (got ${JOIN_LOOK})`);
+  process.exit(2);
+}
+const BACK_HERE = 'It’s free. Once you’re in, we’ll bring you straight back here.';
+const ASK_WORDS = JOIN_LOOK === 'plain'
+  ? {
+    // "Kai posted this. / Join to like it.", by the clip's author.
+    like: /^\S+ posted this\. Join to like it\.$/, likeLine: BACK_HERE, join: 'Join CourtSide',
+    menu: 'Join CourtSide to save or report this.', reply: /^Join to reply to \S+\.$/, replyLine: BACK_HERE, report: 'Join CourtSide to report this.',
+  }
+  : {
+    like: 'Like a post to cheer them on.', likeLine: /^Join CourtSide to let (?!the player).+ know you liked it\.$/, join: 'Create account',
+    menu: 'Save or report this post.', reply: 'Join the conversation.', replyLine: null, report: 'Report this.',
+  };
 
 /** Guest mode shows nobody but public adults: none of the demo's teens, private or no-age players appear anywhere on the page. */
 async function guestShowsOnlyAdults(page) {
@@ -1002,30 +1018,31 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
       // The plain letter (Nov 28, owner: "i think d is solid"): the clip's author first, then the ask.
-      await page.waitFor({ text: LIKE_ASK });
-      await page.waitFor({ text: 'It’s free. Once you’re in, we’ll bring you straight back here.' });
+      await page.waitFor({ text: ASK_WORDS.like });
+      await page.waitFor({ text: ASK_WORDS.likeLine });
       // The focus goes into the prompt when it opens (review, Nov 28: the entering animation used to swallow it).
       await page.waitUntil(() => page.call(() => !!document.activeElement?.closest('[role=dialog]')), 3000, 'the focus to go into the join prompt');
     },
-    expect: [{ label: 'Join CourtSide' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
+    expect: [{ label: ASK_WORDS.join }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
     after: async (page) => {
       await page.tap({ label: 'Close' });
-      await page.gone({ text: LIKE_ASK });
+      await page.gone({ text: ASK_WORDS.like });
       // The heart never fills for a guest: the like did not count.
       if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
       // A post's ••• menu asks to join too, and (found in review, Oct 17) still offers the no-account report.
       // It comes back to the Feed's own page, whose clip is not in its address: so no "we'll bring you straight back".
       await page.tap({ label: 'More options' });
-      await page.waitFor({ text: 'Join CourtSide to save or report this.' });
+      await page.waitFor({ text: ASK_WORDS.menu });
       await page.waitFor({ text: 'Email us about it' });
-      await page.waitFor({ text: 'It’s free.' });
+      if (JOIN_LOOK === 'plain') await page.waitFor({ text: 'It’s free.' });
       if (await page.find({ text: /bring you straight back/ })) throw new Error('the Feed’s ••• ask promises to bring them back, with no post to bring them back to');
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Join CourtSide to save or report this.' });
+      await page.gone({ text: ASK_WORDS.menu });
+      if (JOIN_LOOK !== 'plain') return;
       // "We'll bring you straight back here" is true: either button remembers the clip's own page (the Feed
       // keeps no clip in its address), which the app opens once they are in (useShareLanding).
       await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
-      await page.waitFor({ text: LIKE_ASK });
+      await page.waitFor({ text: ASK_WORDS.like });
       await page.tap({ label: 'Log in' });
       await page.waitUntil(() => page.call(() => location.pathname === '/sign-in'), 15000, 'Log in to open the sign-in page');
       const back = await page.call(() => { try { return JSON.parse(localStorage.getItem('courtside-share-target') || 'null')?.href ?? null; } catch { return null; } });
@@ -1046,18 +1063,18 @@ const STEPS = [
       await page.waitFor({ text: /^I made the switch at 4\.0/ }, 30000);
       await guestShowsOnlyAdults(page);
       await page.tap({ label: 'Reply to this thread' });
+      await page.waitFor({ text: ASK_WORDS.reply });
       // The thread has its own address, so coming back to it once they are in is true here.
-      await page.waitFor({ text: /^Join to reply to \S+\.$/ });
-      await page.waitFor({ text: 'It’s free. Once you’re in, we’ll bring you straight back here.' });
+      if (ASK_WORDS.replyLine) await page.waitFor({ text: ASK_WORDS.replyLine });
       await page.tap({ label: 'Close' });
-      await page.gone({ text: /^Join to reply to \S+\.$/ });
+      await page.gone({ text: ASK_WORDS.reply });
       // Share is the one icon at the top; Report is in the "⋯" menu (Oct 29, owner), and still asks a guest to join.
       await page.tap({ label: 'More options' });
       await page.tap({ label: 'Report this thread' });
-      await page.waitFor({ text: 'Join CourtSide to report this.' });
+      await page.waitFor({ text: ASK_WORDS.report });
       await page.waitFor({ text: 'Email us about it' });
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Join CourtSide to report this.' });
+      await page.gone({ text: ASK_WORDS.report });
     },
     expect: [{ text: 'Replies' }, { label: 'Share this thread' }, { label: 'More options' }],
   },
