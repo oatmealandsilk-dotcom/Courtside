@@ -99,6 +99,7 @@ import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
 import { ACTIVITIES_LOOK } from '@/features/activity/feedLooks/activitiesLook';
+import { simAction } from '@/lib/simDriver';
 import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/ActivitiesList';
 
 /**
@@ -2988,6 +2989,8 @@ function GroupedFeed() {
   useEffect(() => { if (groupId && groupId !== ACTIVITIES && !feedGroups.some((g) => g.id === groupId)) setGroupId(null); }, [feedGroups, groupId]);
   // Opened from a group's page ("See the feed").
   useEffect(() => onOpenGroupFeed((id) => { tookGroupFeed(); setGroupId(id); }), []);
+  // The simulator proof harness only (simDriver: demo builds with EXPO_PUBLIC_SIM_DRIVER; nothing elsewhere): "feed to=activities" or "feed to=foryou".
+  useEffect(() => simAction('feed', (q) => setGroupId(q.to === 'activities' ? ACTIVITIES : null)), []);
   // The last three feeds opened, kept built.
   const [kept, setKept] = useState<string[]>([]);
   useEffect(() => { if (groupId) setKept((k) => (k.includes(groupId) ? k : [...k.slice(-2), groupId])); }, [groupId]);

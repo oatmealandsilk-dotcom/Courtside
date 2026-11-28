@@ -23,6 +23,7 @@ import { ROW_TRAVEL, showRow } from '@/features/feed/topRowScroll';
 import { hasSessionStats, resultWord, scoreLine, sessionTitle, whatWord } from '@/features/activity/format';
 import { localDay } from '@/features/practice/stats';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
 
 /*
  * Activities as a gallery (Nov 28, owner: "1 gallery is better"; the look is ACTIVITIES_LOOK in ./activitiesLook).
@@ -221,6 +222,12 @@ function Bloom({ token }: { token: number }) {
   );
 }
 
+/**
+ * The simulator proof harness only (simDriver: a demo build bundled with EXPO_PUBLIC_SIM_DRIVER; never a store build,
+ * an update or the website): each picture card on screen leaves its double-tap here, so "actlike" can play one.
+ */
+const simLikes = new Map<string, () => void>();
+
 /* ------------------------------------------------------------------ a card's pieces */
 
 function GalleryHead({ post, author }: { post: Post; author: User }) {
@@ -353,6 +360,11 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
     const now = Date.now();
     if (now - lastTap.current < 280) { lastTap.current = 0; likeIt(); } else lastTap.current = now;
   };
+  useEffect(() => {
+    if (!SIM_DRIVER || !media || clip) return;
+    simLikes.set(post.id, likeIt);
+    return () => { if (simLikes.get(post.id) === likeIt) simLikes.delete(post.id); };
+  }, [media, clip, post.id, likeIt]);
   // VoiceOver's own double tap is one tap to the app: liking a picture is its "Like" action instead.
   const onPictureAction = (e: AccessibilityActionEvent) => { if (e.nativeEvent.actionName === 'like') likeIt(); };
   const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
@@ -563,6 +575,36 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   // A pull or a new page from elsewhere can bring more back.
   useEffect(() => { if (app.feed.more) setEnded(false); }, [app.feed.more]);
 
+  // The simulator proof harness only (simDriver; nothing at all elsewhere): "actscroll to=1200" or "actscroll by=600"
+  // moves the list (glide=1: animated), "actclip" opens the first clip below the top of the screen as a tap would,
+  // "actlike" double-taps the first photo below it, "actpos" says where the list is. Each says what it did in sim-log.
+  const rowsRef = useRef(rows);
+  rowsRef.current = rows;
+  useEffect(() => {
+    if (!SIM_DRIVER) return;
+    const firstBelow = (want: (p: Post) => boolean) => rowsRef.current.find((r): r is Extract<Row, { kind: 'post' }> => r.kind === 'post' && want(r.post))?.post;
+    const off = [
+      simAction('actscroll', (q) => {
+        const to = q.to !== undefined ? Number(q.to) : lastY.current + (Number(q.by) || 0);
+        listRef.current?.scrollToOffset({ offset: Math.max(0, to), animated: q.glide === '1' });
+        simLog(`[acts] scroll to ${Math.round(to)}`);
+      }),
+      simAction('actclip', () => {
+        const clipPost = firstBelow(isClip);
+        simLog(`[acts] clip ${clipPost?.id ?? 'none'} at y ${Math.round(lastY.current)}`);
+        if (clipPost) openClip(clipPost.id);
+      }),
+      simAction('actlike', () => {
+        const id = rowsRef.current.flatMap((r) => (r.kind === 'post' && simLikes.has(r.post.id) ? [r.post.id] : []))[0];
+        simLog(`[acts] doubletap ${id ?? 'none'}`);
+        if (id) simLikes.get(id)?.();
+      }),
+      simAction('actpos', () => simLog(`[acts] at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)} rows ${rowsRef.current.length}`)),
+    ];
+    return () => off.forEach((f) => f());
+  }, [openClip]);
+  useFocusEffect(useCallback(() => { if (SIM_DRIVER) simLog(`[acts] on show at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)}`); }, []));
+
   const [refreshing, setRefreshing] = useState(false);
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -691,7 +733,8 @@ const styleDefinitions = StyleSheet.create({
   // Your own photo-less session: one row, the band above it, or a hairline from the words when under another.
   oRow: { flexDirection: 'row', alignItems: 'center', paddingLeft: spacing.lg, paddingRight: spacing.xs, backgroundColor: colors.bg },
   oBand: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt },
-  oJoined: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  // The hairline starts at the words, as every row on a hairline does (DESIGN.md).
+  oJoined: { marginLeft: spacing.lg, paddingLeft: 0, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   oPress: { flex: 1, minWidth: 0, paddingVertical: GALLERY.rowPad, gap: 2 },
   oTop: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   oTitle: { ...font('500'), fontSize: 15, lineHeight: 20, color: colors.text, flexShrink: 1 },

@@ -1310,6 +1310,23 @@ const STEPS = [
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: /^Add a comment/ }); },
   },
   {
+    // Nov 28 (owner: "1 gallery is better"): Activities is one continuous list. Other people's sessions show only
+    // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list again.
+    name: 'activities-gallery',
+    title: 'Activities: the gallery, a clip full screen and back',
+    async run(page) {
+      await page.tap({ label: 'Activities' });
+      await page.waitFor({ label: /^June's photo/ }, 20000);
+      await page.reveal({ label: /^Sam's clip/ });
+      await page.tap({ label: /^Sam's clip/ });
+      await page.waitFor({ label: 'Go back' }, 20000);
+      await page.tap({ label: 'Go back' });
+      await page.waitFor({ label: /^June's photo/ }, 20000);
+    },
+    expect: [{ label: /^June's photo/ }, { label: /^Sam's clip/ }, { label: 'Save this post', any: true }],
+    after: async (page) => { await page.tap({ label: 'For you' }); await page.waitFor({ label: 'Clip comments' }); },
+  },
+  {
     name: 'coaching',
     title: 'Coaching tab',
     async run(page) {
