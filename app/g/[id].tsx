@@ -22,6 +22,11 @@ import { MAX_GROUPS } from '@/store/feedGroups';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { corner } from '@/theme/look';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the group's head at the left, Join as one ink button sized to its word. */
+const PLAIN = noBoxes();
 
 /*
  * One group's page, and where its invite link (/g/<id>) lands, in the app or
@@ -129,11 +134,11 @@ function GroupPage() {
 
   return (
     <Screen title="Group" compactTitle onBack={() => goBack('/groups')} right={right}>
-      <View style={styles.head}>
-        <GroupTile name={title} look={group?.look ?? card?.look} size={88} />
-        <Text style={styles.title} numberOfLines={2}>{title}</Text>
-        {description ? <Text style={styles.about}>{description}</Text> : null}
-        <Text style={styles.headMeta}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
+      <View style={[styles.head, PLAIN && styles.plainHead]}>
+        <GroupTile name={title} look={group?.look ?? card?.look} size={PLAIN ? 56 : 88} />
+        <Text style={[styles.title, PLAIN && styles.plainTitle]} numberOfLines={2}>{title}</Text>
+        {description ? <Text style={[styles.about, PLAIN && styles.plainLeft]}>{description}</Text> : null}
+        <Text style={[styles.headMeta, PLAIN && styles.plainLeft]}>{members} · {ask ? 'Ask to join' : 'Open'}</Text>
       </View>
 
       {/* Joined here: Feed / Post / Invite, the members and Leave unfold as the Join box folds away, rather
@@ -156,29 +161,42 @@ function GroupPage() {
       <Fold open={!group}>
       {invite && !asked ? (
         <View style={styles.joinBox}>
-          <View style={styles.invitedRow}>
+          <View style={[styles.invitedRow, PLAIN && styles.plainInvited]}>
             <Avatar name={inviter?.name ?? inviterName(invite, users)} seed={inviter?.avatarSeed ?? invite.inviterId} uri={inviter?.avatarUrl} size={28} />
             <Text style={styles.invitedText}>{inviterName(invite, users)} invited you</Text>
           </View>
           {/* Join first, as in Groups and Notifications. In 3 groups already: Join dimmed and the cap said up front. */}
+          {PLAIN ? (
+            <PlainActions align="start" style={styles.plainActions}>
+              <InkButton label="Join" onPress={() => answerInvite(true)} loading={busy} disabled={busy || inviteFull} />
+              <TextAction label="Not now" tone="muted" onPress={() => answerInvite(false)} disabled={busy} />
+            </PlainActions>
+          ) : (
           <View style={styles.inviteButtons}>
             <View style={styles.fill}><Button label="Join" onPress={() => answerInvite(true)} loading={busy} disabled={busy || inviteFull} full /></View>
             <View style={styles.fill}><Button label="Not now" variant="secondary" onPress={() => answerInvite(false)} disabled={busy} full /></View>
           </View>
+          )}
           {inviteFull ? (
             <Pressable accessibilityRole="link" accessibilityLabel={`${INVITE_FULL} Manage your groups`} onPress={() => router.push('/groups' as never)}>
-              <Text style={styles.joinNote}>{INVITE_FULL} <Text style={styles.manage}>Manage</Text></Text>
+              <Text style={[styles.joinNote, PLAIN && styles.plainNote]}>{INVITE_FULL} <Text style={styles.manage}>Manage</Text></Text>
             </Pressable>
           ) : (
-            <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
+            <Text style={[styles.joinNote, PLAIN && styles.plainNote]}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
           )}
         </View>
       ) : (
         <View style={styles.joinBox}>
-          {asked
+          {PLAIN ? (
+            <PlainActions align="start" style={styles.plainActions}>
+              {asked
+                ? <TextAction label="Asked to join · Cancel" onPress={() => act(async () => { await actions.leaveFeedGroup(id); await readCard(); })} disabled={busy} />
+                : <InkButton label={ask ? 'Ask to join' : 'Join group'} onPress={join} loading={busy} disabled={busy} />}
+            </PlainActions>
+          ) : asked
             ? <Button label="Asked to join · Cancel" variant="secondary" onPress={() => act(async () => { await actions.leaveFeedGroup(id); await readCard(); })} disabled={busy} full />
             : <Button label={ask ? 'Ask to join' : 'Join group'} onPress={join} loading={busy} disabled={busy} full />}
-          <Text style={styles.joinNote}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
+          <Text style={[styles.joinNote, PLAIN && styles.plainNote]}>A group’s feed shows everything its members post. You can be in up to {MAX_GROUPS} groups.</Text>
         </View>
       )}
       </Fold>
@@ -281,6 +299,12 @@ const styleDefinitions = StyleSheet.create({
   action: { ...lift, flex: 1, height: 68, borderRadius: radius.lg, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 4 },
   actionText: { ...typography.smallStrong, color: colors.text },
   joinBox: { gap: spacing.sm },
+  plainHead: { alignItems: 'flex-start', paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleLg, textAlign: 'left', marginTop: spacing.md },
+  plainLeft: { textAlign: 'left', maxWidth: 520 },
+  plainActions: { marginTop: 0 },
+  plainNote: { textAlign: 'left', paddingHorizontal: spacing.xs },
+  plainInvited: { justifyContent: 'flex-start' },
   invitedRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingBottom: spacing.xs },
   invitedText: { ...typography.bodyStrong, color: colors.text },
   inviteButtons: { flexDirection: 'row', gap: spacing.sm },

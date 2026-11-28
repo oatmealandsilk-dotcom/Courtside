@@ -45,6 +45,11 @@ import { useApp } from '@/store/AppContext';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, pageIsDark, spacing, typography } from '@/theme';
 import { LESS_AI, LESS_AI_ROUND2, corner } from '@/theme/look';
+import { plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a private tennis profile says so in plain words at the left, no lock tile. */
+const PLAIN = noBoxes();
 
 /**
  * The Tennis profile (Oct 5): a player's tennis in one place, yours or
@@ -105,10 +110,10 @@ export default function TennisProfile() {
   if (!isMe && user.isPrivate && !followingIds.includes(user.id)) {
     const requested = !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
     return shell(
-      <View style={styles.locked}>
-        <View style={styles.lockTile}><Ionicons name="lock-closed-outline" size={24} color={colors.textMuted} /></View>
-        <Text style={styles.lockedTitle}>{first}’s tennis profile is private</Text>
-        <Text style={styles.lockedBody}>{requested ? `Requested. Once ${first} accepts, you’ll see how they play.` : `Follow @${user.handle}. Once ${first} accepts, you’ll see how they play.`}</Text>
+      <View style={[styles.locked, PLAIN && styles.plainLocked]}>
+        {PLAIN ? null : <View style={styles.lockTile}><Ionicons name="lock-closed-outline" size={24} color={colors.textMuted} /></View>}
+        <Text style={[styles.lockedTitle, PLAIN && styles.plainTitle]}>{first}’s tennis profile is private</Text>
+        <Text style={[styles.lockedBody, PLAIN && styles.plainBody]}>{requested ? `Requested. Once ${first} accepts, you’ll see how they play.` : `Follow @${user.handle}. Once ${first} accepts, you’ll see how they play.`}</Text>
         <View style={styles.lockedFollow}><FollowPill following={false} userId={user.id} name={user.name} onPress={() => actions.toggleFollow(user.id)} /></View>
         <Pressable accessibilityRole="link" hitSlop={10} onPress={() => router.push({ pathname: '/user/[id]', params: { id: user.id } })} style={({ pressed }) => [styles.ghost, pressed && styles.pressed]}>
           <Text style={styles.ghostText}>Go to {first}’s profile</Text>
@@ -776,6 +781,9 @@ const styleDefinitions = StyleSheet.create({
   tabBody: { gap: spacing.xxl, paddingTop: spacing.xl },
   theirBody: { gap: spacing.xxl, paddingTop: spacing.xxl },
   gone: { ...typography.body, color: colors.textMuted, textAlign: 'center', paddingVertical: 64 },
+  plainLocked: { alignItems: 'flex-start', paddingTop: spacing.xxl, paddingHorizontal: spacing.lg, gap: 0 },
+  plainTitle: { ...plainText.titleLg },
+  plainBody: { ...plainText.bodyLg, textAlign: 'left', maxWidth: 420 },
   locked: { alignItems: 'center', paddingTop: 56, paddingHorizontal: spacing.xl, gap: spacing.sm },
   lockTile: { width: 56, height: 56, borderRadius: corner(16), backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   lockedTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },

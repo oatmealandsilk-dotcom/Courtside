@@ -9,6 +9,11 @@ import { colorChoices } from '@/features/groups/look';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { colors, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the group's face small at the left, the words beside it, no confetti. */
+const PLAIN = noBoxes();
 
 /*
  * The moment a group is ready: its face, big, with a green tick that pops on
@@ -61,6 +66,22 @@ export function Celebrate({ name, look, invited, leaving = true }: { name: strin
 
   const sent = invited ? `${invited} ${invited === 1 ? 'invite' : 'invites'} sent.` : '';
   const line = leaving ? `${sent}${sent ? ' ' : ''}Taking you to the group…` : sent || 'Its feed is ready for a first post.';
+  if (PLAIN) {
+    return (
+      <View style={styles.plainWrap} accessible accessibilityRole="alert" accessibilityLabel={`${name} is ready. ${line}`}>
+        <Animated.View style={tileStyle}>
+          <GroupTile name={name} look={look} size={56} />
+          <Animated.View style={[styles.tick, styles.plainTick, tickStyle]}>
+            <Ionicons name="checkmark" size={14} color={colors.brandInk} />
+          </Animated.View>
+        </Animated.View>
+        <Animated.View style={[styles.plainWords, wordsStyle]}>
+          <Text style={styles.plainTitle} numberOfLines={2}>{`${name} is ready`}</Text>
+          <Text style={styles.plainLine}>{line}</Text>
+        </Animated.View>
+      </View>
+    );
+  }
   return (
     <View style={styles.wrap} accessible accessibilityRole="alert" accessibilityLabel={`${name} is ready. ${line}`}>
       <View style={styles.stage}>
@@ -90,4 +111,9 @@ const styleDefinitions = StyleSheet.create({
   words: { alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg },
   title: { ...typography.title, fontSize: 26, letterSpacing: -0.5, color: colors.text, textAlign: 'center' },
   line: { ...typography.body, color: colors.textMuted, textAlign: 'center' },
+  plainWrap: { alignItems: 'flex-start', gap: spacing.lg, paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
+  plainTick: { right: -6, bottom: -6, width: 24, height: 24, borderRadius: 12, borderWidth: 2 },
+  plainWords: { gap: 0 },
+  plainTitle: { ...plainText.titleLg },
+  plainLine: { ...plainText.bodyLg, marginTop: spacing.xs },
 });

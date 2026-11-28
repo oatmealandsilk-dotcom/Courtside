@@ -27,6 +27,12 @@ import { ABOUT_MAX, MAX_GROUPS, NAME_MAX, NAME_MIN, tidyGroupName } from '@/stor
 import { colors, font, lift, spacing, typography } from '@/theme';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { corner } from '@/theme/look';
+import { plainText } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a stop says so in plain words at the left, no icon disc on top. */
+const PLAIN = noBoxes();
 
 /*
  * Start a group, in three short steps on one tall sheet (the way Strava
@@ -107,8 +113,8 @@ export default function GroupForm() {
   // A look can be saved only once migration 73 has run (my_feed_groups says so).
   const looksOn = feedGroupsLooks;
 
-  const [step, setStep] = useState<Step>(0);
-  const [name, setName] = useState(editing?.name ?? '');
+  const [step, setStep] = useState<Step>(() => (forced('celebrate') ? 3 : 0));
+  const [name, setName] = useState(editing?.name ?? (forced('celebrate') ? 'Wakefield hitters' : ''));
   const [about, setAbout] = useState(editing?.description ?? '');
   const [ask, setAsk] = useState(!!editing?.ask);
   const [listed, setListed] = useState(editing?.discoverable !== false);
@@ -136,7 +142,7 @@ export default function GroupForm() {
   const loading = !isEdit && feedGroupsOn === null;
   const off = !isEdit && feedGroupsOn === false;
   // Once this sheet has made the group, being in 3 is the point, not a stop.
-  const full = !isEdit && !createdId && feedGroups.length >= MAX_GROUPS;
+  const full = !isEdit && !createdId && (feedGroups.length >= MAX_GROUPS || forced('groups-full')) && !forced('celebrate');
   const gate: Gate | null = id && !editing ? (feedGroupsOn === null ? 'loading' : feedGroupsOn === false ? 'off' : 'gone')
     : loading ? 'loading' : off ? 'off' : full ? 'full' : null;
   const retry = async () => { setRetrying(true); await actions.loadFeedGroups().catch(() => undefined); setRetrying(false); };
@@ -421,10 +427,10 @@ export default function GroupForm() {
       full: { icon: 'people-outline', title: `You’re in ${MAX_GROUPS} groups`, line: `That’s the most anyone can be in. Leave one to start another.` },
     }[gate];
     body = (
-      <View style={styles.gate} accessible accessibilityRole="alert" accessibilityLabel={`${g.title}. ${g.line}`}>
-        <View style={styles.gateIcon}><Ionicons name={g.icon as 'people-outline'} size={26} color={colors.textMuted} /></View>
-        <Text style={styles.gateTitle}>{g.title}</Text>
-        <Text style={styles.gateBody}>{g.line}</Text>
+      <View style={[styles.gate, PLAIN && styles.plainGate]} accessible accessibilityRole="alert" accessibilityLabel={`${g.title}. ${g.line}`}>
+        {PLAIN ? null : <View style={styles.gateIcon}><Ionicons name={g.icon as 'people-outline'} size={26} color={colors.textMuted} /></View>}
+        <Text style={[styles.gateTitle, PLAIN && styles.plainTitle]}>{g.title}</Text>
+        <Text style={[styles.gateBody, PLAIN && styles.plainBody]}>{g.line}</Text>
       </View>
     );
   } else if (isEdit) {
@@ -531,6 +537,9 @@ const styleDefinitions = StyleSheet.create({
   errorRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   error: { ...typography.small, color: colors.danger, flex: 1, lineHeight: 18 },
   center: { alignItems: 'center', gap: spacing.md, paddingVertical: 60 },
+  plainGate: { alignItems: 'flex-start', gap: 0, paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleLg, textAlign: 'left' },
+  plainBody: { ...plainText.bodyLg, textAlign: 'left', maxWidth: 420 },
   gate: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.md },
   gateIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: colors.surfaceAlt, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   gateTitle: { ...typography.title, color: colors.text, textAlign: 'center' },

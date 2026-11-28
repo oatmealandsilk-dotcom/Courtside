@@ -50,6 +50,11 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { publicRoute } from '@/features/share/publicRoute';
 import { useModalSheetBottom } from '@/lib/modalSheet';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a private account says so in plain words at the left, no lock on top. */
+const PLAIN = noBoxes();
 
 // Activity (Oct 24, owner): their posts that carry a hit's or a match's numbers, as on your own profile.
 const TABS = ['Posts', 'Activity', 'Clips', 'Tagged'] as const; // Activity second (Oct 25, owner: yes to All · Activity · Clips · Tagged).
@@ -323,10 +328,10 @@ function UserProfile() {
 
       {blocked ? null : locked ? (
         <>
-          <View style={styles.lockedBox}>
-            <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />
-            <Text style={styles.lockedTitle}>This account is private</Text>
-            <Text style={styles.lockedBody}>{requested ? `Requested. You’ll see their posts once ${user.name.split(' ')[0]} accepts.` : 'Follow to see their posts.'}</Text>
+          <View style={[styles.lockedBox, PLAIN && styles.plainLocked]}>
+            {PLAIN ? null : <Ionicons name="lock-closed-outline" size={26} color={colors.textMuted} />}
+            <Text style={[styles.lockedTitle, PLAIN && styles.plainTitle]}>This account is private</Text>
+            <Text style={[styles.lockedBody, PLAIN && styles.plainBody]}>{requested ? `Requested. You’ll see their posts once ${user.name.split(' ')[0]} accepts.` : 'Follow to see their posts.'}</Text>
           </View>
           {/* Players you might know, so a private account's page is never just a lock. */}
           <SuggestedPlayers near={user.location} exclude={[user.id]} />
@@ -411,6 +416,9 @@ const styleDefinitions = StyleSheet.create({
   },
   blockedText: { ...typography.small, color: colors.textMuted, flex: 1, lineHeight: 19 },
   notice: { ...typography.small, color: colors.brand, textAlign: 'center', paddingVertical: spacing.sm },
+  plainLocked: { alignItems: 'flex-start', gap: 0, paddingHorizontal: spacing.lg },
+  plainTitle: { ...plainText.titleMd },
+  plainBody: { ...plainText.bodyMd, textAlign: 'left' },
   lockedBox: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xxl, paddingHorizontal: spacing.xl },
   lockedTitle: { ...typography.heading, color: colors.text },
   lockedBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
