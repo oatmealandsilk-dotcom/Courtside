@@ -35,6 +35,7 @@ import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '
 import { colors, lift, spacing, typography, buttonShape } from '@/theme';
 import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
 
 /** No boxes (demo only, features/noBoxes): the consent as a plain page of words at the left (same words), Agree one ink button. */
 const PLAIN = noBoxes();
@@ -136,7 +137,8 @@ export default function AiCoachRoute() {
   }
   // Before anything leaves the phone: a clear yes to sending it to Anthropic (Apple 5.1.2(i)
   // and 5.1.3). This comes before the week is asked for, which happens as soon as the coach opens.
-  if (!consent.agreed) return <AiCoachConsent onAgree={consent.agree} />;
+  // ?force=ai-consent (demo website, for a picture): the consent page even once agreed.
+  if (!consent.agreed || forced('ai-consent')) return <AiCoachConsent onAgree={consent.agree} />;
   // First time in: the coach asks what it needs (fitness, sessions, a goal,
   // a tournament), which joining no longer does. Skippable; it just plans less well.
   const p = currentUser?.profile;

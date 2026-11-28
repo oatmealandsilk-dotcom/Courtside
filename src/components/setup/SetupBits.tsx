@@ -97,6 +97,15 @@ export function QuietButton({ label, onPress, icon, disabled, loading, dim, acce
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const inactive = !!disabled || !!loading;
+  // No boxes (demo only): the quiet way on as words with its icon, at the left, no grey fill.
+  if (noBoxes()) {
+    return (
+      <Pressable disabled={inactive} onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? label} hitSlop={6} style={({ pressed }) => [styles.plainQuiet, (inactive || !!dim) && styles.quietOff, pressed && styles.linkPressed]}>
+        {loading ? <CourtSpinner size={18} ink={colors.text} /> : icon ? <Ionicons name={icon} size={17} color={colors.text} /> : null}
+        <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.plainQuietText}>{label}</Text>
+      </Pressable>
+    );
+  }
   return (
     <Tappable
       disabled={inactive}
@@ -141,11 +150,21 @@ export function SetupFooter({ primary, secondary, link, children }: {
     return (
       <View style={[styles.footer, { paddingBottom: space.footer }]}>
         {children}
-        <PlainActions style={styles.plainRow}>
-          {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
-          {secondary ? <TextAction label={secondary.loading ? '…' : secondary.label} disabled={secondary.disabled || secondary.loading} onPress={secondary.onPress} /> : null}
-          <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
-        </PlainActions>
+        {secondary ? (
+          // Two ways on of equal standing (Connect Apple Health, Connect WHOOP): the main one first, the other as words under it.
+          <View style={styles.plainStack}>
+            <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
+            <PlainActions style={styles.plainUnder}>
+              {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
+              <TextAction label={secondary.loading ? '…' : secondary.label} disabled={secondary.disabled || secondary.loading} onPress={secondary.onPress} />
+            </PlainActions>
+          </View>
+        ) : (
+          <PlainActions style={styles.plainRow}>
+            {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
+            <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
+          </PlainActions>
+        )}
       </View>
     );
   }
@@ -178,6 +197,10 @@ const styleDefinitions = StyleSheet.create({
   linkSpace: { height: 36 },
   plainRow: { marginTop: spacing.xs, minHeight: 80, alignItems: 'flex-start' },
   plainDim: { opacity: 0.45 },
+  plainStack: { alignItems: 'flex-end', marginTop: spacing.xs, minHeight: 80 },
+  plainUnder: { marginTop: spacing.xs },
+  plainQuiet: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44 },
+  plainQuietText: { ...typography.bodyStrong, color: colors.text },
   // ONBOARDING_V2's pieces.
   segments: { flexDirection: 'row', gap: 4 },
   segment: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: colors.border, overflow: 'hidden' },

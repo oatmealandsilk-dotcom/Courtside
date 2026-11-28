@@ -24,6 +24,7 @@ import { colors, font, lift, radius, spacing, typography } from '@/theme';
 import { corner } from '@/theme/look';
 import { PlainNote } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
 
 /** No boxes (demo only, features/noBoxes): a quiet week in plain words, no card or disc, the way back one ink button. */
 const PLAIN = noBoxes();
@@ -107,7 +108,7 @@ export default function WeeklyRecap() {
   }
 
   // A rest week: the week before, and a way back on court.
-  if (!recap.sessions) {
+  if (!recap.sessions || forced('rest-week')) {
     return (
       <Screen title={title} subtitle={weekRange(week)} compactTitle onBack={() => goBack('/your-sessions')} bar={false}>
         {restCard('A quiet week', `You played ${duration(recap.prevMinutes)} the week before.`)}

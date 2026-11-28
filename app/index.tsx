@@ -6,7 +6,7 @@ import { Redirect, useNavigation } from 'expo-router';
 import { isSupabaseConfigured, storedLoginNow } from '@/lib/supabase';
 import { START_HREF, goToStart } from '@/features/navigation/startTab';
 import { HOME } from '@/lib/goBack';
-import { raiseCurtain } from '@/features/feed/warmup';
+import { raiseCurtain, setCurtainDown } from '@/features/feed/warmup';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { useLaunchUpdate } from '@/lib/instantUpdates';
 
@@ -181,6 +181,8 @@ export default function Index() {
   // A page that stays on this address (could not load the account) takes the website's loader away itself.
   const failed = !!(gone && currentUserId && ((isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error) || forced('load-fail')));
   useEffect(() => { if (failed) dropWebLoader(); }, [failed]);
+  // ?force=load-fail (demo website, for a picture): the start page's curtain never lifts on this page by itself.
+  useEffect(() => { if (failed && forced('load-fail')) setCurtainDown(); }, [failed]);
   if (backToApp) return <View style={styles.splash} />;
 
   // Signed in, but the account never came down even after retries: the app

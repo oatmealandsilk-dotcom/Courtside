@@ -288,7 +288,7 @@ export default function GroupForm() {
   };
 
   // The ready moment lasts long enough to read, then the sheet goes to the group (not with a screen reader on: it waits for the button).
-  const leaving = !screenReader;
+  const leaving = !screenReader && !forced('celebrate');
   useEffect(() => {
     if (step !== 3 || !leaving) return undefined;
     const t = setTimeout(dismiss, READY_MS);
