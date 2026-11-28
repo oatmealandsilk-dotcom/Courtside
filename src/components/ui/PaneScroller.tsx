@@ -22,6 +22,8 @@ import { scrollMemory } from './scrollMemory';
 
 const IOS = Platform.OS === 'ios';
 const WEB = Platform.OS === 'web';
+/** The gap under the section row, above a section's first part (it scrolls away with the content). */
+export const PANE_TOP = 10;
 // Roughly how far a page coasts after letting go, per point-per-millisecond of speed (as Screen).
 const COAST = 499;
 /** A move made by code that never quite arrives (clamped at an end) stops being quiet after this long. */
@@ -418,7 +420,7 @@ const styleDefinitions = StyleSheet.create({
   content: { flexGrow: 1 },
   // The page's side margins, and the gap under the section row, which scrolls away with the content.
   // 10 under the section row (Oct 24, owner: less space above the search so the map can be bigger).
-  body: { paddingHorizontal: spacing.lg, paddingTop: 10 },
+  body: { paddingHorizontal: spacing.lg, paddingTop: PANE_TOP },
   pullRow: { position: 'absolute', top: 0, left: 0, right: 0, height: PULL_DISC, alignItems: 'center', justifyContent: 'center' },
   webRefresh: { position: 'absolute', alignSelf: 'center', top: 10, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   updated: { position: 'absolute', alignSelf: 'center', top: 8, flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 2 } },

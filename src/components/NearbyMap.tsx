@@ -16,7 +16,7 @@ import { MapCanvas, type CanvasMarker, type MapCanvasHandle, type MapLoadStatus,
 import { MAP_LOADING, softShotAllowed, MAP_REVEAL_MS, MapCardFailed, MapCardLoading, MapLoadPill } from '@/components/map/MapLoadState';
 import { cardCaptureBroken, cardHint, hasCardShot, hashText, loadCardShots, peekCardShot, peekPlaceShot, saveCardShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
-import { CARD_HEIGHT, CARD_ZOOM, onCard } from '@/components/map/cardFit';
+import { CARD_HEIGHT, CARD_ZOOM, liftedCenter, onCard } from '@/components/map/cardFit';
 import { STYLE, cardLook, lookFor } from '@/components/map/look';
 import { MAP_PIN_CSS, clusterTemplates, courtLift, youLift } from '@/components/map/markers';
 import { mapMarkers, onTheCard } from '@/components/map/pinList';
@@ -92,7 +92,7 @@ export function nearbyMapSettled(): Promise<void> { return Promise.resolve(); }
  * by side, Snap Map's way (Oct 9), pulled up into the full list.
  */
 export function NearbyMap(props: NearbyMapProps) {
-  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, holdCurtain = true } = props;
+  const { me, players, onOpen, onExpand, expanded = false, onBack, at, locationOn, locating = false, onToggleLocation, focusCourt, focusHit, focusUser, focusSpot, focusPlace, holdPins = false, hitCount, inviting = false, cardHeight, edge = false, cardCover = 0, foot: cardFoot, onCityless, holdCurtain = true } = props;
   const styles = useThemedStyles(styleDefinitions);
   const { theme } = useTheme();
   // The still card takes the place names off: it sets your city's name in the middle itself.
@@ -299,7 +299,9 @@ export function NearbyMap(props: NearbyMapProps) {
     const cardNode = spot.ref.current;
     const page = growHost();
     const pre: Promise<V7Pre | null> = cardNode && page
-      ? Promise.all([rectOf(page), rectOf(cardNode)]).then(([pageAt, cardAt]) => {
+      ? Promise.all([rectOf(page), rectOf(cardNode)]).then(([pageAt, whole]) => {
+        // The map that shows (the card less its covered foot, cardCover): the move starts from exactly that.
+        const cardAt = v7Cut(whole);
         if (!fits(pageAt) || !fits(cardAt)) return null;
         v7Layer()?.aim(cardAt);
         zoomMark('aimed');
@@ -357,12 +359,14 @@ export function NearbyMap(props: NearbyMapProps) {
     const why: ZoomReason | null = !layer ? 'noLayer' : !layer.ready() ? 'notReady' : !pre || !growHost() ? 'measure' : !seen ? 'notSeen' : null;
     if (why || !layer || !pre) { v7Give(t, why ?? 'measure'); return; }
     const { pageAt, cardAt } = pre;
-    // You on the card (window points): its middle shows its town at its zoom.
+    // You on the card (window points): its middle shows its town at its zoom (with its foot covered, the middle of the map
+    // that shows, which is the city itself: v7Center).
+    const mid = v7Center ?? view.center;
     const z0 = CARD_ZOOM;
     const wx = (ll: LatLng) => ((ll.lng + 180) / 360) * 512 * 2 ** z0;
     const wy = (ll: LatLng) => { const k = Math.sin((Math.max(-85, Math.min(85, ll.lat)) * Math.PI) / 180); return (0.5 - Math.log((1 + k) / (1 - k)) / (4 * Math.PI)) * 512 * 2 ** z0; };
     const K = { x: cardAt.x + cardAt.w / 2, y: cardAt.y + cardAt.h / 2 };
-    const q0 = { x: K.x + wx(here) - wx(view.center), y: K.y + wy(here) - wy(view.center) };
+    const q0 = { x: K.x + wx(here) - wx(mid), y: K.y + wy(here) - wy(mid) };
     // The push-in grows round your own spot (kept in from the card's edges, so it covers the screen soon), as far as the card
     // needs to cover the screen and a touch more (its corners and edge go off the screen).
     const M = V7.margin;
@@ -374,15 +378,15 @@ export function NearbyMap(props: NearbyMapProps) {
       const off = Math.hypot(q0.x - P.x, q0.y - P.y);
       if (off > V7.offMax) { zoomWord(`off ${Math.round(off)}pt`); v7Give(t, 'offCard'); return; }
       const n = 512 * 2 ** z0;
-      const fx = wx(view.center) + (P.x - K.x);
-      const fy = wy(view.center) + (P.y - K.y);
+      const fx = wx(mid) + (P.x - K.x);
+      const fy = wy(mid) + (P.y - K.y);
       const r = Math.PI - (2 * Math.PI * fy) / n;
       from = { lat: (180 / Math.PI) * Math.atan(Math.sinh(r)), lng: (fx / n) * 360 - 180 };
       zoomWord(`drift ${Math.round(off)}pt`);
     }
     const S = 1.03 * Math.max(P.x / (P.x - cardAt.x), (windowW - P.x) / (cardAt.x + cardAt.w - P.x), P.y / (P.y - cardAt.y), (windowH - P.y) / (cardAt.y + cardAt.h - P.y));
     const t0 = Date.now() + V7.lead;
-    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: view.center, you: here, from, uc: 0, tg: 0, landLead: V7.landLead, me: t.me !== undefined ? t.me : v7MeAt(here), trace: SIM_DRIVER };
+    const p: V7Params = { t0, D: V7.D, ease: V7.ease, z0, z1: CHECKIN_ZOOM, S, P, W: windowW, H: windowH, K, city: mid, you: here, from, uc: 0, tg: 0, landLead: V7.landLead, me: t.me !== undefined ? t.me : v7MeAt(here), trace: SIM_DRIVER };
     p.uc = coverU(p);
     p.tg = p.uc * V7.D + V7.glide;
     t.started = true;
@@ -591,17 +595,24 @@ export function NearbyMap(props: NearbyMapProps) {
   // Anything else picked (a search result, a pin) takes the place of your own card.
   useEffect(() => { if (model.selected || model.selectedCourt || model.selectedHit || model.place) setMeOpen(false); }, [model.selected, model.selectedCourt, model.selectedHit, model.place]);
   const { home, start } = model;
+  // The iPhone's Community map (edge, COMMUNITY_MAP_LOOK 'overlay'): its foot covered by Open to hit and the bar (cardCover),
+  // the still card is centred a little south, so the city sits in the middle of the map that shows, not of the whole card.
+  const cardCity = model.city && cardCover ? liftedCenter(model.city, cardCover / 2) : model.city;
+  // Up to hit's zoom (v7) starts from the map that shows: that part of the card, its middle on the city itself.
+  const v7Center = cardCover && model.city ? model.city : null;
+  const v7Cut = (r: Rect): Rect => (cardCover ? { ...r, h: r.h - cardCover } : r);
   // The full map opens where you are; the still card on your town (location on) or your profile's city.
   // Opened by the card growing into it (mapGrow): exactly where the grown card shows, so the hand-over cannot be seen.
   const growFrom = expanded ? props.growFrom ?? null : null;
-  const view = growFrom ? { center: growFrom.center, zoom: growFrom.zoom } : expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: model.city ?? start.center, zoom: CARD_ZOOM };
+  const view = growFrom ? { center: growFrom.center, zoom: growFrom.zoom } : expanded ? { center: start.center, zoom: start.zoom ?? CITY_ZOOM } : { center: cardCity ?? start.center, zoom: CARD_ZOOM };
   // The still card's "N players around" counts only the faces on it (onCard), so the number and the map agree.
   const [cardW, setCardW] = useState(0);
+  // With its foot covered (cardCover), the faces in the map that shows: its middle is the city, its height the card's less the cover.
   const cardCenter = model.city ?? start.center;
   const cardPlayers = model.inCity;
   const onCardCount = useMemo(
-    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg, cardHeight ?? HEIGHT)).length),
-    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW, cardHeight], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (expanded ? 0 : cardPlayers.filter((p) => onCard(cardCenter, p.at, cardW || windowW - 2 * spacing.lg, (cardHeight ?? HEIGHT) - cardCover)).length),
+    [expanded, cardPlayers, cardCenter.lat, cardCenter.lng, cardW, windowW, cardHeight, cardCover], // eslint-disable-line react-hooks/exhaustive-deps
   );
   // Zoomed out past about a city: the court pins step aside (pinList), and a note says so.
   const [far, setFar] = useState(() => view.zoom < COURTS_MIN_ZOOM);
@@ -623,7 +634,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Out of view once it has drawn (the only time a held move lands, cardHold), the card is covered again
   // and the map jumps; the cover goes once the new place has drawn. In view (Location just switched on
   // from the card), the map simply goes there, as you asked.
-  const cityKey = model.city ? `${model.city.lat},${model.city.lng}` : '';
+  const cityKey = cardCity ? `${cardCity.lat},${cardCity.lng}` : '';
   const jumpGuard = useRef<ReturnType<typeof setTimeout> | null>(null);
   const coverAgainRef = useRef<(lost?: boolean) => void>(() => undefined);
   const showCardRef = useRef<(drawn?: boolean) => void>(() => undefined);
@@ -631,13 +642,13 @@ export function NearbyMap(props: NearbyMapProps) {
     if (expanded || !model.city) return;
     if (cardUp && !inViewNow()) {
       coverAgainRef.current();
-      canvas.current?.jump(model.city, CARD_ZOOM);
+      canvas.current?.jump(cardCity ?? model.city, CARD_ZOOM);
       // Never left covered: a page that does not say it has drawn the new place within 8 s is shown as it is.
       if (jumpGuard.current) clearTimeout(jumpGuard.current);
       jumpGuard.current = setTimeout(() => { jumpGuard.current = null; showCardRef.current(false); }, 8000);
       return;
     }
-    canvas.current?.flyTo(model.city, CARD_ZOOM, 0);
+    canvas.current?.flyTo(cardCity ?? model.city, CARD_ZOOM, 0);
   }, [cityKey]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (jumpGuard.current) clearTimeout(jumpGuard.current); }, []);
   // Picking someone, a court, a hit, or typing a city takes the map there.
@@ -857,12 +868,14 @@ export function NearbyMap(props: NearbyMapProps) {
     const node = spot.ref.current;
     if (!node) return undefined;
     let live = true;
-    void rectOf(node).then((rect) => {
+    void rectOf(node).then((whole) => {
+      // The map that shows (its covered foot left out, cardCover) and its middle; square corners for the edge-to-edge card.
+      const rect = v7Cut(whole);
       if (!live || !fits(rect)) return;
-      v7Offer({ markers, fullMarkers, tpl, fullLook, city: view.center, zoom: CARD_ZOOM, rect, radius: radius.xl, border: themes[theme].border, bg: themes[theme].bgElevated });
+      v7Offer({ markers, fullMarkers, tpl, fullLook, city: v7Center ?? view.center, zoom: CARD_ZOOM, rect, radius: edge ? 0 : radius.xl, border: themes[theme].border, bg: themes[theme].bgElevated });
     }).catch(() => undefined);
     return () => { live = false; };
-  }, [growsHere, v7On, still, v7Warm, markers, fullMarkers, tpl, fullLook, theme, view.center.lat, view.center.lng]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [growsHere, v7On, still, v7Warm, markers, fullMarkers, tpl, fullLook, theme, view.center.lat, view.center.lng, cardCover, edge]); // eslint-disable-line react-hooks/exhaustive-deps
   // The card gone (its tab let go): the layer goes with it.
   useEffect(() => () => { if (growsHere) v7Drop(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -873,7 +886,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // The map's look itself is in the key, so a picture is never shown over a map that draws differently now (an update).
   const lookSig = useMemo(() => hashText(JSON.stringify(cardLook(lookFor(themes[theme]))) + STYLE + MAP_PIN_CSS), [theme]);
   // Never for a card centred on your own spot (far from any town the app knows): nothing of where you are is kept.
-  const key = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: model.city.lat, lng: model.city.lng, zoom: CARD_ZOOM, w: cardWidth, h: cardHeight ?? HEIGHT, scale, lock: lock ?? 'open', still }) : '';
+  const key = !expanded && model.city && !model.cityExact ? shotKey({ user: me.id, theme, look: lookSig, lat: (cardCity ?? model.city).lat, lng: (cardCity ?? model.city).lng, zoom: CARD_ZOOM, w: cardWidth, h: cardHeight ?? HEIGHT, scale, lock: lock ?? 'open', still }) : '';
   const markerHash = useMemo(() => (expanded ? '' : hashText(JSON.stringify({ items: markers, tpl }))), [expanded, markers, tpl]);
   // The loading look's extras (MAP_LOADING): your face with Location on ('B'); any picture kept of this place, softened ('D').
   const loadingMe = MAP_LOADING === 'B' && !expanded && place.locationOn && model.mePos ? me : null;
@@ -1082,7 +1095,7 @@ export function NearbyMap(props: NearbyMapProps) {
   }, expanded);
 
   // What sits on the card (its words, Up to hit, the weather): one set of props, the card's and (v7) the zoom layer's copy.
-  const overlayProps = { cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length, weather, checkIn: onToggleLocation ? cardCheckIn : undefined, lock, inviting: invitingShown.current, uthTip, reask, chip: fullCard };
+  const overlayProps = { cityName, count: onCardCount, placeCount: model.cardCourts.length, hitCount: hitCount !== undefined && model.cardFromYou && !holding ? hitCount : model.cardHits.length, weather, checkIn: onToggleLocation ? cardCheckIn : undefined, lock, inviting: invitingShown.current, uthTip, reask, chip: fullCard, label: edge };
   useEffect(() => { if (v7Warm) v7SetOverlay({ ...overlayProps, uthTip: false, reask: false }); });
   // v8: the full map's buttons as they will be when it opens, for the copies over the layer (and the full map itself until it
   // has taken over); held still from the tap. The Up to hit control is the card's own, live.
@@ -1092,13 +1105,20 @@ export function NearbyMap(props: NearbyMapProps) {
     v7SetChrome(c as unknown as V7Chrome);
     v7SetChromeControl(cardCheckIn);
   });
+  // The iPhone's Community map (edge): while the card asks for a city instead (no map), the page shows Open to hit in its usual place.
+  const cityless = !expanded && !model.city && !model.cityPending;
+  useEffect(() => { onCityless?.(cityless); }, [cityless]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The iPhone's Community map (edge): the card square to the screen's edges, and what lies over its foot (Open to hit),
+  // beside the card rather than in it, so its taps and its sideways scroll are its own, never the card's. Always in the
+  // same holder with edge (Open to hit there or not), so the card's map is never built again when it comes or goes.
+  const withFoot = (card: React.ReactElement) => (edge ? <View>{card}{cardFoot}</View> : card);
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
-    return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
+    return model.cityPending ? withFoot(<View style={[styles.card, cardHeight ? { height: cardHeight } : null, edge && styles.cardEdge]}><MapCardLoading /></View>) : <CitylessCard onOpenMap={onExpand} />;
   }
   if (!expanded) {
     // Given up on, the card is one button that tries again; otherwise it opens the full map.
-    return (
+    return withFoot(
       <Pressable
         accessibilityRole={failed || onExpand ? 'button' : undefined}
         accessibilityLabel={failed ? "The map didn't load. Tap to try again" : 'Map of courts, open hits and friends up to hit'}
@@ -1106,7 +1126,7 @@ export function NearbyMap(props: NearbyMapProps) {
         disabled={!failed && !onExpand}
         onLayout={(e) => { const w = Math.round(e.nativeEvent.layout.width); if (w > 0 && w !== cardW) setCardW(w); }}
         ref={spot.ref}
-        style={[styles.card, cardHeight ? { height: cardHeight } : null]}
+        style={[styles.card, cardHeight ? { height: cardHeight } : null, edge && styles.cardEdge]}
       >
         {/* Not yet drawn: covered, not tappable, and not read out (the city and its players come with the map). */}
         <View pointerEvents={cardUp ? 'auto' : 'none'} accessibilityElementsHidden={!cardUp} importantForAccessibility={cardUp ? 'auto' : 'no-hide-descendants'} style={StyleSheet.absoluteFill}>
@@ -1136,7 +1156,7 @@ export function NearbyMap(props: NearbyMapProps) {
           ) : null}
           <GrowAwayContext.Provider value={growsHere}>
             <PreviewOverlay {...overlayProps} />
-            <CardCredit />
+            <CardCredit lift={cardCover} />
           </GrowAwayContext.Provider>
         </View>
         {/* No picture (or not loaded yet): the loading sketch over all of it, the city's name and counts too (they come with the map), fading off it once. */}
@@ -1380,6 +1400,8 @@ function tempPicture(dataUrl: string): string | null {
 
 const styleDefinitions = StyleSheet.create({
   card: { height: HEIGHT, borderRadius: radius.xl, overflow: 'hidden', backgroundColor: colors.bgElevated, borderWidth: 1, borderColor: colors.border },
+  // The iPhone's Community map (edge): out to the screen's edges (past the page's side margins), square, a hairline above and below.
+  cardEdge: { marginHorizontal: -spacing.lg, borderRadius: 0, borderLeftWidth: 0, borderRightWidth: 0, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth },
   // The card's own colour, solid, over the map while it loads.
   cover: { backgroundColor: colors.bgElevated },
   fill: { flex: 1, backgroundColor: colors.bgElevated, overflow: 'hidden' },

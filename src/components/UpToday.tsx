@@ -48,6 +48,9 @@ const META_LINE = 14;
 const MINE_H = 2 + RING_BOX + 3 + 2 + NAME_LINE + 2 * (3 + META_LINE) + 2;
 
 const NO_FILL: FillFace[] = [];
+/** The small row over the map (compact: the iPhone's Community map, COMMUNITY_MAP_LOOK 'overlay'): smaller faces, narrower slots. */
+const C_FACE = 42;
+const C_ITEM = 68;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -121,10 +124,17 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false }: { me: User; people: Up[];
+  /** The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): the row laid over the map's foot, small (a smaller title, smaller faces, first names only, never a distance). */ compact?: boolean;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
+  // Sizes: the page's own, or the small row over the map (compact).
+  const face = compact ? C_FACE : FACE;
+  const item = compact ? C_ITEM : ITEM;
+  const itemW = compact ? { width: C_ITEM } : null;
+  // Your own held at a player's height: a ring and a name in the small row.
+  const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 } : null;
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);
@@ -182,21 +192,21 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
     edit();
   };
   return (
-    <View style={styles.wrap}>
-      <View style={styles.head}>
+    <View style={[styles.wrap, compact && styles.wrapCompact]}>
+      <View style={[styles.head, compact && styles.headCompact]}>
         {/* City boards (round 3): "Most active in Los Angeles" while the regulars fill an empty row; otherwise exactly as before. */}
         {!people.length && fill.length && fillTitle
-          ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, styles.titleFit]}>{fillTitle}</Text>
-          : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>Open to hit</Text>}
+          ? <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={[styles.title, compact && styles.titleCompact, styles.titleFit]}>{fillTitle}</Text>
+          : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.title, compact && styles.titleCompact]}>Open to hit</Text>}
         {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row} style={styles.scroll}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.row, compact && styles.rowCompact]} style={[styles.scroll, compact && styles.scrollCompact]}>
         {/* Your own: the ring is the switch; once on, the "Free today" under it opens the sheet. Two presses one above the other, never one inside the other. */}
-        <View style={[styles.item, styles.mine]}>
+        <View style={[styles.item, styles.mine, itemW, mineH]}>
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
             <View>
-              <OpenRing open={up} size={FACE} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={FACE} /></OpenRing>
+              <OpenRing open={up} size={face} hairline halo="small"><Avatar name={me.name} seed={me.avatarSeed} uri={me.avatarUrl} size={face} /></OpenRing>
               {up ? null : <Animated.View entering={FadeIn.duration(160)} style={styles.plus}><Ionicons name="add" size={14} color={colors.bg} /></Animated.View>}
             </View>
             {up ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>I’m free</Text>}
@@ -218,21 +228,21 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
           const far = p.town ? p.town : p.miles !== undefined ? formatSpotMiles(p.miles, p.rough) : null;
           return (
             <Animated.View key={p.user.id} entering={FadeIn.duration(220)} layout={LinearTransition.duration(220)}>
-              <Pressable accessibilityRole="link" accessibilityLabel={p.town ? `${p.user.name}, free today in ${p.town}${theirs ? `, ${theirs}` : ''}. Open profile` : `${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far ? `, ${far}` : ''}. Show on the map`} onPress={() => (p.town ? router.push(`/user/${p.user.id}`) : router.push({ pathname: '/map', params: { user: p.user.id } }))} style={({ pressed }) => [styles.item, styles.face, pressed && styles.pressed]}>
-                <OpenRing open size={FACE} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={FACE} ring={p.user.isCoach} /></OpenRing>
+              <Pressable accessibilityRole="link" accessibilityLabel={p.town ? `${p.user.name}, free today in ${p.town}${theirs ? `, ${theirs}` : ''}. Open profile` : `${p.user.name}, open to hit${theirs ? ` ${theirs}` : ''}${far && !compact ? `, ${far}` : ''}. Show on the map`} onPress={() => (p.town ? router.push(`/user/${p.user.id}`) : router.push({ pathname: '/map', params: { user: p.user.id } }))} style={({ pressed }) => [styles.item, itemW, styles.face, pressed && styles.pressed]}>
+                <OpenRing open size={face} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={face} ring={p.user.isCoach} /></OpenRing>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
-                {far ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
-                {theirs ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
+                {far && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
+                {theirs && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
               </Pressable>
             </Animated.View>
           );
         })}
         {/* City boards (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
-        {fill.length ? <FillDivider size={FACE} /> : null}
-        {fill.map((f) => <FilledFace key={f.user.id} face={f} size={FACE} width={ITEM} onPress={() => router.push(`/user/${f.user.id}`)} />)}
+        {fill.length ? <FillDivider size={face} /> : null}
+        {fill.map((f) => <FilledFace key={f.user.id} face={f} size={face} width={item} bare={compact} onPress={() => router.push(`/user/${f.user.id}`)} />)}
         {!people.length && !fill.length ? (
-          <View style={styles.empty}>
+          <View style={[styles.empty, compact && { height: face + 18 }]}>
             {onLocation ? (
               <Pressable accessibilityRole="button" accessibilityLabel={`${teen ? 'See which friends are up' : 'See who’s up near you'}. ${appleNext ? 'Continue' : 'Turn on Location'}`} onPress={askLocation} hitSlop={6} style={({ pressed }) => pressed && styles.pressed}>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.emptyText}>{teen ? 'See which friends are up.' : 'See who’s up near you.'}</Text>
@@ -250,7 +260,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         ) : null}
       </ScrollView>
       {/* Over the row, pointing down at your own face (the hand that tapped it is below). */}
-      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={MINE_CENTER - 6} on="page" style={styles.tip} />
+      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={(compact ? ROW_PAD + C_ITEM / 2 - spacing.lg : MINE_CENTER) - 6} on="page" style={styles.tip} />
       </View>
     </View>
   );
@@ -260,12 +270,21 @@ const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingTop: spacing.xs },
   title: { ...typography.title, color: colors.text },
+  // The small row over the map (compact): the title at a heading's size, and the faces close under it.
+  wrapCompact: { gap: spacing.xs },
+  headCompact: { paddingTop: 0 },
+  titleCompact: { ...typography.heading },
   titleFit: { flexShrink: 1 },
   count: { ...typography.small, color: colors.textMuted },
   // Runs to the screen's edges, the way the stories rail does, and a little above and below the
   // faces' line (into the gaps around it), so the halos and your "Free today" are never cut off.
   scroll: { marginHorizontal: -spacing.lg, marginTop: -HALO, marginBottom: -BELOW },
   row: { paddingHorizontal: ROW_PAD, paddingTop: HALO, paddingBottom: BELOW, gap: 2, alignItems: 'flex-start' },
+  // The small row over the map (compact) sits in a panel 8 in from the screen's edges, with 8 of its own each side: the
+  // faces run out to the panel's edges, never past them (nothing clips the panel, so a tip over the row shows whole),
+  // the first slot 10 in from the screen's edge, as in the page's row.
+  scrollCompact: { marginHorizontal: -spacing.sm },
+  rowCompact: { paddingHorizontal: ROW_PAD - (spacing.lg - spacing.sm) },
   item: { width: ITEM, alignItems: 'center', paddingVertical: 2 },
   face: { alignItems: 'center', gap: 3 },
   pressed: { opacity: PRESS_DIM },

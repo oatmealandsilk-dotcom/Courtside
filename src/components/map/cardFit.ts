@@ -30,3 +30,15 @@ export function onCard(center: LatLng, spot: LatLng, width: number, height = CAR
   const dy = Math.abs(p.y - c.y) * scale;
   return dx <= width / 2 - EDGE && dy <= height / 2 - EDGE;
 }
+
+/**
+ * The still card's centre moved south by this many points at CARD_ZOOM, so the city itself lands that much above the
+ * card's middle: the middle of what shows when the card's lower part is covered (the iPhone's Community map,
+ * COMMUNITY_MAP_LOOK 'overlay': Open to hit lies over the map's foot, the bar under it).
+ */
+export function liftedCenter(center: LatLng, points: number): LatLng {
+  if (!points) return center;
+  const y = project(center).y + points / 2 ** CARD_ZOOM;
+  const n = Math.PI * (1 - (2 * y) / 512);
+  return { lat: (Math.atan(Math.sinh(n)) * 180) / Math.PI, lng: center.lng };
+}

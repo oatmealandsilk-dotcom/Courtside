@@ -1,3 +1,5 @@
+import type { ReactNode } from 'react';
+
 import type { TaggedCourt, User } from '@/data/types';
 import type { FoundPlace } from '@/features/places/geocode';
 import type { LatLng } from '@/features/players/positions';
@@ -47,6 +49,21 @@ export interface NearbyMapProps {
    * "N players around" counts the faces on a card this tall.
    */
   cardHeight?: number;
+  /**
+   * The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'; the phone's own file only, never the website): the still card
+   * edge to edge with square corners, one small label top left instead of the city's name in its middle, no weather.
+   */
+  edge?: boolean;
+  /**
+   * With `edge`: how many points of the still card's foot are covered (Open to hit over it, the bottom bar under it). The
+   * city sits in the middle of the map that shows, the faces counted are the ones there, the map's credit rises clear of
+   * it, and Up to hit's zoom starts from exactly the map that shows.
+   */
+  cardCover?: number;
+  /** With `edge`: what lies over the still card's foot (Open to hit), drawn over the map card only, never over the card asking for a city. */
+  foot?: ReactNode;
+  /** With `edge`: told whether the card is the one asking for a city (no map, nothing over it), so the page shows Open to hit in its usual place then. */
+  onCityless?: (cityless: boolean) => void;
   /** Shown in its own screen (a pager page that can be swiped away): false while that page is hidden, so its load clocks wait. */
   visible?: boolean;
   /**

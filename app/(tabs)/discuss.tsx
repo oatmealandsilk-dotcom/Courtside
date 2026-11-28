@@ -41,6 +41,10 @@ import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts, usePeekLook } from '@/components/place/CourtsNear';
 import { CARD_HEIGHT } from '@/components/map/cardFit';
+import { MapGlass } from '@/components/map/MapGlass';
+import { MAP_OVERLAY } from '@/features/community/communityMapLook';
+import { useBarTop, useTallMap } from '@/features/community/tallMap';
+import { simAction } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -118,6 +122,8 @@ const FURTHER_MILES = 100;
 const NEW_DAYS = 14;
 /** New players shown before "Show more". */
 const NEW_SHOWN = 6;
+/** Open to hit on the iPhone's Community map (MAP_OVERLAY): the room in its panel above the title. */
+const STRIP_TOP = spacing.md - 2;
 /** Keys for the folding lists (FoldList): a hit by its id, a player by theirs. */
 const hitKey = (x: { hit: { id: string } }) => x.hit.id;
 const userKey = (u: { id: string }) => u.id;
@@ -681,6 +687,20 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   };
   // Near the end of the list (within a screen of it), the next page comes on its own.
   const { height: screenHeight } = useWindowDimensions();
+  // The simulator's proof (simDriver, demo builds only): "scroll y=400" scrolls Find Players, for pictures below the map.
+  useEffect(() => simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: false }); }), [pageTop]);
+  // The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay', never the website): the map from under the search box down to
+  // the screen's foot, under the bottom bar, and Open to hit on its lower part just clear of the bar. While the card asks
+  // for a city instead (no map), Open to hit stays in its usual place under it.
+  const [mapCityless, setMapCityless] = useState(false);
+  const tallMap = useTallMap(playersRef, MAP_OVERLAY && !!currentUser);
+  const barTop = useBarTop();
+  const stripOn = MAP_OVERLAY && showUpToday && !mapCityless;
+  // How tall Open to hit's own rows are on the map (its panel adds its padding and the bar's room under them).
+  const [stripRows, setStripRows] = useState(0);
+  const stripFoot = barTop + spacing.sm;
+  // How much of the map's foot is covered: Open to hit and the bar, or the bar alone.
+  const mapCover = !MAP_OVERLAY ? 0 : stripOn && stripRows ? STRIP_TOP + stripRows + stripFoot : barTop;
   const listEnd = useRef<View>(null);
   const nearEndRef = useRef(() => {});
   nearEndRef.current = () => {
@@ -712,6 +732,18 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       <View style={styles.courtsPair}>{yourCourts(above ? 1 : 2)}{courtsBlock(above ? 2 : 3)}</View>
     </Fold>
   );
+  // Open to hit on the iPhone's Community map (MAP_OVERLAY): the same row, small (UpToday compact: first names, no distances),
+  // along the map's lower part on the map controls' one fixed see-through fill (MapGlass, dense for words: never live glass,
+  // never faded), its top corners rounded as the pills are, down under the bar; no hairline, no shadow. A list over the map,
+  // never pins or places on it.
+  const mapStrip = stripOn && currentUser ? (
+    <View style={[styles.mapStrip, { paddingBottom: stripFoot }]}>
+      <MapGlass radius={0} dense style={styles.mapStripFill} />
+      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== stripRows) setStripRows(h); }}>
+        <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+      </View>
+    </View>
+  ) : null;
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: 12 }}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
@@ -736,7 +768,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
           // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
-          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} /></View>
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null} onLayout={MAP_OVERLAY ? tallMap.onSlotLayout : undefined}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} {...(MAP_OVERLAY ? { edge: true, cardHeight: tallMap.height, cardCover: mapCover, foot: mapStrip, onCityless: setMapCityless } : null)} /></View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
         {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
@@ -751,7 +783,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         {!search && early ? <FirstReveal order={0}><EarlyInvite city={earlyCity} court={inviteCourt} leadRef={leadRef} /></FirstReveal> : null}
         {!search && friendsEarly ? <FirstReveal order={0}><EarlyInvite friends city={myCityName} court={null} leadRef={leadRef} /></FirstReveal> : null}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
-        {currentUser && !search && showUpToday ? (
+        {currentUser && !search && showUpToday && !stripOn ? (
           // Never folded away by the phone's renderer: with players around, the tutorial's first tip lights this row.
           <FirstReveal order={0}><View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
             {/* "Turn on Location" only while it is off: with it on and no spot yet, the row waits for one (the switch would have turned it off). */}
@@ -1224,6 +1256,9 @@ const styleDefinitions = StyleSheet.create({
   // web view with it, so clearing the search loaded the map afresh (blank, then popping in, and on the
   // place the page first opened on). There it stays put, laid over nothing, unseen and untouchable.
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
+  // Open to hit on the iPhone's Community map (MAP_OVERLAY): a panel along the map's foot, 8 in from the screen's edges.
+  mapStrip: { position: 'absolute', left: spacing.sm - spacing.lg, right: spacing.sm - spacing.lg, bottom: 0, paddingHorizontal: spacing.lg - spacing.sm, paddingTop: STRIP_TOP },
+  mapStripFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg },
   // The map card's own height, so nothing jumps when the card takes its place.
   mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
   playersHead: { gap: 3, paddingTop: spacing.sm },
