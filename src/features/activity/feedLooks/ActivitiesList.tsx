@@ -26,13 +26,16 @@ import { isSupabaseConfigured } from '@/lib/supabase';
 import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
 
 /*
- * Activities as a gallery (Nov 28, owner: "1 gallery is better"; the look is ACTIVITIES_LOOK in ./activitiesLook).
+ * Activities as a gallery (Nov 28, owner: "1 gallery is better", then "Gallaty+ friends played"; the look is
+ * ACTIVITIES_LOOK in ./activitiesLook, 'gallery' or 'gallery-rollup').
  * One continuous list, no snapping, that you flick through at any speed and that asks for older posts as you near
  * its end. The Feed hands over exactly the posts Activities may show (yours, the people you follow, and a new
  * player's "near you" players; blocked, muted, unfollowed private, taken down, group-only, archived and unfinished
  * ones already left out; an admin's pushed-down ones last). Here:
- *  - other people's sessions show only with a photo or clip: a card with a square picture, Hevy's way;
- *  - your own sessions without one show to you alone, as a thin row, "Not in friends' feeds";
+ *  - other people's sessions show as cards only with a photo or clip: a card with a square picture, Hevy's way;
+ *  - 'gallery-rollup': the sessions without one by people you follow, one day's together, as ONE quiet "who played"
+ *    row in the feed's time order ("Tomás and Nadia played today"), opened in place with a tap;
+ *  - your own sessions without one show to you alone, as a thin row ('gallery': marked "Not in friends' feeds");
  *  - photo posts, clips and text posts show as cards;
  *  - only a clip opens the full-screen reel (the feed's clips from that one down, videos only); back lands here,
  *    where you were. A double tap on a picture likes it.
@@ -69,6 +72,9 @@ export const GALLERY = {
   actions: 44,
   /** Your own photo-less session as a row: two lines inside 13pt of air above and below. */
   rowPad: 13,
+  /** 'gallery-rollup': the "who played" row, and each of its sessions opened under it (at least; larger text grows them). */
+  who: 56,
+  whoItem: 56,
   /** The column on a computer: a phone's width, so a whole picture card, actions too, fits under the top row. On a
    * phone (narrower than `phoneUnder`) the column is the screen, whatever its width, so pictures run edge to edge. */
   column: 390,
@@ -314,20 +320,21 @@ function GalleryActions({ post, me, pop, children }: { post: Post; me: string | 
 
 /**
  * Your own session with no photo, as one quiet row rather than a card (it is you, so no face or name): the title
- * with "Not in friends' feeds" beside it, "1h 15m · 128 bpm" under it, and •••. A tap opens the post. Under another
- * such row it sits on a hairline, not the band, so a run of auto-logs stays small.
+ * ('gallery': with "Not in friends' feeds" beside it), "1h 15m · 128 bpm" under it, and •••. A tap opens the post.
+ * Under another such row it sits on a hairline, not the band, so a run of auto-logs stays small. In 'gallery-rollup'
+ * there is no note: the people who follow you see it in their "who played" row.
  */
-function OwnRow({ post, joined }: { post: Post; joined: boolean }) {
+function OwnRow({ post, joined, note }: { post: Post; joined: boolean; /** "Not in friends' feeds" beside the title ('gallery'). */ note: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const s = post.session!;
   const title = titleOf(post, s);
   const line = inlineWords(s);
   return (
     <View testID="acts-own" style={[styles.oRow, joined ? styles.oJoined : styles.oBand]}>
-      <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}. ${OWN_NOTE}`} accessibilityHint="Opens the post" style={styles.oPress}>
+      <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}, ${agoInWords(post.createdAt)}. ${line}${note ? `. ${OWN_NOTE}` : ''}`} accessibilityHint="Opens the post" style={styles.oPress}>
         <View style={styles.oTop}>
           <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oTitle}>{title}</Text>
-          <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oNote}>{OWN_NOTE}</Text>
+          {note ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oNote}>{OWN_NOTE}</Text> : null}
         </View>
         <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.oLine}>{line}</Text>
       </Pressable>
@@ -430,32 +437,141 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
   );
 });
 
+/* ------------------------------------------------------------------ who played ('gallery-rollup') */
+
+/** "today", "yesterday", "on Tuesday", "on Nov 20": when a day's sessions were, for the "who played" row. */
+function dayWords(day: string): string {
+  const now = new Date();
+  if (day === localDay(now)) return 'today';
+  if (day === localDay(new Date(now.getTime() - 86_400_000))) return 'yesterday';
+  const at = new Date(`${day}T12:00:00`);
+  if (now.getTime() - at.getTime() < 6 * 86_400_000) return `on ${at.toLocaleDateString(undefined, { weekday: 'long' })}`;
+  return `on ${at.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+}
+
+/** Who ("Tomás and Nadia", "Tomás, Nadia and 2 others") and the rest (" played today"), so the people can read as people. */
+function whoPlayedWords(names: string[], day: string): { who: string; rest: string } {
+  const rest = ` played ${dayWords(day)}`;
+  if (names.length <= 1) return { who: names[0] ?? 'Someone', rest };
+  if (names.length === 2) return { who: `${names[0]} and ${names[1]}`, rest };
+  if (names.length === 3) return { who: `${names[0]}, ${names[1]} and ${names[2]}`, rest };
+  return { who: `${names[0]}, ${names[1]} and ${names.length - 2} others`, rest };
+}
+
+const firstName = (u: User) => u.name?.trim().split(/\s+/)[0] || `@${u.handle}`;
+/** Opened, at most this many sessions show before "Show all N". */
+const WHO_FIRST = 5;
+
+/**
+ * 'gallery-rollup': the sessions without a photo by people you follow on one day, as ONE quiet row in the feed's
+ * time order (their faces, then "Tomás and Nadia played today"). A tap opens their sessions in place, as small rows
+ * inside the same surface on hairlines (a face, "Tomás · Evening practice", "48 min on court · 126 bpm"; never a
+ * place); a tap on one opens its post, where likes and comments live. Another tap closes them. The band comes back
+ * after the group.
+ */
+const WhoPlayed = React.memo(function WhoPlayed({ day, posts, users, open, onToggle }: { day: string; posts: Post[]; users: Map<string, User>; open: boolean; onToggle: (day: string) => void }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const [all, setAll] = useState(false);
+  const people = useMemo(() => [...new Set(posts.map((p) => p.authorId))].flatMap((id) => users.get(id) ?? []), [posts, users]);
+  if (!people.length) return null;
+  const words = whoPlayedWords(people.map(firstName), day);
+  const shown = all ? posts : posts.slice(0, WHO_FIRST);
+  return (
+    <View testID="who-group" style={styles.wGroup}>
+      <Pressable
+        testID="who-played"
+        onPress={() => onToggle(day)}
+        accessibilityRole="button"
+        accessibilityLabel={`${words.who}${words.rest}, ${open ? 'hide' : 'show'} sessions`}
+        // aria-expanded rather than accessibilityState: the website reads only the aria form (VoiceOver on iPhone reads either).
+        aria-expanded={open}
+        style={styles.wRow}
+      >
+        <View style={styles.wFaces}>
+          {people.slice(0, 3).map((u, i) => (
+            // The first face on top, as Instagram's "liked by" faces, so no one's initials are cut.
+            <View key={u.id} style={[styles.wFace, i > 0 && styles.wFaceOver, { zIndex: 3 - i }]}>
+              <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
+            </View>
+          ))}
+        </View>
+        <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wText}>
+          <Text style={styles.wWho}>{words.who}</Text>{words.rest}
+        </Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+      </Pressable>
+      {open ? shown.map((p) => {
+        const u = users.get(p.authorId);
+        if (!u || !p.session) return null;
+        const title = titleOf(p, p.session);
+        const line = inlineWords(p.session);
+        return (
+          <Pressable key={p.id} testID="who-item" onPress={() => router.push(`/post/${p.id}`)} accessibilityRole="button" accessibilityLabel={`${u.name}, ${title}. ${line}`} accessibilityHint="Opens the post" style={styles.wItem}>
+            <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
+            <View style={styles.wItemWords}>
+              <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemTitle}><Text style={styles.wWho}>{firstName(u)}</Text> · {title}</Text>
+              <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.wItemLine}>{line}</Text>
+            </View>
+          </Pressable>
+        );
+      }) : null}
+      {open && !all && posts.length > WHO_FIRST ? (
+        <Pressable onPress={() => setAll(true)} accessibilityRole="button" accessibilityLabel={`Show all ${posts.length} sessions`} style={styles.wAll}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.wAllText}>Show all {posts.length}</Text>
+        </Pressable>
+      ) : null}
+    </View>
+  );
+});
+
 /* ------------------------------------------------------------------ the list */
 
-/** What the list draws: a post's card, your own photo-less session as a row, and the head of the list (connect, follow suggestions). */
+/**
+ * What the list draws: a post's card, your own photo-less session as a row, ('gallery-rollup') one "who played" row
+ * per day for the sessions without a photo by people you follow, and the head of the list (connect, follow suggestions).
+ */
 type Row =
   | { key: string; kind: 'post'; post: Post }
   | { key: string; kind: 'own'; post: Post; joined: boolean }
+  | { key: string; kind: 'rollup'; day: string; posts: Post[] }
   | { key: string; kind: 'start' };
 /** The head of the list (follow suggestions and the rest) goes after this many items, when there are more: a gallery opens on pictures. */
 const START_AFTER = 2;
-/** Pages asked for in a row while none of them brings anything this list shows (other people's plain sessions only). */
+/**
+ * Pages asked for in a row while none of them makes the list longer: other people's plain sessions only ('gallery'),
+ * or ('gallery-rollup') only more sessions for a day whose "who played" row is already there.
+ */
 const QUIET_PAGES = 8;
 
-/** The rows: other people's sessions only with a picture, yours without one as a row, the start block after the first two. */
-export function galleryRows(posts: Post[], me: string | null | undefined, showStart: boolean): Row[] {
+/**
+ * The rows: other people's sessions as cards only with a picture, yours without one as a row, the start block after
+ * the first two. `rollup` ('gallery-rollup'): other people's without one, when you follow them and the session has
+ * its numbers (as today's Activities pages take them), go into their day's one "who played" row, placed where the
+ * day's newest of them falls in the feed's time order; a later page bringing more of that day adds to the same row.
+ */
+export function galleryRows(posts: Post[], me: string | null | undefined, showStart: boolean, rollup = false, follows: ReadonlySet<string> = new Set()): Row[] {
   const out: Row[] = [];
+  const days = new Map<string, Extract<Row, { kind: 'rollup' }>>();
   for (const post of posts) {
     if (!post.session || hasPicture(post)) out.push({ key: post.id, kind: 'post', post });
-    else if (post.authorId === me) out.push({ key: post.id, kind: 'own', post, joined: out[out.length - 1]?.kind === 'own' });
+    else if (post.authorId === me) out.push({ key: post.id, kind: 'own', post, joined: false });
+    else if (rollup && follows.has(post.authorId) && hasSessionStats(post.session)) {
+      const day = localDay(post.createdAt);
+      let r = days.get(day);
+      if (!r) { r = { key: `day:${day}`, kind: 'rollup', day, posts: [] }; days.set(day, r); out.push(r); }
+      r.posts.push(post);
+    }
   }
   if (showStart) out.splice(Math.min(START_AFTER, out.length), 0, { key: 'start', kind: 'start' });
-  return out;
+  // Under another of your rows, a row sits on a hairline rather than the band (once the start block is placed).
+  return out.map((r, i): Row => (r.kind === 'own' && out[i - 1]?.kind === 'own' ? { ...r, joined: true } : r));
 }
 
-export function ActivitiesList({ posts, showStart, nearCount, near, paused, row }: {
+export function ActivitiesList({ posts, rollup = false, showStart, nearCount, near, paused, row }: {
   /** Exactly the posts Activities may show, newest first (the Feed's ActivitiesGallery). */
   posts: Post[];
+  /** 'gallery-rollup': other people's sessions without a photo as one "who played" row per day. */
+  rollup?: boolean;
   /** The "Follow more players" start (ActivitiesStart), after the first two items, at its own height. */
   showStart: boolean;
   nearCount: number;
@@ -472,9 +588,16 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   const barInset = useBarInset();
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const following = useMemo(() => new Set(followingIds), [followingIds]);
-  const rows = useMemo(() => galleryRows(posts, currentUserId, showStart), [posts, currentUserId, showStart]);
-  // Anything from someone else on show (the empty note says friends' sessions need a picture when there is none).
-  const fromOthers = useMemo(() => rows.some((r) => r.kind === 'post' && r.post.authorId !== currentUserId), [rows, currentUserId]);
+  const rows = useMemo(() => galleryRows(posts, currentUserId, showStart, rollup, following), [posts, currentUserId, showStart, rollup, following]);
+  // Anything from someone else on show (with none, the empty note says how friends' sessions show up here).
+  const fromOthers = useMemo(() => rows.some((r) => r.kind === 'rollup' || (r.kind === 'post' && r.post.authorId !== currentUserId)), [rows, currentUserId]);
+  // The "who played" rows opened, by day: a page arriving keeps them open (each day's row keeps its key).
+  const [openDays, setOpenDays] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleDay = useCallback((day: string) => setOpenDays((was) => {
+    const next = new Set(was);
+    if (next.has(day)) next.delete(day); else next.add(day);
+    return next;
+  }), []);
   const { width: screenW } = useWindowDimensions();
   const cardW = screenW < GALLERY.phoneUnder ? screenW : GALLERY.column;
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
@@ -532,7 +655,8 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
 
   // Older posts as the end nears: the store's next page (AppContext loadMorePosts: 40 posts of the whole feed, by
   // time), with a quiet row while it is on its way. A page can bring nothing this list shows (posts from people you
-  // don't follow, other people's plain sessions), so the list would not grow and would never ask again: when a page
+  // don't follow, other people's plain sessions in 'gallery'), or ('gallery-rollup') only more sessions for a day
+  // whose "who played" row is there already, so the list would not grow and would never ask again: when a page
   // lands and the list is no longer, ask again while the store has more, up to QUIET_PAGES pages in a row; past that
   // the list stops asking by itself (stalledRef: the end being reached again, as the footer or the empty note change
   // the list's length, must not start another run) and a plain "Show older posts" row asks on a tap. The run's count
@@ -628,23 +752,32 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
         </View>
       );
     }
-    if (r.kind === 'own') return <View style={[styles.column, { maxWidth: cardW }]}><OwnRow post={r.post} joined={r.joined} /></View>;
+    if (r.kind === 'own') return <View style={[styles.column, { maxWidth: cardW }]}><OwnRow post={r.post} joined={r.joined} note={!rollup} /></View>;
+    if (r.kind === 'rollup') return <View style={[styles.column, { maxWidth: cardW }]}><WhoPlayed day={r.day} posts={r.posts} users={usersById} open={openDays.has(r.day)} onToggle={toggleDay} /></View>;
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
     return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
-  }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused]);
+  }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
   const settled = (ended || stalled) && !loading;
   const quiet = !fromOthers && settled && !showStart ? (
     <View style={[styles.column, { maxWidth: cardW }, rows.length ? styles.emptyUnder : null]}>
-      <EmptyState
-        icon="images-outline"
-        title="No photos from friends yet"
-        body="Friends' sessions show up here when they add a photo or a clip. Add one to your next session and they'll see it too."
-      />
+      {rollup ? (
+        <EmptyState
+          icon="images-outline"
+          title="No sessions from friends yet"
+          body="Sessions from the players you follow show up here. Add a photo or a clip to yours and it shows as a picture."
+        />
+      ) : (
+        <EmptyState
+          icon="images-outline"
+          title="No photos from friends yet"
+          body="Friends' sessions show up here when they add a photo or a clip. Add one to your next session and they'll see it too."
+        />
+      )}
     </View>
   ) : null;
 
@@ -751,4 +884,20 @@ const styleDefinitions = StyleSheet.create({
   oMore: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   // The head of the list (follow suggestions…) when it sits after the first items: the band above it.
   startInList: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: spacing.lg, backgroundColor: colors.bg },
+
+  // 'gallery-rollup''s "who played": a band above, the row, then (opened) its sessions on hairlines in the same surface.
+  wGroup: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, backgroundColor: colors.bg },
+  wRow: { minHeight: GALLERY.who, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
+  wFaces: { flexDirection: 'row', alignItems: 'center' },
+  wFace: { borderRadius: 16, borderWidth: 2, borderColor: colors.bg },
+  wFaceOver: { marginLeft: -8 },
+  wText: { ...typography.body, fontSize: 14, color: colors.textMuted, flex: 1, minWidth: 0 },
+  wWho: { ...font('500'), color: colors.text },
+  wItem: { minHeight: GALLERY.whoItem, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg + 2, paddingRight: spacing.lg },
+  // The hairline starts at the words (DESIGN.md), and the words grow the row with larger text.
+  wItemWords: { flex: 1, minWidth: 0, alignSelf: 'stretch', justifyContent: 'center', paddingVertical: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  wItemTitle: { ...typography.body, fontSize: 14, lineHeight: 19, color: colors.textMuted },
+  wItemLine: { ...typography.small, lineHeight: 17, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  wAll: { minHeight: 44, justifyContent: 'center', marginLeft: spacing.lg + 2 + 28 + spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  wAllText: { ...font('500'), fontSize: 14, color: colors.text },
 });

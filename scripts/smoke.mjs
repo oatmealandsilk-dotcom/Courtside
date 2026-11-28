@@ -38,8 +38,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-// Which look Activities ships with (src/features/activity/feedLooks/activitiesLook.ts): the gallery step runs only for 'gallery'.
-const ACTIVITIES_LOOK = /ACTIVITIES_LOOK: ActivitiesLook = '([\w-]+)'/.exec(fs.readFileSync(path.join(ROOT, 'src/features/activity/feedLooks/activitiesLook.ts'), 'utf8'))?.[1] ?? 'gallery';
+// Which look the website's Activities ships with (ACTIVITIES_LOOK_WEB in src/features/activity/feedLooks/activitiesLook.ts;
+// this tester drives the website): the gallery step runs for 'gallery' and 'gallery-rollup', the friends-played step for
+// 'gallery-rollup' only, neither for 'now'. A line it cannot read stops the run rather than quietly skipping steps.
+const ACTIVITIES_LOOK = /ACTIVITIES_LOOK_WEB: ActivitiesLook = '([\w-]+)'/.exec(fs.readFileSync(path.join(ROOT, 'src/features/activity/feedLooks/activitiesLook.ts'), 'utf8'))?.[1];
+if (!['now', 'gallery', 'gallery-rollup'].includes(ACTIVITIES_LOOK)) {
+  console.error(`smoke: cannot read ACTIVITIES_LOOK_WEB in src/features/activity/feedLooks/activitiesLook.ts (got ${ACTIVITIES_LOOK})`);
+  process.exit(2);
+}
+const ACTIVITIES_GALLERY = ACTIVITIES_LOOK === 'gallery' || ACTIVITIES_LOOK === 'gallery-rollup';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -1315,8 +1322,8 @@ const STEPS = [
     expect: [{ text: /^Comments( · \d+)?$/ }, { label: /^Add a comment/ }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: /^Add a comment/ }); },
   },
-  // Only while Activities is the gallery (ACTIVITIES_LOOK in activitiesLook.ts): rolled back to 'now', the old pages have no such cards.
-  ...(ACTIVITIES_LOOK === 'gallery' ? [{
+  // Only while the website's Activities is a gallery (ACTIVITIES_LOOK_WEB in activitiesLook.ts): rolled back to 'now', the old pages have no such cards.
+  ...(ACTIVITIES_GALLERY ? [{
     // Nov 28 (owner: "1 gallery is better"): Activities is one continuous list. Other people's sessions show only
     // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list where it was.
     name: 'activities-gallery',
@@ -1352,6 +1359,42 @@ const STEPS = [
     expect: [{ label: /'s clip/ }, { label: 'Save this post', any: true }],
     // Scrolled back up the top row comes back in (it rides away with a scroll down), then For you again for the steps after.
     after: async (page) => { await page.reveal({ label: /^June's photo/ }); await page.tap({ label: 'For you' }, 20000); await page.waitFor({ label: 'Clip comments' }); },
+  }] : []),
+  // Only for 'gallery-rollup' (Nov 28, owner: "Gallaty+ friends played"): the demo's friends with a session and no
+  // photo (Tomás and Nadia, a few hours ago) are one "who played" row for their day; a tap opens their sessions in
+  // place, another closes them. Read by its label's shape, not its exact words: after midnight the day's words (and
+  // which day each session falls on) change.
+  ...(ACTIVITIES_LOOK === 'gallery-rollup' ? [{
+    name: 'activities-friends-played',
+    title: 'Activities: the friends-played row opens in place and closes',
+    async run(page) {
+      await page.tap({ label: 'Activities' });
+      await page.waitFor({ label: /^June's photo/ }, 20000);
+      await page.reveal({ testId: 'who-played' }, 20000);
+      const { label } = await page.waitFor({ testId: 'who-played' });
+      const m = /^(.+ played (?:today|yesterday|on .+)), show sessions$/.exec(label ?? '');
+      if (!m) throw new Error(`the friends-played row reads "${label}"`);
+      if (!/Tomás|Nadia/.test(m[1])) throw new Error(`the friends-played row names neither of the demo's friends: "${m[1]}"`);
+      // Closed, its sessions are not drawn.
+      if (await page.find({ testId: 'who-item', any: true })) throw new Error('the friends-played row shows its sessions before it is tapped');
+      await page.tap({ label });
+      // Opened in place: the same row says so (its words, aria-expanded), and the day's sessions sit under it.
+      await page.waitFor({ label: `${m[1]}, hide sessions` });
+      const state = await page.eval(`[...document.querySelectorAll('[data-testid="who-played"]')].map((el) => el.getAttribute('aria-expanded')).join(',')`);
+      if (!/\btrue\b/.test(state)) throw new Error(`the opened friends-played row is not marked expanded (aria-expanded: ${state || 'none'})`);
+      await page.waitFor({ label: /^(Tomás|Nadia) .*, .+\. .+ on court/ });
+      page.whoPlayed = m[1];
+    },
+    expect: [{ testId: 'who-item' }, { label: /played .+, hide sessions$/ }],
+    // A second tap closes it again; then back to the top and For you for the steps after.
+    after: async (page) => {
+      await page.tap({ label: `${page.whoPlayed}, hide sessions` });
+      await page.waitFor({ label: `${page.whoPlayed}, show sessions` });
+      await page.gone({ testId: 'who-item' }, 10000);
+      await page.reveal({ label: /^June's photo/ });
+      await page.tap({ label: 'For you' }, 20000);
+      await page.waitFor({ label: 'Clip comments' });
+    },
   }] : []),
   {
     name: 'coaching',
