@@ -468,14 +468,17 @@ const PAGE_HELPERS = String.raw`
     /**
      * What is on screen right now: the topmost element at points spread over
      * the whole screen. A blank page (or a stuck curtain) hits only one or two
-     * things; a real screen hits dozens.
+     * things; a real screen hits dozens. Rows every ~26 px (Nov 27): at every
+     * ~53 px, a settled sheet over a dimmed page (the guest's "Join CourtSide
+     * to like posts") put most of its rows in the gaps between its lines and
+     * read as blank, so the step passed only while the sheet was still rising.
      */
     health() {
       const seen = new Set();
       let words = '';
       for (let gx = 1; gx < 8; gx++) {
-        for (let gy = 1; gy < 16; gy++) {
-          const el = document.elementFromPoint((innerWidth * gx) / 8, (innerHeight * gy) / 16);
+        for (let gy = 1; gy < 32; gy++) {
+          const el = document.elementFromPoint((innerWidth * gx) / 8, (innerHeight * gy) / 32);
           if (!el || seen.has(el)) continue;
           seen.add(el);
           if (el.childElementCount === 0) words += ' ' + (el.textContent || '');
