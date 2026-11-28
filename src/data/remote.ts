@@ -299,7 +299,8 @@ type StoryRow = {
  * address the app talks to (auth.courtsidebase.com, the same storage). Read back, the old ones are pointed at the
  * app's own address too, so a page never opens a second, cold connection just for them (Nov 27 speed pass).
  */
-const RAW_STORAGE = 'https://cgitvbnvchmofqkhtlml.supabase.co/storage/v1/';
+/** The project's raw storage address (https://<project ref>.supabase.co/storage/v1/), however it was written. */
+const RAW_STORAGE = /^https:\/\/[a-z0-9]{20}\.supabase\.co\/storage\/v1\//;
 const APP_STORAGE = (() => {
   const base = (process.env.EXPO_PUBLIC_SUPABASE_URL ?? '').replace(/\/$/, '');
   return /^https:\/\//.test(base) && !base.includes('.supabase.co') ? `${base}/storage/v1/` : null;
@@ -308,7 +309,7 @@ function media(url: string): string;
 function media(url: string | null | undefined): string | undefined;
 function media(url: string | null | undefined): string | undefined {
   if (!url) return url ?? undefined;
-  return APP_STORAGE && url.startsWith(RAW_STORAGE) ? APP_STORAGE + url.slice(RAW_STORAGE.length) : url;
+  return APP_STORAGE && RAW_STORAGE.test(url) ? url.replace(RAW_STORAGE, APP_STORAGE) : url;
 }
 
 const toUser = (row: ProfileRow, followers: number, following: number): User => ({

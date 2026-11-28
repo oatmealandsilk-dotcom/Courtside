@@ -3,11 +3,11 @@
 
 Why: the website draws its icons from a font. The whole Ionicons set is 1,357 icons (213 KB);
 the app uses about 300 of them. public/index.html loads a small file holding only those, early,
-and falls back to the whole set (public/fonts/ionicons.woff2) for any icon not in it.
+and takes any icon not in it from the rest of the set (public/fonts/ionicons.woff2).
 
 What it does: finds every Ionicons name written in app/ and src/ as a quoted word, keeps just
 those glyphs from the font that ships with @expo/vector-icons, saves them as WOFF2, and rewrites
-the matching unicode-range line in public/index.html.
+the two unicode-range lines in public/index.html (the small file's icons, and all the others).
 
 Run from the project folder:  python3 scripts/ionicons-subset.py
 Needs fontTools and brotli:    python3 -m pip install fonttools brotli
@@ -52,18 +52,24 @@ save(codes, OUT)
 if '--full' in sys.argv or not os.path.exists(FULL):
     save(sorted(GLYPHS.values()), FULL)
 
-ranges = []
-for c in codes:
-    if ranges and c == ranges[-1][1] + 1:
-        ranges[-1][1] = c
-    else:
-        ranges.append([c, c])
-unicode_range = ','.join('U+%X' % a if a == b else 'U+%X-%X' % (a, b) for a, b in ranges)
+def css_ranges(cps):
+    ranges = []
+    for c in cps:
+        if ranges and c == ranges[-1][1] + 1:
+            ranges[-1][1] = c
+        else:
+            ranges.append([c, c])
+    return ','.join('U+%X' % a if a == b else 'U+%X-%X' % (a, b) for a, b in ranges)
+
+# The rest of the set: every icon not in the small file, so no icon is in both ranges.
+used = set(codes)
+rest = sorted(c for c in set(GLYPHS.values()) if c not in used)
 
 html = open(HTML, encoding='utf-8').read()
-pattern = r'(src:url\(/fonts/ionicons-used\.woff2\) format\("woff2"\);font-display:auto;unicode-range:)[^}]*(\})'
-html, n = re.subn(pattern, lambda m: m.group(1) + unicode_range + m.group(2), html)
-if n != 1:
-    sys.exit('Could not find the ionicons-used @font-face line in public/index.html')
+for name, cps in (('ionicons-used', codes), ('ionicons', rest)):
+    pattern = r'(src:url\(/fonts/' + re.escape(name) + r'\.woff2\) format\("woff2"\);font-display:auto;unicode-range:)[^}]*(\})'
+    html, n = re.subn(pattern, lambda m, r=css_ranges(cps): m.group(1) + r + m.group(2), html)
+    if n != 1:
+        sys.exit(f'Could not find the {name} @font-face line in public/index.html')
 open(HTML, 'w', encoding='utf-8').write(html)
 print(f'{len(codes)} icons, {os.path.getsize(OUT):,} bytes -> {os.path.relpath(OUT, ROOT)}')
