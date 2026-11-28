@@ -851,7 +851,8 @@ export function NearbyMap(props: NearbyMapProps) {
   // On the still card the pins say nothing a screen reader needs (the card says it all, and takes the tap).
   // Opened by the grow: hidden (see-through over the page pushing in) until it takes over, then dissolving in.
   // Its streets fade in (GROW_WAIT_CSS), its pins are simply there, on the card's; see-through until then.
-  const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, background: growFrom && growSeeThrough ? 'transparent' : colors.bg }} />;
+  // Its own stacking layer (isolation): the pins' z-indexes (pinEngine, up to z*100) stay inside it, under the card's words (z 10).
+  const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, isolation: 'isolate', background: growFrom && growSeeThrough ? 'transparent' : colors.bg }} />;
 
   if (!expanded && !model.city) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
