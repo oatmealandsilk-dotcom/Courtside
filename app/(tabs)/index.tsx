@@ -2506,7 +2506,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
                   {/* On a computer a tall clip is a 9:16 column in the window: its words sit on it and its buttons
                       beside it, in the page's ink, instead of at the window's far edges under a haze (Nov 27). */}
                   <ReelColumn on={columned}>
-                  <ReelScrim bottom={wordsBottom} />
+                  <ReelScrim bottom={wordsBottom} deep={!post.videoUrl && !post.thumbnailUrl} />
 
                   <Reanimated.View style={[styles.caption, columned && styles.captionColumned, { bottom: wordsBottom }, tuckStyle]}>
                     <ReelCaption post={post} author={author} onAuthor={() => { tappedAuthor(`p:${post.id}`); router.push(`/user/${author.id}`); }} onOpenComments={openClipComments} onOpenStats={() => openStage('/session-stats', 'post', post.id, post.orientation === 'landscape' ? 'landscape' : 'portrait')} active={active === index && focused} />

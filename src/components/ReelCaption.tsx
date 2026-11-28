@@ -379,6 +379,8 @@ export function InstantMeta({ expiresAt, onPress }: { expiresAt: string; onPress
 const SHADE: readonly (readonly [number, number])[] = [[300, 0], [260, 0.04], [220, 0.09], [180, 0.15], [140, 0.21], [100, 0.26], [70, 0.3], [40, 0.33], [0, 0.36]];
 /** Below the words, down to the screen's edge, behind the tab bar. */
 const SHADE_FLOOR = 0.38;
+/** How much deeper the shade is with no picture under it: the words' line near 0.6, as dark as a clip's own ground reads. */
+const DEEP = 2.3;
 
 /**
  * A light shade down from the top edge of a clip in the feed, under the mark,
@@ -399,13 +401,14 @@ export const TOP_SHADE = {
  * court). `bottom` is where the words' bottom line sits above the screen's
  * bottom edge.
  */
-export function ReelScrim({ bottom }: { bottom: number }) {
+export function ReelScrim({ bottom, deep = false }: { bottom: number; /** No picture behind the words (a clip still on its way, the court stand-in): a deeper shade, so white words never sit on the light page (Nov 27). */ deep?: boolean }) {
   const shade = useMemo(() => {
     const height = bottom + SHADE[0][0];
-    const colors = [...SHADE.map(([, a]) => `rgba(0, 0, 0, ${a})`), `rgba(0, 0, 0, ${SHADE_FLOOR})`] as unknown as readonly [string, string, ...string[]];
+    const k = deep ? DEEP : 1;
+    const colors = [...SHADE.map(([, a]) => `rgba(0, 0, 0, ${Math.min(0.82, a * k)})`), `rgba(0, 0, 0, ${Math.min(0.82, SHADE_FLOOR * k)})`] as unknown as readonly [string, string, ...string[]];
     const locations = [...SHADE.map(([d]) => (SHADE[0][0] - d) / height), 1] as unknown as readonly [number, number, ...number[]];
     return { height, colors, locations };
-  }, [bottom]);
+  }, [bottom, deep]);
   return <ShadeGradient pointerEvents="none" colors={shade.colors} locations={shade.locations} style={[styles.scrim, { height: shade.height }]} />;
 }
 
