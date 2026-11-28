@@ -22,6 +22,7 @@ import { Glass } from '@/components/ui/Glass';
 import { TAB_BAR_H } from '@/features/navigation/barInset';
 import { useApp } from '@/store/AppContext';
 import { openJoinSheet } from '@/features/guest/joinAsk';
+import { Button } from '@/components/ui/Button';
 import { useWelcomeNote } from '@/features/welcome/welcomeNote';
 import { unreadChatCount } from '@/features/messages/groupRules';
 import { unseenCount } from '@/features/activity/found';
@@ -390,6 +391,38 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
           {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.sidebarLabel, extra === 'search' && styles.sidebarLabelActive]}>Search</Text>}
         </Pressable>
 
+        {/* A visitor on a computer (Nov 27): nothing of an account they don't have (Notifications, Messages,
+            Create), just the way in: a Sign in row and one Join CourtSide button. */}
+        {isGuest ? (
+          <>
+            <Pressable
+              onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } })}
+              accessibilityRole="button"
+              accessibilityLabel="Sign in"
+              style={({ pressed }) => [
+                styles.sidebarItem,
+                compact && styles.sidebarItemCompact,
+                pressed && { backgroundColor: colors.surfaceAlt },
+              ]}
+            >
+              <Ionicons name="log-in-outline" size={23} color={colors.textMuted} />
+              {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarLabel}>Sign in</Text>}
+            </Pressable>
+            {compact ? (
+              <Pressable
+                onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })}
+                accessibilityRole="button"
+                accessibilityLabel="Join CourtSide"
+                style={({ pressed }) => [styles.sidebarItem, styles.sidebarItemCompact, pressed && { backgroundColor: colors.surfaceAlt }]}
+              >
+                <Ionicons name="person-add-outline" size={22} color={colors.brand} />
+              </Pressable>
+            ) : (
+              <Button label="Join CourtSide" size="sm" full style={styles.sidebarJoin} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
+            )}
+          </>
+        ) : (
+        <>
         <Pressable
           onPress={() => router.push('/notifications')}
           accessibilityRole="button"
@@ -451,6 +484,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
           <Ionicons name="add-circle-outline" size={23} color={colors.textMuted} />
           {compact ? null : <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.sidebarLabel}>Create</Text>}
         </Pressable>
+        </>
+        )}
       </View>
 
       {compact ? null : (
@@ -576,5 +611,6 @@ const styleDefinitions = StyleSheet.create({
     justifyContent: 'center',
   },
   sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
+  sidebarJoin: { marginTop: spacing.md, marginHorizontal: spacing.xs },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });
