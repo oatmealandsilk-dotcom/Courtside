@@ -796,7 +796,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     <View collapsable={false} style={styles.homeStrip} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== homeStripH) setHomeStripH(h); }}>
       <AtCourtPrompt onMap active={!previewSection || section === 'players'} />
       <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
-        <UpToday compact belowMap town={myCityName ?? undefined} me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+        <UpToday compact belowMap town={homeCityName ?? myCityName ?? undefined} me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
     </View>
   ) : null;
@@ -1357,8 +1357,9 @@ function HomePane({ feedOn, paused, follow, slots, onPeek, onRefresh, children, 
 
 const styleDefinitions = StyleSheet.create({
   // The iPhone's first page (HOME_FEED): Open to hit under the map, edge to edge on the page's own ground (the map's
-  // hairline above it), the same room above its title as on the map; the activity's band follows it.
-  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: STRIP_TOP, paddingBottom: spacing.sm, backgroundColor: colors.bg },
+  // hairline above it), a little tighter above and below than over the map (the big map leaves the activity less
+  // room); the activity's band follows it.
+  homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm + 2, paddingBottom: spacing.xs + 2, backgroundColor: colors.bg },
   // What else sits under them in the head ("You're early"…), held together to be measured.
   homeUnder: { gap: HEAD_GAP },
   // People you may know as the activity's follow block: in the page's margins, its cards' row running to the edges.

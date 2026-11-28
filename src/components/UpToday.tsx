@@ -51,6 +51,9 @@ const NO_FILL: FillFace[] = [];
 /** The small row over the map (compact: the iPhone's Community map, COMMUNITY_MAP_LOOK 'overlay'): smaller faces, narrower slots. */
 const C_FACE = 42;
 const C_ITEM = 68;
+/** The small row under the map (belowMap, HOME_LOOK 'map-feed'): a touch smaller, so your face and five more sit in one row on the screen, none cut at its edge. */
+const B_FACE = 40;
+const B_ITEM = 64;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -138,9 +141,9 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Sizes: the page's own, or the small row over the map (compact).
-  const face = compact ? C_FACE : FACE;
-  const item = compact ? C_ITEM : ITEM;
-  const itemW = compact ? { width: C_ITEM } : null;
+  const face = compact ? (belowMap ? B_FACE : C_FACE) : FACE;
+  const item = compact ? (belowMap ? B_ITEM : C_ITEM) : ITEM;
+  const itemW = compact ? { width: item } : null;
   // Your own held at a player's height: a ring and a name in the small row.
   const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 } : null;
   // Under the map (belowMap): the one town the line beside the title names: the players' own when they all chose the
@@ -275,7 +278,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         ) : null}
       </ScrollView>
       {/* Over the row, pointing down at your own face (the hand that tapped it is below). */}
-      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={(compact ? ROW_PAD + C_ITEM / 2 - spacing.lg : MINE_CENTER) - 6} on="page" style={styles.tip} />
+      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={(compact ? ROW_PAD + item / 2 - spacing.lg : MINE_CENTER) - 6} on="page" style={styles.tip} />
       </View>
     </View>
   );

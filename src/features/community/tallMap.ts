@@ -52,9 +52,10 @@ const HOME_MAP_MIN = 220;
 
 /**
  * The iPhone's first page (HOME_LOOK 'map-feed'): how tall the map is. At least the map card's usual height
- * (CARD_HEIGHT, the approved first screen's map; Nov 28, owner: "The map should still be large though"); on a phone
- * with more room, as tall as still leaves Open to hit under it (`strip`), whatever else sits under them in the page's
- * head (`under`: "You're at <court>?", with its gap) and the first activity's top (`peek`) above the bar: the map's
+ * (CARD_HEIGHT; Nov 28, owner: "The map should still be large though"): exactly as tall as the approved first screen's
+ * map with Open to hit over its foot was (home-1.png), that is from where it starts down to the bar less the first
+ * activity's top (`peek`) and whatever else sits under it in the page's head (`under`: "You're at <court>?", with its
+ * gap), never under the card's height. Open to hit under it then takes its room out of the activity's peek: the map's
  * size wins over the peek. With `short` ("You're early" / "Bring your friends" under them, whose button must show on
  * the first screen, the map 2 review's fix) the map and Open to hit together take the card's height, as the map with
  * Open to hit over its foot did, so that card sits where it did. From the page's own layout only, as useTallMap:
@@ -77,6 +78,6 @@ export function useHomeMap(on: boolean, { peek, strip, stripKnown, under, short,
   const ready = on && paneH > 0 && slotY > 0 && stripKnown;
   const height = !ready ? undefined
     : short ? Math.max(HOME_MAP_MIN, CARD_HEIGHT - strip)
-      : Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barTop - under - strip - peek);
+      : Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barTop - under - peek);
   return { height, onSlotLayout, onPaneHeight: setPaneH };
 }
