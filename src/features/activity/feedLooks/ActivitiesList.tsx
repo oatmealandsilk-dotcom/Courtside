@@ -1548,9 +1548,8 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
       r.posts.push(post);
     }
     // A gallery opens on pictures: the head of the list (follow suggestions…) comes after the first two items.
-    // gv4 opens on two rows of tiles (four items) before it, so the grid reads as a grid first.
-    const startAt = grid ? 2 * START_AFTER : START_AFTER;
-    if (showStart && out.length > startAt) out.splice(startAt, 0, { key: 'start', kind: 'start' });
+    // (gv4 places it after pairing: under its second row of tiles, so the feed opens as a grid.)
+    if (!grid && showStart && out.length > START_AFTER) out.splice(START_AFTER, 0, { key: 'start', kind: 'start' });
     // Under another of your rows, a row sits on a hairline rather than the band.
     const joinedRows = out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
     if (!grid) return joinedRows;
@@ -1576,6 +1575,11 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
       paired.push(r);
     }
     release();
+    if (showStart) {
+      const pairs = paired.flatMap((r, i) => (r.kind === 'pair' ? [i] : []));
+      const at = pairs.length >= 2 ? pairs[1] + 1 : paired.length > START_AFTER ? START_AFTER : -1;
+      if (at >= 0) paired.splice(at, 0, { key: 'start', kind: 'start' });
+    }
     // Your rows regrouped: a row under another of yours sits on a hairline, else on its own edge.
     return paired.map((r, i): Row => (r.kind === 'mini' ? { ...r, joined: paired[i - 1]?.kind === 'mini' } : r));
   }, [gallery, rollup, grid, posts, currentUserId, showStart]);
