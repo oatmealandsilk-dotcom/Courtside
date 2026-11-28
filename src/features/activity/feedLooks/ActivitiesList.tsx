@@ -66,12 +66,17 @@ type CardProps = {
   post: Post;
   author: User;
   me: string | null;
-  /** The column's width: the picture runs edge to edge of it. */
+  /** The column's width: on a phone the picture runs edge to edge of it. */
   width: number;
+  /** A computer's column: the picture is as tall as the square one was there, 4:5 and centred (pictureSize). */
+  computer: boolean;
   /** A clip tapped: the full-screen reel of the feed's clips (videos only). */
   onOpenClip: (postId: string) => void;
-  /** A photo tapped once: full screen, on the photo on show, growing out of where the picture sits (`home`). */
-  onOpenPhoto: (post: Post, at: number, home: TileRect | undefined) => void;
+  /**
+   * A photo tapped once: full screen, on the photo on show, growing out of where the picture sits (`home`). `turnTo`
+   * turns the card's own photos to the one the viewer shows, so the one put back lands on itself.
+   */
+  onOpenPhoto: (post: Post, at: number, home: TileRect | undefined, turnTo?: (i: number) => void) => void;
   /** A "near you" player you don't follow yet: the "Near you" line with Follow under the name, as before. */
   near?: boolean;
 };
@@ -95,19 +100,25 @@ export const GALLERY = {
   /** 'gallery-rollup': the "who played" row, and each of its sessions opened under it (at least; larger text grows them). */
   who: 56,
   whoItem: 56,
-  /** The column on a computer: a phone's width, which also caps the picture there (390 wide, 488 tall), so a computer
-   * never shows a giant photo. On a phone (narrower than `phoneUnder`) the column is the screen, whatever its width,
-   * so pictures run edge to edge. */
+  /** The column on a computer: a phone's width, so a whole picture card, actions too, fits under the top row. On a
+   * phone (narrower than `phoneUnder`) the column is the screen, whatever its width, so pictures run edge to edge. */
   column: 390,
   phoneUnder: 600,
   /** A picture's height for its width: 4:5 portrait, Instagram's (Nov 28, owner: "it should be portrait not square"). */
   portrait: 5 / 4,
+  /** On a computer a picture is as tall as the square one was (the column's 390), so a card still fits a laptop's
+   * screen and a photo is never giant: 312 wide at 4:5, centred in the column. */
+  computerHeight: 390,
   /** The double-tap window: a single tap on a photo waits this long before opening it full screen. */
   doubleTap: 280,
 };
 
 /** A picture's frame for the column's width: 4:5, whole points. */
 export const pictureHeight = (width: number) => Math.round(width * GALLERY.portrait);
+/** The picture's frame in a card: on a phone the column's full width at 4:5; on a computer as tall as the square one was, at 4:5. */
+export const pictureSize = (column: number, computer: boolean) => (computer
+  ? { width: Math.round(GALLERY.computerHeight / GALLERY.portrait), height: GALLERY.computerHeight }
+  : { width: column, height: pictureHeight(column) });
 
 /** The photos a post's picture shows (several, or one; a cover when that is all there is), for full screen. */
 const photoUrls = (p: Post): string[] => {
@@ -176,19 +187,35 @@ const openMenu = (post: Post) => router.push({ pathname: '/post-menu', params: {
 
 /* ------------------------------------------------------------------ the picture */
 
-/** A post's several photos, swiped sideways in the square, as Instagram's; `onPage` hears which one is on show. */
-function Photos({ urls, label, onPage }: { urls: string[]; label: string; onPage: (i: number) => void }) {
+/**
+ * A post's several photos, swiped sideways in the picture, as Instagram's; `onPage` hears which one is on show.
+ * `turnRef` is handed a way to turn them to one at once, unseen (the full-screen viewer over them closing on another).
+ */
+function Photos({ urls, label, onPage, turnRef }: { urls: string[]; label: string; onPage: (i: number) => void; turnRef?: React.MutableRefObject<((i: number) => void) | null> }) {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const atRef = useRef(0);
+  const listRef = useRef<FlatList<string>>(null);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (!box.w) return;
     const i = Math.max(0, Math.min(urls.length - 1, Math.round(e.nativeEvent.contentOffset.x / box.w)));
     if (i !== atRef.current) { atRef.current = i; onPage(i); }
   };
+  useEffect(() => {
+    if (!turnRef) return undefined;
+    turnRef.current = (to: number) => {
+      const i = Math.max(0, Math.min(urls.length - 1, to));
+      if (i === atRef.current || !box.w) return;
+      atRef.current = i;
+      listRef.current?.scrollToOffset({ offset: i * box.w, animated: false });
+      onPage(i);
+    };
+    return () => { turnRef.current = null; };
+  }, [turnRef, urls.length, box.w, onPage]);
   return (
     <View style={StyleSheet.absoluteFill} onLayout={(e) => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}>
       {box.w ? (
         <FlatList
+          ref={listRef}
           horizontal
           pagingEnabled
           data={urls}
@@ -217,14 +244,14 @@ function Dots({ n, at }: { n: number; at: number }) {
 }
 
 /** The picture, a clip's cover, or (demo, or no cover yet) the tinted court card; several photos swipe sideways. */
-function Media({ post, stand, onPage }: { post: Post; stand?: string; onPage?: (i: number) => void }) {
+function Media({ post, stand, onPage, turnRef }: { post: Post; stand?: string; onPage?: (i: number) => void; turnRef?: React.MutableRefObject<((i: number) => void) | null> }) {
   const styles = useThemedStyles(styleDefinitions);
   const clip = isClip(post);
   // A clip's cover first; a photo post's own photo first (as MediaPostPage), never its smaller thumbnail.
   const uri = clip ? (post.thumbnailUrl ?? post.imageUrl) : (post.imageUrl ?? post.thumbnailUrl);
   const length = clipLength(post);
   const many = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls : null;
-  if (many && onPage) return <View style={styles.media}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} /></View>;
+  if (many && onPage) return <View style={styles.media}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} turnRef={turnRef} /></View>;
   const label = post.mediaLabel ?? stand ?? 'Session';
   return (
     <View style={styles.media}>
@@ -391,7 +418,7 @@ function OwnRow({ post, joined, note, face }: { post: Post; joined: boolean; /**
 const OWN_NOTE = 'Not in friends’ feeds';
 
 /** One card: a session with a photo or clip (Activities holds sessions only; a plain one falls back to its numbers). */
-const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width }: CardProps) {
+const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width, computer }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const liked = !!me && post.likedBy.includes(me);
@@ -411,6 +438,9 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
   const lastTap = useRef(0);
   const pendingOpen = useRef<ReturnType<typeof setTimeout> | null>(null);
   const frameRef = useRef<View>(null);
+  // The full-screen viewer turns this card's photos with it, so closing on the third puts it back on the third.
+  const turnRef = useRef<((i: number) => void) | null>(null);
+  const turnTo = useCallback((i: number) => turnRef.current?.(i), []);
   const likedNow = useRef(liked);
   likedNow.current = liked;
   const likeIt = useCallback(() => {
@@ -420,9 +450,10 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
   const openPhoto = useCallback(() => {
     const at = pageNow.current;
     const node = frameRef.current;
-    if (!node) { onOpenPhoto(post, at, undefined); return; }
-    node.measureInWindow((x, y, w, h) => onOpenPhoto(post, at, w > 0 && h > 0 ? { x, y, w, h } : undefined));
-  }, [onOpenPhoto, post]);
+    const turn = photos ? turnTo : undefined;
+    if (!node) { onOpenPhoto(post, at, undefined, turn); return; }
+    node.measureInWindow((x, y, w, h) => onOpenPhoto(post, at, w > 0 && h > 0 ? { x, y, w, h } : undefined, turn));
+  }, [onOpenPhoto, post, photos, turnTo]);
   const tapPicture = () => {
     const now = Date.now();
     if (now - lastTap.current < GALLERY.doubleTap) {
@@ -469,10 +500,12 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
     );
   }
 
-  // The picture: the column's full width, square cornered, 4:5 portrait (Instagram's), cover-cropped from the centre.
+  // The picture: square cornered, 4:5 portrait (Instagram's), cover-cropped from the centre; on a phone the column's
+  // full width, on a computer as tall as the square one was, centred.
   const who = author.name?.trim().split(/\s+/)[0] || author.handle;
+  const frame = pictureSize(width, computer);
   const picture = (
-    <View ref={frameRef} collapsable={false} style={[styles.photo, !s && styles.photoUnderHead, { width, height: pictureHeight(width) }]}>
+    <View ref={frameRef} collapsable={false} style={[styles.photo, !s && styles.photoUnderHead, frame, computer && styles.photoCentred]}>
       {clip ? (
         <Pressable onPress={() => onOpenClip(post.id)} accessibilityRole="button" accessibilityLabel={`${who}'s clip${post.mediaLabel ? `, ${post.mediaLabel}` : ''}`} accessibilityHint="Plays it full screen" style={StyleSheet.absoluteFill}>
           <Media post={post} stand={stand} />
@@ -487,7 +520,7 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
           onAccessibilityAction={onPictureAction}
           style={StyleSheet.absoluteFill}
         >
-          <Media post={post} stand={stand} onPage={photos ? setPage : undefined} />
+          <Media post={post} stand={stand} onPage={photos ? setPage : undefined} turnRef={photos ? turnRef : undefined} />
           <Bloom token={bloom} />
         </Pressable>
       )}
@@ -732,7 +765,8 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
     return next;
   }), []);
   const { width: screenW } = useWindowDimensions();
-  const cardW = screenW < GALLERY.phoneUnder ? screenW : GALLERY.column;
+  const computer = screenW >= GALLERY.phoneUnder;
+  const cardW = computer ? GALLERY.column : screenW;
 
   // A clip tapped: the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
@@ -757,11 +791,21 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
   // A photo tapped once: full screen over the list (the chats' viewer: black ground, the photo fitted, pinch to look
   // closer, swipe sideways through a post's photos, swipe down or × to put it back), opened on the photo on show and
   // growing out of where it sits. The list never moves under it, so closing lands exactly where you were. The viewer
-  // is its own full-screen layer (a Modal): whichever list holds the gallery draws `viewerNode` anywhere in its page.
-  const [viewer, setViewer] = useState<{ post: Post; at: number; home?: TileRect } | null>(null);
+  // is its own full-screen layer (a Modal): whichever list holds the gallery (the Feed's Activities, the iPhone's first
+  // page) draws `viewerNode` anywhere in its page.
+  // The card's tap waits out the double-tap window first: by then a quick tap elsewhere (the name above it, another
+  // tab, For you) may have put another screen in front, and the viewer, drawn over the whole app, must not open on it:
+  // `onShow` (this route in front, from its own focus) and `lookingRef` (below: this list the one in front) both say so.
+  const onShow = useRef(true);
+  useFocusEffect(useCallback(() => {
+    onShow.current = true;
+    return () => { onShow.current = false; };
+  }, []));
+  const [viewer, setViewer] = useState<{ post: Post; at: number; home?: TileRect; turnTo?: (i: number) => void } | null>(null);
   useHoldTour(!!viewer);
-  const openPhoto = useCallback((post: Post, at: number, home: TileRect | undefined) => {
-    if (photoUrls(post).length) setViewer({ post, at, home });
+  const openPhoto = useCallback((post: Post, at: number, home: TileRect | undefined, turnTo?: (i: number) => void) => {
+    if (!onShow.current || !lookingRef.current) return;
+    if (photoUrls(post).length) setViewer({ post, at, home, turnTo });
   }, []);
   const closePhoto = useCallback(() => setViewer(null), []);
   const viewerNode = viewer ? (() => {
@@ -772,8 +816,11 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
       <PhotoViewer
         photos={urls.map((path) => ({ path, w: 4, h: 5 }))}
         start={viewer.at}
-        // Every photo of a post sits in the same frame on the card, so each goes back into it.
-        homes={urls.map(() => viewer.home)}
+        // Every photo of a post sits in the same frame on the card, so each goes back into it, the card's photos
+        // turned with the viewer's (onIndex) so the one put back is the one the frame shows. Without that only the
+        // photo opened goes back; another drops away down the screen.
+        homes={urls.map((_, i) => (i === viewer.at || viewer.turnTo ? viewer.home : undefined))}
+        onIndex={viewer.turnTo}
         homeRadius={0}
         caption={caption || undefined}
         who={author ? `${firstName(author)} · ${agoInWords(viewer.post.createdAt)}` : undefined}
@@ -909,8 +956,8 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
-    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} /></View>;
-  }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
+    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} computer={computer} /></View>;
+  }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, computer, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
@@ -1245,6 +1292,7 @@ const styleDefinitions = StyleSheet.create({
   // Full bleed: out past the card's gutter on both sides, square cornered.
   photo: { marginTop: spacing.md, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   photoUnderHead: { marginTop: spacing.sm },
+  photoCentred: { marginHorizontal: 0, alignSelf: 'center' },
   media: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   clipMark: { position: 'absolute', top: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.overlay, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4 },
   clipMarkText: { ...typography.caption, fontSize: 11, color: colors.onMedia, fontVariant: ['tabular-nums'] },
