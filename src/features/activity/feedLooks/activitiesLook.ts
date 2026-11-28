@@ -11,13 +11,15 @@ import { Platform } from 'react-native';
  * - 'mixed-a' / 'mixed-b': the classic list's behaviour, a session with nothing on it as a small card (three to a
  *   phone screen), a post with a photo or clip as one whole card about a screen tall; A puts the stats above the
  *   photo (Strava/Hevy's order), B under it (Instagram's).
+ * - 'mixed-a2': A again, the card sitting as Strava/Hevy/Instagram's do (edge to edge, no box round the numbers, the
+ *   photo full bleed, a title line).
  *
  * Nothing chooses one but a web address's `?look=` (or this browser's saved choice), so the app as everyone has
  * it is exactly 'now'.
  */
-export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b';
+export type ActivitiesLook = 'now' | 'strava' | 'hevy' | 'classic' | 'mixed-a' | 'mixed-b' | 'mixed-a2';
 
-export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b'];
+export const ACTIVITIES_LOOKS: ActivitiesLook[] = ['now', 'strava', 'hevy', 'classic', 'mixed-a', 'mixed-b', 'mixed-a2'];
 const KEY = 'courtside.activitiesLook';
 const isLook = (v: unknown): v is ActivitiesLook => typeof v === 'string' && (ACTIVITIES_LOOKS as string[]).includes(v);
 

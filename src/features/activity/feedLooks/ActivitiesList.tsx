@@ -671,12 +671,152 @@ const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOp
 /** The "Near you" line with Follow, under a near player's name row. */
 const NEAR_H = 30;
 
+/* ------------------------------------------------------------------ mixed-a2: the card as one unit, edge to edge */
+
+/*
+ * 'mixed-a2' (Nov 27, owner, on mixed-a: "stats first is better but ... the cards seem like a bit weird the way its
+ * like sitting ... just gotta be more like instagram hevy and strava"). In mixed-a a card was a stack of separate
+ * framed pieces (a header, a rounded box inset from the edges, a rounded photo inset again). Here, as Strava, Hevy
+ * and Instagram do it, the CARD is the unit: the column's full width, parted from the next by a thin band of the
+ * page's second ground; the header (name, then when · where); a title line ("Evening match") with the result; the
+ * same numbers in the same type straight on the card (SessionCard compact, `bare`); the photo full bleed and square
+ * cornered at 4:5; the caption; the actions with their counts. All words share one left edge (the 16pt gutter); only
+ * the photo runs to the edges. Every plain card is PLAIN2_H tall, every photo card the same as every other.
+ */
+export const MIXED2 = {
+  /** The band of the page's second ground above each card. */
+  band: 6,
+  padTop: 12,
+  head: 36,
+  gap: 10,
+  /** The title line, 6pt, and the numbers' row: SessionCard compact `bare`. */
+  stats: 86,
+  lineGap: 6,
+  line: 20,
+  actions: 36,
+  padBottom: 4,
+};
+export const PLAIN2_H = MIXED2.band + MIXED2.padTop + MIXED2.head + MIXED2.gap + MIXED2.stats + MIXED2.lineGap + MIXED2.line + MIXED2.actions + MIXED2.padBottom;
+/** A text post's words: the numbers', the gap's and the line's place together. */
+const TEXT2_H = MIXED2.stats + MIXED2.lineGap + MIXED2.line;
+
+function MixedHead2({ post, author, me }: { post: Post; author: User; me: string | null }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const streak = shownStreak(author, me);
+  const place = placeOf(post, author);
+  return (
+    <View style={styles.m2Head}>
+      <Pressable onPress={() => router.push(`/user/${author.id}`)} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={[styles.who, styles.flex]}>
+        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
+        <View style={[styles.flex, styles.m2Words]}>
+          <View style={styles.mNameRow}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.mName}>{author.name}</Text>
+            <StreakFlame days={streak} maxFontSizeMultiplier={1.1} />
+            <PushedDownTag post={post} />
+          </View>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.m2Meta}>{agoInWords(post.createdAt)}{place ? ` · ${place}` : ''}</Text>
+        </View>
+      </Pressable>
+      <LevelPill profile={author.profile} userId={author.id} small style={styles.mLevel} />
+    </View>
+  );
+}
+
+const MixedCard2 = React.memo(function MixedCard2({ post, author, me, hidden, onOpenClip, near = false, width = 390 }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions } = useApp();
+  const act = useCardActions(post, me);
+  const inner = width - spacing.lg * 2;
+  const media = hasMedia(post);
+  const clip = isClip(post);
+  const s = post.session;
+  const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
+  const photos = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0;
+  const [page, setPage] = useState(0);
+  // A double tap on a picture likes it (never takes a like away); a single tap does nothing.
+  const [bloom, setBloom] = useState(0);
+  const lastTap = useRef(0);
+  const likedNow = useRef(act.liked);
+  likedNow.current = act.liked;
+  const tapPicture = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      if (!likedNow.current) actions.toggleLike(post.id, true);
+      setBloom((b) => b + 1);
+    } else lastTap.current = now;
+  };
+  const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
+  // The caption, else (a session with none) where the numbers came from; the place is in the header now.
+  const caption = post.body?.trim().replace(/\s+/g, ' ') ?? '';
+  const lineText = s ? (caption || (s.activityId ? sourceLabel(s.source ?? 'apple-health') : '')) : '';
+  const quiet = !caption;
+  const nearLine = near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null;
+  const stats = s ? (
+    <View style={styles.m2Stats}>
+      <SessionCard session={s} author={author.name} width={inner} height={MIXED2.stats} compact bare eyebrow={titleOf(post, s)} hidden={hidden} onPress={hasSessionStats(s) ? openStats : undefined} />
+    </View>
+  ) : null;
+  const lineView = (
+    <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={lineText ? `${lineText}. Open comments` : 'Open comments'} style={styles.m2Line}>
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={quiet ? styles.mLineQuiet : styles.mLineText}>{lineText}</Text>
+    </Pressable>
+  );
+  const actionsRow = <MixedActions post={post} me={me} clip={clip}>{photos ? <Dots n={photos} at={page} /> : null}</MixedActions>;
+
+  if (!media) {
+    return (
+      <View testID="mixed-plain" style={[styles.m2Card, { height: PLAIN2_H + (near ? NEAR_H : 0) }]}>
+        <MixedHead2 post={post} author={author} me={me} />
+        {nearLine}
+        {s ? <>{stats}{lineView}</> : (
+          // A text post: its words, plain on the card, in the numbers' and the line's place.
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.m2Text}>
+            <Text numberOfLines={5} maxFontSizeMultiplier={1.1} style={styles.m2TextWords}>{post.body}</Text>
+          </Pressable>
+        )}
+        {actionsRow}
+      </View>
+    );
+  }
+
+  // The picture: the column's full width, square cornered, 4:5, nothing round it.
+  const picture = (
+    <View style={[styles.m2Photo, { width, height: Math.round(width / PHOTO_SHAPE) }]}>
+      {clip ? (
+        <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} clipBadge />
+        </Pressable>
+      ) : (
+        <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Photo'} accessibilityHint="Double tap to like" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} onPage={photos ? setPage : undefined} count={false} />
+          <Bloom token={bloom} />
+        </Pressable>
+      )}
+    </View>
+  );
+  return (
+    <View testID="mixed-photo" style={styles.m2Card}>
+      <MixedHead2 post={post} author={author} me={me} />
+      {nearLine}
+      {stats}
+      {picture}
+      {s ? lineView : (
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={caption ? `${caption}. Open comments` : 'Open comments'} style={styles.m2Caption}>
+          <Text numberOfLines={2} maxFontSizeMultiplier={1.1} style={styles.mLineText}>{caption}</Text>
+        </Pressable>
+      )}
+      {actionsRow}
+    </View>
+  );
+});
+
 const MixedA = (p: CardProps) => <MixedCard {...p} order="stats" />;
 const MixedB = (p: CardProps) => <MixedCard {...p} order="photo" />;
 
 /* ------------------------------------------------------------------ the list */
 
-const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB };
+const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB, 'mixed-a2': MixedCard2 };
 
 export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
   look: Exclude<ActivitiesLook, 'now'>;
@@ -699,7 +839,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const Card = CARD[look];
   // The mixed looks behave as the classic one (every kind of post, a clip opens the reel); only the cards differ.
-  const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b';
+  const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2';
   const { width: screenW } = useWindowDimensions();
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
@@ -718,7 +858,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     router.push({ pathname: '/reel', params: { ids: (ids.length ? ids : [postId]).join(','), start: postId } });
   }, []);
   // The mixed looks' column on a computer: a photo card (4:5) still fits under the top row of an 800-tall window.
-  const column = look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
+  const column = look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' ? 420 : classic ? 470 : 600;
   const cardW = Math.min(screenW, column);
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
@@ -960,4 +1100,17 @@ const styleDefinitions = StyleSheet.create({
   mAct: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 },
   mSave: { marginLeft: 'auto' },
   mCount: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
+
+  // mixed-a2: the card is the unit, edge to edge, a band of the page's second ground above it; one left edge for words.
+  m2Card: { borderTopWidth: MIXED2.band, borderTopColor: colors.surfaceAlt, paddingTop: MIXED2.padTop, paddingBottom: MIXED2.padBottom, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },
+  m2Head: { height: MIXED2.head, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  m2Words: { justifyContent: 'center', gap: 1 },
+  m2Meta: { ...typography.small, fontSize: 13, lineHeight: 16, color: colors.textMuted },
+  m2Stats: { height: MIXED2.stats, marginTop: MIXED2.gap },
+  m2Line: { height: MIXED2.line, marginTop: MIXED2.lineGap, justifyContent: 'center' },
+  m2Text: { height: TEXT2_H, marginTop: MIXED2.gap, justifyContent: 'flex-start' },
+  m2TextWords: { ...typography.body, fontSize: 16, lineHeight: 22, color: colors.text },
+  // Full bleed: out past the card's gutter on both sides, square cornered.
+  m2Photo: { marginTop: 12, marginHorizontal: -spacing.lg, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  m2Caption: { height: 38, marginTop: MIXED2.lineGap + 2, justifyContent: 'flex-start' },
 });

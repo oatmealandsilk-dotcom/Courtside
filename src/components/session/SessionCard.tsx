@@ -161,6 +161,15 @@ function quietLook(theme: ThemeName): CardLook {
   };
 }
 
+/**
+ * No box (SessionCard's `bare`): the stats sheet's inks straight on the page, the result pill in the court's own
+ * colour as the quiet box has it (London's purple, Melbourne's deeper blue), the brand's on a dark page.
+ */
+function pageLook(theme: ThemeName): CardLook {
+  const quiet = QUIET_BOX.has(theme) && !pageIsDark() ? quietLook(theme) : null;
+  return { ...sheetLook(), fill: 'transparent', rim: null, pillFill: quiet?.pillFill ?? colors.brand, touch: quiet?.touch };
+}
+
 /** The stats sheet's light box (Clean's, SHEET_BOX). */
 function sheetLook(): CardLook {
   return {
@@ -361,7 +370,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0, compact = false, joined }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0, compact = false, joined, bare = false }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
@@ -383,6 +392,12 @@ export function SessionCard({ session, width, height, play = false, people, hidd
   compact?: boolean;
   /** `compact` only: the box shares one frame with a picture on this edge (top or bottom), so that edge is square, unruled and without the hairline. */
   joined?: 'top' | 'bottom';
+  /**
+   * `compact` only: no box at all (the Activities 'mixed-a2' look, Nov 27, owner: "more like instagram hevy and
+   * strava"): the same numbers in the same type sit straight on the card, in the page's own inks, under a title
+   * line (`eyebrow`, e.g. "Evening match") set as a heading rather than a small capital stamp.
+   */
+  bare?: boolean;
   /**
    * The rest are for the pictures made to share (Share → Instagram): the
    * card's shape (9:16 for a whole story), its rounding (0 edge to edge),
@@ -429,7 +444,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
 }) {
   const { theme } = useTheme();
   // A picture made to share keeps the box's own colours; in the app, Clean's box is the stats sheet's (boxLook).
-  const look = clear ? clearLook() : picture ? cardLook(theme) : boxLook(theme);
+  const look = clear ? clearLook() : picture ? cardLook(theme) : bare ? pageLook(theme) : boxLook(theme);
   // Clear's soft shadow under every word and number; nothing on a filled card.
   const density = useShareDensity();
   const shade: TextStyle | undefined = clear ? clearShade(density) : undefined;
@@ -495,6 +510,7 @@ export function SessionCard({ session, width, height, play = false, people, hidd
       score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden, people) } : null}
       stats={stats}
       joined={joined}
+      bare={bare}
     />
   ) : height != null ? (
     <Sideways
@@ -721,7 +737,7 @@ function Sideways({ session, look, width, height, play, wait, top, result, score
  * box is only about a hundred points tall. A match leads with its ScoreBoard and keeps the time as one of its two
  * numbers; anything else leads with the time.
  */
-function Compact({ session, look, width, height, play, wait, top, result, score, stats, joined }: {
+function Compact({ session, look, width, height, play, wait, top, result, score, stats, joined, bare = false }: {
   session: SessionDetail;
   look: CardLook;
   width: number;
@@ -733,6 +749,7 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
   score: { sets: SessionDetail['sets'] & {}; you: string; them: string } | null;
   stats: SidewaysStat[];
   joined?: 'top' | 'bottom';
+  bare?: boolean;
 }) {
   const round = 16;
   // Joined to a picture: the shared edge is square and carries no border (the card draws one hairline there).
@@ -745,23 +762,25 @@ function Compact({ session, look, width, height, play, wait, top, result, score,
   const shown = (score ? stats.slice(0, 1) : stats.slice(0, 2));
   const label = { ...font('500'), fontSize: 10, lineHeight: 13, color: look.muted, marginTop: 1 } as const;
   return (
-    <View collapsable={false} style={[styles.card, { width, height, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }, corners, edge]}>
+    <View collapsable={false} style={bare ? [styles.card, { width, height }] : [styles.card, { width, height, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }, corners, edge]}>
       {/* The wash, its rounded ends pushed past a joined edge so only the outer corners curve. No court lines: in a band
-          this short they would run through the labels and the ScoreBoard. */}
-      <View pointerEvents="none" style={[StyleSheet.absoluteFill, corners, { overflow: 'hidden' }]}>
-        <View style={{ position: 'absolute', left: 0, right: 0, top: joined === 'top' ? -round : 0, bottom: joined === 'bottom' ? -round : 0 }}>
-          <CardWash look={look} radius={round} />
+          this short they would run through the labels and the ScoreBoard. Bare: nothing behind the numbers. */}
+      {bare ? null : (
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, corners, { overflow: 'hidden' }]}>
+          <View style={{ position: 'absolute', left: 0, right: 0, top: joined === 'top' ? -round : 0, bottom: joined === 'bottom' ? -round : 0 }}>
+            <CardWash look={look} radius={round} />
+          </View>
         </View>
-      </View>
-      <View style={[styles.top, { height: 20 }]}>
-        <Text style={{ ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
+      )}
+      <View style={[styles.top, { height: bare ? 24 : 20 }]}>
+        <Text style={bare ? { ...font('600'), fontSize: 17, lineHeight: 22, letterSpacing: -0.3, color: look.ink, flex: 1 } : { ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
         {result ? (
           <View style={[styles.pill, { height: 20, borderRadius: 10, paddingHorizontal: 8, backgroundColor: look.pillFill }]}>
             <Text style={{ ...font('700'), fontSize: 11, color: look.pillInk }} maxFontSizeMultiplier={1}>{result}</Text>
           </View>
         ) : null}
       </View>
-      <View style={styles.compactRow}>
+      <View style={[styles.compactRow, bare && { marginTop: 6 }]}>
         <View style={styles.compactLead}>
           {score ? (
             <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.62 * k} inks={look.plain ? undefined : boxInks(look)} />

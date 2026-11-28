@@ -2925,7 +2925,7 @@ function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: Exclude<Act
     const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
     const acts = posts
       // The mixed looks hold every kind of post, as the classic one.
-      .filter((p) => (look === 'classic' || look === 'mixed-a' || look === 'mixed-b' ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
+      .filter((p) => (look === 'classic' || look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
     return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);
