@@ -23,6 +23,7 @@ import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
 import { InkButton, PlainActions, PlainNote, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
 
 /** No boxes (demo only, features/noBoxes): the notes left-aligned, the asks as plain words with one ink button. */
 const PLAIN = noBoxes();
@@ -87,7 +88,8 @@ export default function Peek() {
   // there until its own answer lands, rather than blanking it to a spinner,
   // and the near/further split always matches the hits on screen.
   const [got, setGot] = useState<{ hits: PeekHit[] | null; from: { lat: number; lng: number } | null } | undefined>(undefined);
-  const hits = got === undefined ? undefined : got.hits;
+  // ?force=peek-empty (demo website, for a picture): as if no hit were open anywhere.
+  const hits = got === undefined ? undefined : forced('peek-empty') ? [] : got.hits;
   const from = got?.from ?? null;
   const [area, setArea] = useState<string | null>(null);
   const [asking, setAsking] = useState<PeekHit | null>(null);
