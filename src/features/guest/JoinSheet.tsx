@@ -12,6 +12,8 @@ import { colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
 import { noteAppTap } from './campaign';
 import { joinCopy } from './joinCopy';
+import { JOIN_LOOK } from './joinLook';
+import { JoinPlain } from './JoinPlain';
 
 /**
  * The one sign-up ask in guest mode (Oct 17, owner: "it's just when you
@@ -35,6 +37,10 @@ import { joinCopy } from './joinCopy';
  * "Create account" and "Log in" (joinCopy.ts has the words). On a computer it
  * is a small dialog in the middle over a dim of the page; on a phone the
  * same content is a bottom sheet with a grab handle. Flat, no logo tile.
+ *
+ * Since Nov 28 evening (owner, of four other takes: "i think d is solid") the
+ * website shows the plain letter instead (JoinPlain.tsx); this one stays one
+ * switch away (JOIN_LOOK in joinLook.ts).
  */
 // The same rise and fall as every other sheet on the website (DragSheet.web): in over 380 ms on its
 // curve, away over 220 ms, with the dim following the sheet on the same timing.
@@ -60,6 +66,17 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 export function JoinSheet() {
+  return JOIN_LOOK === 'plain' ? <PlainJoinSheet /> : <XJoinSheet />;
+}
+
+function PlainJoinSheet() {
+  const ask = useJoinSheet();
+  // A new ask (another heart while one is open) starts fresh: its own focus, its own words.
+  return ask ? <JoinPlain key={ask.at} ask={ask} /> : null;
+}
+
+/** X's signed-out prompt (Nov 28 morning), kept for JOIN_LOOK 'x'. */
+function XJoinSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
