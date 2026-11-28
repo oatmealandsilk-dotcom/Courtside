@@ -23,6 +23,7 @@ import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { LitMark } from './BarPreviews';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -86,7 +87,7 @@ export interface LookItem {
  */
 export const LookBar = React.memo(function LookBar({
   items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false,
+  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false, calmer = false,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -119,6 +120,11 @@ export const LookBar = React.memo(function LookBar({
   lens?: boolean;
   /** The new bar (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first): its own shape, colours and lens. */
   newBar?: boolean;
+  /**
+   * Pictures only (Nov 28, barPreview's '4', "Quiet pill, calmer"): the quiet pill with an ink outlined + in place of the
+   * green circle, its words a touch smaller, every lit tab in the brand's green (icon and word only), crossing over in 160 ms.
+   */
+  calmer?: boolean;
 }) {
   const { theme } = useTheme();
   // Where each tab's middle is along the bar, from the pill's width (worked out from the window's
@@ -131,7 +137,7 @@ export const LookBar = React.memo(function LookBar({
   const pillW = measured ?? Dimensions.get('window').width - 2 * (newBar ? NEW_SPEC : QUIET_SPEC).side;
   // Which bar: today's quiet pill, or the new one (its measures, styles and glass); the new one with its
   // words a touch smaller where "Community" would not sit in its capsule with room either side (tightWords).
-  const look = newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : QUIET_LOOK;
+  const look = newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : calmer ? CALM_LOOK : QUIET_LOOK;
   // The new bar's lens with the phone's Reduce Motion (the app's own answer: useReducedMotion): a quick plain slide.
   const calm = useReducedMotion();
   // How it travels (barLens's LENS_MOTION): read once.
@@ -535,7 +541,7 @@ export const LookBar = React.memo(function LookBar({
   }, [mediaLayers]);
   useEffect(() => () => { timers.current.forEach((t) => clearTimeout(t)); timers.current.clear(); }, []);
   const face = (palette: Palette, live: boolean, overMedia: boolean = glassLook, copyAlpha = 1) => (
-    <Face palette={palette} look={look} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace} kind={kind} onWordWidth={live && newBar ? onWordWidth : undefined}
+    <Face palette={palette} look={look} calmer={calmer && !newBar} calm={calm} media={overMedia} glassMedia={live ? (glassHeld ?? overMedia) : overMedia} live={live} copyAlpha={copyAlpha} items={items} activeRoute={lit} profileAlerts={profileAlerts} lens={litPlace >= 0 ? lensGeo : null} lensFallback={litPlace} kind={kind} onWordWidth={live && newBar ? onWordWidth : undefined}
       onTabPressIn={tabPressIn} onTabPressOut={tabPressOut} onTab={tabPress} onCreate={onCreate} tourRef={tourRef} tourCreate={tourCreate} veilStyle={veilStyle} veilBlocks={veilBlocks} onVeil={onVeil} onFeedHold={live ? onFeedHold : undefined} />
   );
   // The swipe followed: the two copies' faces, built once as a swipe starts carrying the look (and
@@ -544,7 +550,7 @@ export const LookBar = React.memo(function LookBar({
     key: ++copySeq,
     dark: face(themes[theme], false, true, followAlpha),
     light: face(themes[theme], false, false, followAlpha),
-  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, lensGeo, look, calm, kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  } : null), [following, theme, items, lit, profileAlerts, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, lensGeo, look, calm, kind, calmer]); // eslint-disable-line react-hooks/exhaustive-deps
   // The shadow around the glass: on an iPhone, drawn along the pill's own outline (a box shadow),
   // not worked out from everything inside it, which redrew the bar off screen every frame while a
   // page slid or scrolled under the glass (Oct 25 audit). The same shadow to look at. Quicker press feel only (admins first).
@@ -992,9 +998,9 @@ function PopWrap({ active, pop, children }: { active: boolean; pop: boolean; chi
 }
 
 /** The bar's ground and its row, in one court's colours: the live bar, or a fading copy of it. */
-function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth }: {
+function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live, copyAlpha, items, activeRoute, profileAlerts, onTabPressIn, onTabPressOut, onTab, onCreate, tourRef, tourCreate, veilStyle, veilBlocks, onVeil, onFeedHold, lens, lensFallback, kind, onWordWidth }: {
   /** `glassMedia`: the live glass's own dark or light, which may trail `media` by two frames (LookBar). */
-  palette: Palette; look: BarLook; calm: boolean; media: boolean; glassMedia: boolean; live: boolean;
+  palette: Palette; look: BarLook; calmer?: boolean; calm: boolean; media: boolean; glassMedia: boolean; live: boolean;
   /** A copy's ground: solid (1) for a court being left, whose page is fading under it too; as see-through as the glass for a clip's look. */
   copyAlpha: number;
   items: LookItem[]; activeRoute: string | undefined; profileAlerts: number;
@@ -1036,6 +1042,8 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // turned the lit tab a washed-out grey-green on the dark glass).
   const litOf = (route: string) => {
     if (oneInk) return media ? c.onMedia : c.text;
+    // The calmer pill (barPreview '4'): every lit tab in the brand's green, lifted in its own hue over a clip on a light court.
+    if (calmer) return media && !darkPage ? lightened(c.brand) : c.brand;
     const base = fresh ? c.brand : route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
     if (!media || darkPage) return base;
     return fresh ? lightened(base) : toward(base, c.onMedia, 0.35);
@@ -1043,7 +1051,16 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
 
   // The new bar's + as a plain icon in the row with its word (PLUS_LOOK 'icon'), lit while the Create box is up.
   const plusLit = veilBlocks;
-  const plus = fresh && PLUS_LOOK === 'icon' ? (
+  const plus = calmer ? (
+    // The calmer pill's +: a plain outlined plus in the page's ink (white over a clip), no green circle; filled while the Create box is up.
+    <View style={[st.slot, st.plusAbove]} key="create">
+      <Pressable disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} style={st.hit}>
+        <View ref={live ? tourCreate : undefined} style={st.target}>
+          <Ionicons name={plusLit ? 'add-circle' : 'add-circle-outline'} size={m.plusIcon} color={media ? c.onMedia : c.text} />
+        </View>
+      </Pressable>
+    </View>
+  ) : fresh && PLUS_LOOK === 'icon' ? (
     <View style={[st.slot, st.plusAbove]} key="create">
       <Pressable disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} {...PRESS_AT_ONCE} style={st.hit}>
         <View ref={live ? tourCreate : undefined} style={st.target}>
@@ -1097,6 +1114,16 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
           {/* What the tutorial lights: the tab's width, the icon and its word's height, as today. */}
           <View ref={live ? tourRef(item.route) : undefined} style={st.target}>
             <Animated.View style={[st.inner, settle]}>
+              {calmer ? (
+                // The calmer pill (barPreview '4'): the icon and its word cross into the brand's green in 160 ms, the count on the icon as today.
+                <LitMark icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} motion="fade"
+                  label={item.label} labelStyle={st.label} labelFade={labelFade}
+                  badge={item.route === 'profile' && profileAlerts > 0 ? (
+                    <View style={[st.badge, { backgroundColor: c.danger }]}>
+                      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
+                    </View>
+                  ) : null} />
+              ) : (<>
               <View>
                 {follow ? (
                   <FollowGlyph place={lensPlace(item.route)} fallback={lensFallback} icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} pop={live && !calm} />
@@ -1114,6 +1141,7 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
               ) : (
                 <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[st.label, { color: active ? litOf(item.route) : idleLabel }, labelFade]}>{item.label}</Animated.Text>
               )}
+              </>)}
             </Animated.View>
           </View>
         </Pressable>
@@ -1224,7 +1252,7 @@ function toward(hex: string, to: string, t: number): string {
  * `hex` (`#RRGGBB`) at least this light and this strong in its own hue, for a colour on dark glass
  * (Clean's green #2C7446 becomes about #5DBE80); anything else comes back as it was.
  */
-function lightened(hex: string, light = 0.6, strong = 0.42): string {
+export function lightened(hex: string, light = 0.6, strong = 0.42): string {
   const h6 = hex.replace('#', '');
   if (!/^[0-9a-f]{6}$/i.test(h6)) return hex;
   const [r, g, b] = [0, 2, 4].map((i) => parseInt(h6.slice(i, i + 2), 16) / 255);
@@ -1357,3 +1385,9 @@ interface BarLook { m: BarSpec; st: BarStyles; fresh: boolean }
 const QUIET_LOOK: BarLook = { m: QUIET_SPEC, st: barStyles(QUIET_SPEC, false), fresh: false };
 const NEW_LOOK: BarLook = { m: NEW_SPEC, st: barStyles(NEW_SPEC, true), fresh: true };
 const NEW_TIGHT_LOOK: BarLook = { m: NEW_TIGHT_SPEC, st: barStyles(NEW_TIGHT_SPEC, true), fresh: true };
+/**
+ * The calmer pill (barPreview '4', pictures only): today's quiet pill exactly, its words half a point smaller, its + an
+ * outlined plus a little bigger than a tab's icon (25 against 21) so it still reads as the button.
+ */
+const CALM_SPEC: BarSpec = { ...QUIET_SPEC, label: QUIET_SPEC.label - 0.5, plusIcon: 25 };
+const CALM_LOOK: BarLook = { m: CALM_SPEC, st: barStyles(CALM_SPEC, false), fresh: false };

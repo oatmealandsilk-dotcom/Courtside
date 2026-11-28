@@ -32,6 +32,9 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
+import { PreviewBar } from './BarPreviews';
+import { NativeBar, useNativeBarIcons } from './NativeBar';
+import { useBarPreview } from '@/features/navigation/barPreview';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -125,10 +128,18 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onFeedHold = useFeedWindowsOn() && activeRoute === 'index' && feedUnder ? holdFeed : undefined;
   // The swipe followed (features/feed/swipeFollow, admins first): the bar's look follows a finger's swipe on the Feed.
   const swipeFollow = useSwipeFollow();
+  // Other bottom bars, pictures only (features/navigation/barPreview: a demo build of the phone app only; 'off' everywhere else).
+  const preview = useBarPreview();
+  const previewOn = preview !== 'off' && preview !== 'quiet' && preview !== 'new';
   // The lens under the lit tab (features/navigation/barLens, admins first).
-  const barLens = useBarLens();
+  const barLensLive = useBarLens();
   // The new bar, after Instagram's and Strava's (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first). It always has the lens.
-  const barIg = useBarIg();
+  const barIgLive = useBarIg();
+  // The preview's 'quiet' and 'new': today's two bars, whoever is signed in (the demo's player is not an admin).
+  const barLens = preview === 'new' ? true : preview === 'quiet' || preview === '4' ? false : barLensLive;
+  const barIg = preview === 'new' ? true : preview === 'quiet' || preview === '4' ? false : barIgLive;
+  // Apple's own bar (preview 'apple'), drawn once its icons are ready (the bar as it was until then).
+  const nativeIcons = useNativeBarIcons(preview === 'apple' && isPhone && Platform.OS === 'ios', ITEMS, colors.text);
   // The website's bar (Nov 27, owner picked option C for the guest Community screen): the new capsule with its lens,
   // on calm frosted glass (TabBarLooks' WEB_BAR), for everyone on the website. The iPhone app keeps "Bar A".
   const webBar = Platform.OS === 'web';
@@ -239,6 +250,53 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onTab = useCallback((route: string) => navigation.navigate(route), [navigation]);
   const onTabPressIn = useCallback((route: string) => navigation.prepare?.(route), [navigation]);
   const outerStyle = useMemo(() => [lift === 'up' ? null : styles.held, lift === 'held' ? null : duck], [lift, styles.held, duck]);
+  // Pictures only (barPreview): Apple's own bar, or one of the new options 1 to 3 (4 is the quiet pill's `calmer`, below).
+  if (isPhone && previewOn && preview === 'apple' && nativeIcons) {
+    return (
+      <NativeBar
+        items={ITEMS}
+        icons={nativeIcons}
+        activeRoute={activeRoute}
+        feedUnder={feedUnder}
+        tabsUnder={tabsUnder}
+        profileAlerts={profileAlerts}
+        onTab={onTab}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        inset={insets.bottom}
+        outerStyle={outerStyle}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={closeVeil}
+      />
+    );
+  }
+  if (isPhone && (preview === '1' || preview === '2' || preview === '3')) {
+    return (
+      <PreviewBar
+        option={preview}
+        items={ITEMS}
+        activeRoute={activeRoute}
+        feedUnder={feedUnder}
+        tabsUnder={tabsUnder}
+        profileAlerts={profileAlerts}
+        onTab={onTab}
+        onTabPressIn={onTabPressIn}
+        onCreate={openCreate}
+        tourRef={tourRef}
+        tourCreate={tourCreate}
+        inset={insets.bottom}
+        outerStyle={outerStyle}
+        hideFromReader={hideFromReader}
+        veilStyle={veilStyle}
+        veilBlocks={veilBlocks}
+        onVeil={closeVeil}
+        onFeedHold={onFeedHold}
+      />
+    );
+  }
   // The quiet pill in place of the round one (tabBarLook, Oct 25): the same bar and the same glass, a new shape.
   if (isPhone && TAB_BAR_LOOK !== 'now') {
     return (
@@ -264,6 +322,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         follow={swipeFollow}
         lens={barLens || barIg || webBar}
         newBar={barIg || webBar}
+        calmer={preview === '4'}
       />
     );
   }

@@ -5,6 +5,7 @@ import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
 import { simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '@/lib/simDriver';
 import { startJsGapWatch } from '@/lib/simTrace';
 import { forceBarLook } from '@/features/navigation/barLens';
+import { setBarPreview } from '@/features/navigation/barPreview';
 import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -79,6 +80,11 @@ export function SimDriverHost() {
       simAction('barlook', (q) => {
         forceBarLook(q.on === '1' ? true : q.on === '0' ? false : null);
         simLog(`[sim] barlook ${q.on ?? 'switch'}`);
+      }),
+      // Another bottom bar, pictures only (barPreview, Nov 28): v=off|quiet|new|apple|1|2|3|4.
+      simAction('barpreview', (q) => {
+        setBarPreview(q.v);
+        simLog(`[sim] barpreview ${q.v ?? 'off'}`);
       }),
       // Location off (Settings' "Use my location"): the Community card goes back to the profile's city.
       simAction('locoff', () => { void now.current.setLocationEnabled(false); }),
