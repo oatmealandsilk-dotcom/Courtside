@@ -376,7 +376,7 @@ function OptionCard({ near, hits: listed, locating, failed, onLocate, look }: Gu
       ) : null}
       {look === 'a' && found ? <PreviewOverlay cityName="Near you" count={0} placeCount={nearCount} hitCount={nearHits} weather={weather} chip /> : null}
       {look === 'c' && (town || found) ? (
-        <View pointerEvents="none" style={styles.chip}>
+        <View pointerEvents="none" style={[styles.chip, { backgroundColor: withAlpha(colors.surface, 0.9) }]}>
           <Text maxFontSizeMultiplier={TextScale.CHROME} numberOfLines={1} style={styles.chipText}>
             {found
               ? `Near you · ${nearHits > 0 ? `${nearHits} open ${nearHits === 1 ? 'hit' : 'hits'}` : `${nearCount} courts`}`
@@ -518,7 +518,8 @@ const optionDefinitions = StyleSheet.create({
   // C.
   wrapC: { gap: spacing.md },
   wrapEdge: { marginHorizontal: -spacing.lg },
-  chip: { position: 'absolute', left: 12, top: 12, maxWidth: '80%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: withAlpha(colors.surface, 0.9), borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  // Its see-through ground is set where it is drawn (withAlpha here would keep the light court's colour).
+  chip: { position: 'absolute', left: 12, top: 12, maxWidth: '80%', paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   chipText: { ...typography.smallStrong, color: colors.text },
   group: { borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   groupEdge: { marginHorizontal: spacing.lg },
