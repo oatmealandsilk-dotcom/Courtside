@@ -98,6 +98,8 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { ACTIVITIES_LOOK } from '@/features/activity/feedLooks/activitiesLook';
+import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/ActivitiesList';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -117,6 +119,16 @@ const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string
  */
 const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
+
+/**
+ * One for Activities as a gallery (ACTIVITIES_LOOK 'gallery', Nov 28): every kind of post from the same people
+ * isActivity draws from (you, who you follow, a new player's players near them), on the same rules (not archived,
+ * taken down or group-only, media the internet can reach); a session by someone else only with a photo or clip.
+ * Your own sessions without one stay (the list shows them to you alone, as a row).
+ */
+const inActivitiesGallery = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
+  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId))
+  && (!p.session || p.authorId === me || hasPicture(p));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /**
@@ -2892,10 +2904,49 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
   const out: Post[] = [];
   for (const p of app.posts) {
     if (hidden.has(p.authorId) || unfinishedClip(p, me)) continue;
-    if (key === ACTIVITIES ? !isActivity(p, me, follows, none) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
+    if (key === ACTIVITIES ? !(ACTIVITIES_LOOK === 'gallery' ? inActivitiesGallery(p, me, follows, none) : isActivity(p, me, follows, none)) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
     out.push(p);
   }
   return out.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+}
+
+/**
+ * Activities as a gallery (ACTIVITIES_LOOK, Nov 28): one continuous list rather than a page per session. The same
+ * people and rules as Home's Activities (blocked, muted, unfollowed private, taken down, group-only, archived and
+ * unfinished posts left out; newest first; an admin's pushed-down ones last) and the same start for a new player
+ * (the follow suggestions, and the sessions near them asked for once). The list decides what it draws of them.
+ */
+function ActivitiesGallery({ paused, onChrome, row }: { paused: boolean; onChrome?: (c: FeedChrome) => void; row?: SharedValue<number> }) {
+  const { ready, posts, users, followingIds, blockedIds, mutedIds, currentUserId, actions } = useApp();
+  const nearAuthors = useNearYouAuthors(true);
+  const connectRow = useConnectRow();
+  // Decided once, as Home's Activities decides its start page: a new player, or a watch still to connect. Once
+  // there it stays, so following your fifth player from it never pulls it out from under you.
+  const startKept = useRef(false);
+  if (!startKept.current && ready && (followingIds.length < START_UNDER || (connectRow.known && connectRow.offer))) startKept.current = true;
+  const showStart = startKept.current;
+  const askedNear = useRef(false);
+  useEffect(() => {
+    if (!showStart || askedNear.current) return;
+    askedNear.current = true;
+    void actions.loadRecentSessionPosts();
+  }, [showStart, actions]);
+  // The list is never a picture under the top row: its words stay dark, the bar its own.
+  useEffect(() => { if (!paused) onChrome?.({ picture: false, hidden: false, pinched: false }); }, [paused, onChrome]);
+  const [demotedTick, setDemotedTick] = useState(0);
+  useEffect(() => onDemotedChange(() => setDemotedTick((n) => n + 1)), []);
+  const list = useMemo(() => {
+    const follows = new Set(followingIds);
+    const hidden = new Set([...blockedIds, ...mutedIds]);
+    const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
+    const acts = posts
+      .filter((p) => inActivitiesGallery(p, currentUserId, follows, nearAuthors) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
+      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+    const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
+    return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);
+  }, [posts, users, followingIds, blockedIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nearCount = useMemo(() => list.filter((p) => nearAuthors.has(p.authorId)).length, [list, nearAuthors]);
+  return <ActivitiesList posts={list} showStart={showStart} nearCount={nearCount} near={nearAuthors} paused={paused} row={row} />;
 }
 
 /** For the Feed's windows: where a feed not built yet would start (its newest post), for its card. */
@@ -2989,7 +3040,10 @@ function GroupedFeed() {
         <FeedLayer key={key} feed={key} shown={key === groupId} cut={handover}>
           <WindowsLayer index={windowOrder.indexOf(key)}>
             <SnapFrame feed={key}>
-              <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />
+              {/* Activities as a gallery (ACTIVITIES_LOOK; 'now' is the pages, one session per swipe, exactly as before). */}
+              {key === ACTIVITIES && ACTIVITIES_LOOK === 'gallery'
+                ? <ActivitiesGallery paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} row={row} />
+                : <Home scope={key === ACTIVITIES ? { activities: true } : { groupId: key }} paused={key !== groupId} onChrome={key === groupId ? groupChrome : undefined} onSwipe={markFeedSwiped} row={row} />}
             </SnapFrame>
           </WindowsLayer>
         </FeedLayer>
