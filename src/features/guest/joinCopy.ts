@@ -8,7 +8,7 @@ type IconName = ComponentProps<typeof Ionicons>['name'];
 export interface JoinCopy {
   /** The action's own icon, drawn in the brand colour above the headline. */
   icon: IconName;
-  /** A short line about the action itself: "Like a clip to cheer them on." */
+  /** A short line about the action itself: "Like a post to cheer them on." */
   headline: string;
   /** One plain line naming the person, when there is one: "Join CourtSide to let Sam know you liked it." */
   line: string;
@@ -26,7 +26,7 @@ export function joinCopy(ask: Pick<JoinAsk, 'what' | 'who' | 'target'>): JoinCop
   const name = who || 'the player';
   switch (what) {
     case 'like posts':
-      return { icon: 'heart-outline', headline: 'Like a clip to cheer them on.', line: `Join CourtSide to let ${name} know you liked it.` };
+      return { icon: 'heart-outline', headline: 'Like a post to cheer them on.', line: `Join CourtSide to let ${name} know you liked it.` };
     case 'like comments':
       return { icon: 'heart-outline', headline: 'Like a comment to back it up.', line: `Join CourtSide to let ${name} know you liked it.` };
     case 'comment':
@@ -36,7 +36,7 @@ export function joinCopy(ask: Pick<JoinAsk, 'what' | 'who' | 'target'>): JoinCop
     case 'follow players':
       return { icon: 'person-add-outline', headline: who ? `Follow ${who} to see their sessions.` : 'Follow players to see their sessions.', line: 'Join CourtSide so their clips and sessions show up in your feed.' };
     case 'save posts':
-      return { icon: 'bookmark-outline', headline: 'Save clips to watch later.', line: who ? `Join CourtSide to keep ${who}’s clip for later.` : 'Join CourtSide to keep the clips you want to watch again.' };
+      return { icon: 'bookmark-outline', headline: 'Save posts to see again later.', line: who ? `Join CourtSide to keep ${who}’s post for later.` : 'Join CourtSide to keep the posts you want to see again.' };
     case 'save threads':
       return { icon: 'bookmark-outline', headline: 'Save threads to read later.', line: 'Join CourtSide to keep the threads you want to come back to.' };
     case 'save or report this':
