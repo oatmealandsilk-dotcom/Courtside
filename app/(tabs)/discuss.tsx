@@ -44,6 +44,7 @@ import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { MapGlass } from '@/components/map/MapGlass';
 import { useBarInset } from '@/features/navigation/barInset';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
+import { simAction } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -687,9 +688,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The app preview of option C, rounds 2 and 3 (appCPreview; demo builds with its switch only): the map runs from where it
   // starts on the page down to just above the bar, read once from where it is drawn with the page at its top.
   const barInset = useBarInset();
+  // useBarInset counts the bar, its lift and the home strip as one; the bar's own top sits this much lower (iPhone 17,
+  // measured), so the map stops a small gap (about 8 points) above the bar rather than leaving a band of page.
+  const C_MAP_UNDER = 16;
+  // The simulator proof harness only (simDriver: demo builds with its switch): "scroll y=400" scrolls Find Players, for the pictures.
+  useEffect(() => simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: false }); }), [pageTop]);
   const [cMapTop, setCMapTop] = useState(0);
   const cMapBox = useRef<View>(null);
-  const cMapHeight = APP_C_BIG_MAP && cMapTop > 0 ? Math.max(CARD_HEIGHT, Math.round(screenHeight - cMapTop - barInset - spacing.md)) : undefined;
+  const cMapHeight = APP_C_BIG_MAP && cMapTop > 0 ? Math.max(CARD_HEIGHT, Math.round(screenHeight - cMapTop - barInset + C_MAP_UNDER)) : undefined;
   const listEnd = useRef<View>(null);
   const nearEndRef = useRef(() => {});
   nearEndRef.current = () => {
