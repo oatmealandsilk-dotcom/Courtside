@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, Text, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Reanimated, { useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
@@ -12,6 +12,11 @@ import { MediaPlaceholder } from '@/components/MediaPlaceholder';
 import { ActivitiesStart, NearYouTag } from '@/components/ActivitiesStart';
 import { Heart } from '@/components/Heart';
 import { PushedDownTag } from '@/components/PushedDownTag';
+import { SessionCard } from '@/components/session/SessionCard';
+import { StreakFlame } from '@/components/StreakFlame';
+import { LevelPill } from '@/components/LevelPill';
+import { shownStreak } from '@/features/practice/streakFlame';
+import { compactNumber } from '@/lib/format';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, spacing, typography } from '@/theme';
@@ -21,7 +26,7 @@ import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { ROW_TRAVEL, showRow } from '@/features/feed/topRowScroll';
 import { agoInWords, duration } from '@/lib/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { hasSessionStats, resultWord, scoreLine, sessionTitle, whatWord } from '@/features/activity/format';
+import { hasSessionStats, resultWord, scoreLine, sessionTitle, sourceLabel, whatWord } from '@/features/activity/format';
 import { sharePost, shareLabel } from '@/features/share/sharePost';
 import { localDay } from '@/features/practice/stats';
 import { matchTiebreakAt } from '@/features/activity/score';
@@ -34,7 +39,7 @@ import type { ActivitiesLook } from './activitiesLook';
  * Activities shows (the Feed hands them over, already filtered and in order).
  */
 
-type CardProps = { post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User>; /** The classic look: a clip tapped opens the full-screen reel of the feed's clips (videos only). */ onOpenClip?: (postId: string) => void; /** A "near you" player you don't follow yet: the "Near you" line with Follow under the handle, as Home's Activities. */ near?: boolean };
+type CardProps = { /** The column's width (the mixed looks size their boxes from it). */ width?: number; /** The mixed looks: where the stats sit on a photo card. */ order?: 'stats' | 'photo'; post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User>; /** The classic look: a clip tapped opens the full-screen reel of the feed's clips (videos only). */ onOpenClip?: (postId: string) => void; /** A "near you" player you don't follow yet: the "Near you" line with Follow under the handle, as Home's Activities. */ near?: boolean };
 
 /* ------------------------------------------------------------------ small shared pieces */
 
@@ -462,9 +467,178 @@ const ClassicCard = React.memo(function ClassicCard({ post, author, me, hidden, 
   );
 });
 
+/* ------------------------------------------------------------------ mixed: small plain cards, whole photo cards */
+
+/*
+ * The mixed looks (Nov 27, owner: "if an activity is just the card autologged with nothing on it, we can just fit 3
+ * ... into one phone sized page, and then the ones with photos would look more special because they take up a whole
+ * page"). Two sizes, each always the same: a PLAIN card (a session with no photo or clip, a text post, a milestone)
+ * is MIXED.plain tall, three to a phone screen; a PHOTO card (anything with a photo or clip) is the same pieces with
+ * the picture in the middle at 4:5, about a screen tall. Both are today's session box (SessionCard, compact) under
+ * the same name row, with one line of words and the actions row, so they read as one family. Nothing wraps.
+ */
+export const MIXED = {
+  /** Above the name row, under the hairline that parts two cards. */
+  padTop: 12,
+  head: 32,
+  gap: 8,
+  /** The session box (SessionCard compact), and a text post's words in its place. */
+  box: 100,
+  line: 20,
+  actions: 36,
+  padBottom: 4,
+};
+/** A plain card's whole height: name row, box, one line, actions. */
+export const PLAIN_H = MIXED.padTop + MIXED.head + MIXED.gap + MIXED.box + MIXED.gap + MIXED.line + MIXED.actions + MIXED.padBottom;
+const PHOTO_SHAPE = 4 / 5;
+
+function MixedHead({ post, author, me }: { post: Post; author: User; me: string | null }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const streak = shownStreak(author, me);
+  return (
+    <View style={styles.mHead}>
+      <Pressable onPress={() => router.push(`/user/${author.id}`)} accessibilityRole="link" accessibilityLabel={`${author.name}, open profile`} style={[styles.who, styles.flex]}>
+        <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={32} />
+        <View style={[styles.mNameRow, styles.flex]}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.mName}>{author.name}</Text>
+          <StreakFlame days={streak} maxFontSizeMultiplier={1.1} />
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.mWhen}>{agoInWords(post.createdAt)}</Text>
+          <PushedDownTag post={post} />
+        </View>
+      </Pressable>
+      <LevelPill profile={author.profile} userId={author.id} small />
+    </View>
+  );
+}
+
+function MixedActions({ post, me, clip, children }: { post: Post; me: string | null; clip: boolean; children?: React.ReactNode }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const act = useCardActions(post, me);
+  const likes = post.likedBy.length;
+  const n = post.commentIds.length;
+  return (
+    <View style={styles.mActions}>
+      <Pressable onPress={act.like} hitSlop={6} style={styles.mAct} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
+        <Heart liked={act.liked} size={22} ink={colors.text} />
+        {likes ? <Text maxFontSizeMultiplier={1.1} style={styles.mCount}>{compactNumber(likes)}</Text> : null}
+      </Pressable>
+      <Pressable onPress={act.comments} hitSlop={6} style={styles.mAct} accessibilityRole="button" accessibilityLabel={n ? `Comments, ${n}` : 'Comments'}>
+        <Ionicons name="chatbubble-outline" size={20} color={colors.text} />
+        {n ? <Text maxFontSizeMultiplier={1.1} style={styles.mCount}>{compactNumber(n)}</Text> : null}
+      </Pressable>
+      <Pressable onPress={() => sharePost(post, me)} hitSlop={6} style={styles.mAct} accessibilityRole="button" accessibilityLabel={shareLabel(post, me, clip ? 'clip' : 'post')}>
+        <Ionicons name="arrow-redo-outline" size={21} color={colors.text} />
+      </Pressable>
+      {children}
+      <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={[styles.mAct, styles.mMore]} accessibilityRole="button" accessibilityLabel="More options">
+        <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
+      </Pressable>
+    </View>
+  );
+}
+
+/** The session box, or a text post's words in its place: always MIXED.box tall. */
+function MixedBox({ post, author, width, hidden }: { post: Post; author: User; width: number; hidden: string[] }) {
+  const styles = useThemedStyles(styleDefinitions);
+  const s = post.session;
+  const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
+  if (s) {
+    return <SessionCard session={s} author={author.name} width={width} height={MIXED.box} compact hidden={hidden} onPress={hasSessionStats(s) ? openStats : undefined} />;
+  }
+  return (
+    <Pressable onPress={() => router.push({ pathname: '/comments', params: { kind: 'post', id: post.id } })} accessibilityRole="button" accessibilityLabel="Open comments" style={[styles.mWords, { width }]}>
+      <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.mWordsText}>{post.body}</Text>
+    </Pressable>
+  );
+}
+
+/** One line of words under the box: the caption, else where the numbers came from and where it was (never a teen's place). */
+function mixedLine(post: Post, author: User): { text: string; quiet: boolean } {
+  const s = post.session;
+  if (s && post.body?.trim()) return { text: post.body.trim().replace(/\s+/g, ' '), quiet: false };
+  const n = post.commentIds.length;
+  if (!s) return { text: n ? (n === 1 ? 'View 1 comment' : `View all ${n} comments`) : '', quiet: true };
+  const place = placeOf(post, author);
+  return { text: [s.activityId ? sourceLabel(s.source ?? 'apple-health') : null, place || null].filter(Boolean).join(' · '), quiet: true };
+}
+
+const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOpenClip, near = false, width = 390, order = 'stats' }: CardProps) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions } = useApp();
+  const act = useCardActions(post, me);
+  const inner = width - spacing.lg * 2;
+  const media = hasMedia(post);
+  const clip = isClip(post);
+  const line = mixedLine(post, author);
+  const stand = post.session ? [whatWord(post.session), scoreLine(post.session)].filter(Boolean).join(' · ') : undefined;
+  const photos = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls.length : 0;
+  const [page, setPage] = useState(0);
+  // A double tap on a picture likes it (never takes a like away), as the classic look; a single tap does nothing.
+  const [bloom, setBloom] = useState(0);
+  const lastTap = useRef(0);
+  const likedNow = useRef(act.liked);
+  likedNow.current = act.liked;
+  const tapPicture = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      if (!likedNow.current) actions.toggleLike(post.id, true);
+      setBloom((b) => b + 1);
+    } else lastTap.current = now;
+  };
+  const lineView = (
+    <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={line.text ? `${line.text}. Open comments` : 'Open comments'} style={styles.mLine}>
+      <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={line.quiet ? styles.mLineQuiet : styles.mLineText}>{line.text}</Text>
+    </Pressable>
+  );
+  const nearLine = near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null;
+
+  if (!media) {
+    return (
+      <View style={[styles.mCard, { height: PLAIN_H + (near ? NEAR_H : 0) }]}>
+        <MixedHead post={post} author={author} me={me} />
+        {nearLine}
+        <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>
+        {lineView}
+        <MixedActions post={post} me={me} clip={false} />
+      </View>
+    );
+  }
+
+  const picture = (
+    <View style={[styles.mPhoto, { width: inner, height: Math.round(inner / PHOTO_SHAPE) }]}>
+      {clip ? (
+        <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} clipBadge />
+        </Pressable>
+      ) : (
+        <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? 'Photo'} accessibilityHint="Double tap to like" style={StyleSheet.absoluteFill}>
+          <Media post={post} aspect={PHOTO_SHAPE} stand={stand} onPage={photos ? setPage : undefined} />
+          <Bloom token={bloom} />
+        </Pressable>
+      )}
+    </View>
+  );
+  const box = <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>;
+  return (
+    <View style={styles.mCard}>
+      <MixedHead post={post} author={author} me={me} />
+      {nearLine}
+      {order === 'stats' ? <>{box}{picture}</> : <>{picture}{box}</>}
+      {lineView}
+      <MixedActions post={post} me={me} clip={clip}>{photos ? <Dots n={photos} at={page} /> : null}</MixedActions>
+    </View>
+  );
+});
+/** The "Near you" line with Follow, under a near player's name row. */
+const NEAR_H = 30;
+
+const MixedA = (p: CardProps) => <MixedCard {...p} order="stats" />;
+const MixedB = (p: CardProps) => <MixedCard {...p} order="photo" />;
+
 /* ------------------------------------------------------------------ the list */
 
-const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard };
+const CARD: Record<Exclude<ActivitiesLook, 'now'>, React.ComponentType<CardProps>> = { strava: StravaCard, hevy: HevyCard, classic: ClassicCard, 'mixed-a': MixedA, 'mixed-b': MixedB };
 
 export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
   look: Exclude<ActivitiesLook, 'now'>;
@@ -486,7 +660,9 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
   const barInset = useBarInset();
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const Card = CARD[look];
-  const classic = look === 'classic';
+  // The mixed looks behave as the classic one (every kind of post, a clip opens the reel); only the cards differ.
+  const classic = look === 'classic' || look === 'mixed-a' || look === 'mixed-b';
+  const { width: screenW } = useWindowDimensions();
   // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
   postsRef.current = posts;
@@ -503,7 +679,8 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     const ids = (at < 0 ? [] : all.slice(at)).filter(isClip).slice(0, 30).map((p) => p.id);
     router.push({ pathname: '/reel', params: { ids: (ids.length ? ids : [postId]).join(','), start: postId } });
   }, []);
-  const column = look === 'classic' ? 470 : 600;
+  const column = classic ? 470 : 600;
+  const cardW = Math.min(screenW, column);
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
   // The top row follows the list the way Instagram's header does: forward takes it out with the scroll, back brings it in.
@@ -592,8 +769,8 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     const author = usersById.get(item.authorId);
     if (!author || (!item.session && !classic)) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !followingIds.includes(author.id);
-    return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} /></View>;
-  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, styles, Card]);
+    return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
+  }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card]);
 
   const header = (
     <View style={{ paddingTop: top }}>
@@ -718,4 +895,23 @@ const styleDefinitions = StyleSheet.create({
   cWords: { paddingHorizontal: spacing.md, paddingTop: 2, paddingBottom: 4 },
   cWordsText: { ...typography.body, fontSize: 17, lineHeight: 24, color: colors.text },
   cTime: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0.3, marginTop: 2 },
+
+  // Mixed: every piece a fixed height, so a plain card is always PLAIN_H and a photo card always the same.
+  mCard: { paddingTop: MIXED.padTop, paddingBottom: MIXED.padBottom, paddingHorizontal: spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, backgroundColor: colors.bg, overflow: 'hidden' },
+  mHead: { height: MIXED.head, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  mNameRow: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 },
+  mName: { ...typography.bodyStrong, color: colors.text, flexShrink: 1 },
+  mWhen: { ...typography.small, color: colors.textFaint, flexShrink: 0 },
+  mNear: { height: 28, justifyContent: 'center', marginTop: 2 },
+  mBoxSlot: { height: MIXED.box, marginTop: MIXED.gap },
+  mWords: { height: MIXED.box, justifyContent: 'center' },
+  mWordsText: { ...typography.body, fontSize: 17, lineHeight: 24, color: colors.text },
+  mPhoto: { marginTop: MIXED.gap, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
+  mLine: { height: MIXED.line, marginTop: MIXED.gap, justifyContent: 'center' },
+  mLineText: { ...typography.small, fontSize: 14, lineHeight: 19, color: colors.text },
+  mLineQuiet: { ...typography.small, fontSize: 13, lineHeight: 18, color: colors.textMuted },
+  mActions: { height: MIXED.actions, flexDirection: 'row', alignItems: 'center', gap: spacing.lg, position: 'relative' },
+  mAct: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 32 },
+  mMore: { marginLeft: 'auto' },
+  mCount: { ...typography.smallStrong, color: colors.text, fontVariant: ['tabular-nums'] },
 });

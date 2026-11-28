@@ -98,7 +98,7 @@ import { isTaggedIn } from '@/features/activity/sessionTags';
 import { useAndroidBack } from '@/lib/androidBack';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
-import { activitiesLook } from '@/features/activity/feedLooks/activitiesLook';
+import { activitiesLook, type ActivitiesLook } from '@/features/activity/feedLooks/activitiesLook';
 import { ActivitiesList } from '@/features/activity/feedLooks/ActivitiesList';
 
 /**
@@ -2901,7 +2901,7 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
  * than a page per session. The same posts as Home's Activities (isActivity, newest first, an admin's pushed-down
  * ones last, blocked, muted, unfollowed private and unfinished ones left out), and the same start for a new player.
  */
-function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: 'strava' | 'hevy' | 'classic'; paused: boolean; onChrome?: (c: FeedChrome) => void; row?: SharedValue<number> }) {
+function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: Exclude<ActivitiesLook, 'now'>; paused: boolean; onChrome?: (c: FeedChrome) => void; row?: SharedValue<number> }) {
   const app = useApp();
   const { ready, posts, users, followingIds, blockedIds, mutedIds, currentUserId, actions } = app;
   const nearAuthors = useNearYouAuthors(true);
@@ -2924,7 +2924,8 @@ function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: 'strava' | 
     const hidden = new Set([...blockedIds, ...mutedIds]);
     const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
     const acts = posts
-      .filter((p) => (look === 'classic' ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
+      // The mixed looks hold every kind of post, as the classic one.
+      .filter((p) => (look === 'classic' || look === 'mixed-a' || look === 'mixed-b' ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
     return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);

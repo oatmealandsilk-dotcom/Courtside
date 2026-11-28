@@ -361,7 +361,7 @@ export function CardWash({ look, radius, edge = true, keepGlow = false, flat = L
  * from. `width` sets the scale: 358 is the full size, the composer's is
  * about two thirds of it. The feed's post draws it sideways (`height`).
  */
-export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0 }: {
+export function SessionCard({ session, width, height, play = false, people, hidden = [], onPress, showSource = true, accessibilityHint, aspect = 4 / 5, radius, eyebrow, place, brand = false, scale = 1, inset, picture = false, clear = false, author, countDelay = 0, compact = false }: {
   session: SessionDetail;
   /** Who posted it, for the ScoreBoard's top row ("You" when not given). */
   author?: string;
@@ -374,6 +374,13 @@ export function SessionCard({ session, width, height, play = false, people, hidd
    * used then.
    */
   height?: number;
+  /**
+   * With `height`: the same box in one short band (the Activities list's small card, Nov 27, owner: "fit 3 ... into
+   * one phone sized page"): what it was and when along the top, then the time big at the left (or the match's
+   * ScoreBoard) and at most two numbers at the right. Nothing wraps and nothing grows, so every one is as tall as
+   * `height`. Only the Activities looks pass it.
+   */
+  compact?: boolean;
   /**
    * The rest are for the pictures made to share (Share → Instagram): the
    * card's shape (9:16 for a whole story), its rounding (0 edge to edge),
@@ -473,7 +480,20 @@ export function SessionCard({ session, width, height, play = false, people, hidd
     kcal ? { key: 'kcal', value: kcal, label: 'cal' } : null,
   ].filter((s): s is SidewaysStat => !!s);
 
-  const body = height != null ? (
+  const body = height != null && compact ? (
+    <Compact
+      session={session}
+      look={look}
+      width={width}
+      height={height}
+      play={play}
+      wait={countDelay}
+      top={shownTop}
+      result={result}
+      score={score ? { sets: session.sets!, ...boardSides(session, author ?? 'You', hidden, people) } : null}
+      stats={stats}
+    />
+  ) : height != null ? (
     <Sideways
       session={session}
       look={look}
@@ -692,6 +712,73 @@ function Sideways({ session, look, width, height, play, wait, top, result, score
   );
 }
 
+/**
+ * The session box as one short band (SessionCard's `compact`): the sideways card's pieces (the eyebrow, the result
+ * pill, the time, the ScoreBoard, the numbers with their names under them) at fixed sizes, laid out in a row so the
+ * box is only about a hundred points tall. A match leads with its ScoreBoard and keeps the time as one of its two
+ * numbers; anything else leads with the time.
+ */
+function Compact({ session, look, width, height, play, wait, top, result, score, stats }: {
+  session: SessionDetail;
+  look: CardLook;
+  width: number;
+  height: number;
+  play: CountPlay;
+  wait: number;
+  top: string;
+  result: string | null;
+  score: { sets: SessionDetail['sets'] & {}; you: string; them: string } | null;
+  stats: SidewaysStat[];
+}) {
+  const round = 16;
+  // The figures keep their sizes; only a narrow box (a small computer column never is) takes them down a touch.
+  const k = Math.min(1, width / 358);
+  const shown = (score ? stats.slice(0, 1) : stats.slice(0, 2));
+  const label = { ...font('500'), fontSize: 10, lineHeight: 13, color: look.muted, marginTop: 1 } as const;
+  return (
+    <View collapsable={false} style={[styles.card, { width, height, borderRadius: round, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 12, backgroundColor: look.fill, borderColor: look.border, borderWidth: look.dark ? 1 : 0 }]}>
+      <CardWash look={look} radius={round} />
+      {look.plain || session.kind === 'fitness' || session.workout ? null : <CourtLines color={look.lines} />}
+      <View style={[styles.top, { height: 20 }]}>
+        <Text style={{ ...font('600'), fontSize: 11, lineHeight: 14, letterSpacing: 1, color: look.eyebrow, flex: 1 }} numberOfLines={1} maxFontSizeMultiplier={1}>{top}</Text>
+        {result ? (
+          <View style={[styles.pill, { height: 20, borderRadius: 10, paddingHorizontal: 8, backgroundColor: look.pillFill }]}>
+            <Text style={{ ...font('700'), fontSize: 11, color: look.pillInk }} maxFontSizeMultiplier={1}>{result}</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.compactRow}>
+        <View style={styles.compactLead}>
+          {score ? (
+            <ScoreBoard sets={score.sets} you={score.you} them={score.them} youWon={session.won} ended={session.ended} frame="bare" status={false} scale={0.62 * k} inks={look.plain ? undefined : boxInks(look)} />
+          ) : (
+            <>
+              <Duration minutes={session.minutes} size={Math.round(38 * k)} color={look.figure} unitColor={look.muted} play={play} delay={wait + 120} duration={700} maxGrow={1} />
+              <Text style={label} numberOfLines={1} maxFontSizeMultiplier={1}>{onCourtWord(session)}</Text>
+            </>
+          )}
+        </View>
+        {score || shown.length ? (
+          <View style={[styles.compactStats, { gap: 14 * k }]}>
+            {score ? (
+              <View style={styles.compactStat}>
+                <Duration minutes={session.minutes} size={Math.round(20 * k)} unitScale={0.5} color={look.figure} unitColor={look.muted} play={play} delay={wait + 200} maxGrow={1} />
+                <Text style={[label, look.plain && styles.capsLabel]} numberOfLines={1} maxFontSizeMultiplier={1}>{onCourtWord(session)}</Text>
+              </View>
+            ) : null}
+            {shown.map((s) => (
+              <View key={s.key} style={styles.compactStat}>
+                <Figure value={s.value} part={s.part} size={Math.round(20 * k)} color={look.figure} unitColor={look.muted} play={play} delay={wait + 200} maxGrow={1} />
+                <Text style={[label, look.plain && styles.capsLabel]} numberOfLines={1} maxFontSizeMultiplier={1}>{s.label}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
 /** A court seen from behind the baseline, faint, across the bottom of the card (and the live session's box). */
 export function CourtLines({ color }: { color: string }) {
   return (
@@ -728,4 +815,9 @@ const styles = StyleSheet.create({
   lines: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '24%' },
   place: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch' },
   brand: { flexDirection: 'row', alignItems: 'center', borderTopWidth: 1 },
+  // The compact band: the lead (time or ScoreBoard) at the left, its numbers at the right, both on the bottom edge.
+  compactRow: { flex: 1, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, minHeight: 0 },
+  compactLead: { flexShrink: 1, minWidth: 0 },
+  compactStats: { flexDirection: 'row', alignItems: 'flex-end', flexShrink: 0 },
+  compactStat: { minWidth: 0 },
 });
