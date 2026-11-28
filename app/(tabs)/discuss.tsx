@@ -42,7 +42,9 @@ import { SurfaceLine, surfaceSaid } from '@/components/place/SurfaceTag';
 import { CourtsNear, useNearCourts, usePeekLook } from '@/components/place/CourtsNear';
 import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { MapGlass } from '@/components/map/MapGlass';
-import { useBarInset } from '@/features/navigation/barInset';
+import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barInset';
+import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
 import { simAction } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
@@ -725,8 +727,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // on the map controls' one fixed see-through fill (MapGlass dense, for words: never live glass, never faded), its top
   // corners rounded as the pills are; no hairline, no shadow.
   const cOverlay = (bar: number) => (APP_C_OVERLAY && currentUser && showUpToday ? (
-    <MapGlass radius={0} dense style={[styles.cOverlay, { paddingBottom: bar + spacing.xs }]}>
-      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height + styles.cOverlay.paddingTop + bar + spacing.xs); if (h !== cStripH) setCStripH(h); }}>
+    <MapGlass radius={0} dense style={[styles.cOverlay, { paddingBottom: bar + spacing.sm }]}>
+      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height + styles.cOverlay.paddingTop + bar + spacing.sm); if (h !== cStripH) setCStripH(h); }}>
         <UpToday compact me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
     </MapGlass>
@@ -1205,7 +1207,11 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
  */
 function CBigMap({ render }: { render: (height: number | undefined, bar: number) => React.ReactNode }) {
   const { height: screenHeight } = useWindowDimensions();
-  const bar = useBarInset();
+  // The room the preview's bar (C's, the new bar: NEW_BAR, its foot newBarFoot) really takes at the foot, and the live
+  // session's bar over it: useBarInset counts today's taller pill, which would leave a band of air above the bar.
+  const { bottom } = useSafeAreaInsets();
+  const live = useBarInset() - (TAB_BAR_H + TAB_BAR_GAP + Math.max(bottom, 12));
+  const bar = NEW_BAR.height + newBarFoot(bottom) + Math.max(live, 0);
   const box = useRef<View>(null);
   const [top, setTop] = useState(0);
   const read = useCallback(() => box.current?.measureInWindow((_x, y) => { if (y > 0) setTop(Math.round(y)); }), []);
