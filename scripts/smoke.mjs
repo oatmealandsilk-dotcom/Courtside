@@ -469,8 +469,8 @@ const PAGE_HELPERS = String.raw`
      * What is on screen right now: the topmost element at points spread over
      * the whole screen. A blank page (or a stuck curtain) hits only one or two
      * things; a real screen hits dozens. Rows every ~26 px (Nov 27): at every
-     * ~53 px, a settled sheet over a dimmed page (the guest's "Join CourtSide
-     * to like posts") put most of its rows in the gaps between its lines and
+     * ~53 px, a settled sheet over a dimmed page (the guest's "Like a clip
+     * to cheer them on.") put most of its rows in the gaps between its lines and
      * read as blank, so the step passed only while the sheet was still rising.
      */
     health() {
@@ -989,20 +989,22 @@ const STEPS = [
     title: 'Guest mode: a like asks to join',
     async run(page) {
       await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
-      await page.waitFor({ text: 'Join CourtSide to like posts' });
+      // X's signed-out prompt (Nov 28): about the action, naming the clip's author.
+      await page.waitFor({ text: 'Like a clip to cheer them on.' });
+      await page.waitFor({ text: /^Join CourtSide to let (?!the player).+ know you liked it\.$/ });
     },
-    expect: [{ label: 'Create a free account' }, { label: 'I already have an account' }, { label: 'Get the iPhone app' }, { text: 'Not now' }],
+    expect: [{ label: 'Create account' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
     after: async (page) => {
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to like posts' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Like a clip to cheer them on.' });
       // The heart never fills for a guest: the like did not count.
       if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
       // A post's ••• menu asks to join too, and (found in review, Oct 17) still offers the no-account report.
       await page.tap({ label: 'More options' });
-      await page.waitFor({ text: 'Join CourtSide to save or report this' });
+      await page.waitFor({ text: 'Save or report this post.' });
       await page.waitFor({ text: 'Email us about it' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to save or report this' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Save or report this post.' });
     },
   },
   {
@@ -1015,15 +1017,15 @@ const STEPS = [
       await page.waitFor({ text: /^I made the switch at 4\.0/ }, 30000);
       await guestShowsOnlyAdults(page);
       await page.tap({ label: 'Reply to this thread' });
-      await page.waitFor({ text: 'Join CourtSide to reply' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to reply' });
+      await page.waitFor({ text: 'Join the conversation.' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Join the conversation.' });
       // Share is the one icon at the top; Report is in the "⋯" menu (Oct 29, owner), and still asks a guest to join.
       await page.tap({ label: 'More options' });
       await page.tap({ label: 'Report this thread' });
-      await page.waitFor({ text: 'Join CourtSide to report this' });
-      await page.tap({ text: 'Not now' });
-      await page.gone({ text: 'Join CourtSide to report this' });
+      await page.waitFor({ text: 'Report this.' });
+      await page.tap({ label: 'Close' });
+      await page.gone({ text: 'Report this.' });
     },
     expect: [{ text: 'Replies' }, { label: 'Share this thread' }, { label: 'More options' }],
   },

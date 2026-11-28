@@ -13,6 +13,8 @@ export interface JoinAsk {
   what: string;
   /** Set when they tried to report something: its kind and id ("post:…"), for the no-account way to report. */
   report?: string;
+  /** The person it was about, by their display name (a clip's author, the player they tried to follow): the prompt names them. */
+  who?: string;
   /** Where to land once they are in, when not the page they are on: an open hit's page, joined for them (as the peek does). */
   target?: { href: string; joinHit?: string; host?: string };
   /** Counts up on every ask, so the same ask twice still opens the sheet again. */
@@ -24,8 +26,8 @@ const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((fn) => fn());
 const subscribe = (fn: () => void) => { listeners.add(fn); return () => { listeners.delete(fn); }; };
 
-export function openJoinSheet(what: string, options?: { report?: string; target?: JoinAsk['target'] }) {
-  current = { what, report: options?.report, target: options?.target, at: Date.now() };
+export function openJoinSheet(what: string, options?: { report?: string; who?: string; target?: JoinAsk['target'] }) {
+  current = { what, report: options?.report, who: options?.who || undefined, target: options?.target, at: Date.now() };
   emit();
 }
 

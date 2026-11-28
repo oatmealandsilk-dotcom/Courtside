@@ -10683,16 +10683,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * come from guest mode's own data. Everything else is the app's own action.
    */
   const guestActions = useMemo<AppActions>(() => {
-    const ask = (what: string, report?: string) => openJoinSheet(what, report ? { report } : undefined);
+    const ask = (what: string, report?: string, who?: string) => openJoinSheet(what, report || who ? { report, who } : undefined);
     const gate = <A extends unknown[], R>(what: string, answer: R) => (..._args: A) => { ask(what); return answer; };
+    // The prompt names the person it was about (Nov 28: "Join CourtSide to let Sam know you liked it"), from guest mode's own lists.
+    const nameOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId)?.name : undefined);
+    const postBy = (postId: ID) => nameOf(guestRef.current?.posts.find((p) => p.id === postId)?.authorId);
+    const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined) => (...args: A) => { ask(what, undefined, who(...args)); return answer; };
     const later = <T,>(v: T) => Promise.resolve(v);
     const gated: Partial<AppActions> = {
-      toggleLike: gate('like posts', undefined), toggleLikeComment: gate('like comments', undefined), toggleLikeStory: gate('like posts', undefined),
-      addComment: (() => { ask('comment'); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
-      addAnswer: (() => { ask('reply'); return later(undefined); }),
+      toggleLike: named('like posts', undefined, (postId: ID) => postBy(postId)),
+      toggleLikeComment: named('like comments', undefined, (commentId: ID) => nameOf(guestRef.current?.comments.find((c) => c.id === commentId)?.authorId)), toggleLikeStory: gate('like posts', undefined),
+      addComment: ((postId: ID) => { ask('comment', undefined, postBy(postId)); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
+      addAnswer: ((questionId: ID) => { ask('reply', undefined, nameOf(guestRef.current?.questions.find((q) => q.id === questionId)?.authorId)); return later(undefined); }),
       voteQuestion: gate('vote', undefined), voteAnswer: gate('vote', undefined), votePoll: gate('vote', undefined), voteTip: gate('vote', undefined),
-      toggleFollow: gate('follow players', undefined), toggleSavePost: gate('save posts', undefined), toggleSaveQuestion: gate('save threads', undefined),
-      shareToChats: gate('send this to friends', undefined), openConversationWith: gate('message players', ''),
+      toggleFollow: named('follow players', undefined, (userId: ID) => nameOf(userId)), toggleSavePost: named('save posts', undefined, (postId: ID) => postBy(postId)), toggleSaveQuestion: gate('save threads', undefined),
+      shareToChats: gate('send this to friends', undefined), openConversationWith: named('message players', '', (userId: ID) => nameOf(userId)),
       sendMessage: (() => { ask('message players'); return later(undefined); }),
       joinHit: (() => { ask('join this hit'); return later({ error: 'Make a free account to join.' }); }),
       postHit: (() => { ask('post a hit'); return later(''); }),
