@@ -11,6 +11,8 @@ import { Submit } from '@/components/sheet/SheetForm';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { InkButton, PlainActions, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
+import { askCourtTime } from '@/features/places/courtTime';
 import {
   COURT_TIME_MAX, COURT_TIME_MIN, COURT_TIME_STEP, courtTimeSpoken, courtTimeWords, setCourtTimeHost, setCourtTimeUp, tillWords, type CourtTimeRequest,
 } from '@/features/places/courtTime';
@@ -122,7 +124,9 @@ export function CourtTimeHost() {
       setRequest(next);
       setCourtTimeUp(true);
     });
-    return () => setCourtTimeHost(null);
+    // For the no-boxes pictures only (demo website, ?force=court-time): the card comes up by itself for a court.
+    const demo = forced('court-time') ? setTimeout(() => { void askCourtTime('Griffith Park Courts', async () => 'This is a picture: nothing was lit.'); }, 1200) : undefined;
+    return () => { if (demo) clearTimeout(demo); setCourtTimeHost(null); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {

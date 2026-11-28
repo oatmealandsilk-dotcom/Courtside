@@ -103,6 +103,7 @@ import { simAction } from '@/lib/simDriver';
 import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/ActivitiesList';
 import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
 import { noBoxes } from '@/features/noBoxes/noBoxes';
+import { forced } from '@/features/noBoxes/demoForce';
 
 /** No boxes (demo only, features/noBoxes): For you's last pages and an empty group as plain words, no card, wash or tile. */
 const PLAIN = noBoxes();
@@ -2163,7 +2164,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
   return (
     <TopBandContext.Provider value={banded ? TOP_BAND_DROP : 0}>
     <View style={styles.root}>
-      {!ready || !feed.length ? (
+      {!ready || !feed.length || (!!scope?.groupId && forced('group-empty')) ? (
         <View style={[styles.emptyWrap, { paddingTop: banded ? insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT : insets.top, paddingBottom: barInset }]}>
           {scope?.groupId && ready ? (
             // An empty group: its face, one line, and the two things to do about it.
@@ -2203,7 +2204,7 @@ function Home({ scope, topRow, paused, onChrome, onSwipe, row }: {
           {/* Pull-to-refresh is for phones: the app and a phone's browser (`phone`, above). Asking
               isDesktopBrowser() alone took it off the iPhone app: the app has no browser to read,
               so the check answered "computer" there, and the pull strip was never built. */}
-          <VerticalPager ref={pager} key={visit} initialIndex={active} onIndex={setActive} onSwiped={onSwiped} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
+          <VerticalPager ref={pager} key={visit} initialIndex={!scope && forced('feed-end') ? feed.length : active} onIndex={setActive} onSwiped={onSwiped} onReach={reachFirst ? onReach : undefined} row={topRow || rowed ? liveRow : undefined} onRefresh={scope || !phone ? undefined : refreshFeed} pullTop={topRow ? TOP_BAND_TOP + (TOP_BAND_HEIGHT - 44) / 2 : 0} pullAlign={topRow ? 'left' : 'center'} pullHeader={scope ? undefined : <BrandMark size={topRow ? 22 : 40} />}
             looks={followLive ? followLooks : undefined} startEarly={swipeFollow} onHead={swipeFollow ? headStore.set : undefined}>
             {[...feed.map((item, index) => {
               const distance = Math.abs(index - active);

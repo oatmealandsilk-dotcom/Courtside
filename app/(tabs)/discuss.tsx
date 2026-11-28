@@ -87,6 +87,7 @@ import { isDesktopBrowser } from '@/lib/browserDevice';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { LESS_AI, LESS_AI_ROUND2, LESS_AI_DISCUSS, LESS_AI_COURTS, corner, inputCorner } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { forced } from '@/features/noBoxes/demoForce';
 
 const TOPICS: (QuestionTopic | 'all')[] = [
   'all',
@@ -531,7 +532,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // With every board city listed (the ones not ranked at 0), there is always a list; with your town it leads it,
   // even in a month with none ranked yet. With no town and none ranked, only an A to Z of zeros: "You're early" keeps its place.
   const boardShown = cityBoard.status === 'loading' || (cityBoard.status === 'ready' && (cityBoard.cities.length > 0 || !!cityBoard.board?.me.cityId));
-  const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0;
+  const early = !boardShown && !!currentUser && !notKnownAdult(currentUser) && !!nearFrom && (lastSeenLoaded || !isSupabaseConfigured) && (nearPlayers.length === 0 || forced('early'));
   // Round 3 (owner, Oct 28: "fill the rest with more circles without the ring"): after who is up, your home
   // city's regulars (by the town on their profile, never where they are), as the server picked them for you.
   const homeCityId = boardShown ? cityBoard.board?.me.cityId ?? null : null;
