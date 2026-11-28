@@ -2,12 +2,13 @@ import { useEffect, useRef } from 'react';
 import { router } from 'expo-router';
 import { useFrameCallback, useSharedValue } from 'react-native-reanimated';
 
-import { simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '@/lib/simDriver';
+import { SIM_DRIVER, simAction, simCheckIn, simLog, simThreadFetch, startSimPolling } from '@/lib/simDriver';
 import { startJsGapWatch } from '@/lib/simTrace';
 import { forceBarLook } from '@/features/navigation/barLens';
 import { setBarPreview } from '@/features/navigation/barPreview';
 import { requestSection } from '@/features/navigation/swipeOrder';
 import { posts as demoPosts } from '@/data/mock/feed';
+import { learned, TIP_WORDS, type TipKey } from '@/features/tips/tips';
 import { forceTapFast } from '@/features/navigation/pressV2';
 import { useApp } from '@/store/AppContext';
 import { setAutoDark, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
@@ -41,6 +42,15 @@ const NIGHT_CLIP = `data:image/svg+xml;utf8,${encodeURIComponent(`<svg xmlns="ht
 <rect width="900" height="1600" fill="url(#flA)"/><rect width="900" height="1600" fill="url(#flB)"/>
 <rect width="900" height="1600" fill="url(#vig)"/>
 </svg>`)}`;
+
+/**
+ * The bottom bars' pictures (barPreview, Nov 28): the demo's clips have no picture (court cards on the page's own light
+ * ground), so a bar is never seen over a clip. Bundled with EXPO_PUBLIC_SIM_CLIP_PIC=1, each gets NIGHT_CLIP, here as this
+ * module is first read (before the demo's posts are copied for the app, which happens once it has drawn).
+ */
+if (SIM_DRIVER && process.env.EXPO_PUBLIC_SIM_CLIP_PIC === '1') {
+  for (const post of demoPosts) if (post.kind === 'clip' && !post.videoUrl && !post.thumbnailUrl && !post.imageUrl) post.thumbnailUrl = NIGHT_CLIP;
+}
 
 export function SimDriverHost() {
   const { actions } = useApp();
@@ -91,13 +101,8 @@ export function SimDriverHost() {
       simAction('signin', () => { void now.current.signIn('you').then(() => router.replace('/')); }),
       // "go to=/discuss&section=players": the section asked for first, as the bar asks for Find Players (askForCommunityMap).
       simAction('go', (q) => { if (q.to) { if (q.section) requestSection(q.to, q.section); router.navigate(q.to as never); } }),
-      // The bottom bars' pictures (barPreview, Nov 28): the demo's clips have no picture (court cards on the page's own light
-      // ground), so the bar is never seen over a clip; this gives each one a dark night-court picture. Before "signin" only
-      // (the demo's posts are copied at sign-in).
-      simAction('clippic', () => {
-        for (const post of demoPosts) if (post.kind === 'clip' && !post.videoUrl && !post.thumbnailUrl && !post.imageUrl) post.thumbnailUrl = NIGHT_CLIP;
-        simLog('[sim] clippic');
-      }),
+      // Every tip done, so none sits over a picture (the bottom bars' pictures, Nov 28).
+      simAction('notips', () => { (Object.keys(TIP_WORDS) as TipKey[]).forEach((k) => learned(k)); simLog('[sim] notips'); }),
       simAction('fwatch', (q) => fwatchNow.current(Number(q.ms) || 3000)),
       // How long the live app's reply fetch takes when a thread opens (simThreadFetch): ms=0 never, as the demo always was.
       simAction('threadfetch', (q) => { simThreadFetch.ms = Number(q.ms) || 0; simLog(`[sim] threadfetch ${simThreadFetch.ms}`); }),
