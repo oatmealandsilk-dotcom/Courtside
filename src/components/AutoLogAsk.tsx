@@ -39,7 +39,8 @@ export function AutoLogAsk({ enabled }: { enabled: boolean }) {
   const uploading = useAnyUploading();
   const curtainDown = useOpenSettled();
   const swiped = useFeedSwiped();
-  const waitOnFeed = (pathname === '/' || pathname === '/index') && !swiped;
+  // Nor over a full-screen reel, where it would sit on the reel's back arrow.
+  const waitOnFeed = ((pathname === '/' || pathname === '/index') && !swiped) || pathname === '/reel';
   // Whether this phone already asked this account; null until read (or when it cannot be).
   const [asked, setAsked] = useState<boolean | null>(null);
   const [retry, setRetry] = useState(0);

@@ -1127,6 +1127,7 @@ function WhoPlayed({ day, posts, users, open, onToggle, edge = 'band' }: { day: 
         <View style={styles.wFaces}>
           {people.slice(0, 3).map((u, i) => (
             // The first face on top, as Instagram's "liked by" faces, so no one's initials are cut.
+            // Each face sits in a 2pt ring of the page's colour, so two overlapping faces never merge.
             <View key={u.id} style={[styles.wFace, i > 0 && styles.wFaceOver, { zIndex: 3 - i }]}>
               <Avatar name={u.name} seed={u.avatarSeed} uri={u.avatarUrl} size={28} />
             </View>
@@ -1291,6 +1292,9 @@ function countsLine(post: Post): string {
   return [l ? `${l} ${l === 1 ? 'like' : 'likes'}` : '', c ? `${c} ${c === 1 ? 'comment' : 'comments'}` : ''].filter(Boolean).join(' · ');
 }
 
+/** "1h 28m" → "1", "h ", "28", "m": figures full size, every unit small and muted, the same in every column. */
+const unitParts = (value: string): string[] => value.split(/(\d[\d.,]*)/).filter(Boolean);
+
 const Gv2Card = React.memo(function Gv2Card({ post, author, me, onOpenClip, near = false, width = 390 }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { saved: savedItems, actions } = useApp();
@@ -1319,7 +1323,7 @@ const Gv2Card = React.memo(function Gv2Card({ post, author, me, onOpenClip, near
                 <View key={st.label} style={[styles.s2Stat, i > 0 && styles.s2StatRule]}>
                   <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2Label}>{st.label}</Text>
                   <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.1} style={styles.s2Value}>
-                    {i === 0 && scoreLine(s) ? st.value.replace(/ /g, ' ') : st.value}{st.unit ? <Text style={styles.s2Unit}> {st.unit}</Text> : null}
+                    {i === 0 && scoreLine(s) ? st.value.replace(/ /g, ' ') : unitParts(st.value).map((part, k) => (/^\d/.test(part) ? part : <Text key={k} style={styles.s2Unit}>{part}</Text>))}{st.unit ? <Text style={styles.s2Unit}> {st.unit}</Text> : null}
                   </Text>
                 </View>
               ))}
@@ -1336,12 +1340,15 @@ const Gv2Card = React.memo(function Gv2Card({ post, author, me, onOpenClip, near
           <Picture post={post} w={width} h={Math.round(width * 3 / 4)} onOpenClip={onOpenClip} onPage={photos ? setPage : undefined} like={like} />
         </View>
       ) : null}
-      <View style={styles.vPad}>
-        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${countsLine(post)}. Open comments`} style={styles.s2Counts}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2CountsText}>{countsLine(post)}</Text>
-          {photos ? <View style={styles.s2Dots}><Dots n={photos} at={page} /></View> : null}
-        </Pressable>
-      </View>
+      {/* The counts line; a text post with no likes or comments goes straight to its actions. */}
+      {media || s || post.likedBy.length || post.commentIds.length ? (
+        <View style={styles.vPad}>
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${countsLine(post)}. Open comments`} style={styles.s2Counts}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.s2CountsText}>{countsLine(post)}</Text>
+            {photos ? <View style={styles.s2Dots}><Dots n={photos} at={page} /></View> : null}
+          </Pressable>
+        </View>
+      ) : <View style={styles.s2NoCounts} />}
       {/* Strava's foot: three even actions across the card on a hairline. */}
       <View style={styles.s2Foot}>
         <Pressable onPress={act.like} style={styles.s2Act} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
@@ -1407,7 +1414,7 @@ const Gv3Card = React.memo(function Gv3Card({ post, author, me, onOpenClip, near
       ) : null}
       {caption ? (
         <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel={`${caption}. Open comments`} style={s ? styles.h3Caption : styles.gBlock}>
-          <Text numberOfLines={media ? 2 : 4} maxFontSizeMultiplier={1.1} style={media || s ? styles.gCaptionText : styles.gWords}>{caption}</Text>
+          <Text numberOfLines={media ? 2 : 4} maxFontSizeMultiplier={1.1} style={styles.vBody}>{caption}</Text>
         </Pressable>
       ) : null}
       {media ? <PhotoStrip post={post} w={inner} onOpenClip={onOpenClip} like={like} /> : null}
@@ -1418,16 +1425,24 @@ const Gv3Card = React.memo(function Gv3Card({ post, author, me, onOpenClip, near
 
 /* gv4 · Two-up gallery ------------------------------------------------ */
 
-const GRID_GUTTER = spacing.md;
+/** The grid's edge is every full-width row's edge (16), so tiles line up with your rows, text posts and Follow. */
+const GRID_GUTTER = spacing.lg;
 const GRID_GAP = spacing.sm;
 
-/** One square tile: the picture, then the name and the score/time (or the caption) in small text under it. A tap opens the post; a clip opens the reel. */
-function Tile({ post, author, size, onOpenClip }: { post: Post; author: User; size: number; onOpenClip?: (id: string) => void }) {
+/**
+ * One square tile: the picture; under it the name, when, and a small heart with the likes; then one line that always
+ * means the same kind of thing: a session's score or time, else "Clip · Alder Park" / the place / "Photo" (never a
+ * cut-off caption). A tap opens the post (a clip opens the reel); the heart likes it, with no wait for a double tap.
+ */
+function Tile({ post, author, size, me, onOpenClip }: { post: Post; author: User; size: number; me: string | null; onOpenClip?: (id: string) => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  const act = useCardActions(post, me);
   const s = post.session;
   const clip = isClip(post);
   const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
-  const line = s ? inlineWords(s) : (post.body?.trim().replace(/\s+/g, ' ') || (clip ? 'Clip' : 'Photo'));
+  const place = placeOf(post, author);
+  const line = s ? inlineWords(s) : clip ? (place ? `Clip · ${place}` : 'Clip') : place || 'Photo';
+  const likes = post.likedBy.length;
   const many = photoCount(post);
   const open = () => (clip ? onOpenClip?.(post.id) : router.push(`/post/${post.id}`));
   return (
@@ -1439,7 +1454,14 @@ function Tile({ post, author, size, onOpenClip }: { post: Post; author: User; si
         {many ? <View style={styles.t4Mark}><Ionicons name="copy" size={14} color={colors.onMedia} /></View> : null}
       </View>
       <View style={styles.t4Words}>
-        <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.t4Name}>{author.name}</Text>
+        <View style={styles.t4Top}>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={[styles.flex, styles.t4Name]}>{author.name}</Text>
+          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.t4When}>{relativeTime(post.createdAt)}</Text>
+          <Pressable onPress={act.like} hitSlop={10} style={styles.t4Like} accessibilityRole="button" accessibilityLabel={`${act.liked ? 'Unlike' : 'Like'}${likes ? `, ${likes} ${likes === 1 ? 'like' : 'likes'}` : ''}`}>
+            <Heart liked={act.liked} size={14} ink={colors.textMuted} />
+            {likes ? <Text maxFontSizeMultiplier={1.1} style={styles.t4Count}>{compactNumber(likes)}</Text> : null}
+          </Pressable>
+        </View>
         <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.t4Line}>{line}</Text>
       </View>
     </Pressable>
@@ -1455,7 +1477,7 @@ const Gv4Text = React.memo(function Gv4Text({ post, author, me, near = false }: 
       <GalleryHead post={post} author={author} right={<MoreButton post={post} />} />
       {near ? <View style={styles.mNear}><NearYouTag user={author} /></View> : null}
       <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.gBlock}>
-        <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.gWords}>{post.body}</Text>
+        <Text numberOfLines={4} maxFontSizeMultiplier={1.1} style={styles.vBody}>{post.body}</Text>
       </Pressable>
       <GalleryActions post={post} me={me} menu={false} />
     </View>
@@ -1463,12 +1485,12 @@ const Gv4Text = React.memo(function Gv4Text({ post, author, me, near = false }: 
 });
 
 /** Two tiles side by side (or one, the last of a block); `first` gives the block its top air. */
-function TilePair({ posts, users, width, onOpenClip, first }: { posts: Post[]; users: Map<string, User>; width: number; onOpenClip?: (id: string) => void; first: boolean }) {
+function TilePair({ posts, users, width, me, onOpenClip, first }: { posts: Post[]; users: Map<string, User>; width: number; me: string | null; onOpenClip?: (id: string) => void; first: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const size = Math.floor((width - 2 * GRID_GUTTER - GRID_GAP) / 2);
   return (
     <View testID="mixed-photo" style={[styles.t4Pair, first && styles.t4First]}>
-      {posts.map((p) => { const a = users.get(p.authorId); return a ? <Tile key={p.id} post={p} author={a} size={size} onOpenClip={onOpenClip} /> : null; })}
+      {posts.map((p) => { const a = users.get(p.authorId); return a ? <Tile key={p.id} post={p} author={a} size={size} me={me} onOpenClip={onOpenClip} /> : null; })}
     </View>
   );
 }
@@ -1697,7 +1719,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
       return <View style={[styles.column, { maxWidth: column }]}><WhoPlayed day={row.day} posts={row.posts} users={usersById} open={openDays.has(row.day)} onToggle={() => toggleDay(row.day)} edge={edge} /></View>;
     }
     if (row.kind === 'start') return <View style={[styles.column, styles.startInList, edge === 'hair' && styles.startHair, { maxWidth: column }]}>{startBlock}</View>;
-    if (row.kind === 'pair') return <View style={[styles.column, { maxWidth: column }]}><TilePair posts={row.posts} users={usersById} width={cardW} onOpenClip={openClip} first={row.first} /></View>;
+    if (row.kind === 'pair') return <View style={[styles.column, { maxWidth: column }]}><TilePair posts={row.posts} users={usersById} width={cardW} me={currentUserId} onOpenClip={openClip} first={row.first} /></View>;
     const item = row.post;
     const author = usersById.get(item.authorId);
     if (!author || (!item.session && !classic)) return null;
@@ -1913,6 +1935,8 @@ const styleDefinitions = StyleSheet.create({
 
   // gallery variations: shared
   vPad: { paddingHorizontal: spacing.lg },
+  // gv3 and gv4: one body size for captions and text posts alike; the number of lines carries length.
+  vBody: { ...typography.body, fontSize: 15, lineHeight: 21, color: colors.text },
   vMore: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginRight: -spacing.sm },
   // gv1 · Instagram-pure: no band, no box; a hairline and air part two posts, the photo runs edge to edge at 4:5.
   i1Card: { paddingBottom: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -1927,7 +1951,7 @@ const styleDefinitions = StyleSheet.create({
   i1CaptionName: { ...font('600') },
   // gv2 · Strava-photo: the band between cards, a bold title, three numbers on hairline rules, a wide photo, an even foot.
   s2Card: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: spacing.lg, backgroundColor: colors.bg },
-  s2Title: { ...font('700'), fontSize: 19, lineHeight: 24, letterSpacing: -0.3, color: colors.text, marginTop: spacing.md },
+  s2Title: { ...font('600'), fontSize: 19, lineHeight: 24, letterSpacing: -0.3, color: colors.text, marginTop: spacing.md },
   s2Caption: { ...typography.body, fontSize: 14, lineHeight: 20, color: colors.text, marginTop: 2 },
   s2Body: { ...typography.body, fontSize: 15, lineHeight: 21, color: colors.text, marginTop: spacing.md },
   s2Words: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.text, marginTop: spacing.md },
@@ -1938,7 +1962,8 @@ const styleDefinitions = StyleSheet.create({
   s2Value: { ...font('500'), fontSize: 20, lineHeight: 25, letterSpacing: -0.3, color: colors.text, fontVariant: ['tabular-nums'] },
   s2Unit: { ...font('400'), fontSize: 13, letterSpacing: 0, color: colors.textMuted },
   s2Photo: { marginTop: spacing.md, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
-  s2Counts: { minHeight: 40, flexDirection: 'row', alignItems: 'center' },
+  s2NoCounts: { height: spacing.md },
+  s2Counts: { minHeight: 28, flexDirection: 'row', alignItems: 'center' },
   s2CountsText: { ...typography.small, color: colors.textMuted, flex: 1 },
   s2Dots: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
   s2Foot: { flexDirection: 'row', borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
@@ -1953,8 +1978,12 @@ const styleDefinitions = StyleSheet.create({
   t4First: { paddingTop: spacing.md },
   t4Pic: { overflow: 'hidden', borderRadius: radius.sm, backgroundColor: colors.surfaceAlt },
   t4Mark: { position: 'absolute', top: spacing.sm, right: spacing.sm },
-  t4Words: { paddingTop: 6, paddingHorizontal: 2 },
+  t4Words: { paddingTop: 6 },
+  t4Top: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   t4Name: { ...font('500'), fontSize: 13, lineHeight: 17, color: colors.text },
+  t4When: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, fontVariant: ['tabular-nums'], flexShrink: 0 },
+  t4Like: { flexDirection: 'row', alignItems: 'center', gap: 3, flexShrink: 0 },
+  t4Count: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   t4Line: { ...typography.small, fontSize: 12, lineHeight: 16, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   t4Text: { paddingTop: spacing.lg, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   // gallery-rollup's "who played": a band above, the row, then (opened) its sessions on hairlines in the same surface.
@@ -1962,7 +1991,7 @@ const styleDefinitions = StyleSheet.create({
   wGroupHair: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   wRow: { height: GALLERY.who, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   wFaces: { flexDirection: 'row', alignItems: 'center' },
-  wFace: { borderRadius: 16, borderWidth: 2, borderColor: colors.bg },
+  wFace: { width: 32, height: 32, borderRadius: 16, padding: 2, backgroundColor: colors.bg, overflow: 'hidden' },
   wFaceOver: { marginLeft: -8 },
   wText: { ...typography.body, fontSize: 14, color: colors.textMuted },
   wWho: { ...font('500'), color: colors.text },

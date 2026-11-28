@@ -60,7 +60,8 @@ export function HitFollowUp({ enabled }: { enabled: boolean }) {
   // On the Feed it waits for the first swipe to land (then the usual settle), so
   // it never drops in while someone is reaching for the Feed's top row.
   const swiped = useFeedSwiped();
-  const waitOnFeed = (pathname === '/' || pathname === '/index') && !swiped;
+  // Nor over a full-screen reel, where it would sit on the reel's back arrow (a quick tap on back opened the log sheet).
+  const waitOnFeed = ((pathname === '/' || pathname === '/index') && !swiped) || pathname === '/reel';
   // Your hits from the last two days, fresh from the server each time it looks
   // (the open-hits list lets a hit go an hour after it starts, and may not
   // have heard it was called off). Only these are ever asked about.
