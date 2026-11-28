@@ -1874,6 +1874,8 @@ const STEPS = [
       await page.waitFor({ text: 'Find Players' }, 45000);
       await page.tap({ label: 'Feed' });
       await page.tap({ label: 'Activities' }, 20000);
+      // The gallery (Nov 28) opens on pictures: the card sits after the first two items, so it is scrolled to.
+      await page.reveal({ label: /^Connect your watch\./ }, 30000);
       // Honest about who sees it: one tap never chooses (migration 193 review).
       await page.waitFor({ label: /^Connect your watch\. Your tennis logs itself from .+\. You choose who sees it\.$/ }, 30000);
     },
