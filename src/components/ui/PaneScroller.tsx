@@ -1,7 +1,7 @@
 import { PaneShownContext } from '@/lib/loopShown';
 import React, { useCallback, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { Animated, Keyboard, Platform, ScrollView, StyleSheet, Text, View, type FlatList, type ListRenderItem, type ViewToken, type ViewabilityConfig, type ViewStyle } from 'react-native';
-import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Reanimated, { type SharedValue, cancelAnimation, runOnJS, runOnUI, scrollTo, useAnimatedProps, useAnimatedReaction, useAnimatedRef, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 
@@ -68,6 +68,12 @@ export interface PaneScrollerProps {
    * ground, so the map never shows under the last rows.
    */
   sheet?: { full: number };
+  /**
+   * PICTURES ONLY (design/home-discover, take B "Sheet"): true while a finger that landed on the visible map is down
+   * (set on the animation thread from the touch down): the scroller stands down meanwhile, so a drag on the map never
+   * lifts the sheet. Given or not for the section's whole life.
+   */
+  hold?: SharedValue<boolean>;
   children: ReactNode;
 }
 
@@ -102,7 +108,7 @@ export interface PaneList<T = any> { // eslint-disable-line @typescript-eslint/n
  *  - a section not on show only obeys a jump to its top (the tab being left,
  *    or the bar bringing you to the map), never a glide meant for the other.
  */
-export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, onViewHeight, list: rows, sheet, children }: PaneScrollerProps) {
+export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, onViewHeight, list: rows, sheet, hold, children }: PaneScrollerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const barInset = useBarInset();
   const insets = useSafeAreaInsets();
@@ -165,6 +171,14 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
     if (on && !was) panY.value = scrollY.value;
     else if (!on) panY.value = -1;
   });
+  // Take B's map hold (`hold`): where the page was when the finger landed on the map (-1: none); it is held there, and
+  // the scroller itself stands down (scrollEnabled, on the animation thread) until the finger lifts.
+  const holdY = useSharedValue(-1);
+  useAnimatedReaction(() => (hold ? hold.value : false), (on, was) => {
+    if (on && !was) holdY.value = scrollY.value;
+    else if (!on) holdY.value = -1;
+  }, [hold]);
+  const holdProps = useAnimatedProps(() => ({ scrollEnabled: !swiping && !(hold ? hold.value : false) }), [hold, swiping]);
   /** Marks the next move as made by code. Not when the page is already there (no scroll would report it). */
   const hush = useCallback((y: number) => {
     if (Math.abs(scrollY.value - y) < 1) return;
@@ -270,6 +284,11 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
       if (panY.value >= 0) {
         if (Math.abs(y - panY.value) > 0.5) scrollTo(list, 0, panY.value, false);
         lastY.value = panY.value;
+        return;
+      }
+      if (holdY.value >= 0) {
+        if (Math.abs(y - holdY.value) > 0.5) scrollTo(list, 0, holdY.value, false);
+        lastY.value = holdY.value;
         return;
       }
       if (strip > 0) {
@@ -388,7 +407,8 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
     testID: `pane-${memoryKey}`,
     contentContainerStyle: [styles.content, verticalOnlyTouch, strip > 0 && viewH > 0 ? { minHeight: viewH + strip } : null],
     onLayout: (e: { nativeEvent: { layout: { height: number } } }) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== viewH) setViewH(h); if (h > 0) onViewHeight?.(h); },
-    scrollEnabled: !swiping,
+    // (With `hold`, the scroller's own animated prop says it instead, on the animation thread.)
+    scrollEnabled: hold ? undefined : !swiping,
     // A tap on an iPhone's clock takes the section on show to its top; only one scroller may say yes.
     scrollsToTop: active && tabActive,
     directionalLockEnabled: true,
@@ -438,6 +458,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
                 if (scrollRef) scrollRef.current = handle;
               }}
               {...scrollProps}
+              animatedProps={hold ? holdProps : undefined}
               data={rows.data}
               renderItem={rows.renderItem}
               keyExtractor={rows.keyExtractor}

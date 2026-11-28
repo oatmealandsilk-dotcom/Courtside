@@ -14,8 +14,20 @@ import { HOME_FEED } from './communityMapLook';
  *   'c'  Heading  the taller map, Open to hit under it, and just above the bar a plain "Friends' activity" heading.
  *
  * Groups (owner: "maybe take out groups for now"): not in Discover's row. If they stay, the quiet place for them is a
- * "Your groups" row at the top of Posts (one line of small group faces, Instagram's story row), or a Groups row under
- * Profile; nothing built for it here.
+ * "Your groups" row at the top of Posts (one line of small group faces, Instagram's story row), shown only to someone
+ * in a group, or a Groups row under Profile; nothing built for it here.
+ *
+ * Before any of this ships (the design pass leaves them, pictures only):
+ *  - DiscoverTab is a second full Discuss (the map's and players' work runs twice): split Discover into its own page.
+ *  - Community's section is forced to 'players' here, so every ask for Community's Discussions now lands wrong and
+ *    must go to Discover → Discussions: openTopic.ts, PostCard (topic label), TabsPager (section asks on swipes),
+ *    app/saved.tsx ("Browse Community"), app/question/[id].tsx (swipe back; done for the picture), the website's
+ *    (tabs)/_layout.web.tsx asks. "Posted — tap to see it" (scrollToTop) and the Feed's own '/' asks now reach
+ *    Discover: route them to the new post's place.
+ *  - Friends' photo posts that are not sessions now show only in Discover, mixed with everyone's: rankFeed lifts people
+ *    you follow (+6, +3 when they follow back), keep it that way there.
+ *  - Clips in Discover's feed show their cover; Instagram plays the clip on screen, muted. Not built (the demo's clips
+ *    are drawn court cards, so a picture could not show it): one muted player for the card most on screen.
  *
  * Off (unset, the default) the app is exactly feat/home-map-feed's. The iPhone only (HOME_FEED), never the website.
  * In a simulator build (SIM_DRIVER) "homelook v=a|b|c" switches between the three without a new bundle.

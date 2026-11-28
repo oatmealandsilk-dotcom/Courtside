@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 
 import type { Post } from '@/data/types';
@@ -37,23 +37,22 @@ function useDiscoverPosts(deal: number): { list: Post[]; ready: boolean } {
     return posts.filter((p) => reachable(p) && !p.groupId && !p.removed && !p.archived && !sessionOnly(p)
       && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId));
   }, [posts, users, followingIds, blockedIds, blockedMeIds, mutedIds, currentUserId]);
+  // The ranking's scores asked for once the posts are in and again on each pull (an effect, never inside the render).
+  useEffect(() => { if (ready) void loadFeedScores({ userId: currentUserId }); }, [ready, deal, currentUserId]);
   // Dealt once (and again on a pull), as For you is: a like or a page arriving never reshuffles what is on screen;
-  // posts that reach the phone later go on at the end.
-  const order = useRef<string[] | null>(null);
-  const dealtFor = useRef(-1);
-  if (ready && dealtFor.current !== deal) {
-    dealtFor.current = deal;
-    void loadFeedScores({ userId: currentUserId });
-    order.current = rankFeed(shown, [], comments, currentUserId, [], { followingIds, followEdges, users, seen: new Set(), seenOnPhone: seenOnPhone(currentUserId), scores: feedScores(), demoted: demotedPosts() })
-      .flatMap((i) => (i.type === 'post' ? [i.post.id] : []));
-  }
+  // posts that reach the phone later go on at the end. (rankFeed puts people you follow first: closeness +6, and +3
+  // when they follow you back, so friends' photos are lifted here too.) Keyed on the deal only, on purpose.
+  const order = useMemo(() => (ready
+    ? rankFeed(shown, [], comments, currentUserId, [], { followingIds, followEdges, users, seen: new Set(), seenOnPhone: seenOnPhone(currentUserId), scores: feedScores(), demoted: demotedPosts() })
+      .flatMap((i) => (i.type === 'post' ? [i.post.id] : []))
+    : null), [ready, deal]); // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => {
     const byId = new Map(shown.map((p) => [p.id, p]));
-    const dealt = order.current ?? [];
+    const dealt = order ?? [];
     const inDeal = new Set(dealt);
     const later = shown.filter((p) => !inDeal.has(p.id)).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     return [...dealt.flatMap((id) => byId.get(id) ?? []), ...later];
-  }, [shown, deal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [shown, order]);
   return { list, ready };
 }
 

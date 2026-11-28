@@ -127,7 +127,7 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, belowMap = false, town }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, belowMap = false, town, saysPlayers = false }: { me: User; people: Up[];
   /** The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): the row laid over the map's foot, small (a smaller title, smaller faces, first names only, never a distance). */ compact?: boolean;
   /**
    * With `compact`: the small row right under the map, on the page's own ground rather than over the map (HOME_LOOK
@@ -137,6 +137,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
    * that town; "5 free near Los Angeles" when they chose neighbouring ones), the faces first names only, never a distance.
    */ belowMap?: boolean;
   /** With `belowMap`: your town (board city or profile), for that line when only friends are in it, or "free near" it when strangers chose different towns. */ town?: string;
+  /** PICTURES ONLY (design/home-discover): that line names what it counts ("5 players free in Los Angeles"), so it never reads as the map label's "7 open hits" told twice. */ saysPlayers?: boolean;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -153,14 +154,14 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   // with no town of yours, "near you".
   const freeLine = useMemo(() => {
     if (!belowMap) return '';
-    const n = people.length;
+    const n = saysPlayers ? `${people.length} ${people.length === 1 ? 'player' : 'players'}` : people.length;
     const towns = [...new Set(people.flatMap((p) => (p.town ? [p.town] : [])))];
     const mine = town?.trim();
     if (towns.length === 1) return `${n} free in ${towns[0]}`;
     if (!towns.length && mine) return `${n} free in ${mine}`;
     if (towns.length > 1 && mine) return `${n} free near ${mine}`;
     return '';
-  }, [belowMap, people, town]);
+  }, [belowMap, people, town, saysPlayers]);
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);

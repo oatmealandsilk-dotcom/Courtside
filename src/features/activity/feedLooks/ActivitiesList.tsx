@@ -81,6 +81,12 @@ type CardProps = {
   near?: boolean;
   /** The list's first card right under a page's own row (Discover's Posts, design/home-discover): no band above it. */
   flush?: boolean;
+  /**
+   * PICTURES ONLY (design/home-discover): Discover's Posts, Instagram's order and calm (critic, Nov 28): the handle as
+   * the reel shows it, the picture under the header, the actions right under the picture, then a session's title and
+   * numbers and the caption; air between posts, never the grey band; a clip's play mark a bare glyph, never a plate.
+   */
+  ig?: boolean;
 };
 
 export const GALLERY = {
@@ -144,6 +150,8 @@ const placeOf = (post: Post, author: User) => (author.ageGroup === 'teen' ? '' :
 
 /** "Evening match", from when it was posted and what it was. */
 const titleOf = (post: Post, s: SessionDetail) => sessionTitle(whatWord(s), { day: s.day ?? localDay(post.createdAt), startHour: new Date(post.createdAt).getHours() });
+/** A session post's title as its card shows it ("Afternoon practice"); null for any other post. (design/home-discover, take C's heading.) */
+export const galleryTitleOf = (post: Post): string | null => (post.session ? titleOf(post, post.session) : null);
 
 /** "0:14", when the clip's trimmed length is known (a post carries no length of its own otherwise). */
 function clipLength(p: Post): string | null {
@@ -246,7 +254,7 @@ function Dots({ n, at }: { n: number; at: number }) {
 }
 
 /** The picture, a clip's cover, or (demo, or no cover yet) the tinted court card; several photos swipe sideways. */
-function Media({ post, stand, onPage, turnRef }: { post: Post; stand?: string; onPage?: (i: number) => void; turnRef?: React.MutableRefObject<((i: number) => void) | null> }) {
+function Media({ post, stand, onPage, turnRef, bare = false }: { post: Post; stand?: string; onPage?: (i: number) => void; turnRef?: React.MutableRefObject<((i: number) => void) | null>; /** Discover (design/home-discover): the play mark a bare white glyph with a soft shadow, no plate. */ bare?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const clip = isClip(post);
   // A clip's cover first; a photo post's own photo first (as MediaPostPage), never its smaller thumbnail.
@@ -261,9 +269,9 @@ function Media({ post, stand, onPage, turnRef }: { post: Post; stand?: string; o
         : <MediaPlaceholder fill label={label} seed={post.id} />}
       {/* A clip's small play mark and length; the demo's court card with a length in its label already carries one. */}
       {clip && (uri || !/·\s*\d+:\d+/.test(label)) ? (
-        <View style={styles.clipMark}>
-          <Ionicons name="play" size={11} color={colors.onMedia} />
-          {length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.clipMarkText}>{length}</Text> : null}
+        <View pointerEvents="none" style={bare ? styles.clipBare : styles.clipMark}>
+          <Ionicons name="play" size={bare ? 22 : 11} color={colors.onMedia} style={bare ? styles.clipBareGlyph : undefined} />
+          {length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.clipMarkText, bare && styles.clipBareText]}>{length}</Text> : null}
         </View>
       ) : null}
     </View>
@@ -302,7 +310,7 @@ const simLikes = new Map<string, () => void>();
 
 /* ------------------------------------------------------------------ a card's pieces */
 
-function GalleryHead({ post, author }: { post: Post; author: User }) {
+function GalleryHead({ post, author, handle = false }: { post: Post; author: User; /** Discover: the handle, as the reel names them, so the card and its reel read as one person. */ handle?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const place = placeOf(post, author);
   const when = agoInWords(post.createdAt);
@@ -312,7 +320,7 @@ function GalleryHead({ post, author }: { post: Post; author: User }) {
         <Avatar name={author.name} seed={author.avatarSeed} uri={author.avatarUrl} size={36} />
         <View style={styles.whoWords}>
           <View style={styles.nameRow}>
-            <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{author.name}</Text>
+            <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{handle ? author.handle || author.name : author.name}</Text>
             <PushedDownTag post={post} />
           </View>
           <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.meta}>{when}{place ? ` · ${place}` : ''}</Text>
@@ -420,7 +428,7 @@ function OwnRow({ post, joined, note, face }: { post: Post; joined: boolean; /**
 const OWN_NOTE = 'Not in friends’ feeds';
 
 /** One card: a session with a photo or clip (Activities holds sessions only; a plain one falls back to its numbers). */
-const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width, computer, flush = false }: CardProps) {
+const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width, computer, flush = false, ig = false }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const liked = !!me && post.likedBy.includes(me);
@@ -487,8 +495,8 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
 
   if (!media) {
     return (
-      <View testID="acts-plain" style={[styles.card, flush && styles.cardFlush]}>
-        <GalleryHead post={post} author={author} />
+      <View testID="acts-plain" style={[styles.card, ig && styles.cardIg, flush && styles.cardFlush]}>
+        <GalleryHead post={post} author={author} handle={ig} />
         {nearLine}
         {s ? <GalleryStats post={post} /> : (
           // A text post: its words in the title's and numbers' place, three lines at most.
@@ -507,10 +515,10 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
   const who = author.name?.trim().split(/\s+/)[0] || author.handle;
   const frame = pictureSize(width, computer);
   const picture = (
-    <View ref={frameRef} collapsable={false} style={[styles.photo, !s && styles.photoUnderHead, frame, computer && styles.photoCentred]}>
+    <View ref={frameRef} collapsable={false} style={[styles.photo, (!s || ig) && styles.photoUnderHead, frame, computer && styles.photoCentred]}>
       {clip ? (
         <Pressable onPress={() => onOpenClip(post.id)} accessibilityRole="button" accessibilityLabel={`${who}'s clip${post.mediaLabel ? `, ${post.mediaLabel}` : ''}`} accessibilityHint="Plays it full screen" style={StyleSheet.absoluteFill}>
-          <Media post={post} stand={stand} />
+          <Media post={post} stand={stand} bare={ig} />
         </Pressable>
       ) : (
         <Pressable
@@ -528,6 +536,20 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
       )}
     </View>
   );
+  // Discover (ig): Instagram's order, the picture right under the header so every picture starts at the same height,
+  // the actions right under it, then a session's title and numbers beside the caption.
+  if (ig) {
+    return (
+      <View testID="acts-photo" style={[styles.card, styles.cardIg, flush && styles.cardFlush]}>
+        <GalleryHead post={post} author={author} handle />
+        {nearLine}
+        {picture}
+        <GalleryActions post={post} me={me} pop={bloom}>{photos ? <Dots n={photos} at={page} /> : null}</GalleryActions>
+        {s ? <View style={styles.igStats}><GalleryStats post={post} inline /></View> : null}
+        {captionView(2)}
+      </View>
+    );
+  }
   return (
     <View testID="acts-photo" style={[styles.card, flush && styles.cardFlush]}>
       <GalleryHead post={post} author={author} />
@@ -966,7 +988,7 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
-    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} computer={computer} flush={everything && r === rows[0]} /></View>;
+    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} computer={computer} flush={everything && r === rows[0]} ig={everything} /></View>;
   }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, computer, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage, everything]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
@@ -1290,7 +1312,15 @@ const styleDefinitions = StyleSheet.create({
 
   // A card: the column's full width, a band of the page's second ground above it, one left edge for all words.
   card: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: GALLERY.padTop, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },
-  cardFlush: { borderTopWidth: 0 },
+  cardFlush: { borderTopWidth: 0, paddingTop: GALLERY.padTop },
+  // Discover (ig): air between posts instead of the band, as Instagram's feed has.
+  cardIg: { borderTopWidth: 0, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  // A session's title and numbers under the actions: the stats block's own top margin is for under a header.
+  igStats: { marginTop: -4 },
+  // Discover's play mark: a bare white glyph with a soft shadow, no plate (critic: the plate read as a video site's logo).
+  clipBare: { position: 'absolute', top: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 4 },
+  clipBareGlyph: { textShadowColor: colors.overlay, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
+  clipBareText: { fontSize: 12, textShadowColor: colors.overlay, textShadowRadius: 6, textShadowOffset: { width: 0, height: 1 } },
   head: { minHeight: GALLERY.head, flexDirection: 'row', alignItems: 'center' },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0, minHeight: 44 },
   whoWords: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 1 },
