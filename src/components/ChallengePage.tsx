@@ -59,6 +59,9 @@ export function ChallengePage({ challenge }: { challenge: Challenge }) {
           </View>
           {entries.length ? (
             <ChallengeEntries entries={(featured.length ? featured : entries).slice(0, 3)} />
+          ) : noBoxes() ? (
+            // No boxes (demo only): the same line as plain words, no dashed box or icon around it.
+            <Text style={styles.plainEmpty}>No entries yet. Yours could be the first.</Text>
           ) : (
             <View style={styles.empty}>
               <Ionicons name="videocam-outline" size={20} color={colors.textFaint} />
@@ -110,6 +113,7 @@ const styleDefinitions = StyleSheet.create({
   tag: { ...font('600'), color: colors.text },
   empty: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl, paddingHorizontal: spacing.lg, borderRadius: corner(20), borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderStrong },
   emptyText: { ...typography.small, color: colors.textMuted, flex: 1 },
+  plainEmpty: { ...typography.body, color: colors.textMuted },
   actions: { flexDirection: 'row', gap: spacing.sm },
   plainActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   primary: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 48, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand },
