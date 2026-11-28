@@ -74,7 +74,18 @@ export function JoinSheet() {
     if (!open || Platform.OS !== 'web' || typeof document === 'undefined') return undefined;
     const before = document.activeElement as HTMLElement | null;
     const root = () => box.current as unknown as HTMLElement | null;
-    const t = setTimeout(() => root()?.focus?.({ preventScroll: true }), 0);
+    // The entering animation keeps the box hidden for its first frames, and focus() on a hidden box does
+    // nothing, so it keeps trying each frame (up to ~600ms) until the focus is inside.
+    let frame = 0;
+    const giveUp = Date.now() + 600;
+    const focusIn = () => {
+      const el = root();
+      if (el && el.contains(document.activeElement)) return;
+      el?.focus?.({ preventScroll: true });
+      if (el && el.contains(document.activeElement)) return;
+      if (Date.now() < giveUp) frame = requestAnimationFrame(focusIn);
+    };
+    frame = requestAnimationFrame(focusIn);
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); closeJoinSheet(); return; }
       if (e.key !== 'Tab') return;
@@ -88,7 +99,7 @@ export function JoinSheet() {
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      clearTimeout(t);
+      cancelAnimationFrame(frame);
       window.removeEventListener('keydown', onKey);
       if (before && before.isConnected && typeof before.focus === 'function') before.focus({ preventScroll: true });
     };

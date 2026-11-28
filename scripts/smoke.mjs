@@ -992,6 +992,8 @@ const STEPS = [
       // X's signed-out prompt (Nov 28): about the action, naming the clip's author.
       await page.waitFor({ text: 'Like a clip to cheer them on.' });
       await page.waitFor({ text: /^Join CourtSide to let (?!the player).+ know you liked it\.$/ });
+      // The focus goes into the prompt when it opens (review, Nov 28: the entering animation used to swallow it).
+      await page.waitUntil(() => page.call(() => !!document.activeElement?.closest('[role=dialog]')), 3000, 'the focus to go into the join prompt');
     },
     expect: [{ label: 'Create account' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
     after: async (page) => {

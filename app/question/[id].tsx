@@ -341,7 +341,7 @@ function QuestionDetail() {
         <View style={styles.voteRow}>
           <VoteControls item={question} userId={currentUserId} onVote={direction => actions.voteQuestion(question.id, direction)} />
           {/* The same Reply button a reply has; it opens the line to type on right here. None on a removed thread. */}
-          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply'); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
+          {removed ? null : <Pressable accessibilityRole="button" accessibilityLabel="Reply to this thread" onPress={() => { if (isGuest) { openJoinSheet('reply', { who: users.find(u => u.id === question.authorId)?.name }); return; } setReplying(true); setTimeout(() => replyInput.current?.focus(), 50); }} style={({ pressed }) => [styles.replyButton, pressed && { opacity: PRESS_DIM }]}>
             <Ionicons name="chatbubble-outline" size={16} color={colors.textMuted}/>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.replyLabel}>Reply</Text>
           </Pressable>}
