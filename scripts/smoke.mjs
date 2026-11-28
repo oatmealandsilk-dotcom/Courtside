@@ -785,6 +785,9 @@ const profilePageColour = (page) => page.call(() => {
 /** A day's bar in the This week chart, named by its weekday ("Thursday, 1 hour 20 minutes"); today's says "Today". */
 const WEEKDAY_BAR = /^(Sun|Mon|Tues|Wednes|Thurs|Fri|Satur)day, /;
 
+/** The plain sign-up letter's first lines after a guest's like (Nov 28): "Kai posted this. / Join to like it.", by the clip's author. */
+const LIKE_ASK = /^\S+ posted this\. Join to like it\.$/;
+
 /** Guest mode shows nobody but public adults: none of the demo's teens, private or no-age players appear anywhere on the page. */
 async function guestShowsOnlyAdults(page) {
   const words = await page.eval('document.body.innerText');
@@ -998,24 +1001,39 @@ const STEPS = [
     title: 'Guest mode: a like asks to join',
     async run(page) {
       await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
-      // X's signed-out prompt (Nov 28): about the action, naming the clip's author.
-      await page.waitFor({ text: 'Like a post to cheer them on.' });
-      await page.waitFor({ text: /^Join CourtSide to let (?!the player).+ know you liked it\.$/ });
+      // The plain letter (Nov 28, owner: "i think d is solid"): the clip's author first, then the ask.
+      await page.waitFor({ text: LIKE_ASK });
+      await page.waitFor({ text: 'It’s free. Once you’re in, we’ll bring you straight back here.' });
       // The focus goes into the prompt when it opens (review, Nov 28: the entering animation used to swallow it).
       await page.waitUntil(() => page.call(() => !!document.activeElement?.closest('[role=dialog]')), 3000, 'the focus to go into the join prompt');
     },
-    expect: [{ label: 'Create account' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
+    expect: [{ label: 'Join CourtSide' }, { label: 'Log in' }, { label: 'Get the iPhone app' }, { label: 'Close' }],
     after: async (page) => {
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Like a post to cheer them on.' });
+      await page.gone({ text: LIKE_ASK });
       // The heart never fills for a guest: the like did not count.
       if (await page.find({ label: /^Unlike/ })) throw new Error('a guest’s like filled the heart');
       // A post's ••• menu asks to join too, and (found in review, Oct 17) still offers the no-account report.
+      // It comes back to the Feed's own page, whose clip is not in its address: so no "we'll bring you straight back".
       await page.tap({ label: 'More options' });
-      await page.waitFor({ text: 'Save or report this post.' });
+      await page.waitFor({ text: 'Join CourtSide to save or report this.' });
       await page.waitFor({ text: 'Email us about it' });
+      await page.waitFor({ text: 'It’s free.' });
+      if (await page.find({ text: /bring you straight back/ })) throw new Error('the Feed’s ••• ask promises to bring them back, with no post to bring them back to');
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Save or report this post.' });
+      await page.gone({ text: 'Join CourtSide to save or report this.' });
+      // "We'll bring you straight back here" is true: either button remembers the clip's own page (the Feed
+      // keeps no clip in its address), which the app opens once they are in (useShareLanding).
+      await page.tap({ label: /^Like( clip|\. Hold to see who liked it)$/ });
+      await page.waitFor({ text: LIKE_ASK });
+      await page.tap({ label: 'Log in' });
+      await page.waitUntil(() => page.call(() => location.pathname === '/sign-in'), 15000, 'Log in to open the sign-in page');
+      const back = await page.call(() => { try { return JSON.parse(localStorage.getItem('courtside-share-target') || 'null')?.href ?? null; } catch { return null; } });
+      if (!/^\/post\/[^/?#]+$/.test(back ?? '')) throw new Error(`Log in did not remember the clip to come back to (remembered ${back ?? 'nothing'})`);
+      // Back to the Feed as a guest, with nothing waiting, for the steps after this one.
+      await page.call(() => { localStorage.removeItem('courtside-share-target'); });
+      await page.goto('/');
+      await page.waitFor({ label: /^Like( clip|\. Hold to see who liked it)$/ }, 45000);
     },
   },
   {
@@ -1028,15 +1046,18 @@ const STEPS = [
       await page.waitFor({ text: /^I made the switch at 4\.0/ }, 30000);
       await guestShowsOnlyAdults(page);
       await page.tap({ label: 'Reply to this thread' });
-      await page.waitFor({ text: 'Join the conversation.' });
+      // The thread has its own address, so coming back to it once they are in is true here.
+      await page.waitFor({ text: /^Join to reply to \S+\.$/ });
+      await page.waitFor({ text: 'It’s free. Once you’re in, we’ll bring you straight back here.' });
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Join the conversation.' });
+      await page.gone({ text: /^Join to reply to \S+\.$/ });
       // Share is the one icon at the top; Report is in the "⋯" menu (Oct 29, owner), and still asks a guest to join.
       await page.tap({ label: 'More options' });
       await page.tap({ label: 'Report this thread' });
-      await page.waitFor({ text: 'Report this.' });
+      await page.waitFor({ text: 'Join CourtSide to report this.' });
+      await page.waitFor({ text: 'Email us about it' });
       await page.tap({ label: 'Close' });
-      await page.gone({ text: 'Report this.' });
+      await page.gone({ text: 'Join CourtSide to report this.' });
     },
     expect: [{ text: 'Replies' }, { label: 'Share this thread' }, { label: 'More options' }],
   },

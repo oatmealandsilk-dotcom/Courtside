@@ -4,7 +4,7 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AccessibilityInfo, BackHandler, Keyboard, Platform, Pressable, Animated as RNAnimated, Easing as RNEasing, StyleSheet, Text, View, type TextInput } from 'react-native';
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams, useNavigation, useRoute } from 'expo-router';
-import { openJoinSheet } from '@/features/guest/joinAsk';
+import { askedPost, openJoinSheet } from '@/features/guest/joinAsk';
 import { StatusBar } from 'expo-status-bar';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Image as ExpoImage } from 'expo-image';
@@ -635,7 +635,7 @@ export default function CommentsSheet() {
             }}
           >
             {/* A guest (guest mode, Oct 17) reads the comments; the box asks them to join instead of typing. */}
-            {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment', { who: author?.name })} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
+            {isGuest ? <Pressable accessibilityRole="button" accessibilityLabel="Add a comment" onPress={() => openJoinSheet('comment', { who: author?.name, post: askedPost(post) })} style={[StyleSheet.absoluteFill, { zIndex: 5 }]} /> : null}
             {/* Docked on the box's top edge while replying, the × on the right. Plain, never a
                 height animation: an iPhone kept the animation's first frame (no height) and the
                 strip never showed (Oct 25 recording). */}
