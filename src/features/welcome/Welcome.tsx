@@ -12,6 +12,11 @@ import { useReducedMotion } from '@/lib/useReducedMotion';
 import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, pageIsDark, spacing, withAlpha, wordmarkFont } from '@/theme';
 import { MOMENTS, MOMENT_H, MOMENT_W, Moment } from './Moments';
+import { InkButton, PlainActions, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the words at the left, Log in as words beside one ink button, no glow. */
+const PLAIN = noBoxes();
 
 /** From this width up (a desktop, a tablet) everything is one centred column, rather than the buttons sitting at the foot of a tall window. */
 const WIDE = 768;
@@ -150,7 +155,7 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
   const moment = MOMENTS[index];
 
   const lockup = (
-    <Animated.View entering={FadeIn.duration(500).reduceMotion(ReduceMotion.System)} style={styles.lockup}>
+    <Animated.View entering={FadeIn.duration(500).reduceMotion(ReduceMotion.System)} style={[styles.lockup, PLAIN && styles.plainLeft]}>
       <BrandMark size={26} />
       <Text allowFontScaling={false} accessibilityRole="header" style={styles.wordmark}>CourtSide</Text>
     </Animated.View>
@@ -181,18 +186,18 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
     </View>
   );
   const words = (
-    <View style={styles.words}>
+    <View style={[styles.words, PLAIN && styles.plainWords]}>
       {/* The longest line, unseen, holds the room so the buttons never jump as the lines change. */}
-      <Text aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" maxFontSizeMultiplier={1.5} style={[styles.headline, wide && styles.headlineWide, styles.sizer]}>
+      <Text aria-hidden accessibilityElementsHidden importantForAccessibility="no-hide-descendants" maxFontSizeMultiplier={1.5} style={[styles.headline, wide && styles.headlineWide, PLAIN && styles.plainHeadline, styles.sizer]}>
         {MOMENTS.reduce((a, m) => (m.headline.split('\n').length > a.split('\n').length ? m.headline : a), MOMENTS[0].headline as string)}
       </Text>
-      <Animated.Text key={index} entering={FadeIn.duration(420).reduceMotion(ReduceMotion.System)} exiting={leaving} maxFontSizeMultiplier={1.5} style={[styles.headline, wide && styles.headlineWide, styles.headlineShown]} importantForAccessibility="no" accessibilityElementsHidden>
+      <Animated.Text key={index} entering={FadeIn.duration(420).reduceMotion(ReduceMotion.System)} exiting={leaving} maxFontSizeMultiplier={1.5} style={[styles.headline, wide && styles.headlineWide, PLAIN && styles.plainHeadline, styles.headlineShown, PLAIN && styles.plainShown]} importantForAccessibility="no" accessibilityElementsHidden>
         {moment.headline}
       </Animated.Text>
     </View>
   );
   const dots = (
-    <View style={styles.dots}>
+    <View style={[styles.dots, PLAIN && styles.plainLeft]}>
       {MOMENTS.map((m, i) => (
         <Pressable key={m.headline} onPress={() => go(i, i < index)} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Show ${i + 1} of ${MOMENTS.length}`} accessibilityState={{ selected: i === index }}>
           <Dot on={i === index} />
@@ -200,7 +205,14 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
       ))}
     </View>
   );
-  const actions = (
+  const actions = PLAIN ? (
+    <Animated.View entering={FadeIn.delay(250).duration(500).reduceMotion(ReduceMotion.System)}>
+      <PlainActions style={styles.plainActions}>
+        <TextAction label="Log in" onPress={onLogIn} />
+        <InkButton label="Create an account" onPress={onCreate} />
+      </PlainActions>
+    </Animated.View>
+  ) : (
     <Animated.View entering={FadeIn.delay(250).duration(500).reduceMotion(ReduceMotion.System)} style={styles.actions}>
       <Submit label="Create an account" onPress={onCreate} />
       <Pressable accessibilityRole="button" accessibilityLabel="Log in" onPress={onLogIn} hitSlop={6} style={({ pressed }) => [styles.logIn, pressed && styles.pressed]}>
@@ -211,7 +223,7 @@ export function Welcome({ onCreate, onLogIn, still = false }: { onCreate: () => 
 
   return (
     <View style={styles.root}>
-      <Glow />
+      {PLAIN ? null : <Glow />}
       <ScrollView
         contentContainerStyle={[styles.page, { paddingTop: wide ? spacing.xxxl : space.header, paddingBottom: wide ? spacing.xxxl : space.footer }]}
         bounces={false}
@@ -255,4 +267,9 @@ const styleDefinitions = StyleSheet.create({
   logIn: { minHeight: 48, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: spacing.lg },
   logInText: { ...font('600'), fontSize: 16, lineHeight: 22, color: colors.brand, textAlign: 'center' },
   pressed: { opacity: PRESS_DIM },
+  plainLeft: { justifyContent: 'flex-start' },
+  plainHeadline: { ...font('400'), textAlign: 'left' },
+  plainActions: { marginTop: spacing.xl },
+  plainWords: { paddingHorizontal: 0 },
+  plainShown: { left: 0, right: 0 },
 });

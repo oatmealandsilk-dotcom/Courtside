@@ -76,6 +76,11 @@ import type { PlaceSearch } from '@/features/places/usePlaceSearch';
 import { plain } from '@/features/search/words';
 import { isOfficial } from '@/features/players/official';
 import { appleWouldAsk, appleWouldAskLast } from '@/lib/geo';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the map's asks as plain words, words and one ink button. */
+const PLAIN = noBoxes();
 
 // Kept here too, for the screens that already import it from the map's chrome.
 export { CourtGlyph };
@@ -1200,6 +1205,13 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.personName}>Where do you play?</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.openNote}>{appleNext ? 'Turn on location, and the map shows the courts near you, and your friends when they’re up to hit.' : 'Turn on location or add your city, and the map shows the courts near you, and your friends when they’re up to hit.'}</Text>
       </View>
+      {PLAIN ? (
+        // Before Apple's own question its one button still says Continue, with nothing beside it (Apple 5.1.1(iv)).
+        <PlainActions style={styles.plainWhere}>
+          {appleNext ? null : <TextAction label="Add my city" onPress={() => router.push('/edit-profile')} />}
+          <InkButton label={appleNext ? 'Continue' : 'Use my location'} loading={locating} onPress={() => onLocation?.()} />
+        </PlainActions>
+      ) : (
       <View style={[styles.personActions, { marginTop: spacing.xs }]}>
         <Pressable accessibilityRole="button" accessibilityLabel={appleNext ? 'Continue' : undefined} onPress={onLocation} disabled={locating} hitSlop={buttonShape.smallSlop} style={({ pressed }) => [styles.primary, pressed && styles.glassPressed]}>
           <BrandWash radius={buttonShape.smallRadius} curve />
@@ -1212,6 +1224,7 @@ export function WhereCard({ locating, onLocation }: { locating?: boolean; onLoca
           </Pressable>
         )}
       </View>
+      )}
     </View>
   );
 }
@@ -1875,6 +1888,18 @@ export function PreviewOverlay({ cityName, count, placeCount = 0, hitCount = 0, 
  */
 export function CitylessCard({ onOpenMap }: { onOpenMap?: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
+  if (PLAIN) {
+    return (
+      <View style={styles.plainCityless}>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>Where do you play?</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>Add your city to see the courts and players in your town.</Text>
+        <PlainActions align="start" style={styles.plainCitylessActions}>
+          <InkButton small label="Add my city" onPress={() => router.push('/edit-profile')} />
+          {onOpenMap ? <TextAction small label="Open the map" onPress={onOpenMap} /> : null}
+        </PlainActions>
+      </View>
+    );
+  }
   return (
     <View style={styles.cityless}>
       <View style={styles.citylessDisc}><Ionicons name="location-outline" size={20} color={colors.brand} /></View>
@@ -2297,6 +2322,11 @@ const styleDefinitions = StyleSheet.create({
   citylessTitle: { ...typography.heading, color: colors.text, textAlign: 'center' },
   citylessBody: { ...typography.small, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   citylessActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
+  plainCityless: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleMd },
+  plainBody: { ...plainText.bodyMd },
+  plainCitylessActions: { marginTop: spacing.md },
+  plainWhere: { marginTop: spacing.sm, paddingHorizontal: spacing.lg },
   previewBar: { position: 'absolute', left: 10, right: 30, bottom: 10, alignSelf: 'auto' },
   previewWeather: { position: 'absolute', left: 12, bottom: 12 },
   previewChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },

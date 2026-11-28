@@ -52,6 +52,7 @@ import { curtainState, useStartMapHold } from '@/features/feed/warmup';
 import { useReducedMotion } from '@/lib/useReducedMotion';
 import { cardHint, hasCardShot, hashText, peekCardShot, peekPlaceShot, saveStreetsShot, setCardHint, shotKey, useCardShots, forgetPlaces, type CardHint } from '@/components/map/cardShot';
 import { useCardOnScreen, useHeldCardPlace } from '@/components/map/cardHold';
+import { forced } from '@/features/noBoxes/demoForce';
 
 // The court pictures in chats (CourtMapThumb) fetch their drawing through
 // this file too. With two separate files each fetching the map engine, the
@@ -854,7 +855,7 @@ export function NearbyMap(props: NearbyMapProps) {
   // Its own stacking layer (isolation): the pins' z-indexes (pinEngine, up to z*100) stay inside it, under the card's words (z 10).
   const canvas = <div ref={host} aria-hidden={expanded ? undefined : true} style={{ position: 'absolute', inset: 0, isolation: 'isolate', background: growFrom && growSeeThrough ? 'transparent' : colors.bg }} />;
 
-  if (!expanded && !model.city) {
+  if (!expanded && (!model.city || forced('cityless'))) {
     // A city still being looked up holds the card's place, looking as the map will while it loads; no city at all asks for one.
     return model.cityPending ? <View style={[styles.card, cardHeight ? { height: cardHeight } : null]}><MapCardLoading /></View> : <CitylessCard onOpenMap={onExpand} />;
   }
@@ -901,7 +902,7 @@ export function NearbyMap(props: NearbyMapProps) {
       : model.selectedCourt ? `c:${model.selectedCourt.id}`
         : model.selectedHit ? `h:${model.selectedHit.hit.id}`
           : model.place ? `place:${model.place.id}`
-            : !model.homeKnown ? 'where'
+            : !model.homeKnown || forced('where') ? 'where'
               : listOpen ? 'list' : 'bare';
   const bare = stageKey === 'bare';
   // Under a card, its own colour runs on beneath the home indicator, so no map shows below it; it

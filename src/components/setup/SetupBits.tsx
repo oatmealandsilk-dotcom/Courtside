@@ -13,6 +13,8 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { buttonShape, colors, font, radius, spacing, typography } from '@/theme';
 import { PRESS_SHRINK } from '@/theme/press';
 import { TextScale } from '@/theme/textScale';
+import { InkButton, PlainActions, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /*
  * Setup's shared top and bottom (Oct 20 sweep: "Setup says '2 / 2' and a
@@ -134,6 +136,19 @@ export function SetupFooter({ primary, secondary, link, children }: {
 }) {
   const styles = useThemedStyles(styleDefinitions);
   const space = useGateSpace();
+  // No boxes (demo only): the ways on as words, the main one an ink button at the right sized to its word.
+  if (noBoxes()) {
+    return (
+      <View style={[styles.footer, { paddingBottom: space.footer }]}>
+        {children}
+        <PlainActions style={styles.plainRow}>
+          {link ? <TextAction label={link.label} accessibilityLabel={link.accessibilityLabel} tone="muted" disabled={link.disabled} onPress={link.onPress} /> : null}
+          {secondary ? <TextAction label={secondary.loading ? '…' : secondary.label} disabled={secondary.disabled || secondary.loading} onPress={secondary.onPress} /> : null}
+          <InkButton label={primary.label} onPress={primary.onPress} disabled={primary.disabled} loading={primary.loading} style={primary.dim ? styles.plainDim : undefined} />
+        </PlainActions>
+      </View>
+    );
+  }
   return (
     <View style={[styles.footer, { paddingBottom: space.footer }]}>
       {children}
@@ -161,6 +176,8 @@ const styleDefinitions = StyleSheet.create({
   linkText: { ...typography.smallStrong, color: colors.textMuted },
   // The same height with no second way on, so the main button sits at one height on every page.
   linkSpace: { height: 36 },
+  plainRow: { marginTop: spacing.xs, minHeight: 80, alignItems: 'flex-start' },
+  plainDim: { opacity: 0.45 },
   // ONBOARDING_V2's pieces.
   segments: { flexDirection: 'row', gap: 4 },
   segment: { flex: 1, height: 3, borderRadius: 1.5, backgroundColor: colors.border, overflow: 'hidden' },

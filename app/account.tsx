@@ -28,6 +28,12 @@ import { useModalSheetBottom } from '@/lib/modalSheet';
 import { TextScale } from '@/theme/textScale';
 import { SwipeArea } from '@/features/navigation/swipePress';
 import { corner } from '@/theme/look';
+import { plainText } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): "Password updated" as plain words, no tick tile. */
+const PLAIN = noBoxes();
 
 type Sheet = 'password' | 'email' | 'delete' | null;
 
@@ -298,7 +304,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
   const [again, setAgain] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [done, setDone] = useState(false);
+  const [done, setDone] = useState(() => forced('reset-done'));
   const ok = password.length >= 6 && password === again;
   const save = async () => {
     if (!ok || busy) return;
@@ -326,9 +332,9 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
         <Animated.View key={done ? 'done' : 'form'} entering={FadeIn.duration(320)} style={styles.column}>
           {done ? (
             <>
-              <View style={styles.doneIcon}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>
+              {PLAIN ? null : <View style={styles.doneIcon}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>}
               <View style={{ gap: 6 }}>
-                <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.pageTitle}>Password updated</Text>
+                <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.pageTitle, PLAIN && styles.plainTitle]}>Password updated</Text>
                 <Text style={styles.pageLine}>You’re all set. Use your new password the next time you sign in{email ? ` with ${email}` : ''}.</Text>
               </View>
               <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />
@@ -392,6 +398,7 @@ const styleDefinitions = StyleSheet.create({
   column: { width: '100%', maxWidth: 420, alignSelf: 'center', gap: spacing.xxl },
   pageTitle: { ...typography.display, fontSize: 32, letterSpacing: -0.7, color: colors.text },
   pageLine: { ...typography.body, fontSize: 16, lineHeight: 23, color: colors.textMuted },
+  plainTitle: { ...plainText.titleLg, fontSize: 28, lineHeight: 34 },
   doneIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   notNow: { ...typography.smallStrong, fontSize: 14, color: colors.textMuted },
   sheetNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },

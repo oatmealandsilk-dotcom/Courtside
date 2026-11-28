@@ -49,6 +49,12 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { InkButton, plainText } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): nobody to suggest reads as plain words and one ink button, no card or tile. */
+const PLAIN = noBoxes();
 
 const enter = (i: number) => FadeInDown.delay(80 + i * 80).duration(420).easing(Easing.out(Easing.cubic));
 
@@ -224,7 +230,7 @@ export default function FirstMove() {
           .forEach(({ u, c }) => { if (list.length < MOST) list.push({ user: u, meta: c.headline, section: 'coaches' }); });
       }
     }
-    setPicks(list);
+    setPicks(forced('first-move-empty') ? [] : list);
   }, [picks, currentUser, adult, heard, waited, city, cityPending, near, suggested, followingIds, inviter, overApp, fills, fillPending, cityFill, teens, coaches, users, blockedIds, blockedMeIds, currentUserId, findable]);
   const empty = !!picks && !picks.length;
 
@@ -430,7 +436,7 @@ export default function FirstMove() {
               </Pressable>
             </View>
           ) : null}
-          <View style={[styles.card, (picks === null || empty) && styles.main]}>
+          <View style={[styles.card, (picks === null || empty) && styles.main, PLAIN && empty && styles.plainMain]}>
             {picks === null ? (
               <View style={styles.waiting}><ActivityIndicator color={colors.textFaint} /></View>
             ) : picks.length ? (
@@ -451,13 +457,13 @@ export default function FirstMove() {
               // Nobody to offer yet: bring the people you play with.
               <Animated.View entering={FadeIn.duration(220)} style={{ gap: spacing.lg }}>
                 <View style={styles.mainHead}>
-                  <View style={styles.tile}><Ionicons name={adult ? 'paper-plane' : 'people'} size={20} color={colors.brand} /></View>
+                  {PLAIN ? null : <View style={styles.tile}><Ionicons name={adult ? 'paper-plane' : 'people'} size={20} color={colors.brand} /></View>}
                   <View style={{ flex: 1, gap: 2 }}>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mainTitle}>{adult ? 'Bring your hitting partners' : FRIENDS_TITLE}</Text>
-                    <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.mainBody}>{!adult ? FRIENDS_LINE : court ? `Send your link. It opens on ${court.name}.` : 'Send your link. Whoever joins follows you.'}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.mainTitle, PLAIN && styles.plainTitle]}>{adult ? 'Bring your hitting partners' : FRIENDS_TITLE}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.mainBody, PLAIN && styles.plainBody]}>{!adult ? FRIENDS_LINE : court ? `Send your link. It opens on ${court.name}.` : 'Send your link. Whoever joins follows you.'}</Text>
                   </View>
                 </View>
-                <Button label="Share my link" onPress={() => { void share(); }} full />
+                {PLAIN ? <View style={{ alignItems: 'flex-start' }}><InkButton small label="Share my link" onPress={() => { void share(); }} /></View> : <Button label="Share my link" onPress={() => { void share(); }} full />}
               </Animated.View>
             )}
           </View>
@@ -514,6 +520,9 @@ const styleDefinitions = StyleSheet.create({
   // The prompt card, the same as "You're early" and "Looking for someone to play?" on Find Players.
   card: { ...lift, borderRadius: corner(20), backgroundColor: colors.surface, overflow: 'hidden' },
   main: { padding: spacing.lg },
+  plainMain: { backgroundColor: 'transparent', boxShadow: 'none', paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleMd },
+  plainBody: { ...plainText.bodyMd },
   waiting: { height: 120, alignItems: 'center', justifyContent: 'center' },
   mainHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // The icon on Dim Green, one tile for both cards here and for the cards on Find Players.

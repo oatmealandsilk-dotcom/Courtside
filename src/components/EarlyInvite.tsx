@@ -17,6 +17,11 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { InkButton, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): plain words on the page, no tinted card, no wash, no icon tile. */
+const PLAIN = noBoxes();
 
 /**
  * "You're early in Columbus": Find Players with nobody sharing a spot
@@ -56,18 +61,18 @@ export function EarlyInvite({ city, court, friends = false, leadRef }: { city: s
   const poster = () => router.push(court ? { pathname: '/club-poster', params: { court: court.id, name: court.name, lat: court.lat.toFixed(5), lng: court.lng.toFixed(5) } } : '/club-poster');
   return (
     // Never folded away by the phone's renderer, or the tutorial could not measure it.
-    <View ref={leadRef} collapsable={false} style={styles.card}>
-      <View pointerEvents="none" style={styles.washClip}><Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} /></View>
+    <View ref={leadRef} collapsable={false} style={PLAIN ? styles.plainCard : styles.card}>
+      {PLAIN ? null : <View pointerEvents="none" style={styles.washClip}><Wash height={220} strength={0.6} fade={colors.surface} style={styles.wash} /></View>}
       <View style={styles.head}>
-        <View style={styles.tile}><Ionicons name={friends ? 'people' : 'paper-plane'} size={20} color={colors.brand} /></View>
+        {PLAIN ? null : <View style={styles.tile}><Ionicons name={friends ? 'people' : 'paper-plane'} size={20} color={colors.brand} /></View>}
         <View style={styles.headWords}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.title, PLAIN && styles.plainTitle]}>{friends ? FRIENDS_TITLE : city ? `You’re early in ${city}` : 'You’re early here'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.body, PLAIN && styles.plainBody]}>{friends ? FRIENDS_LINE : 'The map fills up with the people you already play with. Send them your link.'}</Text>
         </View>
       </View>
       {/* The feature card's shape: one primary pill, one quiet link under it. */}
-      <View style={styles.actions}>
-        <Button label="Share my link" onPress={() => { void share(); }} full />
+      <View style={[styles.actions, PLAIN && styles.plainActions]}>
+        {PLAIN ? <InkButton small label="Share my link" onPress={() => { void share(); }} /> : <Button label="Share my link" onPress={() => { void share(); }} full />}
       </View>
       {/* The people you already know who are here (owner, Oct 6). A phone app with contacts only; the Find friends page keeps its own rules. */}
       {canReadContacts() ? (
@@ -102,6 +107,10 @@ const styleDefinitions = StyleSheet.create({
   washClip: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: corner(20), overflow: 'hidden' },
   wash: { position: 'absolute', left: 0, right: 0, top: 0 },
   head: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  plainCard: { paddingVertical: spacing.lg, paddingHorizontal: spacing.xs, gap: spacing.sm },
+  plainTitle: { ...plainText.titleMd },
+  plainBody: { ...plainText.bodyMd },
+  plainActions: { alignItems: 'flex-start' },
   // The empty state's tile: the icon on Dim Green, as "Looking for someone to play?" and the first-move page hold theirs.
   tile: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   headWords: { flex: 1, minWidth: 0, gap: 2, paddingTop: 2 },

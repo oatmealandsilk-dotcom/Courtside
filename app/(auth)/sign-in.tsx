@@ -32,6 +32,12 @@ import { buttonShape, colors, lift, radius, spacing, typography, font } from '@/
 import { TextScale } from '@/theme/textScale';
 import { preloadNearbyMap } from '@/components/NearbyMap';
 import { corner } from '@/theme/look';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): "Check your inbox" as plain words, the answers as words and one ink button. */
+const PLAIN = noBoxes();
 
 type Mode = 'sign-in' | 'sign-up';
 
@@ -86,7 +92,7 @@ export default function SignIn() {
   // A first visit (no accounts on this device) opens on the welcome, not on a form.
   const [started, setStarted] = useState(asked === 'create' || asked === 'sign-in');
   // A link sent by email: the form gives way to a panel saying where it went.
-  const [sent, setSent] = useState<{ kind: 'reset' | 'confirm'; to: string } | null>(null);
+  const [sent, setSent] = useState<{ kind: 'reset' | 'confirm'; to: string } | null>(() => (forced('inbox') ? { kind: 'confirm', to: 'you@example.com' } : null));
   const { leave, curtain } = useLeave();
   const switchingAccount = switching ? savedAccounts.find((a) => a.id === switching) ?? null : null;
   const pick = async (id: string) => {
@@ -452,8 +458,8 @@ export default function SignIn() {
             // Where the link went, and what to do with it: a panel, not a line of green text.
             // It fades in and out over the form rather than cutting (item 29).
             <Animated.View key="inbox" entering={BOXES_IN} exiting={BOXES_OUT} style={styles.inbox}>
-              <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>
-              <Text maxFontSizeMultiplier={TextScale.TITLE} style={styles.title}>Check your inbox</Text>
+              {PLAIN ? null : <View style={styles.inboxIcon}><Ionicons name="mail-open-outline" size={28} color={colors.brand} /></View>}
+              <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, PLAIN && styles.plainTitle]}>Check your inbox</Text>
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxBody}>
                 We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
                 {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.'
@@ -462,6 +468,21 @@ export default function SignIn() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.inboxHint}>Didn’t get it? Check your spam folder, or resend the email.</Text>
               {error ? <Text style={styles.error}>{error}</Text> : null}
               {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+              {PLAIN ? (
+                <View style={styles.inboxActions}>
+                  <PlainActions style={styles.plainActions}>
+                    <TextAction label={(sent.kind === 'reset' ? busy : resending) ? 'Sending…' : 'Resend email'} disabled={sent.kind === 'reset' ? busy : resending} onPress={() => { void (sent.kind === 'reset' ? forgot() : resendConfirm()); }} />
+                    {canContinue
+                      ? <InkButton label={busy ? 'Signing in…' : 'Continue'} disabled={busy} onPress={() => { void confirmed(); }} />
+                      : <InkButton label="Back to sign in" onPress={backToForm} />}
+                  </PlainActions>
+                  {canContinue ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Wrong email? Go back" disabled={busy} onPress={backToForm} hitSlop={8} style={styles.linkButton}>
+                      <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.quietLink}>Wrong email? Go back</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : (
               <View style={styles.inboxActions}>
                 {canContinue ? (
                   // Confirmed in the email (on any phone or browser): straight in, with the password typed a moment ago.
@@ -488,6 +509,7 @@ export default function SignIn() {
                   </Pressable>
                 ) : null}
               </View>
+              )}
             </Animated.View>
           ) : (
             <Animated.View key="form" entering={leftInbox ? BOXES_IN : undefined} exiting={BOXES_OUT} style={styles.column}>
@@ -737,4 +759,6 @@ const styleDefinitions = StyleSheet.create({
   inboxTo: { ...font('600'), color: colors.text },
   inboxHint: { ...typography.small, color: colors.textFaint },
   inboxActions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.sm },
+  plainTitle: { ...plainText.titleLg, fontSize: 26, lineHeight: 32 },
+  plainActions: { marginTop: 0 },
 });
