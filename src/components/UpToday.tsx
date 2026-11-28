@@ -51,6 +51,8 @@ const NO_FILL: FillFace[] = [];
 /** The small row over the map (compact; the app preview of option C, round 2): smaller faces, narrower slots. */
 const C_FACE = 42;
 const C_ITEM = 68;
+/** With a town under some names (the strip under the map, `towns`): wide enough that "Los Angeles" under one face never runs into the next one's. */
+const C_ITEM_TOWN = 78;
 
 /** Someone open to hit, near you: who, how far (if we know where you are), when they were last there, and until when they are open. */
 interface Up { user: User; miles?: number; rough: boolean; seenAt?: string; until?: string; /** Free today in your town (not a friend's check-in): their profile's town, never a spot or a distance. */ town?: string }
@@ -124,17 +126,19 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, towns = false }: { me: User; people: Up[];
   /** The app preview of option C, round 2 only (appCPreview): the row laid over the map's foot, small (a smaller title, smaller faces, first names only). */ compact?: boolean;
+  /** With compact, the map-then-activity picture's strip under the map (homePreview '2'): a stranger free today in town shows their town under their first name; friends stay first names only. */ towns?: boolean;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
   // Sizes: the page's own, or the small row over the map (compact).
   const face = compact ? C_FACE : FACE;
-  const item = compact ? C_ITEM : ITEM;
-  const itemW = compact ? { width: C_ITEM } : null;
-  // Your own held at a player's height: a ring and a name in the small row.
-  const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 } : null;
+  // Your own held at a player's height: a ring and a name in the small row (and a town's line, when one shows).
+  const townLine = compact && towns && people.some((p) => !!p.town);
+  const item = compact ? (townLine ? C_ITEM_TOWN : C_ITEM) : ITEM;
+  const itemW = compact ? { width: item } : null;
+  const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + (townLine ? 3 + META_LINE : 0) + 2 } : null;
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);
@@ -232,7 +236,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
                 <OpenRing open size={face} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={face} ring={p.user.isCoach} /></OpenRing>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
-                {far && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
+                {far && (!compact || (towns && p.town)) ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
                 {theirs && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
               </Pressable>
             </Animated.View>
@@ -260,7 +264,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         ) : null}
       </ScrollView>
       {/* Over the row, pointing down at your own face (the hand that tapped it is below). */}
-      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={(compact ? ROW_PAD + C_ITEM / 2 - spacing.lg : MINE_CENTER) - 6} on="page" style={styles.tip} />
+      <TipBubble tip="hold-to-edit" shown={holdTip.shown} onClose={holdTip.close} pointer="down" pointerInset={(compact ? ROW_PAD + item / 2 - spacing.lg : MINE_CENTER) - 6} on="page" style={styles.tip} />
       </View>
     </View>
   );

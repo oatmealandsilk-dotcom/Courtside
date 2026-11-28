@@ -20,6 +20,13 @@ import { isSupabaseConfigured } from '@/lib/supabase';
  * were merged by mistake.
  */
 const LOOK = Platform.OS !== 'web' && !isSupabaseConfigured ? process.env.EXPO_PUBLIC_HOME_PREVIEW : undefined;
-export const HOME_MAP_FEED = LOOK === '1';
+export const HOME_MAP_FEED = LOOK === '1' || LOOK === '2';
+/**
+ * '2' = '1' with Open to hit UNDER the map, not on it (Nov 28, for Apple: we told Apple the map never shows a stranger's
+ * face or name). The map ends above the strip; the strip is the page's first row, on the page's own solid ground with a
+ * hairline between, and a stranger free today in town shows their town under their first name (friends as on '1').
+ * The map gives up the strip's height so the first activity still peeks above the bar.
+ */
+export const HOME_STRIP_UNDER = LOOK === '2';
 /** The feed's look under the map: the one he picked for Activities (Nov 28, "Gallaty+ friends played"). */
 export const HOME_FEED_LOOK = 'gallery-rollup' as const;

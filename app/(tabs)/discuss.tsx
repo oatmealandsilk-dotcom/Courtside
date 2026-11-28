@@ -46,7 +46,7 @@ import { TAB_BAR_GAP, TAB_BAR_H, useBarInset } from '@/features/navigation/barIn
 import { NEW_BAR, newBarFoot } from '@/features/navigation/tabBarLook';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { APP_C_BIG_MAP, APP_C_OVERLAY } from '@/features/community/appCPreview';
-import { HOME_FEED_LOOK, HOME_MAP_FEED } from '@/features/community/homePreview';
+import { HOME_FEED_LOOK, HOME_MAP_FEED, HOME_STRIP_UNDER } from '@/features/community/homePreview';
 import { useInlineFeed, type FeedSlot, type InlineRow } from '@/features/activity/feedLooks/ActivitiesList';
 import { useActivitiesFeed } from '@/features/activity/feedLooks/useActivitiesFeed';
 import { ActivitiesStart } from '@/components/ActivitiesStart';
@@ -744,6 +744,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       </View>
     </MapGlass>
   ) : null);
+  // The map-then-activity picture, '2' (homePreview, for Apple): Open to hit UNDER the map, never on it. The map ends
+  // above it; the strip is the page's first row, edge to edge on the page's own solid ground, a hairline between it and
+  // the map, the same small row, and a stranger's town under their first name. Its height (cStripH) comes off the map.
+  const cUnder = () => (currentUser && showUpToday ? (
+    <View style={styles.cUnder} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h !== cStripH) setCStripH(h); }}>
+      <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
+        <UpToday compact towns me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+      </View>
+    </View>
+  ) : null);
   // Hits: someone wants a game, yours first, then near you. Posting one is right here.
   const hitsSection = () => (
     <View style={styles.hits}>
@@ -919,6 +929,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
             const map = (cardHeight?: number, cover?: number) => <NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} cardHeight={cardHeight} cardCover={cover} />;
             // The app preview of option C, rounds 2 and 3 only (demo builds with its switch): the tall map, measured in its own slot.
             // The map-then-activity picture (homePreview): round 2's map, as tall as leaves the first activity's top in sight above the bar.
+            if (HOME_STRIP_UNDER) return <HomeMap peek={homePeek + cStripH} floor={HOME_MAP_MIN} render={(h) => <>{map(h, 0)}{cUnder()}</>} />;
             if (HOME_MAP_FEED) return <HomeMap peek={homePeek} render={(h) => <>{map(h, cStripH)}{cOverlay(0)}</>} />;
             return APP_C_BIG_MAP ? <CBigMap render={(h, bar) => <>{map(h, APP_C_OVERLAY ? cStripH : bar)}{cOverlay(bar)}</>} /> : map();
           })()}</View>
@@ -1290,6 +1301,8 @@ function CBigMap({ render }: { render: (height: number | undefined, bar: number)
  * other first item down to its last line and a little air, so the bar never cuts through words).
  */
 const HOME_PEEK = 184;
+/** '2' (Open to hit under the map): the map's least height, lower than the card's own, so the strip under it and the first activity's peek both fit above the bar. */
+const HOME_MAP_MIN = 220;
 /** Where the rows that sat under the map go in the feed: after this many activities (past its end: at its end, in order). People you may know is the feed's follow block, after the second. */
 const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 };
 const NO_ROWS: InlineRow[] = [];
@@ -1299,14 +1312,14 @@ const NO_ROWS: InlineRow[] = [];
  * the page down to just above the bar, less the first activity's peek. Read from where the slot is drawn, and once more
  * after the tab's arrival has settled; `render` gets the map's height. Bar A's own room (useBarInset).
  */
-function HomeMap({ peek, render }: { peek: number; render: (height: number | undefined) => React.ReactNode }) {
+function HomeMap({ peek, floor = CARD_HEIGHT, render }: { peek: number; /** The map's least height ('2' takes a lower one). */ floor?: number; render: (height: number | undefined) => React.ReactNode }) {
   const { height: screenHeight } = useWindowDimensions();
   const barInset = useBarInset();
   const box = useRef<View>(null);
   const [top, setTop] = useState(0);
   const read = useCallback(() => box.current?.measureInWindow((_x, y) => { if (y > 0) setTop(Math.round(y)); }), []);
   useEffect(() => { const t = setTimeout(read, 900); return () => clearTimeout(t); }, [read]);
-  const height = top > 0 ? Math.max(CARD_HEIGHT, screenHeight - top - barInset - peek) : undefined;
+  const height = top > 0 ? Math.max(floor, screenHeight - top - barInset - peek) : undefined;
   return <View ref={box} collapsable={false} onLayout={top ? undefined : read}>{render(height)}</View>;
 }
 
@@ -1390,6 +1403,8 @@ const styleDefinitions = StyleSheet.create({
   // The map-then-activity picture (homePreview): the strip is the map's full-width foot, square, edge to edge as the map
   // is, so map, strip, the feed's band and the first post stack as one page (no slivers of map down its sides).
   cOverlayFoot: { left: -spacing.lg, right: -spacing.lg, paddingHorizontal: spacing.lg, borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  // '2' (homePreview, for Apple): the strip under the map, edge to edge as the map is, on the page's own solid ground, a hairline above.
+  cUnder: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, backgroundColor: colors.bg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   mapHidden: Platform.OS === 'web' ? { display: 'none' } : { position: 'absolute', top: 0, left: 0, right: 0, opacity: 0 },
   // The map card's own height, so nothing jumps when the card takes its place.
   mapStandIn: { height: CARD_HEIGHT, borderRadius: radius.xl, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
