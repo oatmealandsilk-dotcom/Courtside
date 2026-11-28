@@ -41,6 +41,7 @@ import { NEW_LAUNCH_LIGHT, NEW_SPLASH } from '@/lib/splashLook';
 import { installCrashReporting, reportError } from '@/lib/crashReporting';
 import { isDesktopBrowser } from '@/lib/browserDevice';
 import { SignOutCurtainHost } from '@/components/SignOutCurtain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 import { ConfirmHost } from '@/components/ConfirmHost';
 import { CourtTimeHost } from '@/components/place/CourtTimeHost';
 import { AlertsWhyHost } from '@/components/AlertsWhyHost';
@@ -57,6 +58,21 @@ installCrashReporting();
  */
 export function ErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   useEffect(() => { void reportError(error, { fatal: true, where: 'screen' }); }, [error]);
+  // No boxes (demo only): the same words at the left, no mark on top, Try again in ink sized to its word.
+  // Drawn with plain styles: this page stands in for the whole app, outside the theme's provider.
+  if (noBoxes()) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', padding: 32, backgroundColor: colors.bg }}>
+        <View style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }}>
+          <Text style={{ fontSize: 24, lineHeight: 31, letterSpacing: -0.3, ...font('400'), color: colors.text }}>Something went wrong</Text>
+          <Text style={{ fontSize: 15, lineHeight: 22, color: colors.textMuted, marginTop: 8 }}>It has been reported, so we can fix it. Nothing you saved is lost.</Text>
+          <Pressable accessibilityRole="button" onPress={retry} style={{ marginTop: 24, alignSelf: 'flex-start', minHeight: buttonShape.height, justifyContent: 'center', paddingHorizontal: 24, borderRadius: 12, ...buttonShape.curve, backgroundColor: colors.text }}>
+            <Text style={{ color: colors.bg, fontSize: 15, ...font('600') }}>Try again</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 32, backgroundColor: colors.bg }}>
       <BrandMark size={52} />

@@ -12,6 +12,11 @@ import { dueText, turnaround } from '@/features/coaching/bookings';
 import { useApp } from '@/store/AppContext';
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, spacing, typography } from '@/theme';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the result in plain words at the left, no round mark, one ink button. */
+const PLAIN = noBoxes();
 
 /**
  * Where Stripe sends a player back after paying (and where the app goes
@@ -55,7 +60,7 @@ export default function BookingDone() {
 
   return (
     <Screen title="Booking" compactTitle onBack={() => (coach ? toCoach() : goBack('/coaches'))}>
-      <View style={styles.body}>
+      <View style={[styles.body, PLAIN && styles.plainBody]}>
         {state === 'checking' ? (
           <>
             <CourtSpinner size={32} />
@@ -64,31 +69,45 @@ export default function BookingDone() {
           </>
         ) : state === 'paid' ? (
           <>
-            <View style={styles.mark}><Ionicons name="checkmark" size={30} color={colors.brandInk} /></View>
-            <Text style={styles.title}>Booked</Text>
-            <Text style={styles.lead}>
+            {PLAIN ? null : <View style={styles.mark}><Ionicons name="checkmark" size={30} color={colors.brandInk} /></View>}
+            <Text style={[styles.title, PLAIN && styles.plainTitle]}>Booked</Text>
+            <Text style={[styles.lead, PLAIN && styles.plainLead]}>
               {first} has your request{request?.dueAt ? ` and will answer by ${dueText(request.dueAt)}` : service ? ` and will answer within ${turnaround(service.turnaroundHours)}` : ''}. You will get a notification when it is in.
             </Text>
-            {service ? <Text style={styles.service}>{service.title}</Text> : null}
-            {request?.priceCents ? <Text style={styles.fine}>Paid {money(request.priceCents)}. If {first} has not answered in time, you can have it back.</Text> : null}
+            {service ? <Text style={[styles.service, PLAIN && styles.plainLeft]}>{service.title}</Text> : null}
+            {request?.priceCents ? <Text style={[styles.fine, PLAIN && styles.plainLeft]}>Paid {money(request.priceCents)}. If {first} has not answered in time, you can have it back.</Text> : null}
+            {PLAIN ? (
+              <PlainActions align="start" style={styles.plainActions}>
+                {request ? <InkButton label="See your booking" onPress={() => router.replace(`/coach-request/${request.id}`)} /> : null}
+                {request ? <TextAction label="Back to Coaching" onPress={toCoaching} /> : <InkButton label="Back to Coaching" onPress={toCoaching} />}
+              </PlainActions>
+            ) : (
             <View style={styles.actions}>
               {request ? <Button label="See your booking" onPress={() => router.replace(`/coach-request/${request.id}`)} full /> : null}
               <Button label="Back to Coaching" variant="secondary" onPress={toCoaching} full />
             </View>
+            )}
           </>
         ) : (
           <>
-            <View style={[styles.mark, styles.markQuiet]}><Ionicons name="close" size={28} color={colors.textMuted} /></View>
-            <Text style={styles.title}>{state === 'cancelled' ? 'Payment cancelled' : 'Not paid yet'}</Text>
-            <Text style={styles.lead}>
+            {PLAIN ? null : <View style={[styles.mark, styles.markQuiet]}><Ionicons name="close" size={28} color={colors.textMuted} /></View>}
+            <Text style={[styles.title, PLAIN && styles.plainTitle]}>{state === 'cancelled' ? 'Payment cancelled' : 'Not paid yet'}</Text>
+            <Text style={[styles.lead, PLAIN && styles.plainLead]}>
               {state === 'cancelled'
                 ? 'Nothing was charged. You can book again whenever you like.'
                 : 'Stripe has not confirmed a payment for this booking. If your card was charged, the booking will show up under Coaching within a few minutes. If it doesn’t, write to support@courtsidebase.com.'}
             </Text>
+            {PLAIN ? (
+              <PlainActions align="start" style={styles.plainActions}>
+                {coach ? <InkButton label={`Back to ${first}`} onPress={toCoach} /> : null}
+                {coach ? <TextAction label="Back to Coaching" onPress={toCoaching} /> : <InkButton label="Back to Coaching" onPress={toCoaching} />}
+              </PlainActions>
+            ) : (
             <View style={styles.actions}>
               {coach ? <Button label={`Back to ${first}`} onPress={toCoach} full /> : null}
               <Button label="Back to Coaching" variant="secondary" onPress={toCoaching} full />
             </View>
+            )}
           </>
         )}
       </View>
@@ -104,5 +123,10 @@ const styleDefinitions = StyleSheet.create({
   lead: { ...typography.body, color: colors.textMuted, textAlign: 'center', lineHeight: 22, maxWidth: 380 },
   service: { ...typography.smallStrong, color: colors.text, textAlign: 'center' },
   fine: { ...typography.small, color: colors.textFaint, textAlign: 'center', lineHeight: 19, maxWidth: 360 },
+  plainBody: { alignItems: 'flex-start', gap: spacing.sm, paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleLg, fontSize: 28, lineHeight: 34, textAlign: 'left' },
+  plainLead: { textAlign: 'left', maxWidth: 520 },
+  plainLeft: { textAlign: 'left' },
+  plainActions: { marginTop: spacing.md },
   actions: { alignSelf: 'stretch', gap: spacing.sm, marginTop: spacing.lg, maxWidth: 420, width: '100%', marginHorizontal: 'auto' },
 });

@@ -33,6 +33,11 @@ import { healthSignal, withoutSource } from '@/lib/integrations';
 import { useApp } from '@/store/AppContext';
 import type { AiMessage, PlayerProfile, TrainingBlockKind, TrainingPlan } from '@/data/types';
 import { colors, lift, spacing, typography, buttonShape } from '@/theme';
+import { InkButton, PlainActions, TextAction, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the consent as a plain page of words at the left (same words), Agree one ink button. */
+const PLAIN = noBoxes();
 
 type BlockIconName = keyof typeof Ionicons.glyphMap | 'court';
 // The tint is a palette slot, looked up when the week draws: read once at load,
@@ -177,10 +182,10 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
   ];
   return (
     <Screen title="AI coach" compactTitle onBack={() => goBack()}>
-      <View style={introStyles.card}>
-        {LESS_AI ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
-        <Text style={introStyles.title}>Before you use the AI coach</Text>
-        <Text style={introStyles.body}>The AI coach is powered by Claude, an AI made by Anthropic. To answer you and plan your week, CourtSide sends Anthropic:</Text>
+      <View style={PLAIN ? introStyles.plainCard : introStyles.card}>
+        {LESS_AI || PLAIN ? null : <View style={introStyles.mark}><Ionicons name="sparkles" size={20} color={colors.brand} /></View>}
+        <Text style={[introStyles.title, PLAIN && introStyles.plainTitle]}>Before you use the AI coach</Text>
+        <Text style={[introStyles.body, PLAIN && introStyles.plainBody]}>The AI coach is powered by Claude, an AI made by Anthropic. To answer you and plan your week, CourtSide sends Anthropic:</Text>
         <View style={introStyles.list}>
           {sent.map((line) => (
             <View key={line} style={introStyles.item}>
@@ -189,13 +194,20 @@ function AiCoachConsent({ onAgree }: { onAgree: () => Promise<boolean> }) {
             </View>
           ))}
         </View>
-        <Text style={introStyles.body}>Numbers from WHOOP are never sent. Anthropic does not use it to train its AI. You can stop any time from Settings → Account center → Coach memory.</Text>
+        <Text style={[introStyles.body, PLAIN && introStyles.plainBody]}>Numbers from WHOOP are never sent. Anthropic does not use it to train its AI. You can stop any time from Settings → Account center → Coach memory.</Text>
         <Pressable accessibilityRole="link" onPress={() => openLegal('privacy')} hitSlop={8}><Text style={introStyles.link}>Read the privacy policy</Text></Pressable>
         {failed ? <Text style={introStyles.error}>That didn’t save. Check your connection and try again.</Text> : null}
+        {PLAIN ? (
+          <PlainActions align="start" style={introStyles.plainActions}>
+            <InkButton label={busy ? 'Saving…' : 'Agree'} disabled={busy} onPress={() => { void agree(); }} />
+            <TextAction label="Not now" tone="muted" onPress={() => goBack()} />
+          </PlainActions>
+        ) : <>
         <Pressable accessibilityRole="button" accessibilityState={{ disabled: busy }} disabled={busy} onPress={() => { void agree(); }} style={({ pressed }) => [introStyles.go, (pressed || busy) && { opacity: 0.85 }]}>
           <Text style={introStyles.goText}>{busy ? 'Saving…' : 'Agree'}</Text>
         </Pressable>
         <Pressable accessibilityRole="button" onPress={() => goBack()} hitSlop={8}><Text style={introStyles.later}>Not now</Text></Pressable>
+        </>}
       </View>
     </Screen>
   );
@@ -214,6 +226,10 @@ const introDefinitions = StyleSheet.create({
   go: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', minHeight: buttonShape.height, paddingVertical: 10, borderRadius: buttonShape.radius, ...buttonShape.curve, backgroundColor: colors.brand, ...brandShadow, marginTop: spacing.sm },
   goText: { ...typography.bodyStrong, color: colors.brandInk },
   later: { ...typography.smallStrong, color: colors.textMuted, paddingVertical: spacing.sm },
+  plainCard: { gap: spacing.md, paddingTop: spacing.lg, paddingHorizontal: spacing.xs },
+  plainTitle: { ...plainText.titleLg },
+  plainBody: { textAlign: 'left' },
+  plainActions: { marginTop: spacing.sm },
 });
 
 type Line = AiMessage & { handoff?: AiCoachReply['handoff'] };

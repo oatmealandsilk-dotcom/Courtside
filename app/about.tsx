@@ -12,11 +12,14 @@ import { Screen } from '@/components/ui';
 import { isSupabaseConfigured } from '@/lib/supabase';
 import { openLegal } from '@/lib/legal';
 import { colors, radius, spacing, typography, font, wordmarkFont } from '@/theme';
+import { forced } from '@/features/noBoxes/demoForce';
 
 // The real version, from the app's own settings, so this never goes stale.
 const VERSION = Constants.expoConfig?.version ?? '0.1.0';
 
 export default function About() {
+  // For the no-boxes pictures only (demo website, ?force=crash): this page breaks, to show "Something went wrong".
+  if (forced('crash')) throw new Error('Demo: a page that breaks, for a picture');
   const styles = useThemedStyles(styleDefinitions);
   return (
     <Screen title="About" compactTitle onBack={() => goBack()}>

@@ -11,6 +11,9 @@ import { loadCardShots } from '@/components/map/cardShot';
 import { loadMapCss } from '@/components/map/mapCss';
 import { Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
+import { PlainNote } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 export type { NearbyMapProps };
 
@@ -63,6 +66,8 @@ export function nearbyMapSettled(): Promise<void> {
 
 const WebMap = lazy(() => loadMap().then((m) => {
   try { sessionStorage.removeItem(RELOADED); } catch {}
+  // For the no-boxes pictures only (demo website, ?force=map-fail): as if the engine never came.
+  if (forced('map-fail')) return { default: MapUnavailable };
   return { default: m.NearbyMap };
 }, () => {
   // A tab left open across an update asks for the old file, which is gone:
@@ -106,6 +111,14 @@ function MapUnavailable({ expanded, onBack, cardHeight }: NearbyMapProps) {
       <Pressable accessibilityRole="button" accessibilityLabel="The map didn't load. Tap to try again" onPress={() => window.location.reload()} style={[styles.card, cardHeight ? { height: cardHeight } : null]}>
         <MapCardFailed />
       </Pressable>
+    );
+  }
+  // No boxes (demo only): the words at the left, Go back in ink sized to its words.
+  if (noBoxes()) {
+    return (
+      <View style={[styles.fill, { alignItems: 'stretch' }]}>
+        <PlainNote size="lg" style={{ maxWidth: 420, alignSelf: 'center', paddingHorizontal: 0 }} title="The map didn’t load" body="Check your connection, then refresh the page." action={onBack ? { label: 'Go back', onPress: onBack } : null} />
+      </View>
     );
   }
   return (

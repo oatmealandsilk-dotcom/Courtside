@@ -22,6 +22,11 @@ import { colors, font, lift, radius, spacing, surfaceColorFor, typography, withA
 import { ASK_ABOUT, PlayersSayRows, SectionHead } from './parts';
 import type { CourtView } from './view';
 import { corner } from '@/theme/look';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): an empty section is plain words under its heading, no card or icon tile. */
+const PLAIN = noBoxes();
 
 /*
  * The court page's sections (see PlaceCard). Every section opens the same
@@ -114,12 +119,12 @@ export function ClipsSection({ view, quiet = false }: {
     return (
       <View style={styles.section}>
         <SectionHead title="Clips" />
-        <View style={[styles.card, styles.emptyCard]}>
-          <View style={styles.emptyTile}><Ionicons name="videocam-outline" size={24} color={colors.brand} /></View>
+        <View style={PLAIN ? styles.plainEmpty : [styles.card, styles.emptyCard]}>
+          {PLAIN ? null : <View style={styles.emptyTile}><Ionicons name="videocam-outline" size={24} color={colors.brand} /></View>}
           <View style={styles.emptyWords}>
             <Text style={styles.cardTitle}>{view.onPost ? 'Be the first to post here' : 'No clips here yet'}</Text>
             <Text style={styles.cardBody}>Clips and photos tagged at {name} show up here, for everyone who opens it.</Text>
-            {view.onPost ? <Button size="sm" variant="secondary" label="Post a clip" onPress={view.onPost} style={styles.emptyButton} /> : null}
+            {view.onPost ? (PLAIN ? <InkButton small label="Post a clip" onPress={view.onPost} style={styles.emptyButton} /> : <Button size="sm" variant="secondary" label="Post a clip" onPress={view.onPost} style={styles.emptyButton} />) : null}
           </View>
         </View>
       </View>
@@ -253,12 +258,12 @@ export function SaysSection({ courtId, name }: { courtId: string; name: string }
     return (
       <View style={styles.section}>
         <SectionHead title="What players say" sub="Nobody has said anything yet." />
-        <View style={[styles.card, styles.emptyCard]}>
-          <View style={styles.emptyTile}><Ionicons name="chatbubble-ellipses-outline" size={23} color={colors.brand} /></View>
+        <View style={PLAIN ? styles.plainEmpty : [styles.card, styles.emptyCard]}>
+          {PLAIN ? null : <View style={styles.emptyTile}><Ionicons name="chatbubble-ellipses-outline" size={23} color={colors.brand} /></View>}
           <View style={styles.emptyWords}>
             <Text style={styles.cardTitle}>Know this court?</Text>
             <Text style={styles.cardBody}>{ASK_ABOUT}: say what you found, so the next player knows before they go.</Text>
-            <Button size="sm" variant="secondary" label={addLabel} onPress={add} style={styles.emptyButton} />
+            {PLAIN ? <InkButton small label={addLabel} onPress={add} style={styles.emptyButton} /> : <Button size="sm" variant="secondary" label={addLabel} onPress={add} style={styles.emptyButton} />}
           </View>
         </View>
       </View>
@@ -307,6 +312,7 @@ const styleDefinitions = StyleSheet.create({
   cardTitle: { ...typography.bodyStrong, color: colors.text },
   cardBody: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
   failed: { padding: spacing.lg, gap: spacing.md, alignItems: 'flex-start' },
+  plainEmpty: { paddingVertical: spacing.sm, paddingHorizontal: spacing.xs },
   emptyCard: { flexDirection: 'row', gap: spacing.md, padding: spacing.lg, alignItems: 'flex-start' },
   emptyTile: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.brandDim, alignItems: 'center', justifyContent: 'center' },
   emptyWords: { flex: 1, minWidth: 0, gap: 4 },

@@ -19,6 +19,9 @@ import { colors, lightColors, spacing, typography, font, wordmarkFont } from '@/
 import { Button } from '@/components/ui';
 import { leaveGently } from '@/components/SignOutCurtain';
 import { dropWebLoader } from '@/lib/webLoader';
+import { PlainNote } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /** How long the mark stays up even when the data is instant — a beat, not a wait. */
 const HOLD_MS = 450;
@@ -176,7 +179,7 @@ export default function Index() {
   // Nothing to draw over (back into a running app, or already on the way in): let the phone's picture go.
   useEffect(() => { if (backToApp || gone) hideLaunch(); }, [backToApp, gone]);
   // A page that stays on this address (could not load the account) takes the website's loader away itself.
-  const failed = !!(gone && currentUserId && isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error);
+  const failed = !!(gone && currentUserId && ((isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error) || forced('load-fail')));
   useEffect(() => { if (failed) dropWebLoader(); }, [failed]);
   if (backToApp) return <View style={styles.splash} />;
 
@@ -184,7 +187,17 @@ export default function Index() {
   // does not open on a guess (the quiz would overwrite what is saved). It
   // says so and offers another try.
   // A saved copy that does not say you are set up is no answer either: the same page, not setup.
-  if (gone && currentUserId && isSupabaseConfigured && !remoteLoaded && (!snapshotShown || !onboardingComplete) && error) {
+  if (failed) {
+    // No boxes (demo only): the words at the left, no mark on top, Try again in ink and Sign out as words.
+    if (noBoxes()) {
+      return (
+        <View style={[styles.splash, { alignItems: 'stretch', padding: spacing.xl }]}>
+          <PlainNote size="lg" style={{ maxWidth: 420, alignSelf: 'center', paddingHorizontal: 0 }} title="Could not load your account" body="Check your connection and try again. Nothing you have saved is lost."
+            action={{ label: retrying ? 'Trying…' : 'Try again', loading: retrying, onPress: async () => { setRetrying(true); try { await actions.retryLoad(); } finally { setRetrying(false); } } }}
+            secondary={{ label: 'Sign out', onPress: () => leaveGently(() => actions.signOut()) }} />
+        </View>
+      );
+    }
     return (
       <View style={[styles.splash, { padding: spacing.xl, gap: spacing.md }]}>
         <BrandMark size={56} />

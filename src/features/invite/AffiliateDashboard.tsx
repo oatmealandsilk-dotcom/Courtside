@@ -13,6 +13,9 @@ import { useTheme, useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, font, lift, radius, spacing, typography, buttonShape } from '@/theme';
 import { REWARDS, dollars, nextReward, notCountedReason, stepFill, wontCount } from './affiliate';
 import { corner } from '@/theme/look';
+import { PlainWords } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 const shortDate = (iso: string) => {
   const at = new Date(iso);
@@ -239,7 +242,7 @@ function Rewards({ counted }: { counted: number }) {
 /** Their players, counted first: a row each, the status at the end of the name's line. */
 function People({ people, asked, invited, counted, onOpen }: { people: Invitee[] | null; asked: boolean; invited: number; counted: number; onOpen: (id: string) => void }) {
   const styles = useThemedStyles(styleDefinitions);
-  const list = people ?? [];
+  const list = forced('affiliate-empty') ? [] : people ?? [];
   // Still on its way (the earnings can come first): no "No one yet" for a moment before the list.
   // Could not be fetched: how many joined, from the earnings' own count, never "No one yet".
   const unknown = people === null;
@@ -296,11 +299,16 @@ function People({ people, asked, invited, counted, onOpen }: { people: Invitee[]
           })}
         </View>
       ) : (
+        noBoxes() ? (
+          // No boxes (demo only): plain words under the heading, no card or icon tile.
+          <PlainWords title="No one yet" body="When someone joins with your link or code, they show up here." style={{ paddingVertical: spacing.sm, paddingHorizontal: spacing.xs }} />
+        ) : (
         <View style={[styles.card, styles.empty]}>
           <View style={styles.emptyIcon}><Ionicons name="people-outline" size={22} color={colors.brand} /></View>
           <Text style={styles.emptyTitle}>No one yet</Text>
           <Text style={styles.emptyText}>When someone joins with your link or code, they show up here.</Text>
         </View>
+        )
       )}
     </View>
   );
