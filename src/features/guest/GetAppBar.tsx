@@ -10,6 +10,7 @@ import { isAppleMobileBrowser, isDesktopBrowser } from '@/lib/browserDevice';
 import { buttonShape, colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL } from './joinAsk';
 import { noteAppTap } from './campaign';
+import { guestCommunityLook } from './guestCommunityLook';
 
 const KEY = 'courtside-app-bar-closed';
 const closedThisVisit = () => { try { return sessionStorage.getItem(KEY) === '1'; } catch { return false; } };
@@ -34,6 +35,8 @@ export function GetAppBar() {
   const [iphone] = useState(isAppleMobileBrowser);
   // A computer gets no strip at all (item 50: "show it on iPhone/iPad only").
   const [computer] = useState(() => !isAppleMobileBrowser() && isDesktopBrowser());
+  // The options for the guest Community screen (guestCommunityLook, Nov 27): a subtitle that fits a 390 iPhone, and a compact button.
+  const refined = guestCommunityLook() !== 'now';
   // The strip's own height once drawn, and how far it has slid shut (0 open, 1 gone).
   const full = useSharedValue(0);
   const shut = useSharedValue(0);
@@ -54,10 +57,10 @@ export function GetAppBar() {
         <View style={styles.mark}><BrandMark size={18} /></View>
         <View style={styles.words}>
           <Text style={styles.title} numberOfLines={1}>{iphone ? 'CourtSide for iPhone' : 'CourtSide'}</Text>
-          <Text style={styles.sub} numberOfLines={1}>{iphone ? 'Clips, hits and coaches, in your pocket' : 'iPhone app · Android coming soon'}</Text>
+          <Text style={styles.sub} numberOfLines={1}>{iphone ? (refined ? 'Clips, hits and coaches' : 'Clips, hits and coaches, in your pocket') : 'iPhone app · Android coming soon'}</Text>
         </View>
         {iphone ? (
-          <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.get, pressed && styles.pressed]}>
+          <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={() => { noteAppTap(); void Linking.openURL(IPHONE_APP_URL); }} style={({ pressed }) => [styles.get, refined && styles.getSmall, pressed && styles.pressed]}>
             <Text style={styles.getText}>Get the app</Text>
           </Pressable>
         ) : null}
@@ -75,6 +78,7 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.smallStrong, color: colors.text },
   sub: { ...typography.caption, letterSpacing: 0, textTransform: 'none', color: colors.textMuted },
   get: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: buttonShape.smallRadius, ...buttonShape.curve, backgroundColor: colors.brand },
+  getSmall: { height: buttonShape.smallHeight, paddingVertical: 0, justifyContent: 'center' },
   getText: { ...typography.smallStrong, color: colors.brandInk },
   pressed: { opacity: PRESS_DIM },
 });

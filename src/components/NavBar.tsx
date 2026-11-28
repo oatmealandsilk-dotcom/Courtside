@@ -31,6 +31,7 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
+import { webBarLook } from '@/features/guest/guestCommunityLook';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -128,6 +129,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const barLens = useBarLens();
   // The new bar, after Instagram's and Strava's (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first). It always has the lens.
   const barIg = useBarIg();
+  // The website's bar options (guestCommunityLook, Nov 27): C is the new bar for everyone on the website. Null on a phone.
+  const webBar = webBarLook();
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -250,6 +253,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         tourRef={tourRef}
         tourCreate={tourCreate}
         bottom={Math.max(insets.bottom, 12)}
+        safeBottom={insets.bottom}
         outerStyle={outerStyle}
         tuckStyle={tuck}
         hideFromReader={hideFromReader}
@@ -258,8 +262,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         onVeil={closeVeil}
         onFeedHold={onFeedHold}
         follow={swipeFollow}
-        lens={barLens || barIg}
-        newBar={barIg}
+        lens={barLens || barIg || webBar === 'c'}
+        newBar={barIg || webBar === 'c'}
       />
     );
   }

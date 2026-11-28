@@ -9,7 +9,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { HitGlyph } from '@/components/HitGlyph';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
-import { Button } from '@/components/ui';
+import { Button, DottedRule } from '@/components/ui';
 import { fetchPeekHits } from '@/data/api';
 import type { PeekHit } from '@/data/types';
 import { FORMAT_LABEL, hitShort, levelText } from '@/features/hits/format';
@@ -18,6 +18,7 @@ import { formatSpotMiles } from '@/features/players/geo';
 import { getPosition } from '@/lib/geo';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { GUEST_PEEK_LIMIT, GuestCourtsMap } from './GuestCourtsMap';
+import { guestCommunityLook } from './guestCommunityLook';
 import { openJoinSheet } from './joinAsk';
 import { TextScale } from '@/theme/textScale';
 
@@ -38,6 +39,9 @@ const RELOADED_KEY = 'cs-guest-loc-reloaded';
  */
 export function GuestFindPlayers() {
   const styles = useThemedStyles(styleDefinitions);
+  // The options for him to pick from (guestCommunityLook, Nov 27); 'now' is today's screen exactly.
+  const look = guestCommunityLook();
+  const refined = look !== 'now';
   const [near, setNear] = useState<{ lat: number; lng: number } | null>(null);
   const [locating, setLocating] = useState(false);
   const [note, setNote] = useState<string | null>(null);
@@ -100,8 +104,9 @@ export function GuestFindPlayers() {
   return (
     <View style={styles.wrap}>
       <GuestCourtsMap near={near} hits={hits} locating={locating} failed={locFail} onLocate={() => { void locate(); }} />
+      {look === 'b' ? <DottedRule gap={spacing.sm} /> : null}
       <View style={styles.head}>
-        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Open hits</Text>
+        <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={[styles.title, look === 'b' && styles.titleB]}>Open hits</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>Players looking for someone to hit with in the next 7 days.</Text>
       </View>
       {near ? (
@@ -112,7 +117,7 @@ export function GuestFindPlayers() {
             <Ionicons name="close" size={15} color={colors.brand} />
           </Pressable>
         </View>
-      ) : (
+      ) : refined ? null : (
         <SwipePressable accessibilityRole="button" onPress={() => { void locate(); }} disabled={locating} style={({ pressed }) => [styles.pill, styles.locate, pressed && styles.pressed]}>
           <Ionicons name="navigate-outline" size={15} color={colors.brandInk} />
           <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.pillText, styles.locateText]}>{locating ? 'Finding you…' : 'Use my location'}</Text>
@@ -122,6 +127,15 @@ export function GuestFindPlayers() {
 
       {hits === undefined ? (
         <View style={styles.loading}><CourtSpinner size={28} /></View>
+      ) : !hits?.length && refined ? (
+        // The options: plain type, no box and no icon bubble; "near you" only once the site knows where that is.
+        <View style={styles.plainEmpty}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.title}>{hits === null ? 'Couldn’t load the hits' : near ? 'No open hits near you yet' : 'No open hits this week'}</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.body}>{hits === null ? 'Check your connection and try again.' : near ? 'Be the first to post one. Players near you see it straight away.' : 'Be the first to post one.'}</Text>
+          <Pressable accessibilityRole="button" accessibilityLabel={hits === null ? 'Try again' : 'Post the first hit'} hitSlop={8} onPress={() => (hits === null ? load(near) : openJoinSheet('post a hit'))} style={({ pressed }) => [styles.plainEmptyLink, pressed && styles.pressed]}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainLinkText}>{hits === null ? 'Try again' : 'Post the first hit'}</Text>
+          </Pressable>
+        </View>
       ) : !hits?.length ? (
         <View style={[styles.card, styles.empty]}>
           <View style={styles.emptyIcon}><HitGlyph size={22} color={colors.brand} /></View>
@@ -134,7 +148,7 @@ export function GuestFindPlayers() {
           {hits.map((h) => {
             const where = [h.court.area, h.km !== undefined ? formatSpotMiles(h.km / 1.609, true) : ''].filter(Boolean).join(' · ');
             return (
-              <View key={h.id} style={styles.card}>
+              <View key={h.id} style={[styles.card, refined && styles.flat]}>
                 <View style={styles.cardTop}>
                   <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.when}>{hitShort(h.startsAt)}</Text>
                   <View style={styles.spots}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.spotsText}>{spotsText(h.spotsLeft)}</Text></View>
@@ -231,6 +245,11 @@ const styleDefinitions = StyleSheet.create({
   wrap: { gap: spacing.md },
   head: { gap: 3, paddingTop: spacing.sm },
   title: { ...typography.heading, color: colors.text },
+  titleB: { ...typography.title },
+  // The options' hit cards: the hairline alone, no lift (DESIGN's One Shadow Rule).
+  flat: { shadowOpacity: 0, elevation: 0 },
+  plainEmpty: { gap: 4, paddingVertical: spacing.sm },
+  plainEmptyLink: { alignSelf: 'flex-start', paddingVertical: spacing.sm },
   body: { ...typography.small, color: colors.textMuted },
   pill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, paddingHorizontal: 14, paddingVertical: 9, borderRadius: radius.pill, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   pillText: { ...typography.smallStrong, color: colors.textMuted },

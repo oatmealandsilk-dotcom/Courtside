@@ -23,6 +23,7 @@ import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { useReducedMotion } from '@/lib/useReducedMotion';
+import { webBarLook } from '@/features/guest/guestCommunityLook';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -86,7 +87,7 @@ export interface LookItem {
  */
 export const LookBar = React.memo(function LookBar({
   items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
-  bottom, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false,
+  bottom, safeBottom = 0, outerStyle, tuckStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold, follow = false, lens = false, newBar = false,
 }: {
   items: LookItem[];
   activeRoute: string | undefined;
@@ -103,6 +104,8 @@ export const LookBar = React.memo(function LookBar({
   tourCreate: (node: View | null) => void;
   /** The phone's own bottom strip (home indicator), or a little air where there is none. */
   bottom: number;
+  /** The phone's own bottom strip alone (none where there is none): the website's docked bar (option B) sits on it. */
+  safeBottom?: number;
   /** The rise on a fresh open (NavBar's `held` and `duck`). */
   outerStyle: AnimStyle;
   /** The tuck toward the edge while scrolling down. */
@@ -131,7 +134,9 @@ export const LookBar = React.memo(function LookBar({
   const pillW = measured ?? Dimensions.get('window').width - 2 * (newBar ? NEW_SPEC : QUIET_SPEC).side;
   // Which bar: today's quiet pill, or the new one (its measures, styles and glass); the new one with its
   // words a touch smaller where "Community" would not sit in its capsule with room either side (tightWords).
-  const look = newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : QUIET_LOOK;
+  // The website's bar options (guestCommunityLook, Nov 27; never on a phone): B docks a solid bar to the bottom edge.
+  const webLook = webBarLook();
+  const look = webLook === 'b' ? DOCK_LOOK : newBar ? (tightWords(pillW) ? NEW_TIGHT_LOOK : NEW_LOOK) : QUIET_LOOK;
   // The new bar's lens with the phone's Reduce Motion (the app's own answer: useReducedMotion): a quick plain slide.
   const calm = useReducedMotion();
   // How it travels (barLens's LENS_MOTION): read once.
@@ -553,11 +558,11 @@ export const LookBar = React.memo(function LookBar({
   const newTuck = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, NEW_BAR.tuck]) * PX) / PX }] }));
   const st = look.st;
   return (
-    <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[st.float, { bottom: newBar ? newBarFoot(bottom) : bottom }, outerStyle]}>
-      <Animated.View style={[st.pillWrap, newBar ? newTuck : tuckStyle]}>
+    <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[st.float, { bottom: webLook === 'b' ? 0 : newBar ? newBarFoot(bottom) : bottom }, outerStyle]}>
+      <Animated.View style={[st.pillWrap, webLook === 'b' ? dockWrap(themes[theme], media, safeBottom) : newBar ? newTuck : tuckStyle]}>
         {/* Split (BAR_SHAPE 'C'): two grounds, each with its own shadow (Face), so this layer holds no shadow of its own. */}
         <SlideOver gesture={slideOn ? slide : null}>
-        <View onLayout={lens ? onPillLayout : undefined} style={look.m.split ? st.splitHolder : [st.pillShadow, (quick || newBar) && Platform.OS === 'ios' ? st.pillShadowPath : null]}>
+        <View onLayout={lens ? onPillLayout : undefined} style={look.m.split ? st.splitHolder : [st.pillShadow, (quick || newBar) && Platform.OS === 'ios' ? st.pillShadowPath : null, webLook === 'a' ? (inkOn(themes[theme].bg) === '#FFFFFF' ? WEB_A_SHADOW_DARK : WEB_A_SHADOW) : null]}>
           {face(themes[theme], true)}
           {/* The swipe followed: the other look, following the page over the live glass (never glass itself), the
               glass turning under it half way. Each look's copy shows only over the glass of the other, switched in
@@ -1010,6 +1015,10 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   onWordWidth?: (route: string, w: number) => void;
 }) {
   const { m, st, fresh } = look;
+  // The website's bar options (guestCommunityLook, Nov 27; null on a phone, and today's bar).
+  const webLook = webBarLook();
+  // B and C: one ink for the lit tab, whichever it is (no amber Community, no blue Coaching beside the green +).
+  const oneInk = webLook === 'b' || webLook === 'c';
   // Ducking lets the words go and settles the icons into the middle, as today's bar does
   // (NavBar: half a word's line and its gap, landed on the screen's real pixels).
   const settle = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, m.settle]) * PX) / PX }] }), [m.settle]);
@@ -1022,17 +1031,18 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   const ground = groundOf(media);
   // The new bar (Oct 28, after Instagram's and Strava's): the tabs in the page's own ink, the lit one in the
   // brand's colour, icon and word; a faint edge that keeps it apart from a white page (its glass has its own light).
-  const line = fresh
+  const line = webLook === 'c' && !media ? c.border : fresh
     ? (media || darkPage ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, 0.07))
     : media ? withAlpha(c.onMedia, 0.14) : c.border;
-  const idleIcon = media ? withAlpha(c.onMedia, fresh ? 0.92 : 0.66) : fresh ? c.text : c.textMuted;
-  const idleLabel = media ? withAlpha(c.onMedia, fresh ? 0.88 : 0.6) : fresh ? c.text : c.textFaint;
+  const idleIcon = oneInk ? (media ? withAlpha(c.onMedia, 0.6) : webLook === 'b' ? c.textFaint : c.textMuted) : media ? withAlpha(c.onMedia, fresh ? 0.92 : 0.66) : fresh ? c.text : c.textMuted;
+  const idleLabel = oneInk ? (media ? withAlpha(c.onMedia, 0.6) : c.textFaint) : media ? withAlpha(c.onMedia, fresh ? 0.88 : 0.6) : fresh ? c.text : c.textFaint;
   // The lit tab in today's colours: Community amber, Coaching blue, the rest the court's own colour
   // (on the new bar, every tab the court's own colour). Over a clip on a light court (its ground gone
   // near-black) that colour is lifted a little toward white so it still reads, in the same hue.
   // On the new bar over a clip, the brand's colour lightened in its own hue instead (mixing in white
   // turned the lit tab a washed-out grey-green on the dark glass).
   const litOf = (route: string) => {
+    if (oneInk) return media ? c.onMedia : c.text;
     const base = fresh ? c.brand : route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
     if (!media || darkPage) return base;
     return fresh ? lightened(base) : toward(base, c.onMedia, 0.35);
@@ -1125,7 +1135,9 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   const lensFill = lensDark ? withAlpha(c.onMedia, 0.16) : withAlpha(c.text, darkPage ? 0.12 : 0.07);
   // The new bar's: a soft wash of the brand's colour on a light court (the lit icon and word are that
   // colour), a step lighter on a dark court and over a clip. Never a heavy grey.
-  const tint = lensDark ? { color: c.onMedia, alpha: 0.18 } : darkPage ? { color: c.text, alpha: 0.13 } : { color: c.brand, alpha: 0.11 };
+  const tint = lensDark ? { color: c.onMedia, alpha: 0.18 }
+    : webLook === 'c' ? (darkPage ? { color: c.text, alpha: 0.08 } : { color: c.brandDim, alpha: 1 })
+    : darkPage ? { color: c.text, alpha: 0.13 } : { color: c.brand, alpha: 0.11 };
   // The lens motion's rim and highlight: light on a dark court and over a clip; on a light court a rim in
   // the brand's colour (white would vanish on the light glass) and a white highlight.
   const lensRim = lensDark || darkPage ? withAlpha(c.onMedia, 0.34) : withAlpha(c.brand, 0.3);
@@ -1140,7 +1152,7 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
           Create box's veil, so the bar keeps its own edge while the box is up. */}
       <View pointerEvents="none" style={[st.rim, { borderColor: line }]} />
       {/* The new bar's bright inner edge, as Apple's glass has its own (so not there on iOS 26). */}
-      {fresh && !liquidGlass ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
+      {fresh && !liquidGlass && webLook !== 'c' ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
       {/* While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
           gets dark grey"): a veil of its own ground, not the page's dim, steps the four tabs back so the
           lit + stands out, and catches a tap there to close the box. Only this child fades, never the glass. */}
@@ -1184,11 +1196,34 @@ function Face({ palette: c, look, calm, media, glassMedia, live, copyAlpha, item
   // The live bar: real Liquid Glass on iOS 26, a frosted blur on older iPhones, the tint nearly solid
   // on Android and the web (Glass). It re-tints at once when a court is picked or a clip comes or goes,
   // under the solid copy fading over it; nothing that holds it ever fades. The new bar's is lighter.
+  // The website's options: B a solid docked bar (no glass at all, so nothing under it can show through or smear);
+  // A the same pill nearly solid with a light blur and no colour boost; C the new bar on calm frosted glass.
+  if (webLook === 'b') return <View style={[st.pill, { backgroundColor: groundOf(glassMedia) }]}>{inside}</View>;
+  const webGround = webLook === 'a' ? webGlass(groundOf(glassMedia), 0.94, 12)
+    : webLook === 'c' ? webGlass(glassMedia ? groundOf(true) : c.surface, 0.92, 20) : null;
   return (
-    <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={st.pill}>
+    <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={webGround ? [st.pill, webGround] : st.pill}>
       {inside}
     </Glass>
   );
+}
+
+/** The website's glass for the bar options: the ground nearly solid, a light blur, no saturation boost (which smeared green content under it). */
+function webGlass(ground: string, alpha: number, blur: number): object {
+  return { backgroundColor: withAlpha(ground, alpha), backdropFilter: `blur(${blur}px)`, WebkitBackdropFilter: `blur(${blur}px)` };
+}
+/** Option A's shadow round the pill: a neutral overlay shadow, deeper on a dark court so it still reads. */
+const WEB_A_SHADOW = { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 16, shadowOffset: { width: 0, height: 4 } } as const;
+const WEB_A_SHADOW_DARK = { ...WEB_A_SHADOW, shadowOpacity: 0.28 } as const;
+/** Option B's docked bar: its ground runs under the phone's bottom strip too, a hairline along its top, and it never tucks. */
+function dockWrap(c: Palette, overMedia: boolean, safeBottom: number): object {
+  const darkPage = inkOn(c.bg) === '#FFFFFF';
+  return {
+    backgroundColor: overMedia ? (darkPage ? c.bg : darkColors.bg) : c.bg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: overMedia ? withAlpha(c.onMedia, 0.14) : c.border,
+    paddingBottom: safeBottom,
+  };
 }
 
 /** `hex` moved part of the way (`t`, 0 to 1) toward `to`; both `#RRGGBB`, anything else comes back as it was. */
@@ -1337,3 +1372,23 @@ interface BarLook { m: BarSpec; st: BarStyles; fresh: boolean }
 const QUIET_LOOK: BarLook = { m: QUIET_SPEC, st: barStyles(QUIET_SPEC, false), fresh: false };
 const NEW_LOOK: BarLook = { m: NEW_SPEC, st: barStyles(NEW_SPEC, true), fresh: true };
 const NEW_TIGHT_LOOK: BarLook = { m: NEW_TIGHT_SPEC, st: barStyles(NEW_TIGHT_SPEC, true), fresh: true };
+/**
+ * The website's docked bar (option B, guestCommunityLook; never on a phone): today's quiet pill's measures, square
+ * and full width on the bottom edge, no shadow, no lift. Its hairline is along the top of the ground (LookBar's dockWrap), not round the pill.
+ */
+const DOCK_BASE = barStyles(QUIET_SPEC, false);
+const DOCK_LOOK: BarLook = {
+  m: QUIET_SPEC,
+  fresh: false,
+  st: {
+    ...DOCK_BASE,
+    ...StyleSheet.create({
+      float: { position: 'absolute', left: 0, right: 0, alignItems: 'stretch', zIndex: 30, paddingBottom: 0 },
+      pillWrap: { width: '100%', paddingHorizontal: 0 },
+      pillShadow: {},
+      pill: { height: QUIET_SPEC.height, borderRadius: 0, overflow: 'hidden', flexDirection: 'row', alignItems: 'center', paddingHorizontal: QUIET_SPEC.pad },
+      rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderWidth: 0 },
+      veil: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 1 },
+    }),
+  } as unknown as BarStyles,
+};
