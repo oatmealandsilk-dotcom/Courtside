@@ -228,7 +228,7 @@ const styleDefinitions = StyleSheet.create({
   head: { gap: 3, paddingTop: spacing.sm },
   title: { ...typography.heading, color: colors.text },
   // The hit cards: the hairline alone, no lift (DESIGN's One Shadow Rule).
-  flat: { shadowOpacity: 0, elevation: 0 },
+  flat: { boxShadow: 'none' },
   plainEmpty: { gap: 4, paddingVertical: spacing.sm },
   plainEmptyLink: { alignSelf: 'flex-start', paddingVertical: spacing.sm },
   body: { ...typography.small, color: colors.textMuted },
