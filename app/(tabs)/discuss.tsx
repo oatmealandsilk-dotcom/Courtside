@@ -8,7 +8,7 @@ import { Fold, FoldList, Pop } from '@/components/ui/Fold';
 import { useRestKey } from '@/components/ui/restMotion';
 import * as haptics from '@/lib/haptics';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { PaneScroller, type PaneList, type PaneScrollerProps } from '@/components/ui/PaneScroller';
+import { PANE_TOP, PaneScroller, type PaneList, type PaneScrollerProps } from '@/components/ui/PaneScroller';
 import { LAYOUT, useResponsive } from '@/lib/useResponsive';
 import { useTabUnderline } from '@/features/navigation/useTabUnderline';
 import { useThemedStyles } from '@/theme/ThemeProvider';
@@ -43,11 +43,14 @@ import { CourtsNear, useNearCourts, usePeekLook } from '@/components/place/Court
 import { CARD_HEIGHT } from '@/components/map/cardFit';
 import { MapGlass } from '@/components/map/MapGlass';
 import { HOME_FEED, MAP_OVERLAY } from '@/features/community/communityMapLook';
-import { useBarTop, useHomeMap, useTallMap } from '@/features/community/tallMap';
+import { useBarTop, useDiscoverMap, useHomeMap, useTallMap } from '@/features/community/tallMap';
+import { useBarInset } from '@/features/navigation/barInset';
+import { setHomeDiscover, useHomeDiscover } from '@/features/community/homeDiscover';
+import { DiscoverPosts } from '@/features/discover/DiscoverPosts';
 import { useGalleryInPage, type FeedSlot, type InPageRow } from '@/features/activity/feedLooks/ActivitiesList';
 import { useGalleryPosts } from '@/features/activity/feedLooks/galleryPosts';
 import { ActivitiesStart } from '@/components/ActivitiesStart';
-import { simAction } from '@/lib/simDriver';
+import { SIM_DRIVER, simAction, simLog } from '@/lib/simDriver';
 import { CourtsNearSnapshots } from '@/components/place/CourtsNearPeek';
 import { YourCourts } from '@/components/place/YourCourts';
 import { EarlyInvite } from '@/components/EarlyInvite';
@@ -131,6 +134,14 @@ const HOME_SLOT_AFTER = { hits: 5, courts: 9, board: 13, near: 17, new: 21 } as 
  * first draw whatever the newest item is; Open to hit under the map takes its room out of this (the map's size wins).
  */
 const HOME_PEEK = 184;
+/**
+ * PICTURES ONLY (design/home-discover). Take A "Peek": what the map leaves above the bar of the first activity under
+ * Open to hit, its band, header, title and numbers and the top ~60pt of its photo (the gallery's measures). Take B
+ * "Sheet": the grab handle's band over Open to hit, and the first activity's band and header under it.
+ */
+const PEEK_FIRST = 196;
+const SHEET_HANDLE = 17;
+const SHEET_FIRST = 72;
 /** Find Players' head column: the gap between its parts. */
 const HEAD_GAP = 12;
 const NO_SLOTS: FeedSlot[] = [];
@@ -160,8 +171,15 @@ const joinedLabel = (iso: string) => {
   return days <= 0 ? 'Joined today' : days === 1 ? 'Joined yesterday' : `Joined ${days} days ago`;
 };
 
-function Discuss({ previewSection }: { previewSection?: string } = {}) {
-  useSimTrace(previewSection ? 'DiscussPreview' : 'Discuss');
+function Discuss({ previewSection, role }: { previewSection?: string; role?: 'discover' } = {}) {
+  useSimTrace(previewSection ? 'DiscussPreview' : role === 'discover' ? 'Discover' : 'Discuss');
+  // PICTURES ONLY (design/home-discover, EXPO_PUBLIC_HOME_DISCOVER; off by default): this page drawn twice. Community as
+  // ONE page, the map and the friends' activity with no "Find Players | Discussions" row (`oneHome`, takes A/B/C:
+  // homeDiscover), and the bottom bar's second tab as Discover (`discover`): "Posts | Discussions", Posts in place of
+  // Find Players and Discussions exactly as here. Off, neither: the page is exactly as before.
+  const discover = role === 'discover';
+  const homeLook = useHomeDiscover();
+  const oneHome = !discover && homeLook !== null;
   // A picture of the page (a thread's swipe back), with taps that answer sooner (admins first): it loads nothing and
   // leaves out what is never in sight. The real tab under the thread already loaded it all (Nov 3 review).
   const tapFast = useTapFast();
@@ -176,8 +194,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // It starts on Find Players: the app opens here, on the map (see startTab).
   // Unless a page asked for a section before this tab was built (a thread
   // opened from a link, then swiped back): that ask was kept for it.
-  const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && askedSection('/discuss')) || START_SECTION));
-  const section = previewSection ? asSection(previewSection) : localSection;
+  const [localSection, setLocalSection] = useState<Section>(() => asSection((!previewSection && !discover && askedSection('/discuss')) || START_SECTION));
+  const section = oneHome ? 'players' : previewSection ? asSection(previewSection) : localSection;
   // A section asked for out of sight whose redraw is still on its way (background work, below):
   // the row and the line are already on it, so a tap reads it as the section on show.
   const comingSection = useRef<Section | null>(null);
@@ -224,6 +242,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const jumpLine = useRef<((pane: number) => void) | null>(null);
   const jumpPages = useRef<((pane: number) => void) | null>(null);
   useEffect(() => {
+    if (discover) return undefined;
     const off = subscribeSectionRequest('/discuss', (value, background) => {
       if (!previewSection) takeAskedSection('/discuss');
       const next = asSection(value);
@@ -252,13 +271,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
     if (!previewSection) { const late = takeAskedSection('/discuss'); if (late) setLocalSection(asSection(late)); }
     return off;
   }, [previewSection]);
-  if (!previewSection) reportSection('/discuss', section);
+  if (!previewSection && !discover) reportSection('/discuss', section);
   useEffect(() => { shownIndex.value = section === 'players' ? 0 : 1; }, [section, shownIndex]);
   // The app opens here: the splash curtain stays up over a fresh open until
   // this page has drawn once, then fades (see warmup). A frame after it is
   // built, so the curtain lifts onto the page and never onto a blank.
   useEffect(() => {
-    if (previewSection || START_TAB !== '/discuss') return undefined;
+    if (previewSection || discover || START_TAB !== '/discuss') return undefined;
     const frame = requestAnimationFrame(() => setStartDrawn(true));
     return () => { cancelAnimationFrame(frame); setStartDrawn(false); };
   }, [previewSection]);
@@ -301,8 +320,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // A picture of it on the phone (taken from this view); in a browser the page itself moves, by a transform only.
   const growRef = useRef<View | null>(null);
   // The page itself only: never a preview copy of it (a tab swipe's, or a thread's swipe back).
-  useGrowHost(growRef, !previewSection);
-  const growStyle = useGrowHostStyle(!previewSection);
+  useGrowHost(growRef, !previewSection && !discover);
+  const growStyle = useGrowHostStyle(!previewSection && !discover);
   // Check in (migration 189), for the Open to hit row's note: your ring is on the map only for friends, and only once you check in.
   const checkIn = useCheckIn();
   // (No ask on opening any more, migration 189: "Who can see you on the map?" comes only when you tap Check in.)
@@ -588,10 +607,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const friendsEarly = !!currentUser && notKnownAdult(currentUser) && (lastSeenLoaded || !isSupabaseConfigured) && nearPlayers.length === 0 && !friendOnMap;
   // The one thing this page leads with, for the tutorial's first tip to light (mapLead.ts).
   const lead: MapLead | null = early ? 'invite' : friendsEarly ? 'friends' : showUpToday ? (teen ? 'free-friends' : 'free') : null;
-  useEffect(() => { if (!previewSection) setMapLead(lead); }, [lead, previewSection]);
+  useEffect(() => { if (!previewSection && !discover) setMapLead(lead); }, [lead, previewSection, discover]);
   // A picture of this tab sliding in never stands in for the real one.
   const tourLead = useTourTarget('map-lead');
-  const leadRef = previewSection ? undefined : tourLead;
+  const leadRef = previewSection || discover ? undefined : tourLead;
   // A hit posted by a teen (or anyone not known to be an adult) reaches only their followers (hits/visible), so the prompt says so.
   const hitsForFriends = !!currentUser && notKnownAdult(currentUser);
   const myCityName = (currentUser?.location ?? '').split(',')[0].trim() || null;
@@ -609,7 +628,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const inviteCourt = useInviteCourt(youAt, nearCourts);
   // Joined through a link that carried a court: its page, once, as soon as you are in.
   useEffect(() => {
-    if (previewSection || !currentUserId || !onboardingComplete) return;
+    if (previewSection || discover || !currentUserId || !onboardingComplete) return;
     let on = true;
     void takeInviteCourt().then((court) => { if (on && court) openCourt(court); });
     return () => { on = false; };
@@ -722,7 +741,7 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   const { height: screenHeight } = useWindowDimensions();
   // The simulator's proof (simDriver, demo builds only): "scroll y=400" scrolls Find Players, for pictures below the map;
   // "scroll y=400&animated=1" glides there. Never from a picture of this tab (a second copy would take the command).
-  useEffect(() => (previewSection ? undefined : simAction('scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); })), [pageTop, previewSection]);
+  useEffect(() => (previewSection ? undefined : simAction(discover ? 'dscroll' : 'scroll', (q) => { playersRef.current?.scrollTo({ y: pageTop + (Number(q.y) || 0), animated: q.animated === '1' }); })), [pageTop, previewSection, discover]);
   // The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay', never the website): the map from under the search box down to
   // the screen's foot, under the bottom bar, and Open to hit on its lower part just clear of the bar. While the card asks
   // for a city instead (no map), Open to hit stays in its usual place under it.
@@ -743,7 +762,27 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // height together, as the map with Open to hit over its foot did, so the card sits where it did.
   const [homeStripH, setHomeStripH] = useState(0);
   const [homeUnder, setHomeUnder] = useState(0);
-  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: HOME_PEEK, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
+  const homeMap = useHomeMap(HOME_FEED && !!currentUser && !oneHome, { peek: HOME_PEEK, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
+  // PICTURES ONLY (design/home-discover): Community as one page, in take A, B or C (useDiscoverMap). C's heading and its
+  // place in the page (for its tap), and B's sheet: how far it rises, and the map and search held still behind it as it does.
+  const [headingH, setHeadingH] = useState(0);
+  const headingY = useRef(0);
+  const sheetRest = SHEET_HANDLE + (stripOn ? homeStripH : 0) + SHEET_FIRST;
+  const discMap = useDiscoverMap(oneHome && !!currentUser ? homeLook : null, { peek: homeLook === 'a' ? PEEK_FIRST : headingH, strip: stripOn ? homeStripH : 0, stripKnown: (!stripOn || homeStripH > 0) && (homeLook !== 'c' || headingH > 0), under: homeUnder, short: mapShort, still: !!search, rest: sheetRest });
+  const mapSize = oneHome ? discMap : homeMap;
+  const sheetFull = oneHome && homeLook === 'b' ? discMap.full : 0;
+  const barInsetNow = useBarInset();
+  const behindSheet = useAnimatedStyle(() => ({ transform: [{ translateY: sheetFull > 0 ? Math.min(sheetFull, Math.max(0, playersY.value - pageTop)) : 0 }] }));
+  useEffect(() => {
+    if (!SIM_DRIVER || !oneHome || previewSection) return undefined;
+    const off = [
+      simAction('homelook', (q) => setHomeDiscover(q.v)),
+      // Take B's sheet: "sheet at=0" resting low, "at=0.5" half way, "at=1" fully up.
+      simAction('sheet', (q) => { playersRef.current?.scrollTo({ y: pageTop + sheetFull * Math.max(0, Math.min(1, Number(q.at) || 0)), animated: q.animated === '1' }); }),
+      simAction('homeinfo', () => simLog(`[home] look ${homeLook} map ${mapSize.height} full ${sheetFull} rest ${sheetRest} strip ${homeStripH} heading ${headingH}`)),
+    ];
+    return () => off.forEach((f) => f());
+  }, [oneHome, previewSection, pageTop, sheetFull, homeLook, mapSize.height, sheetRest, homeStripH, headingH]);
   // Under the map and Open to hit, in the head: "You're at <court>?" (when Open to hit is not there to carry it), "You're
   // early" or "Bring your friends". Gone (and not mid-search): nothing under.
   const homeUnderOn = HOME_FEED && !search && ((!!currentUser && !stripOn) || early || friendsEarly);
@@ -976,6 +1015,8 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   ] : NO_SLOTS;
   // A guest (guest mode, Oct 17): open hits and courts near them, never the players map or people.
   const content = (pane:string) => (pane === 'players' && isGuest ? <GuestFindPlayers /> : pane === 'players' ? <View style={{ gap: HEAD_GAP }}>
+        {/* (design/home-discover: the search and the map, held still behind take B's sheet as it rises.) */}
+        <BehindSheet on={oneHome} style={behindSheet}>
         {/* Cancel beside the box while you search, the way iPhone search boxes do: one tap clears it, puts the keyboard away and brings the map back (Oct 5, owner: "there should be an easier way to exit here"). */}
         <View style={styles.searchRow}>
           <View style={styles.searchWrap}>
@@ -998,9 +1039,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           // Kept (hidden, not taken down) while you search, so clearing the search finds it already drawn
           // instead of building a new map in front of you (Oct 22, owner: "The map blips in").
           // Its own view always (collapsable), so hiding it only changes how it looks, never where it is mounted.
-          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null} onLayout={HOME_FEED ? homeMap.onSlotLayout : MAP_OVERLAY ? tallMap.onSlotLayout : undefined}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} {...(HOME_FEED ? { edge: true, cardHeight: homeMap.height, onCityless: setMapCityless } : MAP_OVERLAY ? { edge: true, cardHeight: tallMap.height, cardCover: mapCover, foot: mapStrip, onCityless: setMapCityless } : null)} />{homeStrip}</View>
+          ? <View collapsable={false} pointerEvents={search ? 'none' : 'auto'} accessibilityElementsHidden={!!search} importantForAccessibility={search ? 'no-hide-descendants' : 'auto'} style={search ? styles.mapHidden : null} onLayout={HOME_FEED ? mapSize.onSlotLayout : MAP_OVERLAY ? tallMap.onSlotLayout : undefined}><NearbyMap visible={(!previewSection || section === 'players') && !search} inView={mapInView} me={currentUser} players={players} at={detectedCoords} locationOn={location.locationOn} locating={location.locating} onToggleLocation={location.toggle} onOpen={id => router.push(`/user/${id}`)} onExpand={() => router.push('/map')} grow hitCount={openHits.length} inviting={early} {...(HOME_FEED ? { edge: true, cardHeight: mapSize.height, onCityless: setMapCityless, ...(sheetFull > 0 ? { cardCover: barInsetNow + sheetRest } : null) } : MAP_OVERLAY ? { edge: true, cardHeight: tallMap.height, cardCover: mapCover, foot: mapStrip, onCityless: setMapCityless } : null)} />{oneHome && homeLook === 'b' ? null : homeStrip}</View>
           // The same footprint, empty: keeps the list from jumping when the map mounts on arrival.
           : search ? null : <View style={styles.mapStandIn} />) : null}
+        </BehindSheet>
         {/* "You're at <court>? Light it up" (AT_COURT_PROMPT, Oct 29, owner: "make it easy for ppl to say they are at a court"):
             only when the phone already knows you're standing at one; one tap, nothing shared before it. With Open to hit on
             the iPhone's map (stripOn), it is on that panel instead. */}
@@ -1018,7 +1060,38 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
           </>;
           // The iPhone's first page (HOME_FEED): held together and measured with the gap above them, so the map leaves
           // them room above the bar.
-          return HOME_FEED ? (homeUnderOn ? <View style={styles.homeUnder} onLayout={(e) => { const room = Math.round(e.nativeEvent.layout.height) + HEAD_GAP; if (room !== homeUnder) setHomeUnder(room); }}>{under}</View> : null) : under;
+          const block = HOME_FEED ? (homeUnderOn ? <View style={styles.homeUnder} onLayout={(e) => { const room = Math.round(e.nativeEvent.layout.height) + HEAD_GAP; if (room !== homeUnder) setHomeUnder(room); }}>{under}</View> : null) : under;
+          // PICTURES ONLY (design/home-discover). Take B: the sheet's top, a solid panel on the page's own ground resting
+          // over the map's foot, its grab handle, then Open to hit (and anything under it); the activity follows in the list.
+          if (oneHome && homeLook === 'b' && currentUser) {
+            return (
+              <View style={[styles.sheetPanel, { marginTop: -(barInsetNow + sheetRest + HEAD_GAP) }]}>
+                <View style={styles.sheetGrab} accessible accessibilityLabel="Friends' activity. Swipe up to see it all"><View style={styles.sheetHandle} /></View>
+                {homeStrip}
+                {block}
+              </View>
+            );
+          }
+          // Take C: a plain heading just above the bar, the start of the activity peeking; a tap brings it up.
+          if (oneHome && homeLook === 'c' && currentUser && !search) {
+            return (
+              <>
+                {block}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Friends' activity"
+                  accessibilityHint="Scrolls down to it"
+                  onLayout={(e) => { const { y, height } = e.nativeEvent.layout; headingY.current = Math.round(y); const h = Math.round(height) + HEAD_GAP; if (h !== headingH) setHeadingH(h); }}
+                  onPress={() => playersRef.current?.scrollTo({ y: pageTop + PANE_TOP + headingY.current, animated: true })}
+                  style={({ pressed }) => [styles.feedHeading, pressed && { opacity: PRESS_DIM }]}
+                >
+                  <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.feedHeadingText}>Friends’ activity</Text>
+                  <Ionicons name="chevron-down" size={16} color={colors.textMuted} />
+                </Pressable>
+              </>
+            );
+          }
+          return block;
         })()}
         {/* Open to hit: you first (one tap, never Location; hold to pick until when and how far), then who near you is open. */}
         {currentUser && !search && showUpToday && !stripOn ? (
@@ -1224,12 +1297,27 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
 
   // On a computer the row and each section's words keep to the page's column; the sections still scroll across the whole window.
   const column = isPhone ? undefined : LAYOUT.soloColumn;
+  // The iPhone's first page: one list, the search, the map and Open to hit its head, the friends' activity under them.
+  // (design/home-discover: keyed by the take, so a take switched in the simulator starts afresh; B's rows are a sheet.)
+  const homePane = HOME_FEED && !discover ? (
+    <HomePane key={oneHome ? `players-${homeLook}` : 'players'} memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={mapSize.onPaneHeight}
+      feedOn={!!currentUser && !isGuest && !search && !(pictureOnly && previewSection !== 'players')} paused={!!previewSection || section !== 'players'}
+      follow={homeFollow}
+      slots={homeSlots}
+      sheet={sheetFull > 0 ? { full: sheetFull } : undefined}
+    >{pictureOnly && previewSection !== 'players' ? null : content('players')}</HomePane>
+  ) : null;
   return (
     <Reanimated.View style={[styles.growHost, growStyle]}>
     <View ref={growRef} collapsable={false} style={styles.growHost}>
-    <Screen memoryKey="discuss" wash scroll={false} scrollsInside padded={false} unconstrained
-      title="Community"
-      right={isGuest ? <GuestSignIn /> :
+    <Screen memoryKey={discover ? 'discover' : 'discuss'} wash scroll={false} scrollsInside padded={false} unconstrained
+      title={discover ? 'Discover' : 'Community'}
+      right={isGuest ? <GuestSignIn /> : discover ? (
+        // Discover (design/home-discover): the search alone; the bell and chats stay on Community.
+        <Pressable accessibilityRole="link" accessibilityLabel="Search" onPress={() => router.push('/search')} hitSlop={8}>
+          <Ionicons name="search" size={23} color={colors.text} />
+        </Pressable>
+      ) :
         // Bell, chats, search: the same order as Profile (bell, chats, then the page's own button), so both pages match.
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
           {/* What's new for you (likes, follows, replies), on the page the app opens on. */}
@@ -1249,12 +1337,14 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
       }
     >
       {/* First, so everything else covers it: where a phone draws Courts near you's little maps, one at a time, while this page is on show (the chat's own way). */}
-      {previewSection || peekLook !== 'N' ? null : <CourtsNearSnapshots />}
+      {previewSection || discover || peekLook !== 'N' ? null : <CourtsNearSnapshots />}
+      {/* PICTURES ONLY (design/home-discover): Community as one page, the map's page alone, with no row over it. */}
+      {oneHome ? <View style={styles.oneHome}>{homePane}</View> : <>
       {/* Under the header and out of every scroller, so it stays exactly where it is while
           either section scrolls or the two slide past each other. */}
       <View style={[styles.sectionsColumn, column ? { maxWidth: column } : null]}>
         <View style={styles.sections} onLayout={e => { setTabWidth(e.nativeEvent.layout.width / 2); }}>
-          {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => tapSection(value)} style={styles.section}><Reanimated.Text {...oneLine(TextScale.TITLE, 0.75)} style={[styles.sectionWord, value === 'players' ? playersWord : threadsWord]}>{value === 'discussions' ? 'Discussions' : 'Find Players'}</Reanimated.Text></Pressable>)}
+          {(['players', 'discussions'] as const).map(value => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} onPress={() => tapSection(value)} style={styles.section}><Reanimated.Text {...oneLine(TextScale.TITLE, 0.75)} style={[styles.sectionWord, value === 'players' ? playersWord : threadsWord]}>{value === 'discussions' ? 'Discussions' : discover ? 'Posts' : 'Find Players'}</Reanimated.Text></Pressable>)}
           {tabWidth > 0 && <Reanimated.View pointerEvents="none" style={[styles.sectionUnderline, { width: tabWidth }, underline.style]} />}
         </View>
       </View>
@@ -1270,15 +1360,11 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         keepMounted
         index={sectionIndex}
         panes={[
-          HOME_FEED ? (
-            // The iPhone's first page: one list, the search, the map and Open to hit its head, the friends' activity under them.
-            <HomePane key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={homeMap.onPaneHeight}
-              feedOn={!!currentUser && !isGuest && !search && !(pictureOnly && previewSection !== 'players')} paused={!!previewSection || section !== 'players'}
-              follow={homeFollow}
-              slots={homeSlots}
-            >{pictureOnly && previewSection !== 'players' ? null : content('players')}</HomePane>
-          ) : <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={MAP_OVERLAY ? tallMap.onPaneHeight : undefined}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
-          <PaneScroller key="discussions" memoryKey="discuss:discussions" active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
+          discover ? (
+            // Discover's Posts (design/home-discover), in Find Players' place.
+            <DiscoverPosts key="posts" memoryKey="discover:posts" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} paused={!!previewSection || section !== 'players'} />
+          ) : HOME_FEED ? homePane : <PaneScroller key="players" memoryKey="discuss:players" active={section === 'players'} scrollRef={playersRef} offsetY={playersY} inStrip={playersStrip} onRefresh={refresh} column={column} onViewHeight={MAP_OVERLAY ? tallMap.onPaneHeight : undefined}>{pictureOnly && previewSection !== 'players' ? null : content('players')}</PaneScroller>,
+          <PaneScroller key="discussions" memoryKey={discover ? 'discover:discussions' : 'discuss:discussions'} active={section === 'discussions'} scrollRef={threadsRef} offsetY={threadsY} inStrip={threadsStrip} onRefresh={refresh} column={column}>{content('discussions')}</PaneScroller>,
         ]}
         progress={underline.progress}
         jumpRef={previewSection ? undefined : jumpPages}
@@ -1288,9 +1374,10 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
         // A pull held open on the section on show: the page stays put until it lets go.
         blocked={swipeBlocked}
         // The tutorial's slide from the map to the threads plays here, as this pager's own swipe.
-        slideChannel={previewSection ? undefined : '/discuss'}
+        slideChannel={previewSection || discover ? undefined : '/discuss'}
         onIndex={(i) => setSection(i === 0 ? 'players' : 'discussions')}
       />
+      </>}
     </Screen>
     </View>
     </Reanimated.View>
@@ -1351,8 +1438,9 @@ function SearchCancel({ shown, onPress }: { shown: boolean; onPress: () => void 
  * show, or a picture of this tab): nothing marked seen, no pages asked for. A pull refreshes the page as before (the
  * map's players and hits, the posts) and lets the activity ask for older pages again.
  */
-function HomePane({ feedOn, paused, follow, slots, onRefresh, children, ...pane }: Omit<PaneScrollerProps, 'list'> & { feedOn: boolean; paused: boolean; follow: React.ReactNode; slots: FeedSlot[] }) {
+function HomePane({ feedOn, paused, follow, slots, onRefresh, children, sheet, ...pane }: Omit<PaneScrollerProps, 'list'> & { feedOn: boolean; paused: boolean; follow: React.ReactNode; slots: FeedSlot[] }) {
   const { remoteLoaded } = useApp();
+  const styles = useThemedStyles(styleDefinitions);
   // Always 'gallery-rollup' here (Nov 28, owner: "Gallaty+ friends played"), whatever the Feed tab's Activities shows.
   const { list, showStart, nearCount, nearAuthors, ready } = useGalleryPosts(true);
   const sessions = list.length;
@@ -1364,9 +1452,17 @@ function HomePane({ feedOn, paused, follow, slots, onRefresh, children, ...pane 
   const feed = useGalleryInPage({ posts: list, rollup: true, nearCount, near: nearAuthors, paused: paused || !feedOn, postsIn, start, slots });
   const { reopen } = feed;
   const pull = useMemo(() => (onRefresh ? async () => { try { return await onRefresh(); } finally { reopen(); } } : undefined), [onRefresh, reopen]);
-  const rows: PaneList<InPageRow> = { data: feedOn ? feed.data : NO_ROWS, renderItem: feed.renderItem, keyExtractor: feed.keyExtractor, onEndReached: feedOn ? feed.onEndReached : undefined, onViewableItemsChanged: feed.onViewableItemsChanged, viewabilityConfig: feed.viewabilityConfig };
+  // Take B's sheet (design/home-discover): every row on the page's own ground, so the map behind never shows between them.
+  const feedRender = feed.renderItem;
+  const solidRender = useCallback((info: { item: InPageRow; index: number }) => <View style={styles.solidRow}>{feedRender(info as never)}</View>, [feedRender, styles]);
+  const rows: PaneList<InPageRow> = { data: feedOn ? feed.data : NO_ROWS, renderItem: sheet ? solidRender : feed.renderItem, keyExtractor: feed.keyExtractor, onEndReached: feedOn ? feed.onEndReached : undefined, onViewableItemsChanged: feed.onViewableItemsChanged, viewabilityConfig: feed.viewabilityConfig };
   // A photo tapped full screen (the gallery's viewer, its own full-screen layer) beside the list, which never moves under it.
-  return <><PaneScroller {...pane} onRefresh={pull} list={rows}>{children}</PaneScroller>{feed.viewerNode}</>;
+  return <><PaneScroller {...pane} onRefresh={pull} list={rows} sheet={sheet}>{children}</PaneScroller>{feed.viewerNode}</>;
+}
+
+/** design/home-discover: take B's search and map, one view held still behind the rising sheet (the others: as they are). */
+function BehindSheet({ on, style, children }: { on: boolean; style: React.ComponentProps<typeof Reanimated.View>['style']; children: React.ReactNode }) {
+  return on ? <Reanimated.View style={[{ gap: HEAD_GAP }, style]}>{children}</Reanimated.View> : <>{children}</>;
 }
 
 const styleDefinitions = StyleSheet.create({
@@ -1376,6 +1472,17 @@ const styleDefinitions = StyleSheet.create({
   homeStrip: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: 2, backgroundColor: colors.bg },
   // What else sits under them in the head ("You're early"…), held together to be measured.
   homeUnder: { gap: HEAD_GAP },
+  // PICTURES ONLY (design/home-discover). Community as one page: the page under the header, no row.
+  oneHome: { flex: 1 },
+  // Take B: the sheet's top, solid on the page's own ground, its top corners rounded as Apple Maps' are, a soft shadow
+  // onto the map; its grab handle a small pill in the border's stronger tone.
+  sheetPanel: { marginHorizontal: -spacing.lg, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, shadowColor: '#000', shadowOpacity: 0.1, shadowRadius: 10, shadowOffset: { width: 0, height: -2 } },
+  sheetGrab: { height: SHEET_HANDLE, alignItems: 'center', justifyContent: 'center', paddingTop: 4 },
+  sheetHandle: { width: 36, height: 5, borderRadius: 3, backgroundColor: colors.borderStrong },
+  solidRow: { backgroundColor: colors.bg },
+  // Take C: "Friends' activity", plain, left, with a small chevron; a finger's height.
+  feedHeading: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 44, paddingBottom: 6 },
+  feedHeadingText: { ...typography.heading, color: colors.text },
   // People you may know as the activity's follow block: in the page's margins, its cards' row running to the edges.
   homeFollow: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
   // Open hits as a row among the activity (homeHitsRow): its title as People you may know's, the hits on hairlines
@@ -1467,3 +1574,12 @@ const styleDefinitions = StyleSheet.create({
 });
 
 export default asTabRoute<{ previewSection?: string }>(Discuss, '/discuss');
+
+/**
+ * PICTURES ONLY (design/home-discover, EXPO_PUBLIC_HOME_DISCOVER): the bottom bar's second tab as Discover, this page's
+ * row as "Posts | Discussions" (TabsPager puts it in the Feed's place). Never built with the switch off.
+ */
+function DiscoverPage(props: { previewSection?: string }) {
+  return <Discuss {...props} role="discover" />;
+}
+export const DiscoverTab = asTabRoute<{ previewSection?: string }>(DiscoverPage, '/');

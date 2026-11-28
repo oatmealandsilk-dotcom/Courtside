@@ -82,3 +82,39 @@ export function useHomeMap(on: boolean, { peek, strip, stripKnown, under, short,
       : Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barInset - under - peek);
   return { height, onSlotLayout, onPaneHeight: setPaneH };
 }
+
+/** Take A's least map: under it the first activity's name and the top of its photo still show (design/home-discover). */
+const PEEK_MAP_MIN = 300;
+/** Take C's least map. */
+const HEADING_MAP_MIN = 360;
+
+/**
+ * PICTURES ONLY (design/home-discover, EXPO_PUBLIC_HOME_DISCOVER): the map's height on Community as one page (no
+ * "Find Players | Discussions" row), for each take, from the page's own layout as useHomeMap.
+ *  - 'a' Peek: as tall as it can be while Open to hit, then the first activity's name row and the top of its photo
+ *    (`peek`), show above the bar.
+ *  - 'b' Sheet: down to the screen's foot, under the bar; the sheet rests over its foot (`rest`: the bar's room, the
+ *    grab handle, Open to hit and the first activity's header) and rises `full` points to cover the page.
+ *  - 'c' Heading: as tall as it can be while Open to hit and the "Friends' activity" heading (`peek`) show above the bar.
+ * With `short` ("You're early" / "Bring your friends" up) all three keep useHomeMap's card-height rule.
+ */
+export function useDiscoverMap(look: 'a' | 'b' | 'c' | null, { peek, strip, stripKnown, under, short, still, rest }: { peek: number; strip: number; stripKnown: boolean; under: number; short: boolean; still: boolean; rest: number }): { height: number | undefined; full: number; onSlotLayout: (e: LayoutChangeEvent) => void; onPaneHeight: (h: number) => void } {
+  const barInset = useBarInset();
+  const [slotY, setSlotY] = useState(0);
+  const [paneH, setPaneH] = useState(0);
+  const stillRef = useRef(still);
+  stillRef.current = still;
+  const onSlotLayout = useCallback((e: LayoutChangeEvent) => {
+    const y = Math.round(e.nativeEvent.layout.y);
+    if (y > 0 && !stillRef.current) setSlotY(y);
+  }, []);
+  const ready = look !== null && paneH > 0 && slotY > 0 && stripKnown;
+  const room = paneH - PANE_TOP - slotY;
+  const height = !ready ? undefined
+    : short ? Math.max(HOME_MAP_MIN, CARD_HEIGHT - strip)
+      : look === 'b' ? room
+        : Math.max(look === 'a' ? PEEK_MAP_MIN : HEADING_MAP_MIN, room - barInset - under - strip - peek);
+  // The sheet's top at rest sits `rest + barInset` above the screen's foot; fully up, at the page's top.
+  const full = ready && look === 'b' && !short ? Math.max(0, paneH - barInset - rest) : 0;
+  return { height, full, onSlotLayout, onPaneHeight: setPaneH };
+}

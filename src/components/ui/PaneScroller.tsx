@@ -61,6 +61,13 @@ export interface PaneScrollerProps {
    * whole life: switching between the two forms would build the content again.
    */
   list?: PaneList;
+  /**
+   * PICTURES ONLY (design/home-discover, take B "Sheet"): the list's rows are a solid sheet resting over the head (the
+   * map). Two resting points, the sheet low (the page's top) and the sheet `full` points further up; past that the
+   * feed scrolls freely. The bar never tucks while the sheet is between them, and the list's foot is the page's own
+   * ground, so the map never shows under the last rows.
+   */
+  sheet?: { full: number };
   children: ReactNode;
 }
 
@@ -95,7 +102,7 @@ export interface PaneList<T = any> { // eslint-disable-line @typescript-eslint/n
  *  - a section not on show only obeys a jump to its top (the tab being left,
  *    or the bar bringing you to the map), never a glide meant for the other.
  */
-export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, onViewHeight, list: rows, children }: PaneScrollerProps) {
+export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY, inStrip, column, onViewHeight, list: rows, sheet, children }: PaneScrollerProps) {
   const styles = useThemedStyles(styleDefinitions);
   const barInset = useBarInset();
   const insets = useSafeAreaInsets();
@@ -109,6 +116,8 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
   const here = useRef(initial.current);
   // The strip only exists on the phone, and only while the page can refresh.
   const strip = !WEB && onRefresh ? PULL_GAP : 0;
+  // Take B's sheet (design/home-discover): how far up its second resting point is (0: no sheet).
+  const sheetFull = sheet && sheet.full > 0 ? Math.round(sheet.full) : 0;
   const restored = useRef(initial.current === 0);
   const [viewH, setViewH] = useState(0);
   // With the keys up an iPhone lets a page scroll past its end, so the stop at the top stands down meanwhile (as Screen).
@@ -284,7 +293,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
       lastY.value = y;
       // Only the section on show, by a finger of its own, moves the bar.
       if (!live.value || sectionPan.value) return;
-      if (Math.abs(dy) > 0.3 && y >= strip) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
+      if (Math.abs(dy) > 0.3 && y >= strip + sheetFull) barCompact.value = Math.max(0, Math.min(1, barCompact.value + dy / 150));
     },
     onBeginDrag: () => {
       dragging.value = true;
@@ -385,7 +394,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
     keyboardDismissMode: Platform.OS === 'android' ? ('on-drag' as const) : ('interactive' as const),
     showsVerticalScrollIndicator: false,
     scrollEventThrottle: 16,
-    snapToOffsets: strip > 0 && !keysUp ? [strip] : undefined,
+    snapToOffsets: sheetFull > 0 ? (strip > 0 && !keysUp ? [strip, strip + sheetFull] : [0, sheetFull]) : strip > 0 && !keysUp ? [strip] : undefined,
     snapToStart: false,
     snapToEnd: false,
     contentOffset: { x: 0, y: strip + initial.current },
@@ -437,7 +446,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
               }
               ListFooterComponent={
                 <>
-                  <View style={{ height: room + spacing.xxxl }} />
+                  <View style={sheet ? [styles.sheetFoot, { minHeight: viewH }] : { height: room + spacing.xxxl }} />
                   {KEYBOARD_ROOM ? <Reanimated.View pointerEvents="none" style={keyboardRoom} /> : null}
                 </>
               }
@@ -487,6 +496,7 @@ export function PaneScroller({ memoryKey, active, onRefresh, scrollRef, offsetY,
 const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   content: { flexGrow: 1 },
+  sheetFoot: { backgroundColor: colors.bg },
   // The page's side margins, and the gap under the section row, which scrolls away with the content.
   // 10 under the section row (Oct 24, owner: less space above the search so the map can be bigger).
   body: { paddingHorizontal: spacing.lg, paddingTop: PANE_TOP },

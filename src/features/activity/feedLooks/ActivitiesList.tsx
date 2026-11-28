@@ -703,8 +703,14 @@ const QUIET_PAGES = 8;
  * Monday is "played on Saturday", with Saturday's. Only a day still to come here (the player's clock a day ahead of
  * yours) falls back to the day it was posted.
  */
-export function galleryRows(posts: Post[], me: string | null | undefined, showStart: boolean, rollup = false, follows: ReadonlySet<string> = new Set()): Row[] {
+export function galleryRows(posts: Post[], me: string | null | undefined, showStart: boolean, rollup = false, follows: ReadonlySet<string> = new Set(), everything = false): Row[] {
   const out: Row[] = [];
+  // PICTURES ONLY (design/home-discover): Discover's Posts, every post as a card (a photo, a clip's cover, a text post).
+  if (everything) {
+    for (const post of posts) out.push({ key: post.id, kind: 'post', post });
+    if (showStart) out.splice(Math.min(START_AFTER, out.length), 0, { key: 'start', kind: 'start' });
+    return out;
+  }
   const days = new Map<string, Extract<Row, { kind: 'rollup' }>>();
   const today = localDay(new Date());
   for (const post of posts) {
@@ -740,6 +746,8 @@ interface GalleryFeedArgs {
   start?: React.ReactNode;
   /** On another page (under the Community map): the follow block always sits on the band, as every row there does. */
   inPage?: boolean;
+  /** PICTURES ONLY (design/home-discover): Discover's Posts, every kind of post as a card, not sessions only. */
+  everything?: boolean;
 }
 
 /**
@@ -748,13 +756,13 @@ interface GalleryFeedArgs {
  * older posts asked for as the end nears (with the quiet-page guard), what is on screen marked seen, the calm empty
  * note and the row at the end (a spinner, "Show older posts" or "You're all caught up").
  */
-function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, start, inPage = false }: GalleryFeedArgs) {
+function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, start, inPage = false, everything = false }: GalleryFeedArgs) {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { users, currentUserId, followingIds, actions } = app;
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const following = useMemo(() => new Set(followingIds), [followingIds]);
-  const rows = useMemo(() => galleryRows(posts, currentUserId, showStart, rollup, following), [posts, currentUserId, showStart, rollup, following]);
+  const rows = useMemo(() => galleryRows(posts, currentUserId, showStart, rollup, following, everything), [posts, currentUserId, showStart, rollup, following, everything]);
   // Anything from someone else on show (with none, the empty note says how friends' sessions show up here).
   const fromOthers = useMemo(() => rows.some((r) => r.kind === 'rollup' || (r.kind === 'post' && r.post.authorId !== currentUserId)), [rows, currentUserId]);
   // The "who played" rows opened, by day: a page arriving keeps them open (each day's row keeps its key).
@@ -966,7 +974,9 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
   const anyRows = rows.length > 0;
   const quiet = useMemo(() => (!fromOthers && settled && !showStart ? (
     <View style={[styles.column, { maxWidth: cardW }, anyRows || inPage ? styles.emptyUnder : null]}>
-      {rollup ? (
+      {everything ? (
+        <EmptyState icon="images-outline" title="No posts yet" body="Photos, clips and posts from players show up here." />
+      ) : rollup ? (
         <EmptyState
           icon="images-outline"
           title="No sessions from friends yet"
@@ -980,7 +990,7 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
         />
       )}
     </View>
-  ) : null), [fromOthers, settled, showStart, styles, cardW, anyRows, inPage, rollup]);
+  ) : null), [fromOthers, settled, showStart, styles, cardW, anyRows, inPage, rollup, everything]);
   // One fixed height whatever it holds, so swapping spinner, button and words never changes the list's length.
   const end = useMemo(() => (
     <View style={styles.end}>
@@ -1180,7 +1190,7 @@ const feedItem = (row: Row): InPageRow => {
  * so nothing above the reader's thumb moves. A pull lets them all find their usual places again. Hand the result to
  * PaneScroller's `list`; `reopen` after a pull; `viewerNode` (a photo full screen, a Modal) anywhere in the page.
  */
-export function useGalleryInPage({ posts, rollup, nearCount, near, paused, postsIn, start, slots }: {
+export function useGalleryInPage({ posts, rollup, nearCount, near, paused, postsIn, start, slots, everything = false, sim = 'homeclip' }: {
   posts: Post[];
   rollup: boolean;
   nearCount: number;
@@ -1192,9 +1202,13 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, posts
   /** The follow block (null: none). */
   start: React.ReactNode;
   slots: FeedSlot[];
+  /** PICTURES ONLY (design/home-discover): Discover's Posts, every kind of post as a card. */
+  everything?: boolean;
+  /** The simulator proof's command that opens this feed's first clip. */
+  sim?: string;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows, renderRow, openClip, viewerNode, onEnd, reopen: reopenFeed, onScreenNow, quiet, end, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
+  const { rows, renderRow, openClip, viewerNode, onEnd, reopen: reopenFeed, onScreenNow, quiet, end, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true, everything });
   // Where each of the page's rows shown past the items stands: after the items there were when it was first shown.
   const placed = useRef(new Map<string, number>());
   const [placing, setPlacing] = useState(0);
@@ -1250,12 +1264,12 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, posts
   // elsewhere): "homeclip" opens the first clip in this feed as a tap on it would, to check the reel and the way back.
   useEffect(() => {
     if (!SIM_DRIVER || paused) return undefined;
-    return simAction('homeclip', () => {
+    return simAction(sim, () => {
       const clip = posts.find((p) => isClip(p) && hasPicture(p));
-      simLog(`[home] clip ${clip?.id ?? 'none'}`);
+      simLog(`[${sim}] clip ${clip?.id ?? 'none'}`);
       if (clip) openClip(clip.id);
     });
-  }, [paused, posts, openClip]);
+  }, [paused, posts, openClip, sim]);
   return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, reopen, viewerNode };
 }
 

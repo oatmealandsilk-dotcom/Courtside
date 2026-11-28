@@ -35,6 +35,7 @@ import { LookBar } from './TabBarLooks';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
+import { DISCOVER_ON } from '@/features/community/homeDiscover';
 
 /** A hold on the Feed tab while on the Feed: the Feed's windows. */
 const holdFeed = () => requestFeedWindows('bar');
@@ -92,7 +93,8 @@ interface NavItem {
  */
 const ITEMS: NavItem[] = [
   { route: 'discuss', label: 'Community', icon: 'people-outline', activeIcon: 'people' },
-  { route: 'index', label: 'Feed', icon: 'play-circle-outline', activeIcon: 'play-circle' },
+  // PICTURES ONLY (design/home-discover, EXPO_PUBLIC_HOME_DISCOVER): the second tab as Discover ("Posts | Discussions").
+  DISCOVER_ON ? { route: 'index', label: 'Discover', icon: 'compass-outline', activeIcon: 'compass' } : { route: 'index', label: 'Feed', icon: 'play-circle-outline', activeIcon: 'play-circle' },
   { route: 'coaches', label: 'Coaching', icon: 'clipboard-outline', activeIcon: 'clipboard' },
   { route: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
 ];
@@ -122,7 +124,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   // None when the page on show was opened cold from a link and belongs to no tab (index -1).
   const activeRoute: string | undefined = state.routes[state.index]?.name;
   // The Feed's windows (features/feed/feedWindows): a hold on the Feed tab, only while on the Feed itself.
-  const onFeedHold = useFeedWindowsOn() && activeRoute === 'index' && feedUnder ? holdFeed : undefined;
+  const onFeedHold = useFeedWindowsOn() && activeRoute === 'index' && feedUnder && !DISCOVER_ON ? holdFeed : undefined;
   // The swipe followed (features/feed/swipeFollow, admins first): the bar's look follows a finger's swipe on the Feed.
   const swipeFollow = useSwipeFollow();
   // The lens under the lit tab (features/navigation/barLens, admins first).

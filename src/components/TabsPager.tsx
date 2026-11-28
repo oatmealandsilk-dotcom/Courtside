@@ -5,11 +5,12 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { Easing, runOnJS, runOnUI, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';
 import { router } from 'expo-router';
 
-import Discuss from '../../app/(tabs)/discuss';
+import Discuss, { DiscoverTab } from '../../app/(tabs)/discuss';
 import Home from '../../app/(tabs)/index';
 import Coaches from '../../app/(tabs)/coaches';
 import Profile from '../../app/(tabs)/profile';
 import { TabFocus } from '@/features/navigation/tabFocus';
+import { DISCOVER_ON } from '@/features/community/homeDiscover';
 import { catchUpNow } from '@/theme/catchUp';
 import { activationDistance, claimedDepth, waitsForDeeper } from '@/features/navigation/gestureClaim';
 import { setPendingTab } from '@/features/navigation/pendingTab';
@@ -151,7 +152,7 @@ export function TabsPager({ pathname }: { pathname: string }) {
     if (lifted >= 0 && near === lifted + Math.round(jumpOffset.value / widthValue.value)) return lifted;
     return near;
   }, (now, was) => {
-    if (now !== was) runOnJS(setRowOnFeed)(now === FEED);
+    if (now !== was) runOnJS(setRowOnFeed)(now === FEED && !DISCOVER_ON);
   });
   useEffect(() => () => setRowOnFeed(null), []);
 
@@ -321,7 +322,8 @@ export function TabsPager({ pathname }: { pathname: string }) {
   // Built once. React skips re-rendering an element it has seen before, so
   // the address or the bar changing costs nothing inside the tabs themselves.
   // In TAB_PATHS order.
-  const panes = useMemo(() => [Discuss, Home, Coaches, Profile].map((Tab, i) => <Tab key={TAB_PATHS[i]} />), []);
+  // (PICTURES ONLY, design/home-discover: the second tab is Discover, "Posts | Discussions", in place of the Feed.)
+  const panes = useMemo(() => [Discuss, DISCOVER_ON ? DiscoverTab : Home, Coaches, Profile].map((Tab, i) => <Tab key={TAB_PATHS[i]} />), []);
 
   return (
     <GestureDetector gesture={pan}>
