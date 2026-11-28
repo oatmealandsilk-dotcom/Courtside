@@ -10,6 +10,8 @@ import { Button } from '@/components/ui';
 import { rememberShareTarget } from '@/features/invite/referral';
 import { colors, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
+import { JoinHuman } from './JoinHuman';
+import { joinLook, type JoinLook } from './joinLook';
 import { noteAppTap } from './campaign';
 import { joinCopy } from './joinCopy';
 
@@ -60,6 +62,17 @@ function focusables(root: HTMLElement): HTMLElement[] {
 }
 
 export function JoinSheet() {
+  // The demo website can show four other takes instead (?joinlook=a|b|c|d, Nov 28); everyone else gets this one.
+  const look = joinLook();
+  return look === 'today' ? <TodayJoinSheet /> : <OtherJoinLook look={look} />;
+}
+
+function OtherJoinLook({ look }: { look: Exclude<JoinLook, 'today'> }) {
+  const ask = useJoinSheet();
+  return ask ? <JoinHuman key={ask.at} ask={ask} look={look} /> : null;
+}
+
+function TodayJoinSheet() {
   const styles = useThemedStyles(styleDefinitions);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();

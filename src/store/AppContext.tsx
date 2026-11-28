@@ -22,7 +22,7 @@ import { isMapCourtId } from '@/features/places/courtName';
 import { TERMS_VERSION } from '@/lib/legal';
 
 import { fetchBootstrap, fetchGuestFeedPage, fetchGuestHome, fetchGuestPost, fetchGuestThread, fetchGuestThreads, searchPosts as apiSearchPosts, signIn as apiSignIn, type Bootstrap, type GuestData } from '@/data/api';
-import { openJoinSheet } from '@/features/guest/joinAsk';
+import { aboutPerson, aboutPost, openJoinSheet, type JoinAbout } from '@/features/guest/joinAsk';
 import { setGuestStatus } from '@/features/guest/guestStatus';
 import { noteCampaignSignup } from '@/features/guest/campaign';
 import * as demoApi from '@/data/api';
@@ -10683,21 +10683,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
    * come from guest mode's own data. Everything else is the app's own action.
    */
   const guestActions = useMemo<AppActions>(() => {
-    const ask = (what: string, report?: string, who?: string) => openJoinSheet(what, report || who ? { report, who } : undefined);
+    const ask = (what: string, report?: string, who?: string, about?: JoinAbout) => openJoinSheet(what, report || who || about ? { report, who, about } : undefined);
     const gate = <A extends unknown[], R>(what: string, answer: R) => (..._args: A) => { ask(what); return answer; };
     // The prompt names the person it was about (Nov 28: "Join CourtSide to let Sam know you liked it"), from guest mode's own lists.
     const nameOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId)?.name : undefined);
     const postBy = (postId: ID) => nameOf(guestRef.current?.posts.find((p) => p.id === postId)?.authorId);
-    const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined) => (...args: A) => { ask(what, undefined, who(...args)); return answer; };
+    // Their face and the post's cover, for the sign-up looks that show them (features/guest/joinLook: b, c).
+    const userOf = (userId: ID | null | undefined) => (userId ? guestRef.current?.users.find((u) => u.id === userId) : undefined);
+    const postAbout = (postId: ID) => { const post = guestRef.current?.posts.find((p) => p.id === postId); return aboutPost(post, userOf(post?.authorId)); };
+    const named = <A extends unknown[], R>(what: string, answer: R, who: (...args: A) => string | undefined, about?: (...args: A) => JoinAbout | undefined) => (...args: A) => { ask(what, undefined, who(...args), about?.(...args)); return answer; };
     const later = <T,>(v: T) => Promise.resolve(v);
     const gated: Partial<AppActions> = {
-      toggleLike: named('like posts', undefined, (postId: ID) => postBy(postId)),
-      toggleLikeComment: named('like comments', undefined, (commentId: ID) => nameOf(guestRef.current?.comments.find((c) => c.id === commentId)?.authorId)), toggleLikeStory: gate('like posts', undefined),
-      addComment: ((postId: ID) => { ask('comment', undefined, postBy(postId)); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
+      toggleLike: named('like posts', undefined, (postId: ID) => postBy(postId), (postId: ID) => postAbout(postId)),
+      toggleLikeComment: named('like comments', undefined, (commentId: ID) => nameOf(guestRef.current?.comments.find((c) => c.id === commentId)?.authorId), (commentId: ID) => aboutPerson(userOf(guestRef.current?.comments.find((c) => c.id === commentId)?.authorId))), toggleLikeStory: gate('like posts', undefined),
+      addComment: ((postId: ID) => { ask('comment', undefined, postBy(postId), postAbout(postId)); return later(undefined); }), addStoryComment: (() => { ask('comment'); return later(undefined); }),
       addAnswer: ((questionId: ID) => { ask('reply', undefined, nameOf(guestRef.current?.questions.find((q) => q.id === questionId)?.authorId)); return later(undefined); }),
       voteQuestion: gate('vote', undefined), voteAnswer: gate('vote', undefined), votePoll: gate('vote', undefined), voteTip: gate('vote', undefined),
-      toggleFollow: named('follow players', undefined, (userId: ID) => nameOf(userId)), toggleSavePost: named('save posts', undefined, (postId: ID) => postBy(postId)), toggleSaveQuestion: gate('save threads', undefined),
-      shareToChats: gate('send this to friends', undefined), openConversationWith: named('message players', '', (userId: ID) => nameOf(userId)),
+      toggleFollow: named('follow players', undefined, (userId: ID) => nameOf(userId), (userId: ID) => aboutPerson(userOf(userId))), toggleSavePost: named('save posts', undefined, (postId: ID) => postBy(postId), (postId: ID) => postAbout(postId)), toggleSaveQuestion: gate('save threads', undefined),
+      shareToChats: gate('send this to friends', undefined), openConversationWith: named('message players', '', (userId: ID) => nameOf(userId), (userId: ID) => aboutPerson(userOf(userId))),
       sendMessage: (() => { ask('message players'); return later(undefined); }),
       joinHit: (() => { ask('join this hit'); return later({ error: 'Make a free account to join.' }); }),
       postHit: (() => { ask('post a hit'); return later(''); }),
