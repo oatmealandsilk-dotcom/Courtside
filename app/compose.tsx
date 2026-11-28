@@ -81,6 +81,12 @@ import { useRevealOnFocus } from '@/lib/keyboardScroll';
 import { useAndroidBack } from '@/lib/androidBack';
 import { SHEET_CLOSE_MS, SHEET_SPRING } from '@/theme/motion';
 import { LESS_AI_ROUND2, corner } from '@/theme/look';
+import { isDesktopBrowser } from '@/lib/browserDevice';
+import { plainSheet } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): on a phone the Create menu is a sheet from the foot, not a card in the middle. */
+const MENU_SHEET = noBoxes() && !isDesktopBrowser();
 
 /** The plain Create list (round 2, item 2): off until the owner says (Oct 25: "Don't change create tab yet"). */
 const CREATE_PLAIN = false;
@@ -1371,10 +1377,10 @@ function Compose() {
   const choiceWords = (label: string, note: string, status: string | null) => (plainMenu
     ? <View style={styles.choiceWords}><Text style={styles.choiceRowLabel}>{label}</Text>{status ? <Text style={styles.note}>{status}</Text> : null}</View>
     : <><Text style={styles.choiceLabel}>{label}</Text><Text style={styles.note}>{note}</Text></>);
-  if (stage === 'choose') return <View style={styles.choiceBackdrop}>
+  if (stage === 'choose') return <View style={[styles.choiceBackdrop, MENU_SHEET && styles.plainBackdrop]}>
     <Reanimated.View pointerEvents="none" style={[StyleSheet.absoluteFill, dimStyle]}><SheetBackdrop /></Reanimated.View>
     <Pressable accessibilityRole="button" accessibilityLabel="Close create menu" onPress={closeMenu} style={StyleSheet.absoluteFill}/>
-    <Reanimated.View style={[styles.choiceSheet, tight && styles.choiceSheetTight, { maxHeight: menuMaxH }, popStyle]}>
+    <Reanimated.View style={[styles.choiceSheet, tight && styles.choiceSheetTight, MENU_SHEET && [styles.plainMenu, { paddingBottom: insets.bottom + spacing.lg }], { maxHeight: menuMaxH }, popStyle]}>
       <View style={styles.choiceHeader}><Text style={styles.choiceTitle}>{entering ? challenge.title : 'Create'}</Text><Pressable accessibilityRole="button" accessibilityLabel="Close" onPress={closeMenu} hitSlop={10}><Ionicons name="close" size={24} color={colors.text}/></Pressable></View>
       <ScrollView style={styles.choiceScroll} contentContainerStyle={[styles.choiceList, tight && styles.choiceListTight, plainMenu && styles.choiceListPlain]} bounces={false} showsVerticalScrollIndicator={false}>
       {/* Session (Oct 6, owner chose "A": one card for both, so the menu stays five cards): a card like the
@@ -1912,6 +1918,8 @@ const styleDefinitions = StyleSheet.create({
   choiceBackdrop: { flex: 1, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 20 },
   choiceSheet: { width: '100%', maxWidth: 400, borderRadius: corner(24), padding: 20, gap: 12, backgroundColor: colors.bg },
   choiceSheetTight: { padding: 16, gap: 10 },
+  plainBackdrop: { justifyContent: 'flex-end', alignItems: 'stretch', padding: 0 },
+  plainMenu: { ...plainSheet, maxWidth: '100%' as unknown as number, borderRadius: 0, borderTopLeftRadius: radius.lg, borderTopRightRadius: radius.lg, backgroundColor: colors.bg },
   // Only the choices scroll, and only when the box is held shorter than they are.
   choiceScroll: { flexGrow: 0, flexShrink: 1 },
   choiceList: { gap: 12 },
