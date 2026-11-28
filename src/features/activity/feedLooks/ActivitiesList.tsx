@@ -992,10 +992,13 @@ function OwnRow({ post, note, joined }: { post: Post; /** "Not in friends' feeds
     <View testID="mixed-mini" style={[styles.oRow, joined ? styles.oJoined : styles.oBand]}>
       <Pressable onPress={() => router.push(`/post/${post.id}`)} accessibilityRole="button" accessibilityLabel={`Your ${title}. ${line}${note ? `. ${note}` : ''}`} accessibilityHint="Opens the post" style={[styles.flex, styles.oPress]}>
         <View style={styles.flex}>
-          <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.oTitle}>{title}</Text>
+          {/* The privacy words share the title's line (titles are short), so the numbers under it get the full width. */}
+          <View style={styles.oTop}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={[styles.flex, styles.oTitle]}>{title}</Text>
+            {note ? <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.oNote}>{note}</Text> : null}
+          </View>
           <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.oLine}>{line}</Text>
         </View>
-        {note ? <Text numberOfLines={1} maxFontSizeMultiplier={1.1} style={styles.oNote}>{note}</Text> : null}
       </Pressable>
       <Pressable onPress={() => router.push({ pathname: '/post-menu', params: { id: post.id } })} hitSlop={8} style={styles.oMore} accessibilityRole="button" accessibilityLabel="More options">
         <Ionicons name="ellipsis-horizontal" size={18} color={colors.text} />
@@ -1549,6 +1552,7 @@ const styleDefinitions = StyleSheet.create({
   oPress: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: GALLERY.rowPad },
   oTitle: { ...font('600'), fontSize: 15, lineHeight: 20, color: colors.text },
   oLine: { ...typography.small, lineHeight: 18, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  oTop: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   oNote: { ...typography.small, fontSize: 12, color: colors.textMuted, flexShrink: 0 },
   oMore: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   // The head of the list (follow suggestions…) when it sits after the first items: the band above it.
