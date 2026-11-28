@@ -131,6 +131,7 @@ const styleDefinitions = StyleSheet.create({
   },
   // The court as a tiny page: its ground with its wash faintly on it, nothing else.
   swatch: { width: 56, height: 48, borderRadius: radius.md, borderWidth: 1, overflow: 'hidden' },
+  swatchMark: { position: 'absolute', right: 7, bottom: 7, width: 9, height: 9, borderRadius: 4.5 },
   words: { flex: 1, gap: 2 },
   name: { ...typography.bodyStrong, color: colors.text },
   blurb: { ...typography.small, color: colors.textMuted },
@@ -214,8 +215,10 @@ const ThemeCard = memo(function ThemeCard({ option, active, onPick, styles, fade
     <Pressable accessibilityRole="radio" aria-checked={active} accessibilityLabel={`${option.label} theme`} onPress={pick}>
       <Animated.View style={[styles.card, cardStyle]}>
         <FadeSpot store={fade} render={(layers) => layers.map((layer) => <FadeFill key={layer.key} op={layer.op} color={themes[layer.theme].surface} radius={radius.lg} testID="theme-fade-card" />)} />
-        <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: palette.border }]}>
+        {/* Clean's white page vanished on its own white card: a firmer edge and a small mark of its green (Nov 27). */}
+        <View style={[styles.swatch, { backgroundColor: palette.bg, borderColor: option.name === 'clean' ? palette.borderStrong : palette.border }]}>
           <Wash theme={option.name} height={48} strength={0.7} fade={palette.bg} swatch />
+          {option.name === 'clean' ? <View style={[styles.swatchMark, { backgroundColor: palette.brand }]} /> : null}
         </View>
         <View style={styles.words}>
           <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name}>{option.label}</Text>
