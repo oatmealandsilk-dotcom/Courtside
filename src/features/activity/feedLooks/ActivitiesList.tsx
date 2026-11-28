@@ -491,6 +491,8 @@ export const MIXED = {
 /** A plain card's whole height: name row, box, one line, actions. */
 export const PLAIN_H = MIXED.padTop + MIXED.head + MIXED.gap + MIXED.box + MIXED.gap + MIXED.line + MIXED.actions + MIXED.padBottom;
 const PHOTO_SHAPE = 4 / 5;
+/** A text post's framed words: the box, the gap and the line together. */
+const TEXT_H = MIXED.box + MIXED.gap + MIXED.line;
 
 function MixedHead({ post, author, me }: { post: Post; author: User; me: string | null }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -604,8 +606,15 @@ const MixedCard = React.memo(function MixedCard({ post, author, me, hidden, onOp
       <View testID="mixed-plain" style={[styles.mCard, { height: PLAIN_H + (near ? NEAR_H : 0) }]}>
         <MixedHead post={post} author={author} me={me} />
         {nearLine}
-        <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>
-        {lineView}
+        {post.session ? (
+          <>
+            <View style={styles.mBoxSlot}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>
+            {lineView}
+          </>
+        ) : (
+          // A text post: its framed words take the box and the line's place together, so the card keeps PLAIN_H with no empty row.
+          <View style={[styles.mBoxSlot, { height: TEXT_H }]}><MixedBox post={post} author={author} width={inner} hidden={hidden} /></View>
+        )}
         <MixedActions post={post} me={me} clip={false} />
       </View>
     );
@@ -935,7 +944,7 @@ const styleDefinitions = StyleSheet.create({
   mNear: { height: 28, justifyContent: 'center', marginTop: 2 },
   mBoxSlot: { height: MIXED.box, marginTop: MIXED.gap },
   // A text post's words framed as the session box is: same band, same radius, so a run of plain cards keeps one shape.
-  mWords: { height: MIXED.box, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  mWords: { height: TEXT_H, justifyContent: 'center', paddingHorizontal: 16, borderRadius: 16, backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   mWordsText: { ...typography.body, fontSize: 15, lineHeight: 21, color: colors.text },
   mPhoto: { marginTop: MIXED.gap, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surfaceAlt },
   mPhotoJoined: { overflow: 'hidden', backgroundColor: colors.surfaceAlt },
