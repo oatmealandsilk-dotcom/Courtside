@@ -18,6 +18,9 @@ const MAX_MS = 12000;
 /** The icon font, waited on at most this long before the page shows anyway. */
 const FONT_WAIT_MS = 3000;
 
+/** One icon the app draws (in public/fonts/ionicons-used.woff2): loading it fetches the small icon file, never the whole set. */
+const ICON_PROBE = String.fromCodePoint(0xf103);
+
 let dropped = false;
 let started = false;
 
@@ -31,7 +34,7 @@ function iconFontReady(): Promise<unknown> {
   try {
     const fonts = (document as Document & { fonts?: FontFaceSet }).fonts;
     if (!fonts) return Promise.resolve();
-    return Promise.race([fonts.load('16px ionicons'), new Promise((done) => setTimeout(done, FONT_WAIT_MS))]);
+    return Promise.race([fonts.load('16px ionicons', ICON_PROBE), new Promise((done) => setTimeout(done, FONT_WAIT_MS))]);
   } catch {
     return Promise.resolve();
   }
