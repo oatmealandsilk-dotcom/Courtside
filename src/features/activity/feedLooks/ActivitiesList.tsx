@@ -1973,7 +1973,7 @@ const styleDefinitions = StyleSheet.create({
   wRow: { height: GALLERY.who, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg },
   wFaces: { flexDirection: 'row', alignItems: 'center' },
   wFace: { width: 32, height: 32, borderRadius: 16, padding: 2, backgroundColor: colors.bg, overflow: 'hidden' },
-  wFaceOver: { marginLeft: -8 },
+  wFaceOver: { marginLeft: -6 },
   wText: { ...typography.body, fontSize: 14, color: colors.textMuted },
   wWho: { ...font('500'), color: colors.text },
   wItem: { height: GALLERY.whoItem, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingLeft: spacing.lg + 2, paddingRight: spacing.lg },
