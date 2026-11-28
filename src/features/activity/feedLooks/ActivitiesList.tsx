@@ -33,6 +33,7 @@ import { localDay } from '@/features/practice/stats';
 import { matchTiebreakAt } from '@/features/activity/score';
 import { galleryVariation, hasWhoPlayed, isGalleryLook, type ActivitiesLook, type GalleryVariation } from './activitiesLook';
 import { supabase } from '@/lib/supabase';
+import { simAction } from '@/lib/simDriver';
 
 /*
  * The Activities looks the owner asked to see (Nov 27): one continuous list, no snapping, that you flick through at
@@ -1684,7 +1685,7 @@ function useFeedRows({ look, posts, showStart, nearCount, near, paused, start }:
   // eslint-disable-next-line react-hooks/exhaustive-deps -- startBlock is rebuilt from the values listed after it
   }, [usersById, classic, near, currentUserId, followingIds, blockedIds, openClip, column, cardW, styles, Card, openDays, toggleDay, showStart, nearCount, posts.length, paused, edge, start]);
 
-  return { rows, renderItem, loadMore, loading, ended, reopen, classic, gallery, column, startBlock, startInRows };
+  return { rows, renderItem, loadMore, loading, ended, reopen, classic, gallery, column, startBlock, startInRows, openClip };
 }
 
 export function ActivitiesList({ look, posts, showStart, nearCount, near, paused, row }: {
@@ -1816,7 +1817,11 @@ export function ActivitiesInline({ look, posts, nearCount, near, paused, start, 
   scrollY: SharedValue<number>;
 }) {
   const styles = useThemedStyles(styleDefinitions);
-  const { rows, renderItem, loadMore, loading, ended, classic, startBlock, startInRows } = useFeedRows({ look, posts, showStart: !!start, nearCount, near, paused, start });
+  const { rows, renderItem, loadMore, loading, ended, classic, startBlock, startInRows, openClip } = useFeedRows({ look, posts, showStart: !!start, nearCount, near, paused, start });
+  // The simulator proof harness only (simDriver: demo builds bundled with EXPO_PUBLIC_SIM_DRIVER; nothing anywhere else):
+  // "openclip" opens the feed's first clip as a tap on it would, for checking the reel and the way back.
+  const firstClip = posts.find(isClip)?.id;
+  useEffect(() => (paused || !firstClip ? undefined : simAction('openclip', () => openClip(firstClip))), [paused, firstClip, openClip]);
   const { height: screenH } = useWindowDimensions();
   // The end of the feed: once it is within two screens of the view, the next page.
   const end = useRef<View>(null);
