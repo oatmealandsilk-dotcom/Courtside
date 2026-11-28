@@ -6017,9 +6017,23 @@ const listOf = <T,>(data: unknown, key: string): T[] => {
   return Array.isArray(v) ? (v as T[]) : [];
 };
 
+/**
+ * On the website, public/index.html asks for a signed-out visitor's first Feed page (guest_feed, the first 20) while
+ * the script is still downloading. Taken once, here; null when it was not asked, has failed, or was taken already.
+ */
+function takeEarlyGuestFeed(): Promise<unknown> | null {
+  if (typeof window === 'undefined') return null;
+  const w = window as unknown as { __csGuestFeed?: Promise<unknown> };
+  const early = w.__csGuestFeed;
+  w.__csGuestFeed = undefined;
+  return early ? early.catch(() => null) : null;
+}
+
 /** One page of the guest feed, newest first: before `before` when paging on. Null when it could not be asked. */
 export async function guestFeed(before?: string | null, limit = 20): Promise<GuestPage | null> {
-  const { data, error } = await need().rpc('guest_feed', { p_before: before ?? null, p_limit: limit });
+  const early = !before && limit === 20 ? takeEarlyGuestFeed() : null;
+  const asked = early ? await early : null;
+  const { data, error } = asked ? { data: asked, error: null } : await need().rpc('guest_feed', { p_before: before ?? null, p_limit: limit });
   if (error || !data || typeof data !== 'object') return null;
   const rows = listOf<GuestPostRow>(data, 'posts');
   return {

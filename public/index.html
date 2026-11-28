@@ -39,6 +39,26 @@
     <!-- The app's data and pictures come from auth.courtsidebase.com: the connection is opened while the script downloads. -->
     <link rel="preconnect" href="https://auth.courtsidebase.com" crossorigin />
     <link rel="dns-prefetch" href="https://auth.courtsidebase.com" />
+    <!-- A signed-out visitor's first Feed page is asked for now, while the app's script is still downloading, instead of
+         after it has run. The request is the one the app makes itself (guest_feed, the first 20; GUEST_PAGE in
+         src/data/api.ts), with the same public key the waitlist page uses; src/data/remote.ts (guestFeed) takes the answer
+         once if it is here, and otherwise (an error, a signed-in visitor, any other address) asks as before. -->
+    <script>
+      (function () {
+        try {
+          if (location.hostname !== 'app.courtsidebase.com') return;
+          if (window.localStorage.getItem('sb-cgitvbnvchmofqkhtlml-auth-token')) return;
+          var key = 'sb_publishable_8PesptF4vNXClY9w2cit-A_LiSY4Zjj';
+          var asked = fetch('https://auth.courtsidebase.com/rest/v1/rpc/guest_feed', {
+            method: 'POST',
+            headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ p_before: null, p_limit: 20 })
+          }).then(function (r) { if (!r.ok) throw new Error('guest_feed ' + r.status); return r.json(); });
+          asked.catch(function () { window.__csGuestFeed = undefined; });
+          window.__csGuestFeed = asked;
+        } catch (e) { /* the app asks itself */ }
+      })();
+    </script>
     <!-- The icon font, small and early. The ~300 icons the app uses are one 43 KB file (fonts/ionicons-used.woff2),
          fetched in parallel with the app's script instead of after it (the loader waits on it); any other icon falls
          back to the whole set (fonts/ionicons.woff2), fetched only if one is ever drawn. The id is expo-font's own:
