@@ -720,14 +720,16 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   // The iPhone's first page (HOME_FEED): Open to hit is never over the map, but the page's first row right under it,
   // whatever the card shows (Apple 5.1.2(i): see communityMapLook).
   const stripOn = MAP_OVERLAY && showUpToday && (HOME_FEED || !mapCityless);
-  // The iPhone's first page (HOME_FEED): the map, then Open to hit, as tall together as leaves the top of the first
-  // activity in sight above the bar (useHomeMap). Each part measured on its own: Open to hit's height, what else sits
-  // under it in the head ("You're early"…, with its gap), and the first activity's peek (HomePane says it, once).
-  // While "You're early" / "Bring your friends" is up, that card's button is what must show, not the activity.
+  // The iPhone's first page (HOME_FEED): the map at least the card's own height (Nov 28, owner: "The map should still be
+  // large though"), taller where the phone leaves room for Open to hit under it and the top of the first activity
+  // above the bar (useHomeMap). Each part measured on its own: Open to hit's height, what else sits under it in the
+  // head ("You're early"…, with its gap), and the first activity's peek (HomePane says it, once). While "You're early"
+  // / "Bring your friends" is up, that card's button is what must show: the map and Open to hit then take the card's
+  // height together, as the map with Open to hit over its foot did, so the card sits where it did.
   const [homeStripH, setHomeStripH] = useState(0);
   const [homeUnder, setHomeUnder] = useState(0);
   const [homePeek, setHomePeek] = useState(HOME_PEEK);
-  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: mapShort ? 0 : homePeek, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, still: !!search });
+  const homeMap = useHomeMap(HOME_FEED && !!currentUser, { peek: homePeek, strip: stripOn ? homeStripH : 0, stripKnown: !stripOn || homeStripH > 0, under: homeUnder, short: mapShort, still: !!search });
   // Under the map and Open to hit, in the head: "You're at <court>?" (when Open to hit is not there to carry it), "You're
   // early" or "Bring your friends". Gone (and not mid-search): nothing under.
   const homeUnderOn = HOME_FEED && !search && ((!!currentUser && !stripOn) || early || friendsEarly);
@@ -788,13 +790,13 @@ function Discuss({ previewSection }: { previewSection?: string } = {}) {
   ) : null;
   // The iPhone's first page (HOME_FEED): Open to hit as the page's first row, right under the map (never over it: Apple
   // 5.1.2(i)), on the page's own ground, edge to edge as the map is, the map's hairline between. The same small row as
-  // over the map, with a stranger's town under their name (belowMap); "You're at <court>? Light it up" at its top, so it
-  // shows without scrolling. Its height is measured on its own (the map takes the rest).
+  // over the map, faces and first names, the line beside its title carrying the town ("5 free in Los Angeles":
+  // belowMap); "You're at <court>? Light it up" at its top. Its height is measured on its own.
   const homeStrip = HOME_FEED && stripOn && currentUser ? (
     <View collapsable={false} style={styles.homeStrip} onLayout={(e) => { const h = Math.round(e.nativeEvent.layout.height); if (h > 0 && h !== homeStripH) setHomeStripH(h); }}>
       <AtCourtPrompt onMap active={!previewSection || section === 'players'} />
       <View ref={early || friendsEarly ? undefined : leadRef} collapsable={false}>
-        <UpToday compact belowMap me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
+        <UpToday compact belowMap town={myCityName ?? undefined} me={currentUser} people={upToday} fill={upFill} fillTitle={homeCityName ? `Most active in ${homeCityName}` : undefined} teen={teen} locationOn={location.locationOn} checkedIn={checkIn.on} finding={location.locationOn && !ownSpot} onLocation={ownSpot || location.locationOn ? undefined : location.toggle} onCheckIn={checkIn.on ? undefined : checkIn.press} onToggle={toggleOpen} />
       </View>
     </View>
   ) : null;
