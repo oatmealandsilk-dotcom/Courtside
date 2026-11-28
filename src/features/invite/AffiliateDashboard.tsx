@@ -309,7 +309,7 @@ function People({ people, asked, invited, counted, onOpen }: { people: Invitee[]
       ) : (
         noBoxes() ? (
           // No boxes (demo only): plain words under the heading, no card or icon tile.
-          <PlainWords title="No one yet" body="When someone joins with your link or code, they show up here." style={{ paddingVertical: spacing.sm }} />
+          <PlainWords title="No one yet" body="When someone joins with your link or code, they show up here." style={{ paddingVertical: spacing.sm, paddingHorizontal: spacing.xs }} />
         ) : (
         <View style={[styles.card, styles.empty]}>
           <View style={styles.emptyIcon}><Ionicons name="people-outline" size={22} color={colors.brand} /></View>

@@ -463,7 +463,7 @@ export default function SignIn() {
               <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.inboxBody, PLAIN && plainText.even]}>
                 We sent a {sent.kind === 'reset' ? 'password reset link' : 'confirmation link'} to <Text style={styles.inboxTo}>{sent.to}</Text>.{' '}
                 {sent.kind === 'reset' ? 'Follow the link to create a new password. It expires in one hour.'
-                  : canContinue ? 'Tap the link in it, then come back here and tap Continue.' : 'Follow the link to confirm your email, then sign in here.'}
+                  : canContinue ? 'Tap the link in it, then come back here and tap Continue.' : `Follow the link to confirm your email, then ${PLAIN ? 'log in' : 'sign in'} here.`}
               </Text>
               {/* No boxes: "Resend email" sits right under it as its own answer, so the line does not say it twice. */}
               <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.inboxHint, PLAIN && styles.plainHint]}>{PLAIN ? 'Didn’t get it? Check your spam folder.' : 'Didn’t get it? Check your spam folder, or resend the email.'}</Text>

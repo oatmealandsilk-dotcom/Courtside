@@ -5,6 +5,10 @@ import { Pressable, StyleSheet, Text } from 'react-native';
 import { router } from 'expo-router';
 
 import { buttonShape, colors, radius, typography } from '@/theme';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the sign-up ask's own word, Log in. */
+const PLAIN = noBoxes();
 
 /**
  * Where a tab's bell, chats and search sit for someone signed in, a guest
@@ -13,8 +17,8 @@ import { buttonShape, colors, radius, typography } from '@/theme';
 export function GuestSignIn({ onMedia = false }: { onMedia?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   return (
-    <Pressable accessibilityRole="button" accessibilityLabel="Sign in" hitSlop={8} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } })} style={({ pressed }) => [styles.pill, onMedia && styles.onMedia, pressed && styles.pressed]}>
-      <Text style={[styles.text, onMedia && styles.onMediaText]}>Sign in</Text>
+    <Pressable accessibilityRole="button" accessibilityLabel={PLAIN ? 'Log in' : 'Sign in'} hitSlop={8} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'sign-in' } })} style={({ pressed }) => [styles.pill, onMedia && styles.onMedia, pressed && styles.pressed]}>
+      <Text style={[styles.text, onMedia && styles.onMediaText]}>{PLAIN ? 'Log in' : 'Sign in'}</Text>
     </Pressable>
   );
 }

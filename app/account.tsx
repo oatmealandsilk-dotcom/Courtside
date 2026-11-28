@@ -335,7 +335,7 @@ function ResetPage({ email, onSave }: { email?: string; onSave: (password: strin
               {PLAIN ? null : <View style={styles.doneIcon}><Ionicons name="checkmark" size={30} color={colors.brand} /></View>}
               <View style={{ gap: 6 }}>
                 <Text maxFontSizeMultiplier={TextScale.TITLE} style={[styles.pageTitle, PLAIN && styles.plainTitle]}>Password updated</Text>
-                <Text style={styles.pageLine}>You’re all set. Use your new password the next time you sign in{email ? ` with ${email}` : ''}.</Text>
+                <Text style={styles.pageLine}>You’re all set. Use your new password the next time you {PLAIN ? 'log in' : 'sign in'}{email ? ` with ${email}` : ''}.</Text>
               </View>
               {/* No boxes: a page, so its one way on sits at the left under the words. */}
               {PLAIN ? <View style={{ alignItems: 'flex-start' }}><InkButton label="Continue to CourtSide" onPress={() => router.replace('/')} /></View> : <Submit label="Continue to CourtSide" onPress={() => router.replace('/')} />}
