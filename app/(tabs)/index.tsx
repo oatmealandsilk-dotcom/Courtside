@@ -2764,8 +2764,8 @@ const styleDefinitions = StyleSheet.create({
   // A computer's tall clip (ReelColumn): the words run to the column's edge, the rail stands 16 outside it.
   captionColumned: { paddingRight: 16 },
   actionsBeside: { right: undefined, left: '100%', marginLeft: 16 },
-  actionLabelBeside: { color: colors.textMuted, textShadowColor: 'transparent' },
-  pageArrows: { position: 'absolute', right: 24, top: 0, bottom: 0, justifyContent: 'center', gap: spacing.sm },
+  actionLabelBeside: { color: colors.textMuted, textShadowColor: 'rgba(0, 0, 0, 0)', textShadowRadius: 0, textShadowOffset: { width: 0, height: 0 } },
+  pageArrows: { position: 'absolute', right: 24, top: 0, bottom: 0, justifyContent: 'center', gap: spacing.sm, zIndex: 20 },
   pageArrow: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   pageArrowOn: { backgroundColor: colors.surfaceAlt },
   pageArrowOff: { opacity: 0.4 },

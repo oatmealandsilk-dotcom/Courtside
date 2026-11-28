@@ -77,7 +77,7 @@ export function LikeButton({ ledgerKey, liked, count, onToggle, likesRoute, pop 
         onLongPress={() => { haptics.commit(); router.push(likesRoute); }}
         hitSlop={8}
         glyphBox={glyphBox}
-        glyph={<RailGlyph name="heart" size={size} filled={like.on} color={like.on ? LIKE_RED : ink} />}
+        glyph={<RailGlyph name="heart" size={size} filled={like.on} color={like.on ? LIKE_RED : ink} edge={ink === 'white'} />}
         around={sparks.node}
       />
       <Pressable accessibilityRole="button" accessibilityLabel={`See who liked this${thing}`} hitSlop={8} disabled={total === 0} onPress={() => router.push(likesRoute)} style={countHit}>
