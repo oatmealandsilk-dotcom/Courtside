@@ -1548,7 +1548,9 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
       r.posts.push(post);
     }
     // A gallery opens on pictures: the head of the list (follow suggestions…) comes after the first two items.
-    if (showStart && out.length > START_AFTER) out.splice(START_AFTER, 0, { key: 'start', kind: 'start' });
+    // gv4 opens on two rows of tiles (four items) before it, so the grid reads as a grid first.
+    const startAt = grid ? 2 * START_AFTER : START_AFTER;
+    if (showStart && out.length > startAt) out.splice(startAt, 0, { key: 'start', kind: 'start' });
     // Under another of your rows, a row sits on a hairline rather than the band.
     const joinedRows = out.map((r, i): Row => (r.kind === 'mini' && out[i - 1]?.kind === 'mini' ? { ...r, joined: true } : r));
     if (!grid) return joinedRows;
