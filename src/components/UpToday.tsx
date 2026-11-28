@@ -240,7 +240,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         })}
         {/* City boards (round 3): then your city's regulars, plain (the ring only ever means up today), each with when they usually play. A tap opens their profile. */}
         {fill.length ? <FillDivider size={face} /> : null}
-        {fill.map((f) => <FilledFace key={f.user.id} face={f} size={face} width={item} onPress={() => router.push(`/user/${f.user.id}`)} />)}
+        {fill.map((f) => <FilledFace key={f.user.id} face={f} size={face} width={item} bare={compact} onPress={() => router.push(`/user/${f.user.id}`)} />)}
         {!people.length && !fill.length ? (
           <View style={[styles.empty, compact && { height: face + 18 }]}>
             {onLocation ? (

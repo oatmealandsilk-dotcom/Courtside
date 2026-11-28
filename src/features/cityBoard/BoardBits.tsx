@@ -69,7 +69,7 @@ export function Medal({ rank, size, fontSize, markSize = Math.round(fontSize * 1
  * `size`: the face; the box round it is the ringed faces' box, so names
  * line up across the row.
  */
-export function FilledFace({ face, size, width, top = 2, onPress }: { face: FillFace; size: number; width: number; /** Room above the face, so the names line up with the ringed faces' in the same row. */ top?: number; onPress: () => void }) {
+export function FilledFace({ face, size, width, top = 2, bare = false, onPress }: { face: FillFace; size: number; width: number; /** The first name only, without the two lines under it (the small Open to hit row over the map, app preview of option C). */ bare?: boolean; /** Room above the face, so the names line up with the ringed faces' in the same row. */ top?: number; onPress: () => void }) {
   const styles = useThemedStyles(styleDefinitions);
   const box = size + 13;
   return (
@@ -79,10 +79,10 @@ export function FilledFace({ face, size, width, top = 2, onPress }: { face: Fill
       </View>
       <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillName}>{face.user.name.split(' ')[0]}</Text>
       {/* Two short lines, each kept whole: "Usually" / "evenings". */}
-      <View style={styles.fillLines}>
+      {bare ? null : <View style={styles.fillLines}>
         <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillLine}>{face.lines[0]}</Text>
         <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.fillLine}>{face.lines[1]}</Text>
-      </View>
+      </View>}
     </Pressable>
   );
 }
