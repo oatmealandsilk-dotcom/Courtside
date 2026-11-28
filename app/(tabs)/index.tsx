@@ -120,6 +120,15 @@ const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string
 const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
+/**
+ * One for Activities in the classic look (owner, Nov 27: "the instagram feed which has activities, pictures. regular
+ * posts. and videos"): every kind of post from the same people isActivity draws from (you, who you follow, and for a
+ * new player the players near them), with the same rules (not archived, taken down or group-only, media the internet
+ * can reach). Sessions, pictures, text posts and clips alike.
+ */
+const inClassicActivities = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
+  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
+
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /**
  * What the ranking may know: who you follow, who follows you, profiles, what
@@ -2915,11 +2924,11 @@ function ActivitiesLookFeed({ look, paused, onChrome, row }: { look: 'strava' | 
     const hidden = new Set([...blockedIds, ...mutedIds]);
     const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
     const acts = posts
-      .filter((p) => isActivity(p, currentUserId, follows, nearAuthors) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
+      .filter((p) => (look === 'classic' ? inClassicActivities(p, currentUserId, follows, nearAuthors) : isActivity(p, currentUserId, follows, nearAuthors)) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId))
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
     const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
     return sinkDemoted(acts.map((p) => `p:${p.id}`), demotedPosts()).flatMap((k) => byKey.get(k) ?? []);
-  }, [posts, users, followingIds, blockedIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [look, posts, users, followingIds, blockedIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
   const nearCount = list.filter((p) => nearAuthors.has(p.authorId)).length;
   return <ActivitiesList look={look} posts={list} showStart={showStart} nearCount={nearCount} paused={paused} row={row} />;
 }

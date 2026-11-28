@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { ActivityIndicator, Animated, FlatList, Pressable, RefreshControl, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Reanimated, { useAnimatedStyle, withTiming, type SharedValue } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Image as ExpoImage } from 'expo-image';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 
 import type { Post, SessionDetail, User } from '@/data/types';
 import { Avatar } from '@/components/ui';
@@ -19,7 +19,8 @@ import { TOP_BAND_HEIGHT, TOP_BAND_TOP } from '@/features/feed/topBand';
 import { ROW_TRAVEL, showRow } from '@/features/feed/topRowScroll';
 import { agoInWords, duration } from '@/lib/format';
 import { sessionPeople } from '@/features/activity/sessionTags';
-import { resultWord, scoreLine, sessionTitle, whatWord } from '@/features/activity/format';
+import { hasSessionStats, resultWord, scoreLine, sessionTitle, whatWord } from '@/features/activity/format';
+import { sharePost, shareLabel } from '@/features/share/sharePost';
 import { localDay } from '@/features/practice/stats';
 import { matchTiebreakAt } from '@/features/activity/score';
 import type { ActivitiesLook } from './activitiesLook';
@@ -31,7 +32,7 @@ import type { ActivitiesLook } from './activitiesLook';
  * Activities shows (the Feed hands them over, already filtered and in order).
  */
 
-type CardProps = { post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User> };
+type CardProps = { post: Post; author: User; me: string | null; hidden: string[]; users: Map<string, User>; /** The classic look: a clip tapped opens the full-screen reel of the feed's clips (videos only). */ onOpenClip?: (postId: string) => void };
 
 /* ------------------------------------------------------------------ small shared pieces */
 
@@ -71,15 +72,28 @@ function likedLine(post: Post, me: string | null, users: Map<string, User>): str
 const hasMedia = (p: Post) => !!(p.imageUrl || p.thumbnailUrl || p.videoUrl || p.mediaLabel);
 const isClip = (p: Post) => p.kind === 'clip' || !!p.videoUrl;
 
+/** "0:14", when the clip's trimmed length is known (a post carries no length of its own otherwise). */
+function clipLength(p: Post): string | null {
+  if (p.trimEnd === undefined || p.trimEnd <= (p.trimStart ?? 0)) return null;
+  const secs = Math.round((p.trimEnd - (p.trimStart ?? 0)) / (p.speed || 1));
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
+
 /** The post's picture, clip cover, or the demo's court card; `stand` names a stats-only session's card. */
-function Media({ post, aspect, stand }: { post: Post; aspect: number; stand?: string }) {
+function Media({ post, aspect, stand, clipBadge = false }: { post: Post; aspect: number; stand?: string; /** A clip's small play mark and length on a quiet pill (the classic look), on its cover or court card alike. */ clipBadge?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const uri = post.thumbnailUrl ?? post.imageUrl;
+  const length = clipLength(post);
   return (
     <View style={[styles.media, { aspectRatio: aspect }]}>
       {uri ? <ExpoImage source={{ uri }} contentFit="cover" style={StyleSheet.absoluteFill} accessibilityLabel={post.mediaLabel ?? 'Photo'} />
         : <MediaPlaceholder fill label={post.mediaLabel ?? stand ?? 'Session'} seed={post.id} />}
-      {uri && isClip(post) ? <View style={styles.playMark}><Ionicons name="play" size={18} color={colors.onMedia} /></View> : null}
+      {clipBadge && isClip(post) ? (
+        <View style={styles.clipMark}>
+          <Ionicons name="play" size={11} color={colors.onMedia} />
+          {length ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.clipMarkText}>{length}</Text> : null}
+        </View>
+      ) : uri && isClip(post) ? <View style={styles.playMark}><Ionicons name="play" size={18} color={colors.onMedia} /></View> : null}
       {post.imageUrls && post.imageUrls.length > 1 ? <View style={styles.countMark}><Text style={styles.countText}>1/{post.imageUrls.length}</Text></View> : null}
     </View>
   );
@@ -279,14 +293,59 @@ function oneLine(s: SessionDetail, hidden: string[]): string {
   ].filter(Boolean).join(' · ');
 }
 
-function ClassicCard({ post, author, me, hidden, users }: CardProps) {
+/** The heart that blooms on a double tap, as Instagram's; keyed on a counter so a second double tap plays it again. */
+function Bloom({ token }: { token: number }) {
+  const scale = useRef(new Animated.Value(0)).current;
+  const shown = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!token) return;
+    scale.setValue(0.5);
+    shown.setValue(1);
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true, speed: 60, bounciness: 12 }),
+      Animated.sequence([Animated.delay(220), Animated.timing(shown, { toValue: 0, duration: 160, useNativeDriver: true })]),
+    ]).start();
+  }, [token, scale, shown]);
+  if (!token) return null;
+  return (
+    <View pointerEvents="none" style={[StyleSheet.absoluteFill, { alignItems: 'center', justifyContent: 'center' }]}>
+      <Animated.View style={{ opacity: shown, transform: [{ scale }] }}>
+        <Ionicons name="heart" size={96} color={colors.onMedia} />
+      </Animated.View>
+    </View>
+  );
+}
+
+function ClassicCard({ post, author, me, hidden, users, onOpenClip }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
-  const s = post.session!;
+  const { actions } = useApp();
+  const s = post.session;
   const act = useCardActions(post, me);
   const place = placeOf(post, author);
   const liked = likedLine(post, me, users);
   const n = post.commentIds.length;
-  const stand = [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ');
+  const clip = isClip(post);
+  const media = hasMedia(post);
+  // A post with nothing to look at but its words (a note, a question to friends): the words take the picture's place.
+  const wordsOnly = !media && !s;
+  const stand = s ? [whatWord(s), scoreLine(s)].filter(Boolean).join(' · ') : undefined;
+  const stats = s ? oneLine(s, hidden) : null;
+  const openStats = () => router.push({ pathname: '/session-stats', params: { kind: 'post', id: post.id } });
+
+  // A double tap on a picture likes it (never takes a like away), as Instagram's; a single tap does nothing.
+  const [bloom, setBloom] = useState(0);
+  const lastTap = useRef(0);
+  const likedNow = useRef(act.liked);
+  likedNow.current = act.liked;
+  const tapPicture = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      lastTap.current = 0;
+      if (!likedNow.current) actions.toggleLike(post.id, true);
+      setBloom((b) => b + 1);
+    } else lastTap.current = now;
+  };
+
   return (
     <View style={styles.cCard}>
       <View style={styles.cHead}>
@@ -298,7 +357,20 @@ function ClassicCard({ post, author, me, hidden, users }: CardProps) {
           </View>
         </Pressable>
       </View>
-      <Pressable onPress={act.open} accessibilityRole="link" accessibilityLabel="Open the post"><Media post={post} aspect={1} stand={stand} /></Pressable>
+      {wordsOnly ? (
+        <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments" style={styles.cWords}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.cWordsText}>{post.body}</Text>
+        </Pressable>
+      ) : clip ? (
+        <Pressable onPress={() => onOpenClip?.(post.id)} accessibilityRole="button" accessibilityLabel="Play the clip full screen">
+          <Media post={post} aspect={1} stand={stand} clipBadge />
+        </Pressable>
+      ) : (
+        <Pressable onPress={tapPicture} accessibilityRole="image" accessibilityLabel={post.mediaLabel ?? (s ? 'Session card' : 'Photo')} accessibilityHint="Double tap to like">
+          <Media post={post} aspect={1} stand={stand} />
+          <Bloom token={bloom} />
+        </Pressable>
+      )}
       <View style={styles.cBody}>
         <View style={styles.cIcons}>
           <Pressable onPress={act.like} hitSlop={8} accessibilityRole="button" accessibilityLabel={act.liked ? 'Unlike' : 'Like'}>
@@ -307,17 +379,23 @@ function ClassicCard({ post, author, me, hidden, users }: CardProps) {
           <Pressable onPress={act.comments} hitSlop={8} accessibilityRole="button" accessibilityLabel="Comments">
             <Ionicons name="chatbubble-outline" size={23} color={colors.text} />
           </Pressable>
-          <Pressable onPress={act.open} hitSlop={8} accessibilityRole="button" accessibilityLabel="Share">
+          <Pressable onPress={() => sharePost(post, me)} hitSlop={8} accessibilityRole="button" accessibilityLabel={shareLabel(post, me, clip ? 'clip' : 'post')}>
             <Ionicons name="paper-plane-outline" size={23} color={colors.text} />
           </Pressable>
         </View>
         {liked ? <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cLiked}>{liked}</Text> : null}
-        {post.body ? (
-          <Text numberOfLines={2} maxFontSizeMultiplier={TextScale.CARD} style={styles.cCaption}>
-            <Text style={styles.cHandle}>{author.handle}</Text> {post.body}
-          </Text>
+        {post.body && !wordsOnly ? (
+          <Pressable onPress={act.comments} accessibilityRole="button" accessibilityLabel="Open comments">
+            <Text numberOfLines={2} maxFontSizeMultiplier={TextScale.CARD} style={styles.cCaption}>
+              <Text style={styles.cHandle}>{author.handle}</Text> {post.body}
+            </Text>
+          </Pressable>
         ) : null}
-        <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cStats}>{oneLine(s, hidden)}</Text>
+        {stats ? (
+          <Pressable onPress={s && hasSessionStats(s) ? openStats : undefined} disabled={!(s && hasSessionStats(s))} accessibilityRole="button" accessibilityLabel={`Session stats: ${stats}`}>
+            <Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CARD} style={styles.cStats}>{stats}</Text>
+          </Pressable>
+        ) : null}
         {n ? <Pressable onPress={act.comments}><Text style={styles.cMuted}>{n === 1 ? 'View 1 comment' : `View all ${n} comments`}</Text></Pressable> : null}
         <Text style={styles.cTime}>{agoInWords(post.createdAt).toUpperCase()}</Text>
       </View>
@@ -347,12 +425,36 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
   const barInset = useBarInset();
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const Card = CARD[look];
+  const classic = look === 'classic';
+  // A clip tapped (classic look): the full-screen reel, that clip first, then the feed's clips below it, videos only.
+  const postsRef = useRef(posts);
+  postsRef.current = posts;
+  const openClip = useCallback((postId: string) => {
+    const all = postsRef.current;
+    const at = all.findIndex((p) => p.id === postId);
+    const ids = (at < 0 ? [] : all.slice(at)).filter(isClip).slice(0, 30).map((p) => p.id);
+    router.push({ pathname: '/reel', params: { ids: (ids.length ? ids : [postId]).join(','), start: postId } });
+  }, []);
   const column = look === 'classic' ? 470 : 600;
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
   // The top row follows the list the way Instagram's header does: forward takes it out with the scroll, back brings it in.
   const liveRow = paused ? undefined : row;
   const lastY = useRef(0);
+  // Where the list was while it was the page on show: back from the reel (or any page over it) it is put back
+  // exactly there if the browser let it slip while covered, so the feed never jumps or starts over.
+  const listRef = useRef<FlatList<Post>>(null);
+  const keptY = useRef(0);
+  const onShow = useRef(true);
+  useFocusEffect(useCallback(() => {
+    onShow.current = true;
+    const y = keptY.current;
+    if (y > 0 && Math.abs(lastY.current - y) > 1) {
+      listRef.current?.scrollToOffset({ offset: y, animated: false });
+      lastY.current = y;
+    }
+    return () => { onShow.current = false; };
+  }, []));
   const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
   useEffect(() => { if (!paused) showRow(row); }, [paused, row]);
@@ -360,6 +462,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
     const y = e.nativeEvent.contentOffset.y;
     const dy = y - lastY.current;
     lastY.current = y;
+    if (onShow.current) keptY.current = y;
     if (!liveRow) return;
     liveRow.value = y <= 0 ? 0 : Math.min(1, Math.max(0, liveRow.value + dy / ROW_TRAVEL));
     if (settle.current) clearTimeout(settle.current);
@@ -401,7 +504,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
       {showStart ? (
         <View style={[styles.column, { maxWidth: column }]}>
           <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop />
-          {posts.length ? <View style={styles.section}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionText}>{nearCount ? 'Latest sessions near you' : 'Latest sessions'}</Text></View> : null}
+          {posts.length ? <View style={styles.section}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionText}>{classic ? (nearCount ? 'Latest near you' : 'Latest') : nearCount ? 'Latest sessions near you' : 'Latest sessions'}</Text></View> : null}
         </View>
       ) : null}
     </View>
@@ -410,18 +513,19 @@ export function ActivitiesList({ look, posts, showStart, nearCount, paused, row 
   return (
     <View style={styles.screen}>
       <FlatList
+        ref={listRef}
         data={posts}
         keyExtractor={(p) => p.id}
         renderItem={({ item }) => {
           const author = usersById.get(item.authorId);
-          if (!author || !item.session) return null;
-          return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} /></View>;
+          if (!author || (!item.session && !classic)) return null;
+          return <View style={[styles.column, { maxWidth: column }]}><Card post={item} author={author} me={currentUserId} hidden={blockedIds} users={usersById} onOpenClip={openClip} /></View>;
         }}
         ListHeaderComponent={header}
-        ListEmptyComponent={showStart ? null : <Text style={[styles.endText, styles.empty]}>No sessions yet. Yours and the people you follow show up here.</Text>}
+        ListEmptyComponent={showStart ? null : <Text style={[styles.endText, styles.empty]}>{classic ? 'No posts yet. Yours and the people you follow show up here.' : 'No sessions yet. Yours and the people you follow show up here.'}</Text>}
         ListFooterComponent={posts.length ? (
           <View style={[styles.end, { paddingBottom: barInset + spacing.xxl }]}>
-            {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older sessions" />
+            {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel={classic ? 'Loading older posts' : 'Loading older sessions'} />
               : ended ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
           </View>
         ) : <View style={{ height: barInset + spacing.xxl }} />}
@@ -464,6 +568,8 @@ const styleDefinitions = StyleSheet.create({
   playMark: { position: 'absolute', top: spacing.md, right: spacing.md },
   countMark: { position: 'absolute', top: spacing.md, right: spacing.md, backgroundColor: colors.overlay, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   countText: { ...typography.caption, color: colors.onMedia },
+  clipMark: { position: 'absolute', top: spacing.md, right: spacing.md, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: colors.overlay, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 4 },
+  clipMarkText: { ...typography.caption, fontSize: 11, color: colors.onMedia, fontVariant: ['tabular-nums'] },
 
   // A · Strava
   sTitle: { ...font('700'), fontSize: 20, letterSpacing: -0.3, color: colors.text, marginTop: spacing.md },
@@ -508,5 +614,7 @@ const styleDefinitions = StyleSheet.create({
   cCaption: { ...typography.small, fontSize: 14, color: colors.text, lineHeight: 19 },
   cStats: { ...typography.small, color: colors.textMuted, fontVariant: ['tabular-nums'] },
   cMuted: { ...typography.small, fontSize: 14, color: colors.textMuted },
+  cWords: { paddingHorizontal: spacing.md, paddingTop: 2, paddingBottom: 4 },
+  cWordsText: { ...typography.body, fontSize: 17, lineHeight: 24, color: colors.text },
   cTime: { ...typography.caption, fontSize: 10, color: colors.textFaint, letterSpacing: 0.3, marginTop: 2 },
 });
