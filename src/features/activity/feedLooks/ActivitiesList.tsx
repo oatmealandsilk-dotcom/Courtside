@@ -858,7 +858,8 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
     router.push({ pathname: '/reel', params: { ids: (ids.length ? ids : [postId]).join(','), start: postId } });
   }, []);
   // The mixed looks' column on a computer: a photo card (4:5) still fits under the top row of an 800-tall window.
-  const column = look === 'mixed-a' || look === 'mixed-b' || look === 'mixed-a2' ? 420 : classic ? 470 : 600;
+  // mixed-a2's photo runs edge to edge of the column, so the column is a phone's width: the whole card, actions too, fits.
+  const column = look === 'mixed-a2' ? 390 : look === 'mixed-a' || look === 'mixed-b' ? 420 : classic ? 470 : 600;
   const cardW = Math.min(screenW, column);
   const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
