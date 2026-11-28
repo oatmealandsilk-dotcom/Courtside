@@ -141,7 +141,7 @@ const HOME_PEEK = 184;
  */
 const PEEK_FIRST = 196;
 const SHEET_HANDLE = 17;
-const SHEET_FIRST = 72;
+const SHEET_FIRST = 64;
 /** Find Players' head column: the gap between its parts. */
 const HEAD_GAP = 12;
 const NO_SLOTS: FeedSlot[] = [];

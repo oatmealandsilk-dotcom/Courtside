@@ -79,6 +79,8 @@ type CardProps = {
   onOpenPhoto: (post: Post, at: number, home: TileRect | undefined, turnTo?: (i: number) => void) => void;
   /** A "near you" player you don't follow yet: the "Near you" line with Follow under the name, as before. */
   near?: boolean;
+  /** The list's first card right under a page's own row (Discover's Posts, design/home-discover): no band above it. */
+  flush?: boolean;
 };
 
 export const GALLERY = {
@@ -418,7 +420,7 @@ function OwnRow({ post, joined, note, face }: { post: Post; joined: boolean; /**
 const OWN_NOTE = 'Not in friends’ feeds';
 
 /** One card: a session with a photo or clip (Activities holds sessions only; a plain one falls back to its numbers). */
-const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width, computer }: CardProps) {
+const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenClip, onOpenPhoto, near = false, width, computer, flush = false }: CardProps) {
   const styles = useThemedStyles(styleDefinitions);
   const { actions } = useApp();
   const liked = !!me && post.likedBy.includes(me);
@@ -485,7 +487,7 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
 
   if (!media) {
     return (
-      <View testID="acts-plain" style={styles.card}>
+      <View testID="acts-plain" style={[styles.card, flush && styles.cardFlush]}>
         <GalleryHead post={post} author={author} />
         {nearLine}
         {s ? <GalleryStats post={post} /> : (
@@ -527,7 +529,7 @@ const GalleryCard = React.memo(function GalleryCard({ post, author, me, onOpenCl
     </View>
   );
   return (
-    <View testID="acts-photo" style={styles.card}>
+    <View testID="acts-photo" style={[styles.card, flush && styles.cardFlush]}>
       <GalleryHead post={post} author={author} />
       {nearLine}
       {s ? <GalleryStats post={post} inline /> : null}
@@ -964,8 +966,8 @@ function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, sta
     const author = usersById.get(r.post.authorId);
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
-    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} computer={computer} /></View>;
-  }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, computer, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
+    return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} onOpenPhoto={openPhoto} near={nearOne} width={cardW} computer={computer} flush={everything && r === rows[0]} /></View>;
+  }, [usersById, near, currentUserId, following, openClip, openPhoto, cardW, computer, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage, everything]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
@@ -1264,8 +1266,8 @@ export function useGalleryInPage({ posts, rollup, nearCount, near, paused, posts
   // elsewhere): "homeclip" opens the first clip in this feed as a tap on it would, to check the reel and the way back.
   useEffect(() => {
     if (!SIM_DRIVER || paused) return undefined;
-    return simAction(sim, () => {
-      const clip = posts.find((p) => isClip(p) && hasPicture(p));
+    return simAction(sim, (q) => {
+      const clip = posts.find((p) => (q.id ? p.id === q.id : isClip(p) && hasPicture(p)));
       simLog(`[${sim}] clip ${clip?.id ?? 'none'}`);
       if (clip) openClip(clip.id);
     });
@@ -1288,6 +1290,7 @@ const styleDefinitions = StyleSheet.create({
 
   // A card: the column's full width, a band of the page's second ground above it, one left edge for all words.
   card: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: GALLERY.padTop, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },
+  cardFlush: { borderTopWidth: 0 },
   head: { minHeight: GALLERY.head, flexDirection: 'row', alignItems: 'center' },
   who: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0, minHeight: 44 },
   whoWords: { flex: 1, minWidth: 0, justifyContent: 'center', gap: 1 },
