@@ -20,6 +20,7 @@ import { buttonShape, colors, radius, spacing, typography, withAlpha } from '@/t
 import { PRESS_DIM } from '@/theme/press';
 import { TextScale } from '@/theme/textScale';
 import { useThemedStyles } from '@/theme/ThemeProvider';
+import { loadMapCss } from '@/components/map/mapCss';
 
 /** How many open hits Find Players asks the peek for (GuestFindPlayers): a list this long may have more behind it. */
 export const GUEST_PEEK_LIMIT = 30;
@@ -39,7 +40,7 @@ const NEAR_KM = 16;
  * the players' map uses too, only when this card is drawn. If it cannot be
  * fetched, the card keeps its plain ground, and everything over it still works.
  */
-const Canvas = lazy(() => import('@/components/map/WebMap').then(
+const Canvas = lazy(() => Promise.all([import('@/components/map/WebMap'), loadMapCss()]).then(([m]) => m).then(
   (m) => ({ default: m.GuestCourtsCanvas as React.ComponentType<GuestCourtsCanvasProps> }),
   () => ({ default: (() => null) as React.ComponentType<GuestCourtsCanvasProps> }),
 ));

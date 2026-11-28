@@ -1,8 +1,6 @@
 import { useThemedStyles } from '@/theme/ThemeProvider';
 import React, { Suspense, lazy } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-// The map's stylesheet is small and stays with the app; only the engine waits.
-import 'maplibre-gl/dist/maplibre-gl.css';
 
 import { CourtSpinner } from '@/components/CourtSpinner';
 import { MapCardFailed, MapCardLoading } from '@/components/map/MapLoadState';
@@ -10,6 +8,7 @@ import { STYLE } from '@/components/map/look';
 import type { NearbyMapProps } from '@/components/NearbyMap.types';
 import { useStartMapHold } from '@/features/feed/warmup';
 import { loadCardShots } from '@/components/map/cardShot';
+import { loadMapCss } from '@/components/map/mapCss';
 import { Button } from '@/components/ui';
 import { colors, radius, spacing, typography } from '@/theme';
 
@@ -26,8 +25,8 @@ const RELOADED = 'courtside-map-reload';
  * holds its place so nothing jumps.
  */
 let loading: Promise<typeof import('@/components/map/WebMap')> | null = null;
-/** One fetch of the engine, shared by the early start and the map itself. */
-const loadMap = () => (loading ??= import('@/components/map/WebMap'));
+/** One fetch of the engine and its stylesheet (mapCss: no longer in the page's head), shared by the early start and the map itself. */
+const loadMap = () => (loading ??= Promise.all([import('@/components/map/WebMap'), loadMapCss()]).then(([m]) => m));
 export function preloadNearbyMap() {
   // A failure here is left for the map to meet and handle (below) when it is drawn.
   loadMap().catch(() => undefined);
