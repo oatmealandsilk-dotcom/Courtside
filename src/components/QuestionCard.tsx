@@ -22,6 +22,10 @@ import { LESS_AI_DISCUSS, LESS_AI_ROUND2 } from '@/theme/look';
 import { OfficialCheck } from '@/components/OfficialCheck';
 import { tapFastOn } from '@/features/navigation/pressV2';
 import { pressWaitedForLook } from '@/features/navigation/swipePress';
+import { webHitArea } from '@/lib/webHitArea';
+
+/** The topic word's tap area on the website (hitSlop does nothing there): about 36 px tall, drawn where it was. */
+const TOPIC_HIT = webHitArea(10, 8, { pushedRight: true });
 
 export const TOPIC_META: Record<QuestionTopic, { label: string; tint: string; icon: keyof typeof Ionicons.glyphMap }> = {
   gear: { label: 'Gear', tint: colors.clay, icon: 'pricetag-outline' },
@@ -110,7 +114,7 @@ function QuestionCardInner({
         ) : null}
         {/* The hand-made look (Oct 24): the topic is a muted word on this line, not a ringed pill; still a tap to its threads. */}
         {LESS_AI_DISCUSS ? (
-          <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, pressed && { opacity: PRESS_DIM }]}>
+          <SwipePressable accessibilityRole="button" accessibilityLabel={`${meta.label} threads`} onPress={() => openTopic(question.topic)} hitSlop={8} style={({ pressed }) => [{ marginLeft: 'auto', flexShrink: 0 }, TOPIC_HIT, pressed && { opacity: PRESS_DIM }]}>
             <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.footerText}>{meta.label}{brandCorner ? '' : ` · ${relativeTime(question.createdAt)}${question.editedAt ? ' · Edited' : ''}`}</Text>
           </SwipePressable>
         ) : brandCorner ? null : <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.footerText, { marginLeft: 'auto' }]}>{relativeTime(question.createdAt)}{question.editedAt ? ' · Edited' : ''}</Text>}
