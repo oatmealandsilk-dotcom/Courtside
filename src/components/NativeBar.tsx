@@ -69,10 +69,11 @@ export type NativeIcons = Readonly<Record<string, { icon: PlatformIconIOS; selec
 /**
  * The longest our icons may take to be drawn into pictures, from the moment they are first asked for (Nov 28): on the
  * iPhone SE and 13 mini Simulators the drawing never answered (Nov 4) and the app silently kept the old bar. Past this,
- * Apple's own symbols, for the rest of the run: the bar never waits longer, never shows without icons, and never
- * changes its icons once it is up. They are asked for under the splash, so the wait is almost always over before the
- * bar comes up: in the Simulator all eight took 0.3 to 0.6 s on an iPhone 17e and 0.7 to 1.1 s on an SE as the app
- * opened (its busiest moment), hence a limit well above that.
+ * Apple's own symbols, for the rest of the run. Only an outer cap: the bar itself never waits for them past the splash's
+ * curtain (NavBar settles on Apple's symbols the moment it would come up without them, settleNativeBarIcons), so it
+ * rises with the page as today's bar does, never shows without icons and never changes its icons once it is up. They are
+ * asked for under the splash, so they are almost always in long before: in the Simulator all eight took 0.03 to 0.6 s on
+ * an iPhone 17e and 13 mini and up to 1.1 s on an SE as the app opened (its busiest moment).
  */
 export const ICON_WAIT_MS = 3000;
 
@@ -90,12 +91,31 @@ function settleIcons(made: NativeIcons, how: string) {
   iconListeners.forEach((fn) => fn());
 }
 
-/** Apple's symbols, for when our icons could not be drawn into pictures in time. */
+/** Apple's symbols, for when our icons could not be drawn into pictures in time: made once, so every draw is handed the same. */
+let symbolsMade: NativeIcons | null = null;
 function symbolIcons(items: readonly LookItem[]): NativeIcons {
-  return Object.fromEntries(items.map((it) => {
+  symbolsMade ??= Object.fromEntries(items.map((it) => {
     const [rest, lit] = SYMBOLS[it.route] ?? ['circle', 'circle.fill'];
     return [it.route, { icon: { type: 'sfSymbol', name: rest } as PlatformIconIOS, selected: { type: 'sfSymbol', name: lit } as PlatformIconIOS }];
   }));
+  return symbolsMade;
+}
+
+/**
+ * The icons Apple's bar comes up with when ours are not in as it is about to come up (NavBar, Nov 28 review: the splash's
+ * curtain lifting, or no curtain at all): Apple's symbols. The same object settleNativeBarIcons then fixes for the run.
+ */
+export function nativeBarSymbols(items: readonly LookItem[]): NativeIcons {
+  return iconsMade ?? symbolIcons(items);
+}
+
+/**
+ * The bar is coming up and our icons are not in (NavBar): Apple's symbols for the rest of the run, now, rather than the
+ * bar waiting past the curtain for a drawing that may never answer (Nov 4's small iPhones). A drawing that answers later
+ * is dropped, so the bar never swaps its icons once it is up.
+ */
+export function settleNativeBarIcons(items: readonly LookItem[], why: string) {
+  settleIcons(symbolIcons(items), `symbols (${why})`);
 }
 
 /**
@@ -144,9 +164,10 @@ export function prepareNativeBarIcons(items: readonly LookItem[]) {
 }
 
 /**
- * The icons for Apple's bar: null until decided (and always with `on` false). Asks for them if nobody has yet. NavBar
- * keeps a bar that has not come up yet below the screen's edge until they are (at most ICON_WAIT_MS), so Apple's bar
- * never shows without its icons and never swaps them.
+ * The icons for Apple's bar: null until decided (and always with `on` false). Asks for them if nobody has yet. A bar that
+ * has not come up yet waits for them only while the splash's curtain holds it below the screen's edge anyway (NavBar);
+ * as it comes up without them, it takes Apple's symbols (settleNativeBarIcons). So it never shows without icons, is
+ * never late, and never swaps them.
  */
 export function useNativeBarIcons(on: boolean, items: readonly LookItem[]): NativeIcons | null {
   const made = useSyncExternalStore(subscribeIcons, readIcons, readIcons);
@@ -181,7 +202,7 @@ export const NativeBar = React.memo(function NativeBar({
   inset, outerStyle, hideFromReader, veilStyle, veilBlocks, onVeil, onFeedHold,
 }: {
   items: readonly LookItem[];
-  /** Null only while the bar waits below the screen's edge for them (NavBar's iconWait); never once it is up. */
+  /** Null only while the bar is still held below the screen's edge under the splash's curtain; never once it comes up. */
   icons: NativeIcons | null;
   activeRoute: string | undefined;
   feedUnder: boolean;

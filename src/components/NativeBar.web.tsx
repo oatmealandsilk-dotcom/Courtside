@@ -7,6 +7,10 @@ import type { LookItem } from './TabBarLooks';
 export type NativeIcons = Readonly<Record<string, never>>;
 export const ICON_WAIT_MS = 3000;
 export function prepareNativeBarIcons(_items: readonly LookItem[]): void {}
+export function nativeBarSymbols(_items: readonly LookItem[]): NativeIcons {
+  return {};
+}
+export function settleNativeBarIcons(_items: readonly LookItem[], _why: string): void {}
 export function useNativeBarIcons(_on: boolean, _items: readonly LookItem[]): NativeIcons | null {
   return null;
 }

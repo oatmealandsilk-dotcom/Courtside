@@ -33,7 +33,7 @@ import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { useBarApple, useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { setPhoneBar } from '@/features/navigation/phoneBar';
 import { LookBar } from './TabBarLooks';
-import { NativeBar, prepareNativeBarIcons, useNativeBarIcons } from './NativeBar';
+import { NativeBar, nativeBarSymbols, prepareNativeBarIcons, settleNativeBarIcons, useNativeBarIcons } from './NativeBar';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -144,7 +144,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   // on calm frosted glass (TabBarLooks' WEB_BAR), for everyone on the website. The iPhone app keeps "Bar A".
   const webBar = Platform.OS === 'web';
   // Apple's own bar (barLens's useBarApple, Nov 28: "Apples own bottom bar"; admins first, iPhones with Liquid Glass only),
-  // drawn once its icons are in (NativeBar: our own icons drawn into pictures, or Apple's symbols after ICON_WAIT_MS).
+  // with our own icons drawn into pictures for it (NativeBar), or Apple's symbols if those are not in as it comes up.
   const apple = useBarApple() && isPhone;
   const nativeIcons = useNativeBarIcons(apple, ITEMS);
   // Everything waiting for you, in one number. The phone bar has no room for
@@ -205,12 +205,18 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   // Still in the way of the tabs while the box fades out, so a tap then does not open a tab under the closing box.
   const veilBlocks = boxUp || (pathname === '/compose' && createMenu === 'leaving');
   const curtainDown = useCurtainDown();
-  // Apple's bar, its icons not in yet (at most NativeBar's ICON_WAIT_MS, usually long done under the splash): a bar that
-  // has not come up yet waits below the edge for them, as under the curtain, so it never shows without its icons, nor as
-  // today's bar first and Apple's a moment later. (One already up stays as it is until they are, then turns into A.)
-  const iconWait = apple && !nativeIcons && !barUp;
-  const behindCurtain = !barUp && ((!warm && !curtainDown && isStartTab(pathname)) || iconWait);
+  const behindCurtain = !barUp && !warm && !curtainDown && isStartTab(pathname);
   if (behindCurtain && !waitUntil) waitUntil = Date.now() + BAR_WAIT_MS;
+  // Apple's bar about to come up for the first time without its icons (the curtain lifting before they were drawn, or no
+  // curtain at all): Apple's own symbols for this run, at once (Nov 28 review). The bar waits for our icons only while
+  // the curtain holds it below the edge anyway, never past it: it rises with the page in the same frame as today's bar,
+  // never shows without icons, and never swaps them once up. (Usually they are in long before: drawn under the splash.)
+  // A bar already up as today's (an account found to be an admin's only later) turns into A once they are in.
+  const iconsLate = apple && !nativeIcons && !barUp && !behindCurtain;
+  const barIcons = nativeIcons ?? (iconsLate ? nativeBarSymbols(ITEMS) : null);
+  useLayoutEffect(() => {
+    if (iconsLate) settleNativeBarIcons(ITEMS, curtainDown ? 'no curtain to wait under' : 'not drawn by the time the curtain lifted');
+  }, [iconsLate, curtainDown]);
   // Where the bar is on that first rise, and what holds it there (Oct 22, owner's iPhone: Community
   // with no tab bar at all, after an open that left the app busy):
   //   'held'   below the edge under the curtain, by the bar's own plain style; nothing is animating
@@ -258,9 +264,10 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const onTab = useCallback((route: string) => navigation.navigate(route), [navigation]);
   const onTabPressIn = useCallback((route: string) => navigation.prepare?.(route), [navigation]);
   const outerStyle = useMemo(() => [lift === 'up' ? null : styles.held, lift === 'held' ? null : duck], [lift, styles.held, duck]);
-  // Apple's own bar (A), where this person has it: as soon as there is a bar, even while it waits below the edge for its
-  // icons (iconWait), so the phone builds it with the rest of the first screen rather than as the bar comes up.
-  const appleDrawn = apple && (!!nativeIcons || lift === 'held');
+  // Apple's own bar (A), where this person has it: as soon as there is a bar, even while it is held below the edge under
+  // the curtain with its icons still coming, so the phone builds it with the rest of the first screen rather than as the
+  // bar comes up.
+  const appleDrawn = apple && (!!barIcons || lift === 'held');
   // Which bar this is, for the pages that run under it (barTop's useBarTop: the Community map).
   const drawnBar = appleDrawn ? 'apple' : barIg || webBar ? 'new' : 'quiet';
   useEffect(() => { if (isPhone) setPhoneBar(drawnBar); }, [isPhone, drawnBar]);
@@ -268,7 +275,7 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
     return (
       <NativeBar
         items={ITEMS}
-        icons={nativeIcons}
+        icons={barIcons}
         activeRoute={activeRoute}
         feedUnder={feedUnder}
         tabsUnder={tabsUnder}
