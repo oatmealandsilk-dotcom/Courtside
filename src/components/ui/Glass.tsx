@@ -23,25 +23,26 @@ export const liquidGlass = Platform.OS === 'ios' && isLiquidGlassAvailable();
  * York's navy), with two warnings each time; nearly solid also keeps the
  * labels readable over a busy clip.
  */
-export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, light = false, behind = false, dark: darkGlass }: {
+export function Glass({ children, style, radius = 999, interactive = false, tint, clear = false, light = false, behind = false, dark: darkGlass, tintAlpha }: {
   children?: React.ReactNode; style?: StyleProp<ViewStyle>; radius?: number; interactive?: boolean;
   /** A hint of colour in the glass; the theme's ground by default. */ tint?: string;
   /** More glass, less tint: what is beneath shows through (the tab bar, Oct 4). */ clear?: boolean;
   /** With `clear`: lighter still, the page's colours coming through (the new tab bar, Oct 28: LIGHT_GLASS_ALPHA). */ light?: boolean;
   /** The glass a layer of its own behind what it holds (a toast's tick drawing itself in). Not for glass that answers a touch (`clear`, `interactive`): that needs what it holds inside it. */ behind?: boolean;
   /** Dark glass whatever the court (the tab bar over a clip on the Feed, with a dark `tint`); the court's own by default. */ dark?: boolean;
+  /** With `tint`: exactly this much of it (0 to 1) on an iPhone, in place of `clear`'s and `light`'s (the other bottom bars' neutral glass, pictures only, Nov 28). */ tintAlpha?: number;
 }) {
   // Dark glass on a dark page (Night, and New York's navy).
   const { dark: darkPage } = useTheme();
   const dark = darkGlass ?? darkPage;
   const rounded = { borderRadius: radius, overflow: 'hidden' as const };
   // Read at draw time, so the veil is the court you are on, not the one the file loaded with.
-  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${clear ? (light ? alphaHex(LIGHT_GLASS_ALPHA) : 'B3') : 'CC'}` };
+  const veil = { backgroundColor: `${(tint ?? colors.surface).slice(0, 7)}${tint && tintAlpha != null ? alphaHex(tintAlpha) : clear ? (light ? alphaHex(LIGHT_GLASS_ALPHA) : 'B3') : 'CC'}` };
   if (Platform.OS === 'ios' && isLiquidGlassAvailable()) {
     // Answering a touch (Apple's glass swelling and shimmering under the finger) only when asked
     // for: the tab bar's `clear` glass did it too, so every tap wobbled the whole bar with every
     // icon in it, and the icons went soft while it was scaled (Oct 25 audit).
-    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: clear && tint ? `${tint.slice(0, 7)}${light ? alphaHex(LIGHT_GLASS_ALPHA) : 'BF'}` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
+    const look = { glassEffectStyle: 'regular' as const, isInteractive: interactive, tintColor: tint && tintAlpha != null ? `${tint.slice(0, 7)}${alphaHex(tintAlpha)}` : clear && tint ? `${tint.slice(0, 7)}${light ? alphaHex(LIGHT_GLASS_ALPHA) : 'BF'}` : tint, colorScheme: dark ? 'dark' as const : 'light' as const };
     if (behind) {
       // Out under the hairline edge too, as when it held what it shows: no ring of bare page inside the edge.
       const edge = -(StyleSheet.flatten(style)?.borderWidth ?? 0);

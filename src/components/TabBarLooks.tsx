@@ -23,7 +23,8 @@ import { brandShadow } from '@/theme/fillMode';
 import { darkColors, themes, useTheme, type ThemeName } from '@/theme/ThemeProvider';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { useReducedMotion } from '@/lib/useReducedMotion';
-import { LitMark } from './BarPreviews';
+import { BarBadge, LitMark } from './BarPreviews';
+import { glyphOf } from './BarGlyphs';
 
 type Palette = (typeof themes)[ThemeName];
 /** A style an animated view takes: plain, or moved on the animation thread. */
@@ -1042,7 +1043,8 @@ function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live,
   // turned the lit tab a washed-out grey-green on the dark glass).
   const litOf = (route: string) => {
     if (oneInk) return media ? c.onMedia : c.text;
-    // The calmer pill (barPreview '4'): every lit tab in the brand's green, lifted in its own hue over a clip on a light court.
+    // The calmer pill (barPreview '4'): every lit tab in the brand's green, lifted in its own hue over a clip on a light court
+    // (over a clip only its word: the filled icon is white there, so the lit Feed is never a green blob over the video).
     if (calmer) return media && !darkPage ? lightened(c.brand) : c.brand;
     const base = fresh ? c.brand : route === 'coaches' ? c.info : route === 'discuss' ? c.warning : c.brand;
     if (!media || darkPage) return base;
@@ -1052,11 +1054,15 @@ function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live,
   // The new bar's + as a plain icon in the row with its word (PLUS_LOOK 'icon'), lit while the Create box is up.
   const plusLit = veilBlocks;
   const plus = calmer ? (
-    // The calmer pill's +: a plain outlined plus in the page's ink (white over a clip), no green circle; filled while the Create box is up.
+    // The calmer pill's +: a plain plus on the icons' line, their size and stroke, with its word "Create" on the words' line
+    // (round 2: the circle-plus sat between the two lines, heavier than its neighbours); green while the Create box is up.
     <View style={[st.slot, st.plusAbove]} key="create">
       <Pressable disabled={!live} accessible={live} accessibilityRole="button" accessibilityLabel="Create a post" onPress={onCreate} style={st.hit}>
         <View ref={live ? tourCreate : undefined} style={st.target}>
-          <Ionicons name={plusLit ? 'add-circle' : 'add-circle-outline'} size={m.plusIcon} color={media ? c.onMedia : c.text} />
+          <Animated.View style={[st.inner, settle]}>
+            <LitMark glyph="plus" size={m.icon} idle={idleIcon} lit={litOf('create')} litIcon={media ? c.onMedia : undefined} active={plusLit}
+              label="Create" labelStyle={st.label} labelFade={labelFade} />
+          </Animated.View>
         </View>
       </Pressable>
     </View>
@@ -1115,13 +1121,12 @@ function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live,
           <View ref={live ? tourRef(item.route) : undefined} style={st.target}>
             <Animated.View style={[st.inner, settle]}>
               {calmer ? (
-                // The calmer pill (barPreview '4'): the icon and its word cross into the brand's green in 160 ms, the count on the icon as today.
-                <LitMark icon={item.icon} activeIcon={item.activeIcon} size={m.icon} idle={idleIcon} lit={litOf(item.route)} active={active} motion="fade"
+                // The calmer pill (barPreview '4'): the icon (BarGlyphs) and its word cross into the brand's green in 120 ms, no pop;
+                // over a clip the filled icon white and only the word green. Profile's count ringed in the glass's own colour.
+                <LitMark glyph={glyphOf(item.route)} size={m.icon} idle={idleIcon} lit={litOf(item.route)} litIcon={media ? c.onMedia : undefined} active={active}
                   label={item.label} labelStyle={st.label} labelFade={labelFade}
                   badge={item.route === 'profile' && profileAlerts > 0 ? (
-                    <View style={[st.badge, { backgroundColor: c.danger }]}>
-                      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
-                    </View>
+                    <BarBadge count={profileAlerts} iconSize={m.icon} ground={media || darkPage ? darkColors.bg : c.onMedia} dark={media || darkPage} />
                   ) : null} />
               ) : (<>
               <View>
@@ -1172,7 +1177,9 @@ function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live,
       {row}
       {/* The hairline edge is a plain layer of its own, never a border on the glass, and above the
           Create box's veil, so the bar keeps its own edge while the box is up. */}
-      <View pointerEvents="none" style={[st.rim, { borderColor: line }]} />
+      <View pointerEvents="none" style={[st.rim, { borderColor: calmer ? (media || darkPage ? withAlpha(c.onMedia, media ? 0.18 : 0.22) : withAlpha(c.text, 0.07)) : line }]} />
+      {/* The calmer pill's light top edge, as glass catches light (in place of the grey rim). */}
+      {calmer ? <View pointerEvents="none" style={[st.rim, { borderWidth: 0, borderTopWidth: 1, borderTopColor: withAlpha(c.onMedia, media || darkPage ? 0.3 : 0.95) }]} /> : null}
       {/* The new bar's bright inner edge, as Apple's glass has its own (so not there on iOS 26). */}
       {fresh && !liquidGlass && !WEB_BAR ? <View pointerEvents="none" style={[st.glint, { borderColor: media || darkPage ? 'rgba(255, 255, 255, 0.10)' : 'rgba(255, 255, 255, 0.8)' }]} /> : null}
       {/* While the Create box is up the bar keeps its colour (Oct 25, owner: "Don't like how this bottom
@@ -1221,6 +1228,16 @@ function Face({ palette: c, look, calmer = false, calm, media, glassMedia, live,
   // The website's: calm frosted glass, the ground nearly solid with no saturation boost (Glass's boost smeared
   // green content under the bar into it).
   const webGround = WEB_BAR ? webGlass(glassMedia ? groundOf(true) : c.surface, 0.92, 20) : null;
+  if (calmer) {
+    // The calmer pill's glass (round 2): neutral and clear, as Apple's own (white over a light page, near-black on a dark
+    // one and over a clip, half and under half strength), never tinted with the page's ground.
+    const darkGlass = glassMedia || darkPage;
+    return (
+      <Glass clear tint={darkGlass ? darkColors.bg : c.onMedia} tintAlpha={darkGlass ? 0.45 : 0.55} dark={glassMedia ? true : undefined} radius={m.radius} style={st.pill}>
+        {inside}
+      </Glass>
+    );
+  }
   return (
     <Glass clear light={fresh} tint={groundOf(glassMedia)} dark={glassMedia ? true : undefined} radius={m.radius} style={webGround ? [st.pill, webGround] : st.pill}>
       {inside}
@@ -1386,8 +1403,18 @@ const QUIET_LOOK: BarLook = { m: QUIET_SPEC, st: barStyles(QUIET_SPEC, false), f
 const NEW_LOOK: BarLook = { m: NEW_SPEC, st: barStyles(NEW_SPEC, true), fresh: true };
 const NEW_TIGHT_LOOK: BarLook = { m: NEW_TIGHT_SPEC, st: barStyles(NEW_TIGHT_SPEC, true), fresh: true };
 /**
- * The calmer pill (barPreview '4', pictures only): today's quiet pill exactly, its words half a point smaller, its + an
- * outlined plus a little bigger than a tab's icon (25 against 21) so it still reads as the button.
+ * The calmer pill (barPreview '4', pictures only): today's quiet pill's shape and measures, its words kept at 10 (round 2:
+ * 9.5 read cramped; the calm comes from colour, not size), its + on the icons' line (Face), half today's shadow.
  */
-const CALM_SPEC: BarSpec = { ...QUIET_SPEC, label: QUIET_SPEC.label - 0.5, plusIcon: 25 };
-const CALM_LOOK: BarLook = { m: CALM_SPEC, st: barStyles(CALM_SPEC, false), fresh: false };
+const CALM_SPEC: BarSpec = { ...QUIET_SPEC };
+const CALM_LOOK: BarLook = {
+  m: CALM_SPEC,
+  st: {
+    ...barStyles(CALM_SPEC, false),
+    ...StyleSheet.create({
+      pillShadow: { borderRadius: CALM_SPEC.radius, shadowColor: '#000', shadowOpacity: 0.035, shadowRadius: 10, shadowOffset: { width: 0, height: 3 }, elevation: 2 },
+      pillShadowPath: { shadowOpacity: 0, boxShadow: '0px 3px 20px rgba(0, 0, 0, 0.035)' },
+    }),
+  },
+  fresh: false,
+};

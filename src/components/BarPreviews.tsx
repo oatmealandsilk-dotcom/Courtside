@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Dimensions, PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
-import Ionicons from '@expo/vector-icons/Ionicons';
+import Animated, { Easing, interpolate, interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Glass } from '@/components/ui/Glass';
 import { BAR_RECEDE } from '@/features/compose/createMenu';
@@ -10,10 +9,10 @@ import { HOLD_MARK, HOLD_MS, NO_CALLOUT, SHOW_ALL_FEEDS, holdFeedTab, noteFeedPr
 import { useFeedOnPicture, useRowOnFeed } from '@/features/navigation/barOverMedia';
 import { barCompact } from '@/features/navigation/barShrink';
 import { BAR_METRICS } from '@/features/navigation/tabBarLook';
-import { useReducedMotion } from '@/lib/useReducedMotion';
 import { TextScale, font, inkOn, typography, withAlpha } from '@/theme';
 import { darkColors, themes, useTheme } from '@/theme/ThemeProvider';
 import type { LookItem } from './TabBarLooks';
+import { BarGlyph, glyphOf, type GlyphKind } from './BarGlyphs';
 
 /**
  * Other bottom bars, pictures only (Nov 28, owner: "Let me see some other bottom bars"; features/navigation/barPreview).
@@ -22,12 +21,16 @@ import type { LookItem } from './TabBarLooks';
  * tutorial's targets, the Feed tab's hold, the tab lit at the touch, dark over a clip on the Feed. The bar stays still
  * while the pages slide under it; nothing that holds glass ever fades (only the icons and words themselves do).
  *
- *   1  Classic edge   full width on the bottom edge, solid in the page's colour, a hairline on top; icons with small
- *                     words; the lit tab in ink with its icon filled, crossing over in 160 ms; the + a plain outlined plus.
- *   2  Icons only     Instagram's classic bar: five line icons evenly spaced, all in ink, the lit one filled (it dips a
- *                     touch as it lights); the + Instagram's square-plus outline; a hairline on top.
- *   3  Small capsule  a compact floating glass capsule (Threads, X on iOS 26), icons only, the lit one filled in ink with
- *                     a small pop as it lights, no coloured bubble; the + a plain icon in the row; it tucks as you scroll.
+ *   1  Classic edge   full width on the bottom edge, solid in the page's colour, a visible hairline on top; icons with
+ *                     small words; the lit tab in ink with its icon filled; the + the square-plus with its word, "Create".
+ *   2  Icons only     Instagram's classic bar: five line icons evenly spaced, all in ink, the lit one filled; the +
+ *                     Instagram's square-plus outline; a hairline on top.
+ *   3  Small capsule  a floating glass capsule (Threads, X on iOS 26), near full width, icons only, the lit one filled in
+ *                     ink, no coloured bubble; neutral clear glass with a light top edge; the + a plain plus as heavy as
+ *                     the icons; it tucks as you scroll.
+ * Round 2 (the critic, Nov 28): one icon set of their own (BarGlyphs: one stroke, a reel for Feed, a clipboard with a tick
+ * for Coaching), no dip or pop as a tab lights (the fill swaps and the colour crosses over in 120 ms, as Instagram's,
+ * Threads' and Apple's do), and Profile's count smaller, ringed in the bar's ground, on the icon's top-right corner.
  */
 export type PreviewOption = '1' | '2' | '3';
 
@@ -37,49 +40,39 @@ const LIT_GIVE_UP_MS = 1500;
 
 /** The edge bars' row over the phone's bottom strip: the height a phone's own tab bar has always had. */
 const EDGE_ROW = 49;
-/** The small capsule: its height, its width at most, and its least air either side on a narrow phone. */
-const CAP_H = 52;
-const CAP_W = 288;
-const CAP_SIDE = 32;
+/** A little more air between the edge bars' hairline and their icons (the icons stay where they were). */
+const EDGE_TOP = 3;
+/** The capsule: its height, and its air either side (Apple's own floats about this far in). */
+const CAP_H = 56;
+const CAP_SIDE = 24;
 /** How far the small capsule tucks toward the edge while you scroll down (the new bar's). */
 const CAP_TUCK = 6;
 
-type Motion = 'fade' | 'dip' | 'pop';
+/** How long a tab takes to light: the fill swaps and the colour crosses over, nothing grows or dips. */
+const LIGHT_MS = 120;
 
 /**
- * A tab's icon (and word) lighting: the plain icon in the idle colour under the filled one in the lit colour,
- * crossed over on the animation thread (each icon a leaf of its own: nothing holding glass fades), the word's
- * colour mixed the same way. `motion`: 'fade' only; 'dip' (it dips to 0.88 and comes back as it lights);
- * 'pop' (a touch bigger, then back). With Reduce Motion, the crossing only.
+ * A tab's icon (and word) lighting: the line glyph in the idle colour under the filled one in the lit colour,
+ * crossed over on the animation thread in 120 ms (each icon a leaf of its own: nothing holding glass fades), the
+ * word's colour mixed the same way. No scale at all (Instagram, Threads and Apple do none on a tab change).
+ * `litIcon`: the filled glyph's own colour where it differs from the word's (the calmer pill over a clip).
  */
-export function LitMark({ icon, activeIcon, size, idle, lit, active, motion, label, labelStyle, labelFade, badge, ms = 160 }: {
-  icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap;
-  size: number; idle: string; lit: string; active: boolean; motion: Motion;
-  label?: string; labelStyle?: object; labelFade?: object; badge?: React.ReactNode; ms?: number;
+export function LitMark({ glyph, size, idle, lit, litIcon, active, label, labelStyle, labelFade, badge, stroke, ms = LIGHT_MS }: {
+  glyph: GlyphKind; size: number; idle: string; lit: string; litIcon?: string; active: boolean;
+  label?: string; labelStyle?: object; labelFade?: object; badge?: React.ReactNode; stroke?: number; ms?: number;
 }) {
-  const calm = useReducedMotion();
   const on = useSharedValue(active ? 1 : 0);
-  const scale = useSharedValue(1);
-  const was = useRef(active);
   useEffect(() => {
     on.value = withTiming(active ? 1 : 0, { duration: ms, easing: Easing.out(Easing.quad) });
-    if (active && !was.current && !calm) {
-      if (motion === 'dip') scale.value = withSequence(withTiming(0.88, { duration: 70, easing: Easing.out(Easing.quad) }), withTiming(1, { duration: 230, easing: Easing.out(Easing.cubic) }));
-      else if (motion === 'pop') scale.value = withSequence(withTiming(1.1, { duration: 110, easing: Easing.out(Easing.quad) }), withSpring(1, { dampingRatio: 1, duration: 280 }));
-    }
-    was.current = active;
-  }, [active, calm, motion, ms, on, scale]);
+  }, [active, ms, on]);
   const idleOn = useAnimatedStyle(() => ({ opacity: 1 - on.value }));
   const litOn = useAnimatedStyle(() => ({ opacity: on.value }));
-  const grow = useAnimatedStyle(() => (scale.value === 1 ? { transform: [] } : { transform: [{ scale: scale.value }] }));
   const tint = useAnimatedStyle(() => ({ color: interpolateColor(on.value, [0, 1], [idle, lit]) }), [idle, lit]);
   return (
     <>
       <View>
-        <Animated.View style={grow}>
-          <Animated.View style={idleOn}><Ionicons name={icon} size={size} color={idle} /></Animated.View>
-          <Animated.View style={[StyleSheet.absoluteFill, litOn]}><Ionicons name={activeIcon} size={size} color={lit} /></Animated.View>
-        </Animated.View>
+        <Animated.View style={idleOn}><BarGlyph kind={glyph} size={size} color={idle} stroke={stroke} /></Animated.View>
+        <Animated.View style={[StyleSheet.absoluteFill, litOn]}><BarGlyph kind={glyph} filled size={size} color={litIcon ?? lit} stroke={stroke} /></Animated.View>
         {badge}
       </View>
       {label ? <Animated.Text numberOfLines={1} maxFontSizeMultiplier={TextScale.CHROME} style={[labelStyle, tint, labelFade]}>{label}</Animated.Text> : null}
@@ -87,17 +80,29 @@ export function LitMark({ icon, activeIcon, size, idle, lit, active, motion, lab
   );
 }
 
-/** Instagram's square-plus, drawn (Ionicons has none): a rounded square outline with a plus in it; solid while the Create box is up. */
-function SquarePlus({ size, color, ground, lit }: { size: number; color: string; ground: string; lit: boolean }) {
-  const stroke = 1.7;
-  const arm = Math.round(size * 0.46);
+/**
+ * Profile's count (round 2): 15 points of full-strength red with 10-point bold figures, in a 2-point ring of the bar's
+ * own ground that cuts it clear of the icon, its middle on the icon's top-right corner. On a dark bar (a dark court or
+ * over a clip) the light courts' red and white, never the dark palette's washed-out salmon.
+ */
+export function BarBadge({ count, iconSize, ground, dark }: { count: number; iconSize: number; ground: string; dark: boolean }) {
+  const { theme } = useTheme();
+  const c = dark ? themes.clean : themes[theme];
   return (
-    <View style={{ width: size, height: size, borderRadius: size * 0.29, borderWidth: stroke, borderColor: color, backgroundColor: lit ? color : 'transparent', alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ position: 'absolute', width: arm, height: stroke, borderRadius: stroke / 2, backgroundColor: lit ? ground : color }} />
-      <View style={{ position: 'absolute', width: stroke, height: arm, borderRadius: stroke / 2, backgroundColor: lit ? ground : color }} />
+    <View pointerEvents="none" style={[badge.ring, { left: iconSize - BADGE_RING - 7, borderColor: ground }]}>
+      <View style={[badge.dot, { backgroundColor: c.danger }]}>
+        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[badge.text, { color: c.onDanger }]}>{count > 9 ? '9+' : count}</Text>
+      </View>
     </View>
   );
 }
+const BADGE_H = 15;
+const BADGE_RING = 2;
+const badge = StyleSheet.create({
+  ring: { position: 'absolute', top: -BADGE_H / 2 - BADGE_RING + 1, borderWidth: BADGE_RING, borderRadius: BADGE_H / 2 + BADGE_RING },
+  dot: { minWidth: BADGE_H, height: BADGE_H, borderRadius: BADGE_H / 2, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  text: { fontSize: 10, lineHeight: 12, ...font('700'), fontVariant: ['tabular-nums'], includeFontPadding: false, textAlign: 'center' },
+});
 
 export const PreviewBar = React.memo(function PreviewBar({
   option, items, activeRoute, feedUnder, tabsUnder, profileAlerts, onTab, onTabPressIn, onCreate, tourRef, tourCreate,
@@ -133,10 +138,12 @@ export const PreviewBar = React.memo(function PreviewBar({
   const overFeed = feedShown && (rowOnFeed === null ? feedUnder : tabsUnder);
   const media = overFeed && onPicture;
   const ground = media ? (darkPage ? c.bg : darkColors.bg) : c.bg;
+  const darkBar = media || darkPage;
   const ink = media ? c.onMedia : c.text;
   // Instagram's idle icons are in ink too (the lit one is only filled); the others' idle tabs step back.
   const idle = option === '2' ? ink : media ? withAlpha(c.onMedia, 0.62) : c.textMuted;
-  const line = media ? withAlpha(c.onMedia, 0.12) : c.border;
+  // The edge bars' hairline: one device pixel, dark enough to see where a white sheet above meets the white bar.
+  const line = media ? withAlpha(c.onMedia, 0.14) : withAlpha(c.text, darkPage ? 0.16 : 0.15);
 
   // The tab lit at the touch, as today's bar: the page follows; the address catching up makes it lit by right.
   const [pressed, setPressed] = useState<string | null>(null);
@@ -160,18 +167,16 @@ export const PreviewBar = React.memo(function PreviewBar({
   const press = useCallback((route: string) => now.current.onTab(route), []);
 
   const st = option === '1' ? classic : option === '2' ? iconsOnly : capsule;
-  const iconSize = option === '1' ? 24 : option === '2' ? 26 : 24;
-  const motion: Motion = option === '1' ? 'fade' : option === '2' ? 'dip' : 'pop';
+  const iconSize = option === '2' ? 26 : 25;
   const words = option === '1';
-  // The capsule's words would go as you scroll; it has none, so only the edge bar's stay put (an edge bar never ducks).
   const plusLit = veilBlocks;
 
-  const plusMark = option === '1' ? (
-    <LitMark icon="add-circle-outline" activeIcon="add-circle" size={iconSize} idle={idle} lit={ink} active={plusLit} motion="fade" label="Create" labelStyle={st.label} />
-  ) : option === '2' ? (
-    <SquarePlus size={23} color={ink} ground={ground} lit={plusLit} />
+  // The +: the square-plus (with its word on the classic edge), or on the capsule a plain plus drawn a touch heavier
+  // and bigger so it weighs what the outlined icons beside it do. Filled while the Create box is up.
+  const plusMark = option === '3' ? (
+    <LitMark glyph="plus" size={27} stroke={2.1} idle={idle} lit={ink} active={plusLit} />
   ) : (
-    <Ionicons name="add" size={29} color={plusLit ? ink : idle} />
+    <LitMark glyph="squarePlus" size={iconSize} idle={idle} lit={ink} active={plusLit} label={words ? 'Create' : undefined} labelStyle={st.label} />
   );
   const row: React.ReactNode[] = [];
   items.forEach((item, index) => {
@@ -186,11 +191,9 @@ export const PreviewBar = React.memo(function PreviewBar({
     }
     const active = item.route === lit;
     const hold = item.route === 'index' ? onFeedHold : undefined;
-    const badge = item.route === 'profile' && profileAlerts > 0 ? (
-      <View style={[st.badge, { backgroundColor: c.danger }]}>
-        <Text maxFontSizeMultiplier={TextScale.CHROME} style={[st.badgeText, { color: c.onDanger }]}>{profileAlerts > 9 ? '9+' : profileAlerts}</Text>
-      </View>
-    ) : null;
+    const count = item.route === 'profile' && profileAlerts > 0
+      ? <BarBadge count={profileAlerts} iconSize={iconSize} ground={option === '3' ? (darkBar ? darkColors.bg : c.onMedia) : ground} dark={darkBar} />
+      : null;
     row.push(
       <View key={item.route} style={st.slot}>
         <FeedHold onHold={hold ? holdFeedTab : undefined}>
@@ -209,8 +212,8 @@ export const PreviewBar = React.memo(function PreviewBar({
             {...(hold ? HOLD_MARK : null)}
           >
             <View ref={tourRef(item.route)} style={st.target}>
-              <LitMark icon={item.icon} activeIcon={item.activeIcon} size={iconSize} idle={idle} lit={ink} active={active} motion={motion}
-                label={words ? item.label : undefined} labelStyle={st.label} badge={badge} />
+              <LitMark glyph={glyphOf(item.route)} size={iconSize} idle={idle} lit={ink} active={active}
+                label={words ? item.label : undefined} labelStyle={st.label} badge={count} />
             </View>
           </Pressable>
         </FeedHold>
@@ -218,27 +221,32 @@ export const PreviewBar = React.memo(function PreviewBar({
     );
   });
   // While the Create box is up, a veil of the bar's own ground steps the tabs back (only it fades), and a tap on it closes the box.
-  const veil = (radius: number) => (
-    <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { zIndex: 1, borderRadius: radius, backgroundColor: withAlpha(ground, BAR_RECEDE) }, veilStyle]}>
+  const veil = (radius: number, over: string = ground) => (
+    <Animated.View pointerEvents={veilBlocks ? 'auto' : 'none'} style={[StyleSheet.absoluteFill, { zIndex: 1, borderRadius: radius, backgroundColor: withAlpha(over, BAR_RECEDE) }, veilStyle]}>
       <Pressable accessible={false} importantForAccessibility="no" onPress={onVeil} style={StyleSheet.absoluteFill} />
     </Animated.View>
   );
 
-  // The small capsule's tuck as you scroll down, on the screen's real pixels (never scaled: icons stay sharp).
+  // The capsule's tuck as you scroll down, on the screen's real pixels (never scaled: icons stay sharp).
   const tuck = useAnimatedStyle(() => ({ transform: [{ translateY: Math.round(interpolate(barCompact.value, [0, 1], [0, CAP_TUCK]) * PX) / PX }] }));
   if (option === '3') {
     const bottom = Math.max(inset, 12);
     // Its foot 22 above the edge on a phone with a home bar (12 into the strip, as the new bar's), its top never past today's.
     const foot = Math.min(Math.max(bottom - 12, 12), bottom + BAR_METRICS.height - CAP_H);
-    const width = Math.min(CAP_W, Dimensions.get('window').width - 2 * CAP_SIDE);
+    const width = Dimensions.get('window').width - 2 * CAP_SIDE;
+    // Neutral clear glass, as Apple's own (round 2: tinted with the page's ground it read as a cream lozenge and caught a
+    // muddy wash from what was under it): white over a light page, near-black on a dark one and over a clip, half and
+    // under half strength. Its edge: a faint neutral line, and a light top edge in place of the grey rim.
+    const glassTint = darkBar ? darkColors.bg : c.onMedia;
     return (
       <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[capsule.float, { bottom: foot }, outerStyle]}>
         <Animated.View pointerEvents="box-none" style={tuck}>
           <View style={[capsule.shadow, Platform.OS === 'ios' ? capsule.shadowPath : null, { width }]}>
-            <Glass clear tint={ground} dark={media ? true : undefined} radius={CAP_H / 2} style={capsule.pill}>
+            <Glass clear tint={glassTint} tintAlpha={darkBar ? 0.45 : 0.55} dark={darkBar} radius={CAP_H / 2} style={capsule.pill}>
               {row}
-              <View pointerEvents="none" style={[capsule.rim, { borderColor: media ? withAlpha(c.onMedia, 0.14) : c.border }]} />
-              {veil(CAP_H / 2)}
+              <View pointerEvents="none" style={[capsule.rim, { borderColor: darkBar ? withAlpha(c.onMedia, media ? 0.18 : 0.22) : withAlpha(c.text, 0.07) }]} />
+              <View pointerEvents="none" style={[capsule.topLight, { borderTopColor: withAlpha(c.onMedia, darkBar ? 0.3 : 0.95) }]} />
+              {veil(CAP_H / 2, glassTint)}
             </Glass>
           </View>
         </Animated.View>
@@ -246,7 +254,7 @@ export const PreviewBar = React.memo(function PreviewBar({
     );
   }
   return (
-    <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[edge.bar, { height: EDGE_ROW + inset, backgroundColor: ground, borderTopColor: line }, outerStyle]}>
+    <Animated.View pointerEvents="box-none" importantForAccessibility={hideFromReader} style={[edge.bar, { height: EDGE_TOP + EDGE_ROW + inset, backgroundColor: ground, borderTopColor: line }, outerStyle]}>
       <View style={edge.row}>{row}</View>
       {veil(0)}
     </Animated.View>
@@ -255,15 +263,9 @@ export const PreviewBar = React.memo(function PreviewBar({
 
 const holdNoop = () => undefined;
 
-const badgeBase = {
-  position: 'absolute' as const, top: -5, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 5,
-  alignItems: 'center' as const, justifyContent: 'center' as const,
-};
-const badgeText = { fontSize: 11, lineHeight: 13, ...font('700'), fontVariant: ['tabular-nums' as const], includeFontPadding: false, textAlign: 'center' as const };
-
 const edge = StyleSheet.create({
   // On the bottom edge, full width, solid; the hairline is its top border (no glass here, so a border is fine).
-  bar: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopWidth: StyleSheet.hairlineWidth },
+  bar: { position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 30, borderTopWidth: StyleSheet.hairlineWidth, paddingTop: EDGE_TOP },
   row: { height: EDGE_ROW, flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 4 },
 });
 
@@ -272,9 +274,8 @@ const classic = StyleSheet.create({
   above: { zIndex: 2 },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 1 },
   target: { alignSelf: 'stretch', alignItems: 'center', gap: 2 },
+  // Semibold for every word, lit or not (only the colour changes), so nothing changes width as a tab lights.
   label: { ...typography.smallStrong, fontSize: 10, letterSpacing: 0.1 },
-  badge: { ...badgeBase, left: 15 },
-  badgeText,
 });
 
 const iconsOnly = StyleSheet.create({
@@ -283,21 +284,20 @@ const iconsOnly = StyleSheet.create({
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   target: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 44 },
   label: {},
-  badge: { ...badgeBase, left: 16 },
-  badgeText,
 });
 
 const capsule = StyleSheet.create({
   float: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: 30 },
-  shadow: { borderRadius: CAP_H / 2, shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 4 },
-  shadowPath: { shadowOpacity: 0, boxShadow: '0px 4px 22px rgba(0, 0, 0, 0.09)' },
-  pill: { height: CAP_H, borderRadius: CAP_H / 2, overflow: 'hidden', flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 8 },
+  // Half the shadow it had: Apple's glass floats on very little.
+  shadow: { borderRadius: CAP_H / 2, shadowColor: '#000', shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 4 }, elevation: 2 },
+  shadowPath: { shadowOpacity: 0, boxShadow: '0px 4px 22px rgba(0, 0, 0, 0.045)' },
+  pill: { height: CAP_H, borderRadius: CAP_H / 2, overflow: 'hidden', flexDirection: 'row', alignItems: 'stretch', paddingHorizontal: 10 },
   rim: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: CAP_H / 2, borderWidth: StyleSheet.hairlineWidth },
+  // The light top edge: a one-point line along the top that thins away round the ends, as glass catches light.
+  topLight: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 2, borderRadius: CAP_H / 2, borderTopWidth: 1 },
   slot: { flex: 1 },
   above: { zIndex: 2 },
   hit: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   target: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 44 },
   label: {},
-  badge: { ...badgeBase, left: 14 },
-  badgeText,
 });
