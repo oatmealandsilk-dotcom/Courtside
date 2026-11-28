@@ -225,7 +225,7 @@ export function NearYouTag({ user, over = false, follow = true }: { user: User; 
 
 const styleDefinitions = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: spacing.lg, gap: spacing.lg, backgroundColor: colors.bg, maxWidth: 520, width: '100%', alignSelf: 'center' },
-  inList: { flex: 0, backgroundColor: 'transparent', maxWidth: undefined },
+  inList: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', backgroundColor: 'transparent', maxWidth: undefined },
   head: { gap: 4, paddingHorizontal: spacing.xs },
   title: { ...typography.title, color: colors.text },
   lead: { ...typography.small, color: colors.textMuted },

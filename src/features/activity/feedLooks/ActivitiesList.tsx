@@ -272,7 +272,7 @@ function oneLine(s: SessionDetail, hidden: string[]): string {
   const score = scoreLine(s);
   const result = resultWord(s);
   return [
-    [whatWord(s), result, score].filter(Boolean).join(' '),
+    [whatWord(s), [result, score].filter(Boolean).join(' ')].filter(Boolean).join(' · '),
     peopleWords(s, hidden),
     duration(s.minutes),
     s.avgHr ? `${s.avgHr} avg bpm` : null,
