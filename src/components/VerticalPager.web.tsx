@@ -317,10 +317,12 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     };
     const key = (event: KeyboardEvent) => keyFrom(event, event.target as HTMLElement | null);
     el.addEventListener('keydown', key);
-    // With nothing focused (a page just opened), the keys reach the feed that is on top in the middle of the
-    // window. Never focused for that: a ring round the whole feed would show.
+    // With the focus elsewhere (nothing, or a tab button just clicked), the keys reach the feed that is on top in
+    // the middle of the window, unless a text box or slider has them. Never focused for that: a ring round the
+    // whole feed would show.
     const looseKey = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || (document.activeElement && document.activeElement !== document.body)) return;
+      const active = document.activeElement as HTMLElement | null;
+      if (event.defaultPrevented || (active && active !== document.body && (el.contains(active) || active.closest('input,textarea,select,[contenteditable="true"],[role="slider"]')))) return;
       const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
       if (!hit || !el.contains(hit)) return;
       keyFrom(event, el);
