@@ -29,6 +29,8 @@ export function dropWebLoader() {
   if (dropped || typeof document === 'undefined') return;
   dropped = true;
   document.getElementById('cs-launch')?.remove();
+  // The browser bar's colour while the loader was up (public/index.html, light look only), with it.
+  document.getElementById('cs-launch-theme')?.remove();
   holdFirstClipAtMost();
 }
 

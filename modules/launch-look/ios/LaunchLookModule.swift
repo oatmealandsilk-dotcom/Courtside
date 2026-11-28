@@ -28,6 +28,16 @@ public class LaunchLookModule: Module {
       LaunchLook.shared.confirm()
     }
 
+    // The app is up (Nov 27): the root behind it goes back to white, as it always was, from the launch
+    // screen's dark green (app.config.js backgroundColor, Info.plist RCTRootViewBackgroundColor). Never
+    // saved (expo-system-ui's setBackgroundColorAsync would save it and paint every later launch white),
+    // so each launch starts on the green again. Builds after 29 only, the ones with the green launch look.
+    Function("whiteRoot") {
+      DispatchQueue.main.async {
+        LaunchLook.whiteRoot()
+      }
+    }
+
     // What happened at this open and to iOS's pictures, for the simulator checks.
     AsyncFunction("status") { () -> [String: Any] in
       LaunchLook.shared.status()

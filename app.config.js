@@ -38,10 +38,12 @@ module.exports = {
     // the phone's own parts: its alerts, menus, keyboard and pickers. iPhone: the next store build
     // (after 18; src/lib/phoneAppearance.ts). Android: below.
     userInterfaceStyle: 'automatic',
-    // The root behind the app (expo-system-ui): white, the launch screen's own ground and the Clean
-    // theme's (Oct 25), so a frame between the launch screen and the app's first draw is never a third
-    // colour. Native: the next store build. On Android the app sets it to the theme's own once running.
-    backgroundColor: '#FFFFFF',
+    // The root behind the app (expo-system-ui): the launch screen's own light ground (white from Oct 25;
+    // dark green from Nov 27, the icon reversed), so a frame between the launch screen and the app's first
+    // draw is never a third colour. Native: the next store build (iPhone after 29, Android after 1). Once
+    // running, the app sets it back: the theme's own on Android, white (as before) on the iPhone
+    // (ThemedStatusBar in app/_layout.tsx).
+    backgroundColor: '#1C5835',
     // Android only reads this (its "primary" colour: the app's card in the recent-apps
     // view, and the edge glow on older phones), which was Expo's default navy. The
     // brand's green, as on the icon (Oct 5). The iPhone app and the website ignore it.
@@ -55,7 +57,7 @@ module.exports = {
     // Oct 26 (owner, of option A: "A is good"): on iOS 26 the thin mark came out a washed sage, so the
     // refined weight again and a deeper green (#236B3F), flat on the same cream. icon-thin*.png stay.
     icon: green ? './assets/icon.png' : './assets/icon-a.png',
-    splash: { image: './assets/splash-c.png', resizeMode: 'cover', backgroundColor: '#FFFFFF' },
+    splash: { image: './assets/splash-c.png', resizeMode: 'cover', backgroundColor: '#1C5835' },
     newArchEnabled: true,
     ios: {
       supportsTablet: false,
@@ -139,6 +141,11 @@ module.exports = {
     },
     web: { bundler: 'metro', output: 'single', name: 'CourtSide' },
     plugins: [
+      // The status-bar icons on the launch screen: light, on both its looks since Nov 27 (dark green and dark),
+      // so they do not flip when the app takes over; once the app runs, ThemedStatusBar sets them per theme.
+      // Replaces expo-status-bar's plugin (fixed dark, Oct 24). Listed before expo-splash-screen: plugins'
+      // style edits run last-listed first, so this one runs after expo-splash-screen writes its launch theme.
+      './plugins/withLaunchStatusBar',
       // Build 12 (Oct 4): the phone opens on the logo, cream, never a black frame. expo-system-ui
       // (installed) paints the root the backgroundColor above; this keeps the launch picture full screen.
       // Android (Oct 4) only ever shows a round logo in the middle of the colour, never a
@@ -156,15 +163,15 @@ module.exports = {
       // Night theme's ground, in Night's green and grey (assets/splash-c-dark.png, splash-c-android-dark.png,
       // from scripts/make-splash-c.py). The phone picks by its own mode, before the app runs; the app's drawn
       // copy picks the same way (src/components/LaunchMark.tsx). Next store build (iPhone: after 18).
+      // Nov 27: the light look is the icon reversed (owner: "Make this screen match the color of the app logo",
+      // then of four dark greens "between 2 and 3"): the icon's cream mark on #1C5835, the line in the cream
+      // with 15% of the ground in it. Next store build (iPhone after 29, Android after versionCode 1); the
+      // app draws it only on those (src/lib/splashLook.ts, NEW_LAUNCH_LIGHT). The dark look is unchanged.
       ['expo-splash-screen', {
-        image: './assets/splash-c.png', backgroundColor: '#FFFFFF', resizeMode: 'cover', enableFullScreenImage_legacy: true,
+        image: './assets/splash-c.png', backgroundColor: '#1C5835', resizeMode: 'cover', enableFullScreenImage_legacy: true,
         dark: { image: './assets/splash-c-dark.png', backgroundColor: '#0F1412' },
-        android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#FFFFFF', dark: { image: './assets/splash-c-android-dark.png', backgroundColor: '#0F1412' } },
+        android: { image: './assets/splash-c-android.png', imageWidth: 288, resizeMode: 'contain', backgroundColor: '#1C5835', dark: { image: './assets/splash-c-android-dark.png', backgroundColor: '#0F1412' } },
       }],
-      // The status-bar icons on the launch screen follow the phone's mode, as its two looks do (dark icons on
-      // the white one, light on the dark one), so they do not flip when the app takes over; once the app
-      // runs, ThemedStatusBar sets them per theme. Replaces expo-status-bar's plugin (fixed dark, Oct 24).
-      './plugins/withLaunchStatusBar',
       // iOS 27 needs the scene start-up or the app stops at launch (Xcode 27 builds, Oct 29):
       // Expo's own ExpoAppSceneDelegate makes the window (plugins/withSceneLifecycle.js).
       './plugins/withSceneLifecycle',
