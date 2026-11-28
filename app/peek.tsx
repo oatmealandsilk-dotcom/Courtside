@@ -21,6 +21,11 @@ import { getPosition } from '@/lib/geo';
 import { useGateSpace } from '@/lib/useGateSpace';
 import { useApp } from '@/store/AppContext';
 import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
+import { InkButton, PlainActions, PlainNote, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the notes left-aligned, the asks as plain words with one ink button. */
+const PLAIN = noBoxes();
 
 /** Further than this, a hit is "further away", not "near you". */
 const NEAR_KM = 40;
@@ -190,6 +195,14 @@ export default function Peek() {
 
           {loading ? (
             <View style={styles.loading}><CourtSpinner size={32} /></View>
+          ) : PLAIN && hits === null ? (
+            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT}>
+              <PlainNote style={styles.plainNote} title="Couldn’t load the hits" body="Check your connection and try again." action={{ label: 'Try again', loading: retrying, onPress: () => { if (retrying) return; setRetrying(true); load(near); } }} />
+            </Animated.View>
+          ) : PLAIN && (nothing || noneNear) ? (
+            <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} layout={LIST_GLIDE}>
+              <PlainNote style={styles.plainNote} title="No open hits near you yet" body="Be the first to post one. Players near you see it straight away." action={{ label: 'Post the first hit', onPress: () => { void signUp(null, true); } }} />
+            </Animated.View>
           ) : hits === null ? (
             <Animated.View entering={FadeIn.duration(260)} exiting={CARD_OUT} style={[styles.card, styles.empty]}>
               <Ionicons name="cloud-offline-outline" size={26} color={colors.textMuted} />
@@ -224,12 +237,21 @@ export default function Peek() {
 
       {/* Always in reach: a free account, whatever they are looking at. */}
       <View style={[styles.sticky, { paddingBottom: insets.bottom + spacing.md }]}>
+        {PLAIN ? (
+          <View style={styles.stickyInner}>
+            <PlainActions style={styles.plainBar}>
+              <TextAction label="Sign in" onPress={() => { void signUp(null, false); }} />
+              <InkButton label="Create a free account" onPress={() => { void signUp(null, true); }} />
+            </PlainActions>
+          </View>
+        ) : (
         <View style={styles.stickyInner}>
           <Button label="Create a free account" full onPress={() => { void signUp(null, true); }} />
           <Pressable accessibilityRole="button" hitSlop={8} onPress={() => { void signUp(null, false); }} style={styles.already}>
             <Text style={styles.alreadyText}>Already on CourtSide? <Text style={styles.alreadyLink}>Sign in</Text></Text>
           </Pressable>
         </View>
+        )}
       </View>
 
       {/* Always there, so the sheet can drop away when it closes rather than vanish (item 32). */}
@@ -279,7 +301,22 @@ function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit | null; onClose: () =
       </Animated.View>
       ) : null}
       {hit ? (
-      <Animated.View key="sheet" entering={SHEET_IN} exiting={SHEET_OUT} style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]} accessibilityViewIsModal>
+      <Animated.View key="sheet" entering={SHEET_IN} exiting={SHEET_OUT} style={[styles.sheet, PLAIN && styles.plainSheet, { paddingBottom: insets.bottom + spacing.lg }]} accessibilityViewIsModal>
+        {PLAIN ? (
+          <View style={styles.sheetInner}>
+            {/* The hit first, as the plain letter says the post first ("Kai posted this."), then the ask. */}
+            <Text accessibilityRole="header" style={styles.plainTitle}>{hit.hostFirst ? `${hit.hostFirst}’s hit, ${whenInWords(hit.startsAt)}.` : `An open hit, ${whenInWords(hit.startsAt)}.`}{'\n'}Make a free account to join it.</Text>
+            <Text style={styles.plainBody}>{hit.court.name} · {FORMAT_LABEL[hit.format]} · {spotsText(hit.spotsLeft)}</Text>
+            <Text style={styles.sheetNote}>It takes a minute. Once you’re in, the app opens on this hit and joins it for you. Add your birthday when you sign up: hits with players you don’t follow yet are for players 18 and over.</Text>
+            <PlainActions style={styles.plainSheetActions}>
+              <TextAction label="Log in" onPress={() => onGo(false)} />
+              <InkButton label="Create a free account" onPress={() => onGo(true)} />
+            </PlainActions>
+            <Pressable accessibilityRole="button" accessibilityLabel="Not now" hitSlop={8} onPress={onClose} style={({ pressed }) => [styles.plainClose, pressed && styles.pressed]}>
+              <Ionicons name="close" size={18} color={colors.textMuted} />
+            </Pressable>
+          </View>
+        ) : (
         <View style={styles.sheetInner}>
           <View style={styles.sheetIcon}><HitGlyph size={22} color={colors.brand} /></View>
           <Text style={styles.sheetTitle}>{hit.hostFirst ? `Make a free account to join ${hit.hostFirst}’s hit ${whenInWords(hit.startsAt)}` : `Make a free account to join this hit ${whenInWords(hit.startsAt)}`}</Text>
@@ -291,6 +328,7 @@ function JoinPrompt({ hit, onClose, onGo }: { hit: PeekHit | null; onClose: () =
             <Text style={styles.alreadyText}>Not now</Text>
           </Pressable>
         </View>
+        )}
       </Animated.View>
       ) : null}
     </View>
@@ -352,4 +390,11 @@ const styleDefinitions = StyleSheet.create({
   sheetTitle: { ...typography.title, color: colors.text },
   sheetBody: { ...typography.bodyStrong, color: colors.text },
   sheetNote: { ...typography.small, color: colors.textMuted, lineHeight: 19 },
+  plainNote: { paddingHorizontal: 0, paddingVertical: spacing.xl },
+  plainBar: { marginTop: 0 },
+  plainSheet: { ...plainSheet, paddingHorizontal: spacing.xl },
+  plainTitle: { ...plainText.titleLg, paddingRight: spacing.xxl },
+  plainBody: { ...typography.body, color: colors.text },
+  plainSheetActions: { marginTop: spacing.sm },
+  plainClose: { position: 'absolute', top: -spacing.sm, right: -spacing.md, width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
 });

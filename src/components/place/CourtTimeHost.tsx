@@ -8,6 +8,9 @@ import Svg, { Defs, G, Line, LinearGradient, RadialGradient, Rect, Stop, Circle 
 import { litTilePaint } from '@/components/map/markers';
 import { POP_FROM_SCALE, POP_IN, POP_OUT, POP_SETTLE_MS, POP_SPRING } from '@/components/popMotion';
 import { Submit } from '@/components/sheet/SheetForm';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { InkButton, PlainActions, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 import {
   COURT_TIME_MAX, COURT_TIME_MIN, COURT_TIME_STEP, courtTimeSpoken, courtTimeWords, setCourtTimeHost, setCourtTimeUp, tillWords, type CourtTimeRequest,
 } from '@/features/places/courtTime';
@@ -232,7 +235,11 @@ export function CourtTimeHost() {
   }); // (every draw: it reads the minutes and busy of this one)
 
   const dimStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
-  const cardStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const cardStyle = useAnimatedStyle(() => (PLAIN
+    // No boxes: the sheet rises from the foot (Reduce Motion: it only fades).
+    ? { opacity: Math.min(1, shown.value * 2), transform: [{ translateY: reduce ? 0 : (1 - shown.value) * 420 }] }
+    : { opacity: shown.value, transform: [{ scale: scale.value }] }));
+  const insets = useSafeAreaInsets();
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.55 + 0.45 * glow.value }] }));
   const litStyle = useAnimatedStyle(() => ({ opacity: on.value }));
   const tileStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
@@ -258,21 +265,21 @@ export function CourtTimeHost() {
   const atMax = minutes >= COURT_TIME_MAX;
 
   const layer = (
-    <View style={styles.layer}>
+    <View style={[styles.layer, PLAIN && styles.plainLayer]}>
       <Animated.View pointerEvents="none" style={[styles.dim, dimStyle]} />
       <View
-        style={styles.box}
+        style={[styles.box, PLAIN && styles.plainBox]}
         accessibilityViewIsModal
         onAccessibilityEscape={() => { if (!busy && !lit) leave(false); }}
         {...(Platform.OS === 'web' ? { role: 'dialog' as const, 'aria-modal': true, 'aria-labelledby': TITLE_ID } : {})}
       >
-        <Animated.View style={[styles.card, cardStyle]}>
-          <Animated.View pointerEvents="none" style={[styles.wash, washStyle]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Animated.View style={[styles.card, PLAIN && [styles.plainSheet, { paddingBottom: insets.bottom + spacing.lg }], cardStyle]}>
+          {PLAIN ? null : <Animated.View pointerEvents="none" style={[styles.wash, washStyle]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
             <LivingWash id={`ctw${theme.replace(/[^a-zA-Z0-9]/g, '')}`} dark={dark} light={paint.top} />
-          </Animated.View>
-          <ScrollView style={styles.scroll} contentContainerStyle={styles.words} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
-            {/* The court, as the map draws it: quiet, then lit. */}
-            <View style={styles.stage} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          </Animated.View>}
+          <ScrollView style={styles.scroll} contentContainerStyle={PLAIN ? styles.plainWords : styles.words} bounces={false} alwaysBounceVertical={false} showsVerticalScrollIndicator={false}>
+            {/* The court, as the map draws it: quiet, then lit. (No boxes: no drawing on top, the words lead.) */}
+            {PLAIN ? null : <View style={styles.stage} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
               <Animated.View pointerEvents="none" style={[styles.glow, glowStyle]}>
                 <Svg width={GLOW} height={GLOW}>
                   <Defs>
@@ -306,11 +313,11 @@ export function CourtTimeHost() {
                   </Animated.View>
                 </View>
               </Animated.View>
-            </View>
-            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, EVEN_WEB]}>
+            </View>}
+            <Text ref={titleRef} nativeID={TITLE_ID} accessibilityRole="header" maxFontSizeMultiplier={TextScale.TITLE} style={[styles.title, PLAIN && styles.plainTitle, EVEN_WEB]}>
               {lit ? 'Court’s lit' : 'How long are you here?'}
             </Text>
-            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.court} numberOfLines={1}>{name}</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.court, PLAIN && styles.plainCourt]} numberOfLines={1}>{name}</Text>
 
             {/* − [1h 30m] +: 30 minutes to 4 hours, in half hours. */}
             <View
@@ -349,6 +356,15 @@ export function CourtTimeHost() {
             </View>
             {problem ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.problem}>{problem}</Text> : null}
           </ScrollView>
+          {PLAIN ? (
+            <View>
+              <PlainActions>
+                <TextAction label="Not now" tone="muted" disabled={busy || !!lit} onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} />
+                <InkButton label={lit ? 'Lit up' : busy ? 'Lighting it up' : 'Light it up'} disabled={busy || !!lit} onPress={() => { void lightUp(); }} />
+              </PlainActions>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.fine, styles.plainFine]}>Friends who follow you back see you here.</Text>
+            </View>
+          ) : (
           <View style={styles.actions}>
             <Submit short radius={BUTTON_CORNER} label={lit ? 'Lit up' : 'Light it up'} busy={busy} busyLabel="Lighting it up" onPress={() => { void lightUp(); }} />
             <Pressable accessibilityRole="button" accessibilityLabel="Not now" disabled={busy || !!lit} onPressIn={() => { touchAt.current = Date.now(); }} onPress={notNow} hitSlop={6} style={({ pressed }) => [styles.notNow, pressed && styles.notNowPressed]}>
@@ -356,6 +372,7 @@ export function CourtTimeHost() {
             </Pressable>
             <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.fine}>Friends who follow you back see you here.</Text>
           </View>
+          )}
         </Animated.View>
       </View>
       {/* A tap outside is Not now. Not a button for a screen reader: Not now on the card says it. */}
@@ -453,6 +470,8 @@ const EVEN_WEB = Platform.OS === 'web' ? ({ textWrap: 'pretty' } as unknown as T
 const CARD_PAD = spacing.lg + spacing.xs;
 const BUTTON_CORNER = radius.md;
 const ROUND = 48;
+/** No boxes (demo only, features/noBoxes): a sheet from the foot, the words left, no court drawing or wash. */
+const PLAIN = noBoxes();
 
 const styleDefinitions = StyleSheet.create({
   layer: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xxxl },
@@ -494,4 +513,11 @@ const styleDefinitions = StyleSheet.create({
   notNowText: { ...typography.bodyStrong, fontSize: buttonShape.label, color: colors.textMuted, textAlign: 'center' },
   notNowOff: { color: colors.textFaint },
   fine: { ...typography.small, fontSize: 12, color: colors.textFaint, textAlign: 'center', marginTop: 2 },
+  plainLayer: { justifyContent: 'flex-end', alignItems: 'stretch', paddingHorizontal: 0, paddingBottom: 0 },
+  plainBox: { maxWidth: '100%' as unknown as number },
+  plainSheet: { ...plainSheet, overflow: 'visible' },
+  plainWords: { alignItems: 'stretch' },
+  plainTitle: { ...plainText.titleLg, textAlign: 'left' },
+  plainCourt: { ...plainText.bodyLg, marginTop: spacing.xs, textAlign: 'left' },
+  plainFine: { textAlign: 'left', marginTop: spacing.md },
 });

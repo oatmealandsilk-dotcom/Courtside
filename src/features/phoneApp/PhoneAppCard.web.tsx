@@ -14,6 +14,12 @@ import { useThemedStyles } from '@/theme/ThemeProvider';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { TextScale } from '@/theme/textScale';
 import { corner } from '@/theme/look';
+import { InkButton, PlainActions, TextAction, plainSheet, plainText } from '@/components/plain/Plain';
+import { forced } from '@/features/noBoxes/demoForce';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): a plain row on Profile, a plain letter after sign-up. */
+const PLAIN = noBoxes();
 
 /*
  * "Get CourtSide on your iPhone" on the website (Oct 20 sweep, R3: "People
@@ -72,8 +78,23 @@ export function PhoneAppRow({ style }: { style?: object }) {
   const none = useNoPhoneApp();
   const [closed, setClosed] = useState(() => !!currentUserId && kept(rowKey(currentUserId)));
   useEffect(() => { setClosed(!!currentUserId && kept(rowKey(currentUserId))); }, [currentUserId]);
-  if (!none || closed || !currentUserId) return null;
+  if (!(none || forced('phone-app')) || closed || !currentUserId) return null;
   const close = () => { keep(rowKey(currentUserId)); setClosed(true); };
+  if (PLAIN) {
+    // A line on the page between hairlines, not a tinted box: the words, the way there as words, and the ×.
+    return (
+      <View style={[styles.plainRow, style]}>
+        <View style={{ flex: 1 }}>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowTitle}>Get CourtSide on your iPhone</Text>
+          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.rowMeta}>So you hear when someone wants to hit or replies to you.</Text>
+        </View>
+        <TextAction small label="Get the app" accessibilityLabel="Get the iPhone app" onPress={open} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Close the iPhone app card" hitSlop={10} onPress={close} style={styles.plainRowClose}>
+          <Ionicons name="close" size={16} color={colors.textMuted} />
+        </Pressable>
+      </View>
+    );
+  }
   return (
     <View style={[styles.row, style]}>
       <Pressable accessibilityRole="link" accessibilityLabel="Get the iPhone app" onPress={open} style={styles.rowMain}>
@@ -99,7 +120,7 @@ export function PhoneAppWelcome({ calm }: { calm: boolean }) {
   const none = useNoPhoneApp();
   const joined = currentUser?.joinedAt ? Date.parse(currentUser.joinedAt) : NaN;
   const fresh = Number.isFinite(joined) && Date.now() - joined < NEW_MS;
-  const due = !!currentUserId && onboardingComplete && none && fresh && !kept(welcomeKey(currentUserId));
+  const due = (!!currentUserId && onboardingComplete && none && fresh && !kept(welcomeKey(currentUserId))) || (!!currentUserId && forced('phone-welcome'));
   const [up, setUp] = useState(false);
   useEffect(() => {
     if (!due || !calm || touring || up) return undefined;
@@ -122,7 +143,18 @@ export function PhoneAppWelcome({ calm }: { calm: boolean }) {
       <Animated.View entering={FadeIn.duration(380).easing(RISE)} exiting={FadeOut.duration(220).easing(FALL)} style={[StyleSheet.absoluteFill, styles.dim]}>
         <Pressable accessibilityRole="button" accessibilityLabel="Not now" style={StyleSheet.absoluteFill} onPress={close} />
       </Animated.View>
-      <Animated.View entering={SlideInDown.duration(380).easing(RISE)} exiting={SlideOutDown.duration(220).easing(FALL)} accessibilityViewIsModal style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+      <Animated.View entering={SlideInDown.duration(380).easing(RISE)} exiting={SlideOutDown.duration(220).easing(FALL)} accessibilityViewIsModal style={[styles.sheet, PLAIN && styles.plainSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+        {PLAIN ? (
+          <View style={styles.inner}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>Get CourtSide on your iPhone</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>The app tells you when someone near you wants to hit, or replies to you. The website can’t.</Text>
+            <PlainActions style={styles.plainActions}>
+              <TextAction label="Not now" tone="muted" onPress={close} />
+              <InkButton label="Get the iPhone app" onPress={() => { open(); close(); }} />
+            </PlainActions>
+            <Text style={styles.plainFoot}>No iPhone? Everything works here in your browser too.</Text>
+          </View>
+        ) : (
         <View style={styles.inner}>
           <View style={styles.mark}><BrandMark size={30} /></View>
           <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>Get CourtSide on your iPhone</Text>
@@ -131,6 +163,7 @@ export function PhoneAppWelcome({ calm }: { calm: boolean }) {
           <Button label="Not now" variant="secondary" full onPress={close} />
           <Text style={styles.foot}>No iPhone? Everything works here in your browser too.</Text>
         </View>
+        )}
       </Animated.View>
     </View>
   );
@@ -154,4 +187,11 @@ const styleDefinitions = StyleSheet.create({
   title: { ...typography.title, color: colors.text },
   body: { ...typography.body, color: colors.textMuted, lineHeight: 22, marginTop: -spacing.xs },
   foot: { ...typography.small, color: colors.textMuted, textAlign: 'center' },
+  plainRow: { marginTop: 16, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  plainRowClose: { paddingVertical: spacing.sm, paddingLeft: spacing.xs },
+  plainSheet: { ...plainSheet },
+  plainTitle: { ...plainText.titleLg, paddingRight: spacing.xl },
+  plainBody: { ...plainText.bodyLg, marginTop: 0 },
+  plainActions: { marginTop: spacing.sm },
+  plainFoot: { ...typography.small, color: colors.textMuted },
 });

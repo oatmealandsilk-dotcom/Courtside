@@ -35,6 +35,8 @@ import { LookBar } from './TabBarLooks';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
+import { InkButton } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
 
 /** A hold on the Feed tab while on the Feed: the Feed's windows. */
 const holdFeed = () => requestFeedWindows('bar');
@@ -469,7 +471,10 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
               <Ionicons name="person-add-outline" size={22} color={colors.brand} />
             </Pressable>
           ) : (
-            <Button label="Join CourtSide" size="sm" full style={styles.sidebarJoin} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
+            // No boxes (demo only): ink, sized to its words, at the menu's left edge, not a full-width green slab.
+            noBoxes()
+              ? <InkButton small label="Join CourtSide" style={styles.sidebarJoinPlain} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
+              : <Button label="Join CourtSide" size="sm" full style={styles.sidebarJoin} onPress={() => router.push({ pathname: '/sign-in', params: { mode: 'create' } })} />
           )
         ) : null}
       </View>
@@ -598,5 +603,6 @@ const styleDefinitions = StyleSheet.create({
   },
   sidebarBadgeText: { color: colors.brandInk, fontSize: 9, ...font('700') },
   sidebarJoin: { marginTop: spacing.md, marginHorizontal: spacing.xs },
+  sidebarJoinPlain: { marginTop: spacing.md, marginLeft: spacing.md, alignSelf: 'flex-start' },
   sidebarFootnote: { ...typography.caption, color: colors.textFaint, paddingHorizontal: spacing.md },
 });

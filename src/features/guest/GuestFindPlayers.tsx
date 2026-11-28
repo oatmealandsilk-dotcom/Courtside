@@ -19,6 +19,11 @@ import { colors, lift, radius, spacing, typography } from '@/theme';
 import { GUEST_PEEK_LIMIT, GuestCourtsMap } from './GuestCourtsMap';
 import { openJoinSheet } from './joinAsk';
 import { TextScale } from '@/theme/textScale';
+import { InkButton, PlainActions, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the way in as one ink button sized to its words, Log in as words. */
+const PLAIN = noBoxes();
 
 const spotsText = (n: number) => (n === 1 ? '1 spot left' : `${n} spots left`);
 const DENIED_NOTE = 'Location is off for this site, so here are the soonest hits.';
@@ -197,7 +202,9 @@ export function GuestJoinCard({ title, body, profile = false }: { /** Left out w
           </View>
         </View>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
-        <Button label="Create a free account" full onPress={toCreate} />
+        {PLAIN ? (
+          <PlainActions align="start" style={styles.plainRow}><InkButton label="Create a free account" onPress={toCreate} /></PlainActions>
+        ) : <Button label="Create a free account" full onPress={toCreate} />}
         <View aria-hidden>
           <View style={styles.ghostTabs}>
             {['Posts', 'Activity', 'Clips', 'Tagged'].map((t, i) => (
@@ -215,10 +222,17 @@ export function GuestJoinCard({ title, body, profile = false }: { /** Left out w
     <View style={styles.plain}>
       {title ? <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.plainTitle}>{title}</Text> : null}
       <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainBody}>{body}</Text>
+      {PLAIN ? (
+        <PlainActions style={styles.plainRow}>
+          <TextAction label="Log in" accessibilityLabel="I already have an account" onPress={toSignIn} />
+          <InkButton label="Create a free account" onPress={toCreate} />
+        </PlainActions>
+      ) : <>
       <Button label="Create a free account" full onPress={toCreate} />
       <Pressable accessibilityRole="link" accessibilityLabel="I already have an account" onPress={toSignIn} hitSlop={8} style={({ pressed }) => [styles.plainLink, pressed && styles.pressed]}>
         <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.plainLinkText}>I already have an account</Text>
       </Pressable>
+      </>}
     </View>
   );
 }
@@ -253,6 +267,7 @@ const styleDefinitions = StyleSheet.create({
   chip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.pill, backgroundColor: colors.bgElevated, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   chipText: { ...typography.smallStrong, color: colors.textMuted },
   plain: { gap: spacing.md, paddingTop: spacing.lg },
+  plainRow: { marginTop: 0 },
   plainTitle: { ...typography.title, color: colors.text },
   plainBody: { ...typography.body, color: colors.textMuted },
   plainLink: { alignSelf: 'center', paddingVertical: spacing.sm },

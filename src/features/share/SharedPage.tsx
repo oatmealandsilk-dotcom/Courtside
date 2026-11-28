@@ -21,6 +21,11 @@ import { useGateSpace } from '@/lib/useGateSpace';
 import { colors, font, lift, radius, spacing, typography, wordmarkFont } from '@/theme';
 import { isOfficial } from '@/features/players/official';
 import { OfficialCheck } from '@/components/OfficialCheck';
+import { InkButton, PlainActions, PlainWords, TextAction } from '@/components/plain/Plain';
+import { noBoxes } from '@/features/noBoxes/noBoxes';
+
+/** No boxes (demo only, features/noBoxes): the locked note as plain words, the join as words and one ink button. */
+const PLAIN = noBoxes();
 
 /**
  * What a link shared outside the app shows someone with no account: the
@@ -129,7 +134,15 @@ export function SharedPage({ kind, id }: { kind: ShareKind; id: string }) {
             <CourtCard name={courtName} preview={preview} />
           ) : <Locked />}
 
-          {waiting ? null : (
+          {waiting ? null : PLAIN ? (
+            <View style={styles.plainJoin}>
+              <Text style={styles.plainPitch}>{pitch}</Text>
+              <PlainActions style={styles.plainActions}>
+                <TextAction label="Sign in" onPress={() => { void go(false); }} />
+                <InkButton label={cta} onPress={() => { void go(true); }} />
+              </PlainActions>
+            </View>
+          ) : (
             <View style={styles.join}>
               <Text style={styles.pitch}>{pitch}</Text>
               <Button label={cta} full onPress={() => { void go(true); }} />
@@ -164,6 +177,11 @@ function Person({ person, line }: { person: SharePerson; line?: string }) {
 
 function Locked({ group = false }: { group?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
+  if (PLAIN) {
+    return (
+      <PlainWords size="lg" style={styles.plainLocked} title={group ? 'Join CourtSide to join this group' : 'Join CourtSide to see this'} body="It's shared with players on CourtSide. Make a free account and it opens right here." />
+    );
+  }
   return (
     <View style={[styles.card, styles.lockedCard]}>
       <View style={styles.lockedIcon}><Ionicons name="lock-closed-outline" size={24} color={colors.brand} /></View>
@@ -368,4 +386,8 @@ const styleDefinitions = StyleSheet.create({
   already: { alignSelf: 'center', paddingVertical: spacing.xs },
   alreadyText: { ...typography.small, color: colors.textMuted },
   alreadyLink: { ...typography.smallStrong, color: colors.brand },
+  plainLocked: { paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  plainJoin: { paddingTop: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  plainPitch: { ...typography.body, color: colors.textMuted, marginTop: spacing.lg },
+  plainActions: { marginTop: spacing.lg },
 });
