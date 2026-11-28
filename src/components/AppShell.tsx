@@ -32,7 +32,7 @@ import { openJoinSheet } from '@/features/guest/joinAsk';
 import { JoinSheet } from '@/features/guest/JoinSheet';
 import { GetAppBar } from '@/features/guest/GetAppBar';
 import { rememberReferrer } from '@/features/invite/referral';
-import { rememberCampaign } from '@/features/guest/campaign';
+import { readLanding } from '@/features/guest/campaign';
 import { HOME } from '@/lib/goBack';
 import { useShareLanding } from '@/features/share/useShareLanding';
 import { useWorkoutWatch } from '@/features/activity/useWorkoutWatch';
@@ -115,13 +115,10 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
 let landingRef: string | null = null;
 if (Platform.OS === 'web' && typeof window !== 'undefined') {
   try {
-    const q = new URLSearchParams(window.location.search);
-    const ref = q.get('ref');
-    const code = (q.get('r') ?? '').toLowerCase();
-    landingRef = ref ? ref : /^[0-9a-f]{8}$/.test(code) ? `r=${code}` : null;
-    // The campaign a link came from (?src=fb, from courtsidebase.com/?ref=fb, Oct 18): kept so a
-    // sign-up or a "Get the app" tap here is counted for that link (campaign.ts).
-    rememberCampaign(q.get('src'));
+    // The campaign a link came from (?src=fb, from courtsidebase.com/?ref=fb, Oct 18) is kept so a
+    // sign-up or a "Get the app" tap here is counted for that link; straight from the site
+    // (from=site, Nov 27) the visit is counted here too (campaign.ts).
+    landingRef = readLanding(new URLSearchParams(window.location.search));
   } catch { /* nothing carried */ }
 }
 export function AppShell({ children }: { children: React.ReactNode }) {

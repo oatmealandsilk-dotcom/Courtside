@@ -26,3 +26,22 @@ is needed.
 
 Paste the new `share-worker.js` over the old one in the same editor and click
 **Deploy**. Nothing else changes.
+
+# Straight into the app (courtsidebase.com links, Nov 27)
+
+What it is for: a link like `courtsidebase.com/?ref=ig` today stops on a small
+"Opening CourtSide" page (`public/waitlist.html`) before the app, about half a
+second. This rule sends it straight to the app instead; the app itself counts
+the visit for Admin → Links (`readLanding` in `src/features/guest/campaign.ts`).
+Ship the app change first (it does nothing until this rule exists), then:
+
+1. https://dash.cloudflare.com → the `courtsidebase.com` site → **Rules** →
+   **Redirect Rules**. Open the rule that sends courtsidebase.com to the
+   waitlist page (or **Create rule** if there is none).
+2. **When incoming requests match** → **Edit expression**, paste:
+   `(http.host eq "courtsidebase.com" and not http.request.uri.query contains "go=app")`
+3. **Then** → Type **Dynamic**, expression:
+   `concat("https://app.courtsidebase.com/?", http.request.uri.query, "&from=site")`
+   Status code **302**. Leave **Preserve query string** off (the expression carries it).
+4. **Deploy**. `?go=app` links keep going through the waitlist page (it sends
+   them on to the iPhone app), so the old rule stays for those: put it after this one.
