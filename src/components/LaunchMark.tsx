@@ -6,7 +6,7 @@ import { font, wordmarkFont } from '@/theme';
 import { LAUNCH_FADE_MS, launchHiddenAt, launchShowing, whenLaunchHidden } from '@/lib/launchSplash';
 import { BRAND, LINE as LINE_SHAPE, PICTURE } from '@/components/launchPicture';
 import { ANDROID_C, LINE_C, MARK_C, PICTURE_C, SPLASH_C_COLORS, SPLASH_C_DARK_COLORS } from '@/components/launchPictureC';
-import { NEW_SPLASH } from '@/lib/splashLook';
+import { NEW_LAUNCH_GREEN, NEW_SPLASH, OLD_LAUNCH_GREEN } from '@/lib/splashLook';
 import { onPhoneAppearance, phoneDark } from '@/lib/phoneAppearance';
 import { launchLookNow, type LaunchLook } from '@/lib/launchLook';
 
@@ -269,8 +269,13 @@ export function useLaunchDark(on = true): boolean {
   return NEW_SPLASH && (own ? own === 'dark' : byPhone);
 }
 
-/** The launch look's colours: white or dark. */
-const lookC = (dark: boolean) => (dark ? SPLASH_C_DARK_COLORS : SPLASH_C_COLORS);
+/**
+ * The launch look's colours: white or dark. The white look's green is the icon's since Nov 27, but only
+ * where the phone's own picture has it too (NEW_LAUNCH_GREEN, src/lib/splashLook.ts); older builds keep
+ * their picture's lighter green, so the hand-over does not change colour.
+ */
+const LIGHT_C = NEW_LAUNCH_GREEN ? SPLASH_C_COLORS : { ...SPLASH_C_COLORS, green: OLD_LAUNCH_GREEN };
+const lookC = (dark: boolean) => (dark ? SPLASH_C_DARK_COLORS : LIGHT_C);
 const LINE_C_TEXT = { size: LINE_C.size, tracking: LINE_C.tracking, baseline: LINE_C.baseline, centre: PICTURE_C.width / 2 };
 
 /** iPhone: the picture's mark and line, where the picture (drawn to cover the screen) has them. */

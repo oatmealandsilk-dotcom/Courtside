@@ -9,7 +9,7 @@
 export const PICTURE_C = { width: 1284, height: 2778 };
 
 /** Its colours: the ground (the Clean theme's white, Oct 25), the icon's green, and the quiet line's grey (Clean's muted ink). */
-export const SPLASH_C_COLORS = { ground: '#FFFFFF', green: '#2E7E4B', line: '#536471' };
+export const SPLASH_C_COLORS = { ground: '#FFFFFF', green: '#236B3F', line: '#536471' };
 
 /**
  * The dark look (Oct 25, assets/splash-c-dark.png), shown when the phone is in dark mode: the Night

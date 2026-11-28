@@ -35,3 +35,35 @@ export function iosBuild(): number {
 /** True when this app draws the new, logo-only launch look (splash C); false: today's picture. */
 export const NEW_SPLASH: boolean =
   Platform.OS === 'web' || Platform.OS === 'android' || (Platform.OS === 'ios' && iosBuild() > LAST_OLD_SPLASH_BUILD);
+
+/*
+ * The launch picture's green (Nov 27). The owner asked for one green: the icon's own #236B3F on the
+ * icon, the app's buttons and the launch screen ("new green is better"). The phone's launch picture
+ * only changes with a new store build, so the app's drawn copy keeps the picture's old, lighter green
+ * on the builds that still carry it, and the hand-over from picture to drawing never shifts colour:
+ * iPhone builds up to 29 (in review Nov 25), Android's first build (versionCode 1, Nov 5). The website
+ * has no picture of its own: its loader (public/index.html) and drawing switch together.
+ */
+
+/** The launch picture's green on builds made before Nov 27 (assets/splash-c.png until then). */
+export const OLD_LAUNCH_GREEN = '#2E7E4B';
+/** The last iPhone store build whose launch picture has OLD_LAUNCH_GREEN. */
+export const LAST_OLD_GREEN_IOS_BUILD = 29;
+/** The last Android build whose launch icon has OLD_LAUNCH_GREEN. */
+export const LAST_OLD_GREEN_ANDROID_BUILD = 1;
+
+/** The installed Android app's own version code (0 when unknown). */
+function androidBuild(): number {
+  try {
+    const n = Number(Constants.platform?.android?.versionCode ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** True when this app's launch picture is in the icon's green, so its drawn copy should be too. */
+export const NEW_LAUNCH_GREEN: boolean =
+  Platform.OS === 'web' ||
+  (Platform.OS === 'ios' && iosBuild() > LAST_OLD_GREEN_IOS_BUILD) ||
+  (Platform.OS === 'android' && androidBuild() > LAST_OLD_GREEN_ANDROID_BUILD);

@@ -42,7 +42,8 @@ FONT = os.environ.get('INTER_SEMIBOLD') or os.path.join(ROOT, 'node_modules/@exp
 
 ICON_CREAM = (0xF6, 0xEF, 0xE4)  # the icon's cream (assets/icon-thin.png): only to measure the mark against the icon
 GROUND = (0xFF, 0xFF, 0xFF)  # the launch screen's ground: the Clean theme's bg (src/theme/ThemeProvider.tsx), white
-GREEN = (0x2E, 0x7E, 0x4B)   # the icon's green
+GREEN = (0x23, 0x6B, 0x3F)   # the icon's green (Nov 27, owner: one green for icon, buttons and launch: the icon's #236B3F)
+THIN_ICON_GREEN = (0x2E, 0x7E, 0x4B)  # assets/icon-thin.png's green: only to measure the mark against that picture
 LINE_INK = (0x53, 0x64, 0x71)  # the quiet line: Clean's muted ink (textMuted), 6.1:1 on white
 # The dark look (Oct 25): the Night theme's ground, its green (brand) and its muted ink (textMuted),
 # src/theme/ThemeProvider.tsx darkColors.
@@ -176,7 +177,7 @@ def mark_polys(d, left, top, width):
 def check_against_icon(d):
     """How far this drawing of the mark is from assets/icon-thin.png (placed as that icon places it)."""
     icon = np.asarray(Image.open(os.path.join(ROOT, 'assets/icon-thin.png')).convert('RGB')).astype(np.float32)
-    ink = np.clip((ICON_CREAM[1] - icon[..., 1]) / (ICON_CREAM[1] - GREEN[1]), 0, 1)
+    ink = np.clip((ICON_CREAM[1] - icon[..., 1]) / (ICON_CREAM[1] - THIN_ICON_GREEN[1]), 0, 1)
     shapes = thin_mark(d); x0, y0, x1, y1 = bbox(shapes)
     w = 0.68 * 1024; h = w * (y1 - y0) / (x1 - x0)
     polys, _, _ = mark_polys(d, 512 - w / 2, 0.494 * 1024 - h / 2, w)

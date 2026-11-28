@@ -45,7 +45,7 @@ module.exports = {
     // Android only reads this (its "primary" colour: the app's card in the recent-apps
     // view, and the edge glow on older phones), which was Expo's default navy. The
     // brand's green, as on the icon (Oct 5). The iPhone app and the website ignore it.
-    primaryColor: '#3F7049',
+    primaryColor: '#236B3F',
     // Shown by Expo Go and native builds while the JS loads; matches app/index.tsx
     // so the loader fades straight into the in-app splash.
     // The refined icon he picked (Oct 6): the same green court mark, redrawn with even

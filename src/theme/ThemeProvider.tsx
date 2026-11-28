@@ -51,24 +51,27 @@ export const darkColors: Palette = {
  * warmth in the neutrals at all: white ground, near-black text, grey hairlines.
  * The green is lifted a little from the default one, which was mixed for paper
  * and goes slightly flat against pure white.
+ * Nov 27 (owner, of the icon's green next to the app's: "new green is better"): the app's greens are the
+ * icon's own #236B3F (scripts/make-app-icon.py), each slot still a step apart, so icon, buttons and the
+ * loading screen are one green.
  */
 const cleanColors: Palette = {
   bg: '#FFFFFE', bgElevated: '#F7F8F8', surface: '#FAFAFA', surfaceAlt: '#F0F1F1',
   border: '#E6E7E8', borderStrong: '#C7CACC', text: '#0F1419', textMuted: '#536471', textFaint: '#5F6871',
-  brand: '#2C7446', brandInk: '#FFFFFD', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#2C7447', clay: '#B4653A',
-  hard: '#2C6885', grass: '#477F50', info: '#2C6886', success: '#2C7448', warning: '#806311', danger: '#B93129',
+  brand: '#236B3F', brandInk: '#FFFFFD', brandDim: '#E8F3EC', brandBright: '#7ED492', court: '#236B40', clay: '#B4653A',
+  hard: '#2C6885', grass: '#477F50', info: '#2C6886', success: '#236B41', warning: '#806311', danger: '#B93129',
   surfaceHard: '#2F6B9A', surfaceClay: '#B0582F', surfaceGrass: '#3D7A44', surfaceOther: '#6B7378',
   sun: '#9A7110', rose: '#B04A7C',
   open: '#17803F',
   overlay: 'rgba(15, 20, 25, 0.5)',
   link: '#1B6699', onMedia: '#FFFFFF',
   bubble: '#EEF0F1',
-  bubbleMine: '#2B7345', onDanger: '#FFFFFC',
+  bubbleMine: '#226A3E', onDanger: '#FFFFFC',
   // No shirt for Clean: its session box stays the green box with the brand's own wash (cardLook).
   // These only fill the slots, with that box's colours.
-  cardFill: '#2C7546', cardGlowTop: '#2C7547', cardGlowBottom: '#2C7548',
+  cardFill: '#236C3F', cardGlowTop: '#236C40', cardGlowBottom: '#236C41',
   cardFigure: '#FEFFFF', cardInk: '#FEFFFE', cardMuted: '#FEFFFD',
-  cardTouch: '#2C7449',
+  cardTouch: '#236B42',
   launchLine: '#5F6872',
   checker: '#26292A', checkerAlt: '#323637',
   avatarTint1: '#E3EAE4', avatarTint2: '#EDE6DA', avatarTint3: '#F0E0DA', avatarTint4: '#DDE5EC', avatarTint5: '#E6E0EA', avatarTint6: '#E8E8E0',
