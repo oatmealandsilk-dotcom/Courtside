@@ -846,7 +846,8 @@ export const GALLERY_PLAIN_H = GALLERY.band + GALLERY.padTop + GALLERY.head + GA
 function twoStats(s: SessionDetail): { label: string; value: string; unit?: string }[] {
   const score = scoreLine(s);
   const time = { label: onCourtLabel(s), value: duration(s.minutes) };
-  if (score) return [{ label: resultWord(s) ?? 'Score', value: score }, time];
+  // A little more room between sets than inside one ("6–3  7–5"), so the sets read apart at a glance.
+  if (score) return [{ label: resultWord(s) ?? 'Score', value: score.replace(/ /g, '\u2002') }, time];
   const second = s.avgHr ? { label: 'Avg heart rate', value: String(s.avgHr), unit: 'bpm' }
     : s.kcal ? { label: 'Calories', value: String(Math.round(s.kcal)), unit: 'Cal' } : null;
   return second ? [time, second] : [time];
@@ -1240,7 +1241,7 @@ export function ActivitiesList({ look, posts, showStart, nearCount, near, paused
       {showStart ? (
         <View style={[styles.column, { maxWidth: column }]}>
           <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop />
-          {posts.length ? <View style={styles.section}><Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sectionText}>{classic ? (nearCount ? 'Latest near you' : 'Latest') : nearCount ? 'Latest sessions near you' : 'Latest sessions'}</Text></View> : null}
+          {posts.length ? <View style={styles.section}><Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.sectionText, gallery && styles.sectionTextQuiet]}>{classic ? (nearCount ? 'Latest near you' : 'Latest') : nearCount ? 'Latest sessions near you' : 'Latest sessions'}</Text></View> : null}
         </View>
       ) : null}
     </View>
@@ -1285,6 +1286,8 @@ const styleDefinitions = StyleSheet.create({
   column: { width: '100%', alignSelf: 'center' },
   section: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   sectionText: { ...typography.caption, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  // The gallery looks: sentence case, no all-caps label (DESIGN.md's No-Kicker Rule).
+  sectionTextQuiet: { ...typography.small, textTransform: 'none', letterSpacing: 0 },
   end: { alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xl, minHeight: 60 },
   endText: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   empty: { paddingHorizontal: spacing.xl, paddingTop: spacing.xxl },
