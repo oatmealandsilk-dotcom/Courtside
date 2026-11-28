@@ -643,9 +643,12 @@ export default function Search() {
         onLayout={(e) => { const w = Math.floor(e.nativeEvent.layout.width); if (w > 0 && w !== columnW) setColumnW(w); }}
       >
         <View style={[styles.bar, !isPhone && styles.barWide]}>
-          <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={{ left: 10, right: 4 }} onPress={() => goBack()} style={styles.back}>
-            <Ionicons name="chevron-back" size={22} color={colors.text} />
-          </Pressable>
+          {/* On a computer Search is one of the side menu's own pages, lit there like a tab: no back arrow (Nov 27). */}
+          {Platform.OS === 'web' && !isPhone ? null : (
+            <Pressable accessibilityRole="button" accessibilityLabel="Go back" hitSlop={{ left: 10, right: 4 }} onPress={() => goBack()} style={styles.back}>
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
+            </Pressable>
+          )}
           <SearchField
             ref={input}
             value={term}
