@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Reanimated, { FadeOut } from 'react-native-reanimated';
 import { router } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -100,22 +100,41 @@ export function usePeopleYouMayKnow() {
 
 export type PymkModel = NonNullable<ReturnType<typeof usePeopleYouMayKnow>>;
 
-export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
+export function PeopleYouMayKnow({ model, inFeed = false }: { model: PymkModel;
+  /** The follow block of the activity under the iPhone's Community map (HOME_LOOK 'map-feed'): Not now on the title's line, one line under it, and the
+   *  cards sized so the third shows only its edge (never a word cut in half). */
+  inFeed?: boolean }) {
   useTheme();
   const styles = useThemedStyles(styleDefinitions);
   const { followingIds, followRequests, currentUserId } = useApp();
+  const { width: screenW } = useWindowDimensions();
   const { cards, follow, hide, close } = model;
+  // In the feed: two cards in full, then THIRD_EDGE of the third (its edge, no words), whatever the phone's width.
+  const cardW = inFeed ? Math.max(CARD, Math.floor((screenW - spacing.lg - 2 * spacing.sm - THIRD_EDGE) / 2)) : CARD;
+  const notNow = (
+    <Pressable accessibilityRole="button" accessibilityLabel="Not now" accessibilityHint="Hides People you may know for a few days" hitSlop={10} onPress={close} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
+      <Text maxFontSizeMultiplier={TextScale.CHROME} style={[styles.notNow, inFeed && styles.notNowTop]}>Not now</Text>
+    </Pressable>
+  );
   return (
     <View style={styles.wrap}>
-      <View style={styles.head}>
-        <View style={styles.headWords}>
-          <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>People you may know</Text>
-          <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sub}>Follow each other to see each other on the map and the leaderboard</Text>
+      {inFeed ? (
+        <View style={styles.headFeed}>
+          <View style={styles.titleRow}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" numberOfLines={1} style={[styles.title, styles.flex]}>People you may know</Text>
+            {notNow}
+          </View>
+          <Text maxFontSizeMultiplier={TextScale.CARD} numberOfLines={1} style={styles.sub}>Follow each other to see each other on the map</Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Not now" accessibilityHint="Hides People you may know for a few days" hitSlop={10} onPress={close} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
-          <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.notNow}>Not now</Text>
-        </Pressable>
-      </View>
+      ) : (
+        <View style={styles.head}>
+          <View style={styles.headWords}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} accessibilityRole="header" style={styles.title}>People you may know</Text>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.sub}>Follow each other to see each other on the map and the leaderboard</Text>
+          </View>
+          {notNow}
+        </View>
+      )}
       {/* The row runs to the screen's edges, so a card half in view says "there is more this way". */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.scroller} contentContainerStyle={styles.strip}>
         {cards.map(({ user, followsYou, line, second }) => {
@@ -123,13 +142,13 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
           const requested = !following && !!currentUserId && followRequests.some((r) => r.fromId === currentUserId && r.toId === user.id);
           const label = following ? 'Following' : requested ? 'Requested' : followsYou ? 'Follow back' : 'Follow';
           return (
-            <Reanimated.View key={user.id} exiting={LEAVE} style={styles.card}>
+            <Reanimated.View key={user.id} exiting={LEAVE} style={[styles.card, inFeed && { width: cardW }]}>
               <Pressable accessibilityRole="link" accessibilityLabel={[user.name, line, second].filter(Boolean).join(', ')} onPress={() => router.push(`/user/${user.id}`)} style={styles.who}>
                 <Avatar uri={user.avatarUrl} name={user.name} seed={user.avatarSeed} size={68} ring={user.isCoach} />
                 {/* The name, then one short line of why (Oct 30, owner: "add a short line under their name between that and follow
                     which says smth"; Oct 28 took out the longer explanation). One line only, so the card stays as short. */}
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{user.name}</Text>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.why} numberOfLines={1}>{line}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.name, inFeed && { maxWidth: cardW - spacing.md * 2 }]} numberOfLines={1}>{user.name}</Text>
+                <Text maxFontSizeMultiplier={TextScale.CARD} style={[styles.why, inFeed && { maxWidth: cardW - spacing.md * 2 }]} numberOfLines={1}>{line}</Text>
               </Pressable>
               <Button
                 label={label}
@@ -152,11 +171,18 @@ export function PeopleYouMayKnow({ model }: { model: PymkModel }) {
 }
 
 const CARD = 158;
+/** In the feed (inFeed): how much of the third card shows at the screen's edge. */
+const THIRD_EDGE = 32;
 
 const styleDefinitions = StyleSheet.create({
   wrap: { marginTop: spacing.sm },
   head: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md, marginBottom: spacing.md },
   headWords: { flex: 1, minWidth: 0, gap: 2 },
+  // In the feed: the title and Not now on one line, their tops level; the one line under them.
+  headFeed: { gap: 2, marginBottom: spacing.md },
+  titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  flex: { flex: 1, minWidth: 0 },
+  notNowTop: { paddingBottom: 0, paddingTop: 3 },
   title: { ...typography.heading, color: colors.text },
   sub: { ...typography.small, color: colors.textMuted },
   notNow: { ...typography.smallStrong, color: colors.textMuted, paddingBottom: 1 },

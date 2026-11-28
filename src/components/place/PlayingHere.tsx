@@ -56,7 +56,7 @@ export function PlayingHereRow({ courtId, access, name }: { courtId: string; acc
  * standing at a court (useAtCourtPrompt), one tap opens "How long are you here?", exactly as the court card's
  * button does. Nothing is shared until Light it up on that card; the (x) puts it away.
  */
-export function AtCourtPrompt({ active, onMap = false }: { active: boolean; /** On Open to hit's panel over the iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): at its top, the room under it rather than above. */ onMap?: boolean }) {
+export function AtCourtPrompt({ active, onMap = false }: { active: boolean; /** At the top of Open to hit's panel on the iPhone's Community map (over the map, COMMUNITY_MAP_LOOK 'overlay'; right under it, HOME_LOOK 'map-feed'): the room under it rather than above. */ onMap?: boolean }) {
   const styles = useThemedStyles(styleDefinitions);
   const { court, close } = useAtCourtPrompt(active);
   const p = usePlayingHere(court?.id ?? null, court?.access ?? 'unknown', court?.name);

@@ -579,25 +579,34 @@ export function galleryRows(posts: Post[], me: string | null | undefined, showSt
   return out.map((r, i): Row => (r.kind === 'own' && out[i - 1]?.kind === 'own' ? { ...r, joined: true } : r));
 }
 
-export function ActivitiesList({ posts, rollup = false, showStart, nearCount, near, paused, row }: {
-  /** Exactly the posts Activities may show, newest first (the Feed's ActivitiesGallery). */
+interface GalleryFeedArgs {
+  /** Exactly the posts Activities may show, newest first (galleryPosts). */
   posts: Post[];
   /** 'gallery-rollup': other people's sessions without a photo as one "who played" row per day. */
-  rollup?: boolean;
-  /** The "Follow more players" start (ActivitiesStart), after the first two items, at its own height. */
+  rollup: boolean;
+  /** A follow block after the first two items (ActivitiesStart's "Follow more players", or the page's own: `start`). */
   showStart: boolean;
   nearCount: number;
   /** "Near you" players (a new player's), whose posts carry the "Near you" line until followed. */
   near?: Set<string>;
-  /** Another feed is on show: this one leaves the top row alone. */
+  /** Not the page on show: nothing is marked seen. */
   paused: boolean;
-  row?: SharedValue<number>;
-}) {
+  /** The follow block, when not Activities' own start (ActivitiesStart): the Community map's People you may know. */
+  start?: React.ReactNode;
+  /** On another page (under the Community map): the follow block always sits on the band, as every row there does. */
+  inPage?: boolean;
+}
+
+/**
+ * What the gallery draws and how it behaves, whichever list holds it (the Feed's own, ActivitiesList, or the Community
+ * map's page in the iPhone app, useGalleryInPage): its rows, each row drawn, a clip opening the reel (once per tap),
+ * older posts asked for as the end nears (with the quiet-page guard), what is on screen marked seen, the calm empty
+ * note and the row at the end (a spinner, "Show older posts" or "You're all caught up").
+ */
+function useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused, start, inPage = false }: GalleryFeedArgs) {
   const styles = useThemedStyles(styleDefinitions);
   const app = useApp();
   const { users, currentUserId, followingIds, actions } = app;
-  const insets = useSafeAreaInsets();
-  const barInset = useBarInset();
   const usersById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const following = useMemo(() => new Set(followingIds), [followingIds]);
   const rows = useMemo(() => galleryRows(posts, currentUserId, showStart, rollup, following), [posts, currentUserId, showStart, rollup, following]);
@@ -612,7 +621,6 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
   }), []);
   const { width: screenW } = useWindowDimensions();
   const cardW = screenW < GALLERY.phoneUnder ? screenW : GALLERY.column;
-  const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
 
   // A clip tapped: the full-screen reel, that clip first, then the feed's clips below it, videos only.
   const postsRef = useRef(posts);
@@ -630,40 +638,9 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
     const ids = (at < 0 ? [] : all.slice(at)).filter(isClip).slice(0, 30).map((p) => p.id);
     router.push({ pathname: '/reel', params: { ids: (ids.length ? ids : [postId]).join(','), start: postId } });
   }, []);
-
-  // The top row follows the list the way Instagram's header does: forward takes it out with the scroll, back brings it in.
-  const liveRow = paused ? undefined : row;
-  const lastY = useRef(0);
-  // Where the list was while it was the page on show: back from the reel (or any page over it) it is put back
-  // exactly there if it slipped while covered, so the feed never jumps or starts over.
-  const listRef = useRef<FlatList<Row>>(null);
-  const keptY = useRef(0);
-  const onShow = useRef(true);
-  useFocusEffect(useCallback(() => {
-    onShow.current = true;
-    opening.current = false;
-    const y = keptY.current;
-    if (y > 0 && Math.abs(lastY.current - y) > 1) {
-      listRef.current?.scrollToOffset({ offset: y, animated: false });
-      lastY.current = y;
-    }
-    return () => { onShow.current = false; };
-  }, []));
-  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); if (openingReset.current) clearTimeout(openingReset.current); }, []);
-  useEffect(() => { if (!paused) showRow(row); }, [paused, row]);
-  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const y = e.nativeEvent.contentOffset.y;
-    const dy = y - lastY.current;
-    lastY.current = y;
-    if (onShow.current) keptY.current = y;
-    if (!liveRow) return;
-    liveRow.value = y <= 0 ? 0 : Math.min(1, Math.max(0, liveRow.value + dy / ROW_TRAVEL));
-    if (settle.current) clearTimeout(settle.current);
-    settle.current = setTimeout(() => { liveRow.value = withTiming(y > top && liveRow.value > 0.5 ? 1 : 0, { duration: 200 }); }, 140);
-  }, [liveRow, top]);
-  // The plain band behind the row, so cards never pass under its words; it rides up with the row.
-  const band = useAnimatedStyle(() => ({ transform: [{ translateY: -(liveRow ? liveRow.value : 0) * top }] }));
+  // Back on show (from the reel, or any page over it): a clip can be opened again at once.
+  useFocusEffect(useCallback(() => { opening.current = false; }, []));
+  useEffect(() => () => { if (openingReset.current) clearTimeout(openingReset.current); }, []);
 
   // Older posts as the end nears: the store's next page (AppContext loadMorePosts: 40 posts of the whole feed, by
   // time), with a quiet row while it is on its way. A page can bring nothing this list shows (posts from people you
@@ -718,40 +695,16 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
   }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
   // A pull or a new page from elsewhere can bring more back.
   useEffect(() => { if (app.feed.more) setEnded(false); }, [app.feed.more]);
-
-  // The simulator proof harness only (simDriver; nothing at all elsewhere): "actscroll to=1200" or "actscroll by=600"
-  // moves the list (glide=1: animated), "actclip" opens the first clip below the top of the screen as a tap would,
-  // "actlike" double-taps the first photo below it, "actpos" says where the list is. Each says what it did in sim-log.
+  /** The end of the list reached: the next page, unless a run of quiet pages stopped it (then the row's tap asks). */
+  const onEnd = useCallback(() => { if (!stalledRef.current) loadMore(); }, [loadMore]);
+  /** A pull brought the newest again: the run's count starts over. */
+  const reopen = useCallback(() => { tries.current = 0; stalledRef.current = false; setStalled(false); }, []);
   const rowsRef = useRef(rows);
   rowsRef.current = rows;
-  useEffect(() => {
-    if (!SIM_DRIVER) return;
-    const firstBelow = (want: (p: Post) => boolean) => rowsRef.current.find((r): r is Extract<Row, { kind: 'post' }> => r.kind === 'post' && want(r.post))?.post;
-    const off = [
-      simAction('actscroll', (q) => {
-        const to = q.to !== undefined ? Number(q.to) : lastY.current + (Number(q.by) || 0);
-        listRef.current?.scrollToOffset({ offset: Math.max(0, to), animated: q.glide === '1' });
-        simLog(`[acts] scroll to ${Math.round(to)}`);
-      }),
-      simAction('actclip', () => {
-        const clipPost = firstBelow(isClip);
-        simLog(`[acts] clip ${clipPost?.id ?? 'none'} at y ${Math.round(lastY.current)}`);
-        if (clipPost) openClip(clipPost.id);
-      }),
-      simAction('actlike', () => {
-        const id = rowsRef.current.flatMap((r) => (r.kind === 'post' && simLikes.has(r.post.id) ? [r.post.id] : []))[0];
-        simLog(`[acts] doubletap ${id ?? 'none'}`);
-        if (id) simLikes.get(id)?.();
-      }),
-      simAction('actpos', () => simLog(`[acts] at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)} rows ${rowsRef.current.length}`)),
-    ];
-    return () => off.forEach((f) => f());
-  }, [openClip]);
-  useFocusEffect(useCallback(() => { if (SIM_DRIVER) simLog(`[acts] on show at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)}`); }, []));
 
   // Seen, as Home's pages are (Oct 7, owner: "don't keep seeing the same videos"): a card, your own row or a "who
-  // played" row on screen for GLANCE_MS while this list is the one in front (the Feed showing Activities, its route
-  // on top, no tutorial over it, the app open) goes in this phone's seen list (features/feed/seenPosts), so the Feed's
+  // played" row on screen for GLANCE_MS while this list is the one in front (its page on show, its route on top, no
+  // tutorial over it, the app open) goes in this phone's seen list (features/feed/seenPosts), so the Feed's
   // Activities card stops counting it as new and For you deals it below what you have not seen yet. A "who played"
   // row counts for each session in it. As a card or your own row leaves the screen the server is told the same, with
   // how long it was there (noteFeedSignal, as Home's endViewing). A row flown past mid-fling is neither.
@@ -790,32 +743,23 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
     const seconds = (Date.now() - view.since) / 1000;
     actionsRef.current.noteFeedSignal({ kind: 'post', id: r.post.id, seen: true, watched: seconds, skipped: seconds < 1.5 });
   }, []);
-  // FlatList takes one handler and one setting for the list's whole life.
-  const viewability = useRef({ itemVisiblePercentThreshold: 50 }).current;
-  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
-    const now = viewableItems.flatMap((t) => (t.isViewable && t.item && t.item.kind !== 'start' ? [t.item.key] : []));
+  /** The keys of the gallery's rows on screen now (the follow block never counts), from the list's viewability. */
+  const onScreenNow = useCallback((now: string[]) => {
     for (const key of onScreen.current) if (!now.includes(key)) endView(key);
     onScreen.current = now;
     if (lookingRef.current) now.forEach(startView);
-  }).current;
+  }, [startView, endView]);
   useEffect(() => {
     if (looking) onScreen.current.forEach(startView);
     else [...views.current.keys()].forEach(endView);
   }, [looking, startView, endView]);
   useEffect(() => () => { [...views.current.keys()].forEach(endView); }, [endView]);
 
-  const [refreshing, setRefreshing] = useState(false);
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    showRow(liveRow);
-    try { await actions.refresh(); } finally { setRefreshing(false); tries.current = 0; stalledRef.current = false; setStalled(false); }
-  }, [actions, liveRow]);
-
-  const renderItem = useCallback(({ item: r }: { item: Row }) => {
+  const renderRow = useCallback((r: Row) => {
     if (r.kind === 'start') {
       return (
-        <View style={[styles.column, { maxWidth: cardW }, r === rows[0] ? null : styles.startInList]}>
-          <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop />
+        <View style={[styles.column, { maxWidth: cardW }, r === rows[0] && !inPage ? null : styles.startInList]}>
+          {start !== undefined ? start : <ActivitiesStart inList topInset={0} bottomInset={spacing.lg} nearCount={nearCount} sessions={posts.length} shown={!paused} onTop />}
         </View>
       );
     }
@@ -825,13 +769,13 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
     if (!author) return null;
     const nearOne = !!near?.has(author.id) && author.id !== currentUserId && !following.has(author.id);
     return <View style={[styles.column, { maxWidth: cardW }]}><GalleryCard post={r.post} author={author} me={currentUserId} onOpenClip={openClip} near={nearOne} width={cardW} /></View>;
-  }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay]);
+  }, [usersById, near, currentUserId, following, openClip, cardW, styles, rows, nearCount, posts.length, paused, rollup, openDays, toggleDay, start, inPage]);
 
   // Nothing from anyone else yet, and nothing older to ask for (or many pages asked already): say why, calmly. A new
   // player (following fewer than five) has the start block, with its follow suggestions, instead.
   const settled = (ended || stalled) && !loading;
   const quiet = !fromOthers && settled && !showStart ? (
-    <View style={[styles.column, { maxWidth: cardW }, rows.length ? styles.emptyUnder : null]}>
+    <View style={[styles.column, { maxWidth: cardW }, rows.length || inPage ? styles.emptyUnder : null]}>
       {rollup ? (
         <EmptyState
           icon="images-outline"
@@ -847,20 +791,122 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
       )}
     </View>
   ) : null;
+  // One fixed height whatever it holds, so swapping spinner, button and words never changes the list's length.
+  const end = (
+    <View style={styles.end}>
+      {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" />
+        : !rows.length ? null
+        : stalled ? (
+          <Pressable onPress={() => { tries.current = 0; loadMore(); }} accessibilityRole="button" style={styles.older}>
+            <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.olderText}>Show older posts</Text>
+          </Pressable>
+        ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
+    </View>
+  );
+  return { rows, rowsRef, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more: app.feed.more, cardW };
+}
+
+export function ActivitiesList({ posts, rollup = false, showStart, nearCount, near, paused, row }: {
+  /** Exactly the posts Activities may show, newest first (the Feed's ActivitiesGallery). */
+  posts: Post[];
+  /** 'gallery-rollup': other people's sessions without a photo as one "who played" row per day. */
+  rollup?: boolean;
+  /** The "Follow more players" start (ActivitiesStart), after the first two items, at its own height. */
+  showStart: boolean;
+  nearCount: number;
+  /** "Near you" players (a new player's), whose posts carry the "Near you" line until followed. */
+  near?: Set<string>;
+  /** Another feed is on show: this one leaves the top row alone. */
+  paused: boolean;
+  row?: SharedValue<number>;
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { actions } = useApp();
+  const insets = useSafeAreaInsets();
+  const barInset = useBarInset();
+  const { rows, rowsRef, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end } = useGalleryFeed({ posts, rollup, showStart, nearCount, near, paused });
+  const top = insets.top + TOP_BAND_TOP + TOP_BAND_HEIGHT + 8;
+
+  // The top row follows the list the way Instagram's header does: forward takes it out with the scroll, back brings it in.
+  const liveRow = paused ? undefined : row;
+  const lastY = useRef(0);
+  // Where the list was while it was the page on show: back from the reel (or any page over it) it is put back
+  // exactly there if it slipped while covered, so the feed never jumps or starts over.
+  const listRef = useRef<FlatList<Row>>(null);
+  const keptY = useRef(0);
+  const onShow = useRef(true);
+  useFocusEffect(useCallback(() => {
+    onShow.current = true;
+    const y = keptY.current;
+    if (y > 0 && Math.abs(lastY.current - y) > 1) {
+      listRef.current?.scrollToOffset({ offset: y, animated: false });
+      lastY.current = y;
+    }
+    return () => { onShow.current = false; };
+  }, []));
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (settle.current) clearTimeout(settle.current); }, []);
+  useEffect(() => { if (!paused) showRow(row); }, [paused, row]);
+  const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const y = e.nativeEvent.contentOffset.y;
+    const dy = y - lastY.current;
+    lastY.current = y;
+    if (onShow.current) keptY.current = y;
+    if (!liveRow) return;
+    liveRow.value = y <= 0 ? 0 : Math.min(1, Math.max(0, liveRow.value + dy / ROW_TRAVEL));
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = setTimeout(() => { liveRow.value = withTiming(y > top && liveRow.value > 0.5 ? 1 : 0, { duration: 200 }); }, 140);
+  }, [liveRow, top]);
+  // The plain band behind the row, so cards never pass under its words; it rides up with the row.
+  const band = useAnimatedStyle(() => ({ transform: [{ translateY: -(liveRow ? liveRow.value : 0) * top }] }));
+
+  // The simulator proof harness only (simDriver; nothing at all elsewhere): "actscroll to=1200" or "actscroll by=600"
+  // moves the list (glide=1: animated), "actclip" opens the first clip below the top of the screen as a tap would,
+  // "actlike" double-taps the first photo below it, "actpos" says where the list is. Each says what it did in sim-log.
+  useEffect(() => {
+    if (!SIM_DRIVER) return;
+    const firstBelow = (want: (p: Post) => boolean) => rowsRef.current.find((r): r is Extract<Row, { kind: 'post' }> => r.kind === 'post' && want(r.post))?.post;
+    const off = [
+      simAction('actscroll', (q) => {
+        const to = q.to !== undefined ? Number(q.to) : lastY.current + (Number(q.by) || 0);
+        listRef.current?.scrollToOffset({ offset: Math.max(0, to), animated: q.glide === '1' });
+        simLog(`[acts] scroll to ${Math.round(to)}`);
+      }),
+      simAction('actclip', () => {
+        const clipPost = firstBelow(isClip);
+        simLog(`[acts] clip ${clipPost?.id ?? 'none'} at y ${Math.round(lastY.current)}`);
+        if (clipPost) openClip(clipPost.id);
+      }),
+      simAction('actlike', () => {
+        const id = rowsRef.current.flatMap((r) => (r.kind === 'post' && simLikes.has(r.post.id) ? [r.post.id] : []))[0];
+        simLog(`[acts] doubletap ${id ?? 'none'}`);
+        if (id) simLikes.get(id)?.();
+      }),
+      simAction('actpos', () => simLog(`[acts] at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)} rows ${rowsRef.current.length}`)),
+    ];
+    return () => off.forEach((f) => f());
+  }, [openClip, rowsRef]);
+  useFocusEffect(useCallback(() => { if (SIM_DRIVER) simLog(`[acts] on show at y ${Math.round(lastY.current)} kept ${Math.round(keptY.current)}`); }, []));
+
+  // FlatList takes one handler and one setting for the list's whole life.
+  const viewability = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken<Row>[] }) => {
+    onScreenNow(viewableItems.flatMap((t) => (t.isViewable && t.item && t.item.kind !== 'start' ? [t.item.key] : [])));
+  }).current;
+
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    showRow(liveRow);
+    try { await actions.refresh(); } finally { setRefreshing(false); reopen(); }
+  }, [actions, liveRow, reopen]);
+
+  const renderItem = useCallback(({ item: r }: { item: Row }) => renderRow(r), [renderRow]);
 
   const footer = (
     <View style={{ paddingBottom: barInset + spacing.xxl }}>
       {quiet}
-      {/* One fixed height whatever it holds, so swapping spinner, button and words never changes the list's length. */}
-      <View style={styles.end}>
-        {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" />
-          : !rows.length ? null
-          : stalled ? (
-            <Pressable onPress={() => { tries.current = 0; loadMore(); }} accessibilityRole="button" style={styles.older}>
-              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.olderText}>Show older posts</Text>
-            </Pressable>
-          ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
-      </View>
+      {end}
     </View>
   );
 
@@ -873,7 +919,7 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
         renderItem={renderItem}
         ListHeaderComponent={<View style={{ height: top }} />}
         ListFooterComponent={footer}
-        onEndReached={() => { if (!stalledRef.current) loadMore(); }}
+        onEndReached={onEnd}
         onViewableItemsChanged={onViewable}
         viewabilityConfig={viewability}
         windowSize={7}
@@ -892,6 +938,123 @@ export function ActivitiesList({ posts, rollup = false, showStart, nearCount, ne
   );
 }
 
+/* ------------------------------------------------------------------ the gallery on another page */
+
+/** Something the page puts into the gallery between its items (the Community map's page: Open hits, courts, the city board…). */
+export interface FeedSlot {
+  key: string;
+  /** Goes after this many of the gallery's items (the follow block not counted); past the end, at the end, in order, once no more pages are coming. */
+  after: number;
+  node: React.ReactNode;
+}
+
+/** One row of the gallery in another page's list: a gallery row, one of the page's own rows, the calm empty note, or the row at the end. */
+export type InPageRow =
+  | { key: string; kind: 'feed'; row: Row }
+  | { key: string; kind: 'slot'; node: React.ReactNode }
+  | { key: string; kind: 'quiet' }
+  | { key: string; kind: 'end' };
+
+/** How much of a photo's top shows under the first item's words on the first screen: enough to pull a thumb down. */
+const PEEK_PHOTO = 56;
+/** Under a first item with no photo: its last line, and this much air. */
+const PEEK_AIR = 16;
+
+/**
+ * How much of the gallery's first item shows above the bottom bar on the Community map's first screen (HOME_LOOK
+ * 'map-feed'), read off the gallery's own measures (GALLERY and the styles below, at the phone's usual text size): a
+ * photo card down through its numbers and the top of its photo, anything else down to its last line and a little air,
+ * so the bar never cuts through words.
+ */
+function firstPeek(row: Row | undefined): number {
+  // The band, the room above the header, the header.
+  const head = GALLERY.band + GALLERY.padTop + GALLERY.head;
+  // Title (22) under the header's tap air (12).
+  const title = GALLERY.gap - 4 + 22;
+  if (!row) return 64;
+  if (row.kind === 'own') return GALLERY.band + 2 * GALLERY.rowPad + 20 + 2 + 18 + PEEK_AIR;
+  if (row.kind === 'rollup') return GALLERY.band + GALLERY.who + PEEK_AIR;
+  // The follow block first (a short feed): its title.
+  if (row.kind === 'start') return GALLERY.band + spacing.lg + 24 + PEEK_AIR;
+  const p = row.post;
+  const s = p.session;
+  // A photo card: (a session's title and its one line of numbers), then the top of the photo.
+  if (hasPicture(p)) return head + (s ? title + 4 + 20 + spacing.md : spacing.sm) + PEEK_PHOTO;
+  // A plain session: its title, its two numbers (label and figure) and, with one, its caption's line.
+  if (s) return head + title + GALLERY.statsGap + 16 + 26 + (p.body?.trim() ? GALLERY.lineGap + 20 : 0) + PEEK_AIR;
+  // A text post: its words (three lines at most, about 38 letters to a line).
+  return head + GALLERY.gap - 4 + 23 * Math.min(3, Math.max(1, Math.ceil((p.body?.length ?? 0) / 38))) + PEEK_AIR;
+}
+
+/**
+ * The gallery under something else on a page, as that page's own list rows (the iPhone app's Community map, HOME_LOOK
+ * 'map-feed': Find Players is one list, the search and the map its head, then these): the same rows, cards and
+ * behaviour as the Feed's Activities (a clip opens the reel and back lands on the same spot, the page keeping its
+ * place; double tap likes; •••; Save; the "who played" rows open in place; what is on screen marked seen; older posts
+ * asked for as the list's end nears, with the quiet-page guard), the follow block after the first two items, and the
+ * page's own rows between the items (`slots`). The page's rows that would go past the items loaded so far wait until
+ * no more pages are coming: shown at the end now, a page landing would push them up into the middle of the feed, under
+ * the reader's thumb. Hand the result to PaneScroller's `list`; `peek` is how much of the first item should show above
+ * the bar on the first screen; `reopen` after a pull.
+ */
+export function useGalleryInPage({ posts, rollup, nearCount, near, paused, start, slots }: {
+  posts: Post[];
+  rollup: boolean;
+  nearCount: number;
+  near?: Set<string>;
+  /** The page is not on show (or is only a picture of it): nothing is marked seen, no pages are asked for. */
+  paused: boolean;
+  /** The follow block (null: none). */
+  start: React.ReactNode;
+  slots: FeedSlot[];
+}) {
+  const styles = useThemedStyles(styleDefinitions);
+  const { rows, renderRow, openClip, onEnd, reopen, onScreenNow, quiet, end, ended, stalled, more, cardW } = useGalleryFeed({ posts, rollup, showStart: !!start, nearCount, near, paused, start: start ?? undefined, inPage: true });
+  const settled = ended || stalled || !more;
+  const hasQuiet = !!quiet;
+  const data = useMemo<InPageRow[]>(() => {
+    const out: InPageRow[] = [];
+    // The page's rows after so many items (the follow block is not counted).
+    let items = 0;
+    for (const row of rows) {
+      out.push({ key: row.key, kind: 'feed', row });
+      if (row.kind === 'start') continue;
+      items += 1;
+      for (const slot of slots) if (slot.after === items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
+    }
+    if (hasQuiet) out.push({ key: 'inpage:quiet', kind: 'quiet' });
+    out.push({ key: 'inpage:end', kind: 'end' });
+    if (settled) for (const slot of slots) if (slot.after > items) out.push({ key: `slot:${slot.key}`, kind: 'slot', node: slot.node });
+    return out;
+  }, [rows, slots, hasQuiet, settled]);
+  const renderItem = useCallback(({ item }: { item: InPageRow }) => {
+    if (item.kind === 'feed') return renderRow(item.row);
+    // In the gallery's column, as its cards are (on a wide screen, a phone's width).
+    if (item.kind === 'slot') return <View style={[styles.column, { maxWidth: cardW }, styles.slot]}>{item.node}</View>;
+    if (item.kind === 'quiet') return quiet;
+    return end;
+  }, [renderRow, styles, quiet, end, cardW]);
+  const keyExtractor = useCallback((item: InPageRow) => item.key, []);
+  const onEndReached = useCallback(() => { if (!paused) onEnd(); }, [paused, onEnd]);
+  // FlatList takes one handler and one setting for the list's whole life.
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<InPageRow>[] }) => {
+    onScreenNow(viewableItems.flatMap((t) => (t.isViewable && t.item?.kind === 'feed' && t.item.row.kind !== 'start' ? [t.item.key] : [])));
+  }).current;
+  // The simulator proof harness only (simDriver: a demo build bundled with EXPO_PUBLIC_SIM_DRIVER; nothing at all
+  // elsewhere): "homeclip" opens the first clip in this feed as a tap on it would, to check the reel and the way back.
+  useEffect(() => {
+    if (!SIM_DRIVER || paused) return undefined;
+    return simAction('homeclip', () => {
+      const clip = posts.find((p) => isClip(p) && hasPicture(p));
+      simLog(`[home] clip ${clip?.id ?? 'none'}`);
+      if (clip) openClip(clip.id);
+    });
+  }, [paused, posts, openClip]);
+  const peek = firstPeek(rows[0]);
+  return { data, renderItem, keyExtractor, onEndReached, onViewableItemsChanged, viewabilityConfig, peek, reopen };
+}
+
 const styleDefinitions = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   flex: { flex: 1 },
@@ -902,6 +1065,8 @@ const styleDefinitions = StyleSheet.create({
   older: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: 'center' },
   olderText: { ...font('500'), fontSize: 14, color: colors.text },
   emptyUnder: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt },
+  // A row of the page's own between the gallery's items (useGalleryInPage): the band above it, in the page's margins.
+  slot: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, backgroundColor: colors.bg },
 
   // A card: the column's full width, a band of the page's second ground above it, one left edge for all words.
   card: { borderTopWidth: GALLERY.band, borderTopColor: colors.surfaceAlt, paddingTop: GALLERY.padTop, paddingHorizontal: spacing.lg, backgroundColor: colors.bg, overflow: 'hidden' },

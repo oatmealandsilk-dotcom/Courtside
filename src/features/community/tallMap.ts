@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { type LayoutChangeEvent } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -44,5 +44,36 @@ export function useTallMap(on: boolean): { height: number | undefined; onSlotLay
     if (y > 0) setSlotY(y);
   }, []);
   const height = on && paneH > 0 && slotY > 0 ? Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY) : undefined;
+  return { height, onSlotLayout, onPaneHeight: setPaneH };
+}
+
+/** Never shorter than this, whatever sits under it (a tall "You're early" card, very large text on a small phone). */
+const HOME_MAP_MIN = 180;
+
+/**
+ * The iPhone's first page (HOME_LOOK 'map-feed'): how tall the map is. The map and Open to hit under it together take
+ * the room from where the map starts on Find Players down to the bar, less whatever else sits under them in the page's
+ * head (`under`: "You're early", say, with its gap) and less the first activity's peek (`peek`), so the top of that
+ * activity shows above the bar; never less than the map card's usual height (CARD_HEIGHT) for the two together, as the
+ * approved first screen has them on an iPhone Air. The map is that, less Open to hit's own height (`strip`, 0 when it is
+ * not there). From the page's own layout only, as useTallMap: `onSlotLayout` on the view that holds the map and Open to
+ * hit (a direct child of the section's first column), `onPaneHeight` on the section's PaneScroller; every height it is
+ * given is measured on its own, never off the map's. `still` (a search under way, the map laid aside) keeps where the
+ * map starts as it was. Undefined until all of it is known (the card's usual height meanwhile).
+ */
+export function useHomeMap(on: boolean, { peek, strip, stripKnown, under, still }: { peek: number; strip: number; stripKnown: boolean; under: number; still: boolean }): { height: number | undefined; onSlotLayout: (e: LayoutChangeEvent) => void; onPaneHeight: (h: number) => void } {
+  const barTop = useBarTop();
+  const [slotY, setSlotY] = useState(0);
+  const [paneH, setPaneH] = useState(0);
+  const stillRef = useRef(still);
+  stillRef.current = still;
+  const onSlotLayout = useCallback((e: LayoutChangeEvent) => {
+    const y = Math.round(e.nativeEvent.layout.y);
+    // 0 only while it is laid aside (a search under way hides it, out of the page's flow): kept as it was.
+    if (y > 0 && !stillRef.current) setSlotY(y);
+  }, []);
+  const ready = on && paneH > 0 && slotY > 0 && stripKnown;
+  const both = ready ? Math.max(CARD_HEIGHT, paneH - PANE_TOP - slotY - barTop - under - peek) : 0;
+  const height = ready ? Math.max(HOME_MAP_MIN, both - strip) : undefined;
   return { height, onSlotLayout, onPaneHeight: setPaneH };
 }

@@ -101,6 +101,7 @@ import { corner } from '@/theme/look';
 import { ACTIVITIES_LOOK, isGalleryLook } from '@/features/activity/feedLooks/activitiesLook';
 import { simAction } from '@/lib/simDriver';
 import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/ActivitiesList';
+import { inActivitiesGallery, reachable, unfinishedClip, useGalleryPosts } from '@/features/activity/feedLooks/galleryPosts';
 
 /**
  * The heart that blooms when you double tap a clip.
@@ -112,8 +113,7 @@ import { ActivitiesList, hasPicture } from '@/features/activity/feedLooks/Activi
  * Something that can be tapped away: it shrinks and fades in one short move,
  * then tells its page it is gone. The page decides how long to remember that.
  */
-/** Media the internet can reach: a file:// link only ever worked on the phone that made it. Every photo of a carousel too. */
-const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string[] }) => [p.imageUrl, p.videoUrl, ...(p.imageUrls ?? [])].every((u) => !u || /^(https?:|data:|blob:)/.test(u));
+// reachable (media the internet can reach) lives in feedLooks/galleryPosts, shared with the Community map's activity.
 /**
  * One for Activities: a session with its numbers, yours or by someone you follow, out on the feed (not archived, taken down or group-only).
  * For a new player (following fewer than five), also one by a player near them (`near`, features/activity/nearYou), marked "Near you".
@@ -121,17 +121,8 @@ const reachable = (p: { imageUrl?: string; videoUrl?: string; imageUrls?: string
 const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
   !p.archived && !p.removed && !p.groupId && reachable(p) && !!p.session && hasSessionStats(p.session) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId));
 
-/**
- * One for Activities as a gallery (ACTIVITIES_LOOK 'gallery' or 'gallery-rollup', Nov 28): every kind of post from the same people
- * isActivity draws from (you, who you follow, and only the sessions of a new player's players near them), on the same rules (not archived,
- * taken down or group-only, media the internet can reach); a session by someone else only with a photo or clip.
- * Your own sessions without one stay (the list shows them to you alone, as a row). In 'gallery-rollup' a session
- * without one by someone you follow stays too, exactly those isActivity takes (its numbers), for the day's "who
- * played" row; a near player's (not followed) never does.
- */
-const inActivitiesGallery = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || (near.has(p.authorId) && !!p.session))
-  && (!p.session || p.authorId === me || hasPicture(p) || (ACTIVITIES_LOOK === 'gallery-rollup' && follows.has(p.authorId) && hasSessionStats(p.session)));
+// inActivitiesGallery (one for Activities as a gallery) lives in feedLooks/galleryPosts, shared with the Community map's
+// activity (HOME_LOOK 'map-feed'): the same rules on both.
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */
 /**
@@ -289,13 +280,7 @@ export interface FeedChrome { picture: boolean; hidden: boolean; /** Pinched in:
  * 108) is in no feed: its author and admins see it only on its author's
  * own pages, marked.
  */
-/**
- * A clip whose video never finished uploading (no video, no picture): to
- * anyone but its author it would only be a grey box, so only its author sees
- * it. The demo's stand-in clips are drawn as court cards on purpose and stay.
- */
-const unfinishedClip = (p: Post, me: string | null | undefined) =>
-  isSupabaseConfigured && p.kind === 'clip' && !p.videoUrl && !p.imageUrl && !p.imageUrls?.length && p.authorId !== me;
+// unfinishedClip (a clip that never finished uploading: its author's only) lives in feedLooks/galleryPosts.
 /**
  * A page that fills the top of the screen with a real picture (a clip or an Instant with its media):
  * the Feed's top row reads white over it, and the bar turns dark. The demo's court cards are the
@@ -2910,7 +2895,7 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
   const out: Post[] = [];
   for (const p of app.posts) {
     if (hidden.has(p.authorId) || unfinishedClip(p, me)) continue;
-    if (key === ACTIVITIES ? !(isGalleryLook(ACTIVITIES_LOOK) ? inActivitiesGallery(p, me, follows, none) : isActivity(p, me, follows, none)) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
+    if (key === ACTIVITIES ? !(isGalleryLook(ACTIVITIES_LOOK) ? inActivitiesGallery(p, me, follows, none, ACTIVITIES_LOOK === 'gallery-rollup') : isActivity(p, me, follows, none)) : key === FOR_YOU ? !reachable(p) : !(inGroupFeed(p, key, group) && reachable(p))) continue;
     if (down?.has(p.id) && !!p.session && p.authorId !== me && !hasPicture(p)) continue;
     out.push(p);
   }
@@ -2926,39 +2911,12 @@ function feedPostsOf(key: string, app: ReturnType<typeof useApp>): Post[] {
  * 'gallery-rollup' it would otherwise join its day's "who played" row, up where that day is.
  */
 function ActivitiesGallery({ paused, onChrome, row }: { paused: boolean; onChrome?: (c: FeedChrome) => void; row?: SharedValue<number> }) {
-  const { ready, posts, users, followingIds, blockedIds, blockedMeIds, mutedIds, currentUserId, actions } = useApp();
-  const nearAuthors = useNearYouAuthors(true);
-  const connectRow = useConnectRow();
-  // Decided once, as Home's Activities decides its start page: a new player, or a watch still to connect. Once
-  // there it stays, so following your fifth player from it never pulls it out from under you.
-  const startKept = useRef(false);
-  if (!startKept.current && ready && (followingIds.length < START_UNDER || (connectRow.known && connectRow.offer))) startKept.current = true;
-  const showStart = startKept.current;
-  const askedNear = useRef(false);
-  useEffect(() => {
-    if (!showStart || askedNear.current) return;
-    askedNear.current = true;
-    void actions.loadRecentSessionPosts();
-  }, [showStart, actions]);
+  const rollup = ACTIVITIES_LOOK === 'gallery-rollup';
+  // The posts and the start (features/activity/feedLooks/galleryPosts): shared with the Community map's activity.
+  const { list, showStart, nearCount, nearAuthors } = useGalleryPosts(rollup);
   // The list is never a picture under the top row: its words stay dark, the bar its own.
   useEffect(() => { if (!paused) onChrome?.({ picture: false, hidden: false, pinched: false }); }, [paused, onChrome]);
-  const [demotedTick, setDemotedTick] = useState(0);
-  useEffect(() => onDemotedChange(() => setDemotedTick((n) => n + 1)), []);
-  const list = useMemo(() => {
-    const follows = new Set(followingIds);
-    // Whoever blocked you too (the server keeps their posts from you already; this list never relies on it).
-    const hidden = new Set([...blockedIds, ...blockedMeIds, ...mutedIds]);
-    const unfollowedPrivate = new Set(users.filter((u) => u.isPrivate && u.id !== currentUserId && !follows.has(u.id)).map((u) => u.id));
-    const down = demotedPosts();
-    const acts = posts
-      .filter((p) => inActivitiesGallery(p, currentUserId, follows, nearAuthors) && !hidden.has(p.authorId) && !unfollowedPrivate.has(p.authorId) && !unfinishedClip(p, currentUserId)
-        && !(down.has(p.id) && !!p.session && p.authorId !== currentUserId && !hasPicture(p)))
-      .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-    const byKey = new Map(acts.map((p) => [`p:${p.id}`, p]));
-    return sinkDemoted(acts.map((p) => `p:${p.id}`), down).flatMap((k) => byKey.get(k) ?? []);
-  }, [posts, users, followingIds, blockedIds, blockedMeIds, mutedIds, currentUserId, nearAuthors, demotedTick]); // eslint-disable-line react-hooks/exhaustive-deps
-  const nearCount = useMemo(() => list.filter((p) => nearAuthors.has(p.authorId)).length, [list, nearAuthors]);
-  return <ActivitiesList posts={list} rollup={ACTIVITIES_LOOK === 'gallery-rollup'} showStart={showStart} nearCount={nearCount} near={nearAuthors} paused={paused} row={row} />;
+  return <ActivitiesList posts={list} rollup={rollup} showStart={showStart} nearCount={nearCount} near={nearAuthors} paused={paused} row={row} />;
 }
 
 /** For the Feed's windows: where a feed not built yet would start (its newest post), for its card. */

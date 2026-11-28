@@ -124,8 +124,15 @@ export function useUpToday({ users, lastSeen, me, from, blockedIds, myTown = '',
  * faces are friends who follow each other with them, and their own ring is
  * seen only by those friends; the words say so.
  */
-export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false }: { me: User; people: Up[];
+export const UpToday = memo(function UpToday({ me, people, teen = false, locationOn, checkedIn = false, finding = false, onLocation, onCheckIn, onToggle, fill = NO_FILL, fillTitle, compact = false, belowMap = false }: { me: User; people: Up[];
   /** The iPhone's Community map (COMMUNITY_MAP_LOOK 'overlay'): the row laid over the map's foot, small (a smaller title, smaller faces, first names only, never a distance). */ compact?: boolean;
+  /**
+   * With `compact`: the small row right under the map, on the page's own ground rather than over the map (HOME_LOOK
+   * 'map-feed'; Apple 5.1.2(i), as told to Apple on Oct 27: "The map never shows a stranger's face or name", and outside
+   * the map "I'm free today" is shown with the town they chose). It runs to the screen's edges as the page's row does,
+   * and a player free today in your town (never a friend's check-in) has that town under their first name again.
+   * Friends keep their first name alone. Never a distance.
+   */ belowMap?: boolean;
   /** City boards (migration 196; round 3 of the approved design): your home city's regulars after the ringed faces, so the row never looks empty. Empty while city boards are off for you. */ fill?: FillFace[];
   /** The row's title while nobody is up and the regulars fill it ("Most active in Los Angeles"). */ fillTitle?: string; /** Not known to be an adult, with the map's teen rule on: friends only. */ teen?: boolean; locationOn: boolean; /** Checked in on the map (migration 189): your ring shows there, for friends. */ checkedIn?: boolean; /** Location is on, but this phone has no spot yet: the row says it is looking. */ finding?: boolean; /** Location off and no spot of yours: the way to give one. */ onLocation?: () => void | Promise<void>; /** Not checked in: the "Check in" on the note that says your ring is not on the map yet. */ onCheckIn?: () => void; /** Resolves false when the ring did not go on (a teen who closed "Who can see you?" without an answer). */ onToggle: (on: boolean) => Promise<boolean> }) {
   const styles = useThemedStyles(styleDefinitions);
@@ -134,7 +141,8 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
   const item = compact ? C_ITEM : ITEM;
   const itemW = compact ? { width: C_ITEM } : null;
   // Your own held at a player's height: a ring and a name in the small row.
-  const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 } : null;
+  // Under the map (belowMap) a town's line may come under a name: yours is held that tall too, so the row never jumps.
+  const mineH = compact ? { minHeight: 2 + face + 13 + 3 + NAME_LINE + 2 + (belowMap ? 3 + META_LINE : 0) } : null;
   // Your ring goes out by itself at the time you picked.
   useOpenClock([me.openToHitUntil]);
   const up = isOpenToHit(me);
@@ -201,7 +209,7 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
         {people.length ? <Text maxFontSizeMultiplier={TextScale.CHROME} style={styles.count}>{people.length} near you</Text> : null}
       </View>
       <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.row, compact && styles.rowCompact]} style={[styles.scroll, compact && styles.scrollCompact]}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={[styles.row, compact && !belowMap && styles.rowCompact]} style={[styles.scroll, compact && !belowMap && styles.scrollCompact]}>
         {/* Your own: the ring is the switch; once on, the "Free today" under it opens the sheet. Two presses one above the other, never one inside the other. */}
         <View style={[styles.item, styles.mine, itemW, mineH]}>
           <Pressable accessibilityRole="switch" accessibilityState={{ checked: up }} accessibilityLabel={up ? `You’re open to hit${till ? ` ${till}` : ''}. Turn off` : 'I’m free. Turn on open to hit'} accessibilityHint="Hold to edit your time and distance" accessibilityActions={[{ name: 'longpress', label: 'Edit your time and distance' }]} onAccessibilityAction={(e) => { if (e.nativeEvent.actionName === 'longpress') edit(); }} onPress={flip} onLongPress={held} delayLongPress={400} style={({ pressed }) => [styles.face, pressed && styles.pressed]}>
@@ -232,7 +240,9 @@ export const UpToday = memo(function UpToday({ me, people, teen = false, locatio
                 <OpenRing open size={face} halo="small"><Avatar name={p.user.name} seed={p.user.avatarSeed} uri={p.user.avatarUrl} size={face} ring={p.user.isCoach} /></OpenRing>
                 <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.name} numberOfLines={1}>{p.user.name.split(' ')[0]}</Text>
                 {/* How far, then until when ("till 8pm"): two short lines, so neither is cut off. */}
-                {far && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text> : null}
+                {far && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{far}</Text>
+                  // Under the map (belowMap): a player free in your town has that town; a friend, the first name alone.
+                  : belowMap && p.town ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{p.town}</Text> : null}
                 {theirs && !compact ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.meta} numberOfLines={1}>{theirs}</Text> : null}
               </Pressable>
             </Animated.View>

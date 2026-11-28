@@ -79,7 +79,9 @@ import { useLoadedSurface } from '@/features/players/courts';
  * `tipAt`: the page's address, for a list that leaves "its page on show" to
  * the tip (see useShownAt), so the page opening others is not redrawn.
  */
-export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey, atCourt = false, fill = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = false, tipAt, restKey, atCourt = false, fill = false, flat = false }: { hit: HitRequest; miles?: number; linked?: boolean; tip?: HitTip; tipReady?: boolean; tipAt?: string;
+  /** A row of a feed rather than a card (Open hits among the activity under the iPhone's Community map, HOME_LOOK 'map-feed'): no border, shadow, corners or fill, in the page's margins; the list draws the hairlines between. */
+  flat?: boolean;
   /** In a row of cards side by side (the map's court card, COURT_CARD_HIT_BOXES): the card takes its slot's full height, its foot at the bottom, so every card in the row is the same height. Nothing else about it changes. */
   fill?: boolean;
   /** Given: the tip also waits for the page to rest after any swipe, and after this changes (usePaneRested). */
@@ -178,7 +180,7 @@ export function HitCard({ hit, miles, linked = true, tip, tipReady: listReady = 
     },
   });
   return (
-    <SwipePressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, fill && styles.cardFill, pressed && { opacity: PRESS_DIM }]}>
+    <SwipePressable ref={cardRef} accessible={linked} accessibilityRole={linked ? 'link' : undefined} disabled={!linked} onPress={linked ? () => router.push(`/hit-request/${hit.id}`) : undefined} style={({ pressed }) => [styles.card, fill && styles.cardFill, flat && styles.cardFlat, pressed && { opacity: PRESS_DIM }]}>
       {/* Who, with the paper plane and the flag beside the name; when, under it, across the
           card's full width, so "Tomorrow 9:00 AM" stays on one line on a small phone and the
           name is never cut to "Sam Ortiz is lookin…" (Oct 5). The section says it is a hit.
@@ -351,6 +353,8 @@ export function whoIsIn(people: { id: string; name: string }[], total: number, m
 
 const styleDefinitions = StyleSheet.create({
   card: { ...(LESS_AI_HITS ? { borderWidth: 1, borderColor: colors.border } : lift), gap: spacing.md, padding: spacing.lg, borderRadius: corner(20), backgroundColor: colors.surface },
+  // A feed row (`flat`): the card's insides as they are, on the page itself, its words in the page's margins.
+  cardFlat: { borderWidth: 0, borderRadius: 0, backgroundColor: 'transparent', shadowOpacity: 0, elevation: 0, paddingHorizontal: 0, paddingVertical: spacing.lg },
   // `fill`: the slot's full height, the foot held to the bottom.
   cardFill: { flex: 1 },
   footFill: { marginTop: 'auto' },
