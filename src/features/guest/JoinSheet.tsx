@@ -12,6 +12,8 @@ import { rememberShareTarget } from '@/features/invite/referral';
 import { colors, lift, radius, spacing, typography } from '@/theme';
 import { IPHONE_APP_URL, closeJoinSheet, useJoinSheet } from './joinAsk';
 import { noteAppTap } from './campaign';
+import { joinPromptLook } from './joinPromptLook';
+import { JoinPromptOption } from './JoinPromptOptions';
 import { corner } from '@/theme/look';
 
 /**
@@ -61,6 +63,9 @@ export function JoinSheet() {
     closeJoinSheet();
     router.push({ pathname: '/sign-in', params: { mode: create ? 'create' : 'sign-in' } });
   };
+  // Website design options behind ?jp=a|b|c (Nov 27); without it, today's prompt below.
+  const look = joinPromptLook();
+  if (look) return <JoinPromptOption look={look} ask={ask} go={(create) => { void go(create); }} />;
   const report = ask.report;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
