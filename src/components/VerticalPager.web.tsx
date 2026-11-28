@@ -258,21 +258,74 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
   useEffect(() => {
     const el = pager.current;
     if (!el) return;
-    const wheel = (event: WheelEvent) => {
-      if (event.ctrlKey || !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY) * 1.5) return;
-      if (drag.current?.active) return;
+    // On a computer, one wheel or trackpad gesture moves exactly one clip, as TikTok's web player does
+    // (Nov 27): left to the browser, a mouse wheel's notch (100 px) or a short trackpad swipe snapped
+    // straight back to the clip it started on, so a laptop visitor could never get past the first one.
+    // The gesture is added up until it says which way (30 px), the feed glides one page that way, and
+    // the rest of the gesture (a trackpad's momentum) is spent until it has been quiet for 200 ms.
+    let wheelSum = 0;
+    let wheelSpent = false;
+    let wheelQuiet: ReturnType<typeof setTimeout> | null = null;
+    const page = () => Math.round(el.scrollTop / Math.max(1, el.clientHeight));
+    const goTo = (index: number) => {
+      const last = Math.max(0, Math.round(el.scrollHeight / Math.max(1, el.clientHeight)) - 1);
+      const to = Math.max(0, Math.min(last, index));
       drag.current = null;
-      stop();
       userMoved.current = true;
       rowDrag.current = NO_DRAG;
-      // Let the browser own trackpad movement, momentum and snap selection.
-      // No preventDefault, finger-up timer, or synthetic scroll increments.
-      el.style.scrollSnapType = 'y mandatory';
+      el.style.scrollSnapType = 'none';
+      settle(el, to * el.clientHeight);
     };
-    el.addEventListener('wheel', wheel, { passive: true });
-    // The arrow keys, Page Down and Space move it as well (the browser scrolls the focused feed).
-    const key = (event: KeyboardEvent) => { if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', ' ', 'Home', 'End'].includes(event.key)) userMoved.current = true; };
+    // Something inside a page that scrolls itself (opened words, a list) keeps the wheel while it can.
+    const innerScrolls = (from: EventTarget | null, dy: number) => {
+      let node = from instanceof HTMLElement ? from : null;
+      while (node && node !== el) {
+        const oy = getComputedStyle(node).overflowY;
+        if ((oy === 'auto' || oy === 'scroll') && node.scrollHeight > node.clientHeight + 1
+          && (dy > 0 ? node.scrollTop + node.clientHeight < node.scrollHeight - 1 : node.scrollTop > 1)) return true;
+        node = node.parentElement;
+      }
+      return false;
+    };
+    const wheel = (event: WheelEvent) => {
+      if (event.ctrlKey || !event.deltaY || Math.abs(event.deltaX) > Math.abs(event.deltaY) * 1.5) return;
+      if (drag.current?.active || innerScrolls(event.target, event.deltaY)) return;
+      // Pulling down on the first page is the pull-to-refresh (pullWheel, below).
+      if (el.scrollTop <= 0 && (event.deltaY < 0 || gap.value > 0)) return;
+      event.preventDefault();
+      if (wheelQuiet) clearTimeout(wheelQuiet);
+      wheelQuiet = setTimeout(() => { wheelSum = 0; wheelSpent = false; }, 200);
+      if (wheelSpent) return;
+      wheelSum += event.deltaMode === 1 ? event.deltaY * 40 : event.deltaMode === 2 ? event.deltaY * el.clientHeight : event.deltaY;
+      if (Math.abs(wheelSum) < 30) return;
+      wheelSpent = true;
+      const dir = wheelSum > 0 ? 1 : -1;
+      wheelSum = 0;
+      goTo(page() + dir);
+    };
+    el.addEventListener('wheel', wheel, { passive: false });
+    // The arrow keys, Page Up/Down, Home/End and Space move it a clip at a time too (from the feed or anything in it
+    // that has focus; Space only from the feed itself, so it still presses a focused button).
+    const keyFrom = (event: KeyboardEvent, target: HTMLElement | null) => {
+      if (event.altKey || event.ctrlKey || event.metaKey) return;
+      if (target && target !== el && target.closest('input,textarea,select,[contenteditable="true"]')) return;
+      const step = event.key === 'ArrowDown' || event.key === 'PageDown' || (event.key === ' ' && target === el && !event.shiftKey) ? 1
+        : event.key === 'ArrowUp' || event.key === 'PageUp' || (event.key === ' ' && target === el && event.shiftKey) ? -1 : 0;
+      if (step) { event.preventDefault(); if (!gliding.current) goTo(page() + step); return; }
+      if (event.key === 'Home') { event.preventDefault(); goTo(0); }
+      else if (event.key === 'End') { event.preventDefault(); goTo(Number.MAX_SAFE_INTEGER); }
+    };
+    const key = (event: KeyboardEvent) => keyFrom(event, event.target as HTMLElement | null);
     el.addEventListener('keydown', key);
+    // With nothing focused (a page just opened), the keys reach the feed that is on top in the middle of the
+    // window. Never focused for that: a ring round the whole feed would show.
+    const looseKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || (document.activeElement && document.activeElement !== document.body)) return;
+      const hit = document.elementFromPoint(window.innerWidth / 2, window.innerHeight / 2);
+      if (!hit || !el.contains(hit)) return;
+      keyFrom(event, el);
+    };
+    window.addEventListener('keydown', looseKey);
     // Pull-to-refresh on the first page, by finger or wheel. The finger's
     // travel goes through the same give the phone has, so the feed moves about
     // half as far at first and less after; the line ticks once on the way
@@ -318,7 +371,7 @@ export const VerticalPager = forwardRef<VerticalPagerHandle, {
     el.addEventListener('touchmove', touchM, { passive: true });
     el.addEventListener('touchend', touchE);
     el.addEventListener('touchcancel', touchE);
-    return () => { stop(); if (idle) clearTimeout(idle); el.removeEventListener('wheel', wheel); el.removeEventListener('keydown', key); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
+    return () => { stop(); if (idle) clearTimeout(idle); if (wheelQuiet) clearTimeout(wheelQuiet); el.removeEventListener('wheel', wheel); el.removeEventListener('keydown', key); window.removeEventListener('keydown', looseKey); el.removeEventListener('wheel', pullWheel); el.removeEventListener('touchstart', touchS); el.removeEventListener('touchmove', touchM); el.removeEventListener('touchend', touchE); el.removeEventListener('touchcancel', touchE); };
   }, [children.length]);
 
   return <PageLeavingContext.Provider value={leaving}><div style={{ position: 'relative', height: '100%', width: '100%' }}>
