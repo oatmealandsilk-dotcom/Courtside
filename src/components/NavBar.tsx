@@ -3,7 +3,7 @@ import { remapFor, themes, useThemedStyles, type ThemeName } from '@/theme/Theme
 import { activeFade, FadeCopy, FadeSpot, type FadeLayer } from '@/theme/ThemeFade';
 import { BrandMark } from './BrandMark';
 import React from 'react';
-import { PixelRatio, Pressable, StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, runOnJS, useAnimatedReaction, useAnimatedStyle } from 'react-native-reanimated';
 import { Animated as RNAnimated } from 'react-native';
 import { BAR_TUCK, barCompact, DUCK } from '@/features/navigation/barShrink';
@@ -31,7 +31,6 @@ import { useTourOpen, useTourTarget } from '@/features/tour/tourStore';
 import { TAB_BAR_LOOK } from '@/features/navigation/tabBarLook';
 import { useBarIg, useBarLens } from '@/features/navigation/barLens';
 import { LookBar } from './TabBarLooks';
-import { webBarLook } from '@/features/guest/guestCommunityLook';
 import { useSwipeFollow } from '@/features/feed/swipeFollow';
 import { HOLD_MS, holdFeedTab, requestFeedWindows, useFeedWindowsOn } from '@/features/feed/feedWindows';
 import { FeedHold } from '@/features/feed/FeedHold';
@@ -129,8 +128,9 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
   const barLens = useBarLens();
   // The new bar, after Instagram's and Strava's (tabBarLook's NEW_BAR, barLens's BAR_IG_FOR_EVERYONE; admins first). It always has the lens.
   const barIg = useBarIg();
-  // The website's bar options (guestCommunityLook, Nov 27): C is the new bar for everyone on the website. Null on a phone.
-  const webBar = webBarLook();
+  // The website's bar (Nov 27, owner picked option C for the guest Community screen): the new capsule with its lens,
+  // on calm frosted glass (TabBarLooks' WEB_BAR), for everyone on the website. The iPhone app keeps "Bar A".
+  const webBar = Platform.OS === 'web';
   // Everything waiting for you, in one number. The phone bar has no room for
   // separate bell and inbox entries the way the sidebar does, so Profile
   // carries the lot — it is where both of those live.
@@ -253,7 +253,6 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         tourRef={tourRef}
         tourCreate={tourCreate}
         bottom={Math.max(insets.bottom, 12)}
-        safeBottom={insets.bottom}
         outerStyle={outerStyle}
         tuckStyle={tuck}
         hideFromReader={hideFromReader}
@@ -262,8 +261,8 @@ export const NavBar = React.memo(function NavBar({ state, navigation, feedUnder 
         onVeil={closeVeil}
         onFeedHold={onFeedHold}
         follow={swipeFollow}
-        lens={barLens || barIg || webBar === 'c'}
-        newBar={barIg || webBar === 'c'}
+        lens={barLens || barIg || webBar}
+        newBar={barIg || webBar}
       />
     );
   }

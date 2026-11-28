@@ -1033,11 +1033,13 @@ const STEPS = [
     async run(page) {
       await page.tap({ label: 'Go back' });
       await page.tap({ text: 'Find Players' });
-      // The courts-only map (Oct 29): its own label, and its button that asks for Location only on a tap.
+      // The courts-only map (Oct 29): its own label, and its row that asks for Location only on a tap (option C, Nov 27:
+      // one row under the map, no second 'Use my location' button by the list).
       await page.waitFor({ label: 'Map of courts near you', any: true });
-      await page.waitFor({ text: { re: '^Find (a hit|courts) near me$' } });
+      await page.waitFor({ text: 'Show courts near me' });
+      await page.waitFor({ text: 'Nobody sees where you are' });
       await page.waitFor({ text: 'Open hits' });
-      await page.waitFor({ text: 'Use my location' });
+      if (await page.find({ text: 'Use my location' })) throw new Error('the guest Community screen still shows a second Use my location button');
       if (await page.find({ label: 'Map of courts, open hits and friends up to hit', any: true })) throw new Error('a guest sees the players map');
       if (await page.find({ label: 'Up to hit', any: true }) || await page.find({ text: 'Up to hit', any: true })) throw new Error('a guest sees Up to hit');
       if (await page.find({ text: 'Open to hit', any: true })) throw new Error('a guest sees who is open to hit');
