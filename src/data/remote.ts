@@ -3129,7 +3129,7 @@ export const remote = {
    * log_link_event: the label, the kind and the browser's own random id; never who they are).
    * The server ignores labels that are not ours, a handle or a code, and says nothing back.
    */
-  async logLinkEvent(label: string, kind: 'app' | 'web', visitor: string): Promise<void> {
+  async logLinkEvent(label: string, kind: 'app' | 'web' | 'visit', visitor: string): Promise<void> {
     await need().rpc('log_link_event', { p_label: label, p_kind: kind, p_visitor: visitor });
   },
   /**
