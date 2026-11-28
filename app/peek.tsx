@@ -157,12 +157,8 @@ export default function Peek() {
           </View>
 
           <View style={styles.hero}>
-            <View style={styles.eyebrowRow}>
-              <HitGlyph size={15} color={colors.brand} />
-              <Text style={styles.eyebrow}>Open hits · next 7 days</Text>
-            </View>
             <Text style={styles.title}>Open hits near you</Text>
-            <Text style={styles.lede}>Players looking for someone to hit with. See one that fits? Tap I’m in.</Text>
+            <Text style={styles.lede}>Players looking for someone to hit with in the next 7 days. See one that fits? Tap I’m in.</Text>
           </View>
 
           <View style={styles.tools}>
@@ -310,8 +306,6 @@ const styleDefinitions = StyleSheet.create({
   wordmark: { fontSize: 20, ...wordmarkFont('700'), color: colors.brand, letterSpacing: -0.6 },
   signIn: { ...typography.bodyStrong, color: colors.brand },
   hero: { gap: spacing.sm, paddingTop: spacing.sm },
-  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  eyebrow: { ...typography.caption, letterSpacing: 0.3, color: colors.brand, textTransform: 'uppercase' },
   title: { ...typography.display, fontSize: 34, letterSpacing: -0.7, color: colors.text },
   lede: { ...typography.body, color: colors.textMuted, lineHeight: 22 },
   tools: { gap: spacing.sm },
