@@ -30,7 +30,7 @@ import { hitSpot } from '@/features/hits/visible';
 import { isTennisActivity } from '@/features/activity/workouts';
 import { isOwnAutoPostOf, seenByLine, shownTo, unsureWaiting } from '@/features/activity/autoLogSharing';
 import { fitbitTipAfterYes } from '@/features/activity/watchTip';
-import { colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
+import { TextScale, colors, radius, spacing, surfaceColorFor, typography, buttonShape } from '@/theme';
 import { CourtGlyph } from '@/components/map/CourtGlyph';
 import { HitGlyph } from '@/components/HitGlyph';
 import { showCourtOnMap } from '@/features/players/courtLink';
@@ -714,7 +714,7 @@ export default function Notifications() {
           <View style={[styles.brandFace, welcomeTint && styles.brandFaceOnTint]}><BrandMark size={24} /></View>
           <View style={styles.body}>
             <Text style={styles.who}>Welcome, {currentUser.name.split(' ')[0]}.</Text>
-            <Text style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={2}>{welcomeStep.line}</Text>
           </View>
           {/* 32 drawn, 44 to the finger. */}
           <Pressable accessibilityRole="button" accessibilityLabel={welcomeStep.label} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={welcomeStep.go} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
@@ -730,7 +730,7 @@ export default function Notifications() {
           <View style={[styles.brandFace, styles.brandFaceOnTint]}><BrandMark size={24} /></View>
           <View style={styles.body}>
             <Text style={styles.who}>Was this tennis?</Text>
-            <Text style={styles.preview} numberOfLines={2}>{`${unsure.length === 1 ? '1 session' : `${unsure.length} sessions`} from your ${unsure.every((a) => a.source === 'fitbit') ? 'Fitbit' : 'tracker'}, filed as Sport.`}</Text>
+            <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={2}>{`${unsure.length === 1 ? '1 session' : `${unsure.length} sessions`} from your ${unsure.every((a) => a.source === 'fitbit') ? 'Fitbit' : 'tracker'}, filed as Sport.`}</Text>
           </View>
           <Pressable accessibilityRole="button" accessibilityLabel={unsure.length === 1 ? 'Yes, this was tennis' : `Yes, these ${unsure.length} were tennis`} accessibilityState={{ busy: unsureBusy }} disabled={unsureBusy} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }} onPress={() => { void yesAll(); }} style={({ pressed }) => [styles.accept, pressed && { opacity: PRESS_DIM }]}>
             {unsureBusy ? <ActivityIndicator size="small" color={colors.brandInk} /> : <Text style={styles.acceptText}>{unsure.length === 1 ? 'Yes' : `Yes, all ${unsure.length}`}</Text>}
@@ -846,29 +846,29 @@ export default function Notifications() {
                   {group.kind === 'session-tag' ? (
                     // Where the tag stands first (the one thing that changes), then what it was from your side: "Declined · You won · Sep 30 · 1h 15m".
                     tag ? (
-                      <Text style={styles.preview} numberOfLines={1}>
+                      <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={1}>
                         {[tagState(tag), yourResult(tag), shortDay(tag.day), duration(tag.minutes)].filter(Boolean).join(' · ')}
                       </Text>
                     ) : null
                   ) : group.found ? (
                     // What they were, newest first, and where from: "Run, Tennis, Walk and 2 more · from your Apple Watch".
-                    <Text style={styles.preview} numberOfLines={2}>{foundLine(group.found.activityIds, group.found.previews, detectedActivities)}</Text>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={2}>{foundLine(group.found.activityIds, group.found.previews, detectedActivities)}</Text>
                   ) : group.kind === 'removed' || (group.kind === 'review' && !reviewNotice(group.preview).restored) ? (
                     // The reason (the whole sentence is already the row's words), then the way to the rule
                     // it broke: "Something else" opens the rules at the top, where a plain removal is explained.
                     <>
-                      {reasonOf(group) ? <Text style={styles.preview} numberOfLines={2}>Reason: {reasonOf(group)}</Text> : null}
+                      {reasonOf(group) ? <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={2}>Reason: {reasonOf(group)}</Text> : null}
                       <View style={styles.whyRow}>
-                        <Text style={styles.preview}>Why? </Text>
+                        <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview}>Why? </Text>
                         <Pressable accessibilityRole="link" accessibilityLabel="Why? See the rules" hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }} onPress={() => openRules(reasonFromLabel(reasonOf(group)), thingOf(group))} style={({ pressed }) => pressed && { opacity: PRESS_DIM }}>
                           <Text style={styles.whyLink}>See the rules</Text>
                         </Pressable>
                       </View>
                     </>
                   ) : group.kind === 'review' ? (
-                    <Text style={styles.preview} numberOfLines={2}>Thanks for asking. It’s back where it was.</Text>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={2}>Thanks for asking. It’s back where it was.</Text>
                   ) : group.kind === 'review-request' || group.kind === 'group-invite' || group.kind === 'friend-court' ? null : group.preview && group.kind !== 'milestone' && group.kind !== 'weekly-recap' && group.preview !== INVITE_LINE ? (
-                    <Text style={styles.preview} numberOfLines={1}>
+                    <Text maxFontSizeMultiplier={TextScale.BODY} style={styles.preview} numberOfLines={1}>
                       {group.preview}
                     </Text>
                   ) : null}
