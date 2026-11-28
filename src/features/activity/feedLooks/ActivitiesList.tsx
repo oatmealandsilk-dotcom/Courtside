@@ -179,8 +179,9 @@ function Dots({ n, at }: { n: number; at: number }) {
 /** The picture, a clip's cover, or (demo, or no cover yet) the tinted court card; several photos swipe sideways. */
 function Media({ post, stand, onPage }: { post: Post; stand?: string; onPage?: (i: number) => void }) {
   const styles = useThemedStyles(styleDefinitions);
-  const uri = post.thumbnailUrl ?? post.imageUrl;
   const clip = isClip(post);
+  // A clip's cover first; a photo post's own photo first (as MediaPostPage), never its smaller thumbnail.
+  const uri = clip ? (post.thumbnailUrl ?? post.imageUrl) : (post.imageUrl ?? post.thumbnailUrl);
   const length = clipLength(post);
   const many = !clip && post.imageUrls && post.imageUrls.length > 1 ? post.imageUrls : null;
   if (many && onPage) return <View style={styles.media}><Photos urls={many} label={post.mediaLabel ?? 'Photo'} onPage={onPage} /></View>;
@@ -532,26 +533,29 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   // Older posts as the end nears: the store's next page (AppContext loadMorePosts: 40 posts of the whole feed, by
   // time), with a quiet row while it is on its way. A page can bring nothing this list shows (posts from people you
   // don't follow, other people's plain sessions), so the list would not grow and would never ask again: when a page
-  // lands and the list is no longer, ask again while the store has more, up to QUIET_PAGES pages per reach of the end;
-  // past that, a plain "Show older posts" row asks on a tap. The store saying it has no more is the end.
+  // lands and the list is no longer, ask again while the store has more, up to QUIET_PAGES pages in a row; past that
+  // the list stops asking by itself (stalledRef: the end being reached again, as the footer or the empty note change
+  // the list's length, must not start another run) and a plain "Show older posts" row asks on a tap. The run's count
+  // starts over only when the list grew, on that tap, or on a pull. The store saying it has no more is the end.
   const moreRef = useRef(app.feed.more);
   moreRef.current = app.feed.more;
   const [loading, setLoading] = useState(false);
   const [ended, setEnded] = useState(!app.feed.more);
   const [stalled, setStalled] = useState(false);
+  const stalledRef = useRef(false);
   const asking = useRef(false);
   const lenRef = useRef(rows.length);
   lenRef.current = rows.length;
   const askedAt = useRef<number | null>(null);
   const tries = useRef(0);
   const [landed, setLanded] = useState(0);
-  const loadMore = useCallback((again = false) => {
+  const loadMore = useCallback(() => {
     if (asking.current) return;
     if (!moreRef.current) { setEnded(true); return; }
-    if (!again) tries.current = 0;
     asking.current = true;
     askedAt.current = lenRef.current;
     setLoading(true);
+    stalledRef.current = false;
     setStalled(false);
     const started = Date.now();
     void (async () => {
@@ -568,9 +572,11 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
     if (!landed || askedAt.current === null) return;
     const before = askedAt.current;
     askedAt.current = null;
-    if (rows.length > before) { setLoading(false); return; }
+    if (rows.length > before) { tries.current = 0; setLoading(false); return; }
     if (!moreRef.current) { setEnded(true); setLoading(false); return; }
-    if (tries.current < QUIET_PAGES - 1) { tries.current += 1; loadMore(true); return; }
+    if (tries.current < QUIET_PAGES - 1) { tries.current += 1; loadMore(); return; }
+    tries.current = 0;
+    stalledRef.current = true;
     setLoading(false);
     setStalled(true);
   }, [landed]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -611,7 +617,7 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     showRow(liveRow);
-    try { await actions.refresh(); } finally { setRefreshing(false); setStalled(false); }
+    try { await actions.refresh(); } finally { setRefreshing(false); tries.current = 0; stalledRef.current = false; setStalled(false); }
   }, [actions, liveRow]);
 
   const renderItem = useCallback(({ item: r }: { item: Row }) => {
@@ -645,16 +651,16 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
   const footer = (
     <View style={{ paddingBottom: barInset + spacing.xxl }}>
       {quiet}
-      {rows.length ? (
-        <View style={styles.end}>
-          {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" />
-            : stalled ? (
-              <Pressable onPress={() => loadMore()} accessibilityRole="button" style={styles.older}>
-                <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.olderText}>Show older posts</Text>
-              </Pressable>
-            ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
-        </View>
-      ) : loading ? <View style={styles.end}><ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" /></View> : null}
+      {/* One fixed height whatever it holds, so swapping spinner, button and words never changes the list's length. */}
+      <View style={styles.end}>
+        {loading ? <ActivityIndicator size="small" color={colors.textFaint} accessibilityLabel="Loading older posts" />
+          : !rows.length ? null
+          : stalled ? (
+            <Pressable onPress={() => { tries.current = 0; loadMore(); }} accessibilityRole="button" style={styles.older}>
+              <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.olderText}>Show older posts</Text>
+            </Pressable>
+          ) : ended && fromOthers ? <Text maxFontSizeMultiplier={TextScale.CARD} style={styles.endText}>You're all caught up</Text> : null}
+      </View>
     </View>
   );
 
@@ -667,7 +673,7 @@ export function ActivitiesList({ posts, showStart, nearCount, near, paused, row 
         renderItem={renderItem}
         ListHeaderComponent={<View style={{ height: top }} />}
         ListFooterComponent={footer}
-        onEndReached={() => loadMore()}
+        onEndReached={() => { if (!stalledRef.current) loadMore(); }}
         windowSize={7}
         initialNumToRender={4}
         maxToRenderPerBatch={4}
@@ -689,7 +695,7 @@ const styleDefinitions = StyleSheet.create({
   flex: { flex: 1 },
   band: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: colors.bg },
   column: { width: '100%', alignSelf: 'center' },
-  end: { alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xl, minHeight: 60 },
+  end: { alignItems: 'center', justifyContent: 'center', paddingTop: spacing.xl, height: 68 },
   endText: { ...typography.small, color: colors.textFaint, textAlign: 'center' },
   older: { minHeight: 44, paddingHorizontal: spacing.lg, justifyContent: 'center' },
   olderText: { ...font('500'), fontSize: 14, color: colors.text },

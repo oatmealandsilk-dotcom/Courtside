@@ -123,12 +123,12 @@ const isActivity = (p: Post, me: string | null | undefined, follows: Set<string>
 
 /**
  * One for Activities as a gallery (ACTIVITIES_LOOK 'gallery', Nov 28): every kind of post from the same people
- * isActivity draws from (you, who you follow, a new player's players near them), on the same rules (not archived,
+ * isActivity draws from (you, who you follow, and only the sessions of a new player's players near them), on the same rules (not archived,
  * taken down or group-only, media the internet can reach); a session by someone else only with a photo or clip.
  * Your own sessions without one stay (the list shows them to you alone, as a row).
  */
 const inActivitiesGallery = (p: Post, me: string | null | undefined, follows: Set<string>, near: Set<string>) =>
-  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || near.has(p.authorId))
+  !p.archived && !p.removed && !p.groupId && reachable(p) && (p.authorId === me || follows.has(p.authorId) || (near.has(p.authorId) && !!p.session))
   && (!p.session || p.authorId === me || hasPicture(p));
 
 /** When each page's post, thread or Instant was made, for putting new ones newest first. */

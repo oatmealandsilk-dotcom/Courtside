@@ -38,6 +38,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// Which look Activities ships with (src/features/activity/feedLooks/activitiesLook.ts): the gallery step runs only for 'gallery'.
+const ACTIVITIES_LOOK = /ACTIVITIES_LOOK: ActivitiesLook = '([\w-]+)'/.exec(fs.readFileSync(path.join(ROOT, 'src/features/activity/feedLooks/activitiesLook.ts'), 'utf8'))?.[1] ?? 'gallery';
 
 // ---------------------------------------------------------------------------
 // Options
@@ -1313,25 +1315,44 @@ const STEPS = [
     expect: [{ text: /^Comments( · \d+)?$/ }, { label: /^Add a comment/ }],
     after: async (page) => { await page.tap({ label: 'Close' }); await page.gone({ label: /^Add a comment/ }); },
   },
-  {
+  // Only while Activities is the gallery (ACTIVITIES_LOOK in activitiesLook.ts): rolled back to 'now', the old pages have no such cards.
+  ...(ACTIVITIES_LOOK === 'gallery' ? [{
     // Nov 28 (owner: "1 gallery is better"): Activities is one continuous list. Other people's sessions show only
-    // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list again.
+    // with a photo or clip; a clip opens the full-screen reel (videos only) and back lands on the list where it was.
     name: 'activities-gallery',
-    title: 'Activities: the gallery, a clip full screen and back',
+    title: 'Activities: the gallery, a clip full screen and back to the same spot',
     async run(page) {
       await page.tap({ label: 'Activities' });
       await page.waitFor({ label: /^June's photo/ }, 20000);
-      await page.reveal({ label: /^Sam's clip/ });
-      await page.tap({ label: /^Sam's clip/ });
+      // Scrolled well down first, so a list that started over (back at the top) cannot pass for one that stayed.
+      // The list itself (its aria-label; the tab button shares the name but does not scroll).
+      const scrollerOf = `[...document.querySelectorAll('[aria-label="Activities"]')].find((el) => el.scrollHeight > el.clientHeight + 20)`;
+      const picked = await page.waitUntil(() => page.eval(`(() => {
+        const list = ${scrollerOf};
+        if (!list) return false;
+        // A clip at least 500px down the list, put a third of the way down the screen; none drawn yet, scroll on and look again.
+        const box = list.getBoundingClientRect();
+        const clips = [...list.querySelectorAll('[aria-label*="s clip"]')];
+        const far = clips.find((c) => c.getBoundingClientRect().top - box.top + list.scrollTop > 500);
+        if (!far) { list.scrollTop = Math.min(list.scrollTop + 400, list.scrollHeight - list.clientHeight); return false; }
+        list.scrollTop += far.getBoundingClientRect().top - window.innerHeight / 3;
+        const r = far.getBoundingClientRect();
+        if (list.scrollTop < 300 || r.top < 120 || r.bottom > window.innerHeight - 60) return false;
+        return JSON.stringify({ label: far.getAttribute('aria-label'), top: Math.round(list.scrollTop) });
+      })()`), 20000, 'a clip on screen with the list scrolled down');
+      const { label, top } = JSON.parse(picked);
+      await page.tap({ label });
       await page.waitFor({ label: 'Go back' }, 20000);
       await page.tap({ label: 'Go back' });
-      // Back on the list where it was: the clip that was tapped is still in view (the list did not start over).
-      await page.waitFor({ label: /^Sam's clip/ }, 20000);
+      await page.waitFor({ label }, 20000);
+      // Back on the list exactly where it was (the list did not jump or start over).
+      const after = await page.waitUntil(() => page.eval(`(() => { const list = ${scrollerOf}; return list ? String(Math.round(list.scrollTop)) : false; })()`), 10000, 'the Activities list after back').then(Number);
+      if (Math.abs(after - top) > 4) throw new Error(`back from the reel the Activities list moved: scrollTop ${top} before the clip, ${after} after`);
     },
-    expect: [{ label: /^Sam's clip/ }, { label: 'Save this post', any: true }],
+    expect: [{ label: /'s clip/ }, { label: 'Save this post', any: true }],
     // Scrolled back up the top row comes back in (it rides away with a scroll down), then For you again for the steps after.
     after: async (page) => { await page.reveal({ label: /^June's photo/ }); await page.tap({ label: 'For you' }, 20000); await page.waitFor({ label: 'Clip comments' }); },
-  },
+  }] : []),
   {
     name: 'coaching',
     title: 'Coaching tab',
